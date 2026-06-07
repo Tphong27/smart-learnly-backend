@@ -26,6 +26,13 @@ import org.springframework.context.annotation.Configuration;
         scheme = "basic",
         description = "Temporary development authentication for protected endpoints."
 )
+@SecurityScheme(
+        name = "bearerAuth",
+        type = SecuritySchemeType.HTTP,
+        scheme = "bearer",
+        bearerFormat = "JWT",
+        description = "Production-ready bearer JWT authentication for protected endpoints."
+)
 public class OpenApiConfig {
 
     @Bean

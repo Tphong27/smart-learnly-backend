@@ -15,7 +15,8 @@ import com.smartlearnly.backend.auth.repository.PasswordResetTokenRepository;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
-import com.smartlearnly.backend.common.security.SecurityUtils;
+import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
+import com.smartlearnly.backend.common.security.CurrentUser;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +46,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuditLogService auditLogService;
     private final AuthProperties authProperties;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Transactional
@@ -206,14 +208,33 @@ public class AuthService {
     }
 
     private UserAccount getAuthenticatedUser() {
-        String currentEmail = SecurityUtils.currentPrincipalName()
+        CurrentUser currentUser = authenticatedUserResolver.resolve()
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED));
 
-        return userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(currentEmail)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.RESOURCE_NOT_FOUND,
-                        "Authenticated user was not found"
-                ));
+        if (currentUser.id() != null) {
+            return userRepository.findByIdAndDeletedAtIsNull(currentUser.id())
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.RESOURCE_NOT_FOUND,
+                            "Authenticated user was not found"
+                    ));
+        }
+
+        if (currentUser.authUserId() != null) {
+            Optional<UserAccount> userByAuthUserId = userRepository.findByAuthUserIdAndDeletedAtIsNull(currentUser.authUserId());
+            if (userByAuthUserId.isPresent()) {
+                return userByAuthUserId.get();
+            }
+        }
+
+        if (currentUser.email() != null && !currentUser.email().isBlank()) {
+            return userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(currentUser.email())
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.RESOURCE_NOT_FOUND,
+                            "Authenticated user was not found"
+                    ));
+        }
+
+        throw new BusinessException(ErrorCode.UNAUTHENTICATED, "Authenticated user identity is missing required claims");
     }
 
     private UserProfileResponse toUserProfileResponse(UserAccount user) {

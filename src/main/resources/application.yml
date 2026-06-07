@@ -15,7 +15,13 @@ app:
   seed:
     auth-users-enabled: ${APP_SEED_AUTH_USERS_ENABLED:true}
   security:
-    jwt-secret: ${JWT_SECRET:}
+    authentication-mode: ${APP_SECURITY_AUTHENTICATION_MODE:basic}
+    jwt:
+      email-claim: ${APP_SECURITY_JWT_EMAIL_CLAIM:email}
+      user-id-claim: ${APP_SECURITY_JWT_USER_ID_CLAIM:user_id}
+      auth-user-id-claim: ${APP_SECURITY_JWT_AUTH_USER_ID_CLAIM:sub}
+      roles-claim: ${APP_SECURITY_JWT_ROLES_CLAIM:roles}
+      role-prefix: ${APP_SECURITY_JWT_ROLE_PREFIX:ROLE_}
   integrations:
     ai-provider: ${AI_PROVIDER:none}
     payment-provider: ${PAYMENT_PROVIDER:none}

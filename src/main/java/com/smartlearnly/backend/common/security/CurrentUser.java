@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record CurrentUser(
         UUID id,
+        UUID authUserId,
         String email,
         Set<String> roles
 ) {

@@ -19,8 +19,11 @@ import com.smartlearnly.backend.auth.entity.PasswordResetToken;
 import com.smartlearnly.backend.auth.repository.EmailVerificationTokenRepository;
 import com.smartlearnly.backend.auth.repository.PasswordResetTokenRepository;
 import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.config.SecurityProperties;
+import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.common.security.SecurityContextAuthenticatedUserResolver;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import java.time.Duration;
@@ -61,6 +64,8 @@ class AuthServiceTest {
         properties.setDebugLogTokens(false);
         properties.setEmailVerificationTokenTtl(Duration.ofHours(24));
         properties.setPasswordResetTokenTtl(Duration.ofMinutes(30));
+        AuthenticatedUserResolver authenticatedUserResolver =
+                new SecurityContextAuthenticatedUserResolver(new SecurityProperties());
 
         authService = new AuthService(
                 userRepository,
@@ -68,7 +73,8 @@ class AuthServiceTest {
                 passwordResetTokenRepository,
                 passwordEncoder,
                 auditLogService,
-                properties
+                properties,
+                authenticatedUserResolver
         );
     }
 

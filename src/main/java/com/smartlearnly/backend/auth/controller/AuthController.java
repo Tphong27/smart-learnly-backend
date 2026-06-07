@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -88,7 +89,10 @@ public class AuthController {
 
     @GetMapping("/profile")
     @Operation(summary = "Get current user profile")
-    @SecurityRequirement(name = "basicAuth")
+    @SecurityRequirements({
+            @SecurityRequirement(name = "basicAuth"),
+            @SecurityRequirement(name = "bearerAuth")
+    })
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Profile loaded successfully"),
             @ApiResponse(responseCode = "401", description = "Authentication required")
@@ -99,7 +103,10 @@ public class AuthController {
 
     @PatchMapping("/profile")
     @Operation(summary = "Update current user profile")
-    @SecurityRequirement(name = "basicAuth")
+    @SecurityRequirements({
+            @SecurityRequirement(name = "basicAuth"),
+            @SecurityRequirement(name = "bearerAuth")
+    })
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Profile updated successfully"),
             @ApiResponse(responseCode = "400", description = "Validation failed or empty update payload"),
@@ -111,7 +118,10 @@ public class AuthController {
 
     @PostMapping("/change-password")
     @Operation(summary = "Change current user password")
-    @SecurityRequirement(name = "basicAuth")
+    @SecurityRequirements({
+            @SecurityRequirement(name = "basicAuth"),
+            @SecurityRequirement(name = "bearerAuth")
+    })
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Password changed successfully"),
             @ApiResponse(responseCode = "400", description = "Validation failed"),
