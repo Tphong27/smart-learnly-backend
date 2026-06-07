@@ -15,3 +15,9 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 2
+
+app:
+  seed:
+    auth-users-enabled: ${APP_SEED_AUTH_USERS_ENABLED:true}

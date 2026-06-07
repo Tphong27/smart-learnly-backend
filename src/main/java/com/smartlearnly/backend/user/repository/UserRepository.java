@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<UserAccount, UUID> {
     Optional<UserAccount> findByEmailIgnoreCaseAndDeletedAtIsNull(String email);
+    Optional<UserAccount> findByGoogleIdAndDeletedAtIsNull(String googleId);
     Optional<UserAccount> findByAuthUserIdAndDeletedAtIsNull(UUID authUserId);
     Optional<UserAccount> findByIdAndDeletedAtIsNull(UUID id);
 }

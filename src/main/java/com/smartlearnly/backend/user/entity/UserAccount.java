@@ -61,6 +61,15 @@ public class UserAccount {
     @Column(name = "password_changed_at")
     private Instant passwordChangedAt;
 
+    @Column(name = "failed_login_attempts", nullable = false)
+    private Integer failedLoginAttempts;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
+
     @Column(name = "ai_message_count", nullable = false)
     private Integer aiMessageCount;
 
@@ -88,6 +97,9 @@ public class UserAccount {
         updatedAt = now;
         if (aiMessageCount == null) {
             aiMessageCount = 0;
+        }
+        if (failedLoginAttempts == null) {
+            failedLoginAttempts = 0;
         }
     }
 

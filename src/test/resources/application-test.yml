@@ -12,3 +12,10 @@ spring:
 
   flyway:
     enabled: false
+
+app:
+  security:
+    authentication-mode: jwt
+    jwt-secret: smart-learnly-test-secret-key-at-least-32-characters
+  seed:
+    auth-users-enabled: false

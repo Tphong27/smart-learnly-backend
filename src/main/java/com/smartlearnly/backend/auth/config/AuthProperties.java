@@ -13,5 +13,11 @@ import org.springframework.stereotype.Component;
 public class AuthProperties {
     private Duration emailVerificationTokenTtl = Duration.ofHours(24);
     private Duration passwordResetTokenTtl = Duration.ofMinutes(30);
-    private boolean debugLogTokens = true;
+    private Duration accessTokenTtl = Duration.ofMinutes(15);
+    private Duration refreshTokenTtl = Duration.ofDays(7);
+    private String frontendBaseUrl = "http://localhost:5173";
+    private boolean refreshCookieSecure;
+    private int loginMaxFailures = 5;
+    private Duration loginLockDuration = Duration.ofMinutes(15);
+    private boolean debugLogTokens;
 }

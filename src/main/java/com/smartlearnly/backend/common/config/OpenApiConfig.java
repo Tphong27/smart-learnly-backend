@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Configuration;
         info = @Info(
                 title = "Smart Learnly Backend API",
                 version = "v1",
-                description = "OpenAPI contract for Smart Learnly backend services. Auth endpoints currently use HTTP Basic for local development until JWT integration is finalized.",
+                description = "OpenAPI contract for Smart Learnly backend services using bearer JWT authentication.",
                 contact = @Contact(name = "Smart Learnly Backend Team")
         )
 )
@@ -49,7 +49,7 @@ public class OpenApiConfig {
     GroupedOpenApi authApiGroup() {
         return GroupedOpenApi.builder()
                 .group("auth")
-                .pathsToMatch("/api/auth/**")
+                .pathsToMatch("/api/v1/auth/**")
                 .build();
     }
 }

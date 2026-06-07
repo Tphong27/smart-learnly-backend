@@ -11,12 +11,16 @@ import static org.mockito.Mockito.when;
 import com.smartlearnly.backend.auth.config.AuthProperties;
 import com.smartlearnly.backend.auth.dto.ChangePasswordRequest;
 import com.smartlearnly.backend.auth.dto.ForgotPasswordRequest;
+import com.smartlearnly.backend.auth.dto.GoogleLoginRequest;
+import com.smartlearnly.backend.auth.dto.LoginRequest;
+import com.smartlearnly.backend.auth.dto.RegisterRequest;
 import com.smartlearnly.backend.auth.dto.ResetPasswordRequest;
 import com.smartlearnly.backend.auth.dto.UpdateProfileRequest;
 import com.smartlearnly.backend.auth.dto.VerifyEmailRequest;
 import com.smartlearnly.backend.auth.entity.EmailVerificationToken;
 import com.smartlearnly.backend.auth.entity.PasswordResetToken;
 import com.smartlearnly.backend.auth.repository.EmailVerificationTokenRepository;
+import com.smartlearnly.backend.auth.repository.LoginHistoryRepository;
 import com.smartlearnly.backend.auth.repository.PasswordResetTokenRepository;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.config.SecurityProperties;
@@ -53,6 +57,14 @@ class AuthServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private AuthSessionService authSessionService;
+    @Mock
+    private EmailService emailService;
+    @Mock
+    private LoginHistoryRepository loginHistoryRepository;
+    @Mock
+    private GoogleIdTokenService googleIdTokenService;
 
     private AuthService authService;
 
@@ -64,6 +76,8 @@ class AuthServiceTest {
         properties.setDebugLogTokens(false);
         properties.setEmailVerificationTokenTtl(Duration.ofHours(24));
         properties.setPasswordResetTokenTtl(Duration.ofMinutes(30));
+        properties.setLoginMaxFailures(5);
+        properties.setLoginLockDuration(Duration.ofMinutes(15));
         AuthenticatedUserResolver authenticatedUserResolver =
                 new SecurityContextAuthenticatedUserResolver(new SecurityProperties());
 
@@ -74,7 +88,11 @@ class AuthServiceTest {
                 passwordEncoder,
                 auditLogService,
                 properties,
-                authenticatedUserResolver
+                authenticatedUserResolver,
+                authSessionService,
+                emailService,
+                loginHistoryRepository,
+                googleIdTokenService
         );
     }
 
@@ -97,6 +115,88 @@ class AuthServiceTest {
     }
 
     @Test
+    void registerShouldCreatePendingTraineeAndSendVerificationLink() {
+        when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("new@example.com"))
+                .thenReturn(Optional.empty());
+        when(passwordEncoder.encode("Secure@123")).thenReturn("encoded-password");
+        when(userRepository.save(any(UserAccount.class))).thenAnswer(invocation -> {
+            UserAccount user = invocation.getArgument(0);
+            user.setId(UUID.randomUUID());
+            return user;
+        });
+
+        authService.register(new RegisterRequest("New User", "NEW@example.com", "Secure@123", "Secure@123"));
+
+        ArgumentCaptor<UserAccount> userCaptor = ArgumentCaptor.forClass(UserAccount.class);
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getEmail()).isEqualTo("new@example.com");
+        assertThat(userCaptor.getValue().getRole()).isEqualTo("TRAINEE");
+        assertThat(userCaptor.getValue().getStatus()).isEqualTo("pending_verify");
+        verify(emailService).sendVerificationLink(eq("new@example.com"), eq("New User"), any());
+    }
+
+    @Test
+    void googleLoginShouldLinkExistingUserByEmail() {
+        UserAccount user = createUser();
+        user.setStatus("active");
+        user.setEmailVerifiedAt(Instant.now());
+        GoogleIdTokenService.GoogleIdentity identity = new GoogleIdTokenService.GoogleIdentity(
+                "google-subject",
+                "student@example.com",
+                "Student",
+                "https://example.com/avatar.png"
+        );
+        when(googleIdTokenService.verify("google-id-token")).thenReturn(identity);
+        when(userRepository.findByGoogleIdAndDeletedAtIsNull("google-subject")).thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("student@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        authService.loginWithGoogle(new GoogleLoginRequest("google-id-token"), "browser", "127.0.0.1");
+
+        assertThat(user.getGoogleId()).isEqualTo("google-subject");
+        assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/avatar.png");
+        verify(authSessionService).issue(user, "browser", "127.0.0.1");
+    }
+
+    @Test
+    void loginShouldRejectPendingVerificationUser() {
+        UserAccount user = createUser();
+        when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("student@example.com"))
+                .thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(
+                new LoginRequest("student@example.com", "Secure@123"),
+                "browser",
+                "127.0.0.1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED);
+    }
+
+    @Test
+    void loginShouldLockAccountAfterFiveInvalidPasswords() {
+        UserAccount user = createUser();
+        user.setStatus("active");
+        user.setEmailVerifiedAt(Instant.now());
+        user.setPasswordHash("encoded-password");
+        when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("student@example.com"))
+                .thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Wrong@123", "encoded-password")).thenReturn(false);
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            assertThatThrownBy(() -> authService.login(
+                    new LoginRequest("student@example.com", "Wrong@123"),
+                    "browser",
+                    "127.0.0.1"
+            )).isInstanceOf(BusinessException.class);
+        }
+
+        assertThat(user.getLockedUntil()).isAfter(Instant.now());
+        assertThat(user.getFailedLoginAttempts()).isZero();
+    }
+
+    @Test
     void forgotPasswordShouldNotCreateTokenForUnknownEmail() {
         when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("missing@example.com"))
                 .thenReturn(Optional.empty());
@@ -110,6 +210,7 @@ class AuthServiceTest {
     void verifyEmailShouldActivatePendingUser() {
         UserAccount user = createUser();
         user.setStatus("pending_verify");
+        user.setFailedLoginAttempts(0);
         user.setEmailVerifiedAt(null);
 
         EmailVerificationToken token = new EmailVerificationToken();

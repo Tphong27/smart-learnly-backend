@@ -3,14 +3,19 @@ package com.smartlearnly.backend.auth.service;
 import com.smartlearnly.backend.auth.config.AuthProperties;
 import com.smartlearnly.backend.auth.dto.ChangePasswordRequest;
 import com.smartlearnly.backend.auth.dto.ForgotPasswordRequest;
+import com.smartlearnly.backend.auth.dto.LoginRequest;
+import com.smartlearnly.backend.auth.dto.GoogleLoginRequest;
+import com.smartlearnly.backend.auth.dto.RegisterRequest;
 import com.smartlearnly.backend.auth.dto.ResetPasswordRequest;
 import com.smartlearnly.backend.auth.dto.ResendVerificationRequest;
 import com.smartlearnly.backend.auth.dto.UpdateProfileRequest;
 import com.smartlearnly.backend.auth.dto.UserProfileResponse;
 import com.smartlearnly.backend.auth.dto.VerifyEmailRequest;
 import com.smartlearnly.backend.auth.entity.EmailVerificationToken;
+import com.smartlearnly.backend.auth.entity.LoginHistory;
 import com.smartlearnly.backend.auth.entity.PasswordResetToken;
 import com.smartlearnly.backend.auth.repository.EmailVerificationTokenRepository;
+import com.smartlearnly.backend.auth.repository.LoginHistoryRepository;
 import com.smartlearnly.backend.auth.repository.PasswordResetTokenRepository;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
@@ -47,7 +52,99 @@ public class AuthService {
     private final AuditLogService auditLogService;
     private final AuthProperties authProperties;
     private final AuthenticatedUserResolver authenticatedUserResolver;
+    private final AuthSessionService authSessionService;
+    private final EmailService emailService;
+    private final LoginHistoryRepository loginHistoryRepository;
+    private final GoogleIdTokenService googleIdTokenService;
     private final SecureRandom secureRandom = new SecureRandom();
+
+    @Transactional
+    public void register(RegisterRequest request) {
+        validatePasswordConfirmation(request.password(), request.confirmPassword());
+        String email = normalizeEmail(request.email());
+        if (userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email).isPresent()) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Email already exists");
+        }
+
+        UserAccount user = new UserAccount();
+        user.setEmail(email);
+        user.setFullName(request.fullName().trim());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setRole("TRAINEE");
+        user.setStatus("pending_verify");
+        user.setFailedLoginAttempts(0);
+        UserAccount savedUser = userRepository.save(user);
+
+        issueVerificationToken(savedUser);
+        auditLogService.record(savedUser.getEmail(), "ACCOUNT_REGISTERED", "USER", savedUser.getId().toString());
+    }
+
+    @Transactional(noRollbackFor = BusinessException.class)
+    public AuthSessionService.IssuedSession login(LoginRequest request, String deviceInfo, String ipAddress) {
+        String email = normalizeEmail(request.email());
+        UserAccount user = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email)
+                .orElseThrow(() -> {
+                    recordLogin(null, email, ipAddress, deviceInfo, "email", "failed");
+                    return new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+                });
+
+        Instant now = Instant.now();
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
+            recordLogin(user, email, ipAddress, deviceInfo, "email", "blocked");
+            throw new BusinessException(ErrorCode.ACCOUNT_LOCKED, "Account is locked until " + user.getLockedUntil());
+        }
+        if (!"active".equalsIgnoreCase(user.getStatus())) {
+            if ("pending_verify".equalsIgnoreCase(user.getStatus()) || !user.isEmailVerified()) {
+                throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
+            }
+            throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE);
+        }
+        if (user.getPasswordHash() == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            registerFailedLogin(user, now);
+            recordLogin(user, email, ipAddress, deviceInfo, "email", "failed");
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
+
+        user.setFailedLoginAttempts(0);
+        user.setLockedUntil(null);
+        user.setLastLoginAt(now);
+        userRepository.save(user);
+        recordLogin(user, email, ipAddress, deviceInfo, "email", "success");
+        auditLogService.record(email, "LOGIN_SUCCEEDED", "USER", user.getId().toString());
+        return authSessionService.issue(user, deviceInfo, ipAddress);
+    }
+
+    @Transactional
+    public AuthSessionService.IssuedSession loginWithGoogle(
+            GoogleLoginRequest request,
+            String deviceInfo,
+            String ipAddress
+    ) {
+        GoogleIdTokenService.GoogleIdentity identity = googleIdTokenService.verify(request.idToken());
+        String email = normalizeEmail(identity.email());
+        UserAccount user = userRepository.findByGoogleIdAndDeletedAtIsNull(identity.subject())
+                .orElseGet(() -> linkOrCreateGoogleUser(identity, email));
+
+        if (!"active".equalsIgnoreCase(user.getStatus())) {
+            throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE);
+        }
+
+        user.setLastLoginAt(Instant.now());
+        userRepository.save(user);
+        recordLogin(user, email, ipAddress, deviceInfo, "google", "success");
+        auditLogService.record(email, "GOOGLE_LOGIN_SUCCEEDED", "USER", user.getId().toString());
+        return authSessionService.issue(user, deviceInfo, ipAddress);
+    }
+
+    @Transactional
+    public AuthSessionService.IssuedSession refresh(String refreshToken, String deviceInfo, String ipAddress) {
+        return authSessionService.rotate(refreshToken, deviceInfo, ipAddress);
+    }
+
+    @Transactional
+    public void logout(String refreshToken) {
+        authSessionService.revoke(refreshToken);
+    }
 
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
@@ -63,6 +160,11 @@ public class AuthService {
             passwordResetTokenRepository.save(token);
 
             logDebugToken("password-reset", user.getEmail(), rawToken, token.getExpiresAt());
+            emailService.sendPasswordResetLink(
+                    user.getEmail(),
+                    user.getFullName(),
+                    authProperties.getFrontendBaseUrl() + "/reset-password?token=" + rawToken
+            );
             auditLogService.record(user.getEmail(), "PASSWORD_RESET_REQUESTED", "USER", user.getId().toString());
         });
     }
@@ -72,17 +174,7 @@ public class AuthService {
         findActiveUserByEmail(request.email())
                 .filter(user -> !user.isEmailVerified())
                 .ifPresent(user -> {
-                    Instant now = Instant.now();
-                    emailVerificationTokenRepository.markAllUnusedAsUsed(user.getId(), now);
-
-                    String rawToken = generateRawToken();
-                    EmailVerificationToken token = new EmailVerificationToken();
-                    token.setUser(user);
-                    token.setTokenHash(hashToken(rawToken));
-                    token.setExpiresAt(now.plus(authProperties.getEmailVerificationTokenTtl()));
-                    emailVerificationTokenRepository.save(token);
-
-                    logDebugToken("email-verification", user.getEmail(), rawToken, token.getExpiresAt());
+                    issueVerificationToken(user);
                     auditLogService.record(user.getEmail(), "EMAIL_VERIFICATION_RESENT", "USER", user.getId().toString());
                 });
     }
@@ -127,6 +219,7 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         user.setPasswordChangedAt(now);
         userRepository.save(user);
+        authSessionService.revokeAll(user);
 
         token.setUsedAt(now);
         passwordResetTokenRepository.save(token);
@@ -200,11 +293,86 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         user.setPasswordChangedAt(Instant.now());
         userRepository.save(user);
+        authSessionService.revokeAll(user);
         auditLogService.record(user.getEmail(), "PASSWORD_CHANGED", "USER", user.getId().toString());
     }
 
     private Optional<UserAccount> findActiveUserByEmail(String email) {
         return userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(normalizeEmail(email));
+    }
+
+    private UserAccount linkOrCreateGoogleUser(GoogleIdTokenService.GoogleIdentity identity, String email) {
+        Optional<UserAccount> existingUser = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email);
+        if (existingUser.isPresent()) {
+            UserAccount user = existingUser.get();
+            user.setGoogleId(identity.subject());
+            if (!user.isEmailVerified()) {
+                user.setEmailVerifiedAt(Instant.now());
+                user.setStatus("active");
+            }
+            if (user.getAvatarUrl() == null && identity.avatarUrl() != null) {
+                user.setAvatarUrl(identity.avatarUrl());
+            }
+            return userRepository.save(user);
+        }
+
+        UserAccount user = new UserAccount();
+        user.setEmail(email);
+        user.setGoogleId(identity.subject());
+        user.setFullName(identity.fullName() == null || identity.fullName().isBlank() ? email : identity.fullName());
+        user.setAvatarUrl(identity.avatarUrl());
+        user.setRole("TRAINEE");
+        user.setStatus("active");
+        user.setEmailVerifiedAt(Instant.now());
+        user.setFailedLoginAttempts(0);
+        return userRepository.save(user);
+    }
+
+    private void issueVerificationToken(UserAccount user) {
+        Instant now = Instant.now();
+        emailVerificationTokenRepository.markAllUnusedAsUsed(user.getId(), now);
+
+        String rawToken = generateRawToken();
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setUser(user);
+        token.setTokenHash(hashToken(rawToken));
+        token.setExpiresAt(now.plus(authProperties.getEmailVerificationTokenTtl()));
+        emailVerificationTokenRepository.save(token);
+
+        logDebugToken("email-verification", user.getEmail(), rawToken, token.getExpiresAt());
+        emailService.sendVerificationLink(
+                user.getEmail(),
+                user.getFullName(),
+                authProperties.getFrontendBaseUrl() + "/verify-email?token=" + rawToken
+        );
+    }
+
+    private void registerFailedLogin(UserAccount user, Instant now) {
+        int failures = Optional.ofNullable(user.getFailedLoginAttempts()).orElse(0) + 1;
+        user.setFailedLoginAttempts(failures);
+        if (failures >= authProperties.getLoginMaxFailures()) {
+            user.setLockedUntil(now.plus(authProperties.getLoginLockDuration()));
+            user.setFailedLoginAttempts(0);
+        }
+        userRepository.save(user);
+    }
+
+    private void recordLogin(
+            UserAccount user,
+            String email,
+            String ipAddress,
+            String userAgent,
+            String method,
+            String status
+    ) {
+        LoginHistory history = new LoginHistory();
+        history.setUser(user);
+        history.setEmail(email);
+        history.setIpAddress(ipAddress);
+        history.setUserAgent(userAgent);
+        history.setLoginMethod(method);
+        history.setStatus(status);
+        loginHistoryRepository.save(history);
     }
 
     private UserAccount getAuthenticatedUser() {
