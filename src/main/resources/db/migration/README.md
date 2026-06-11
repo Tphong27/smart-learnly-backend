@@ -6,23 +6,31 @@ migration; add a new versioned migration instead.
 Current migrations:
 
 ```text
+V0__auth_database_baseline.sql
 V1__database_foundation.sql
 V2__identity_auth_support.sql
 V3__auth_session_foundation.sql
+V4__complete_auth_foundation.sql
 ```
 
-`V1` enables required PostgreSQL extensions. `V2` adds identity token tables.
+`V0` creates the user and role foundation before later auth migrations when
+provisioning a clean database. Existing Supabase databases baselined at version
+2 safely ignore it. `V1` enables required PostgreSQL extensions. `V2` adds identity token tables.
 `V3` adds refresh-session metadata, login history, and login lockout fields
 without rewriting already-applied migrations or existing Supabase data.
+`V4` adds the canonical role catalog, email-verification OTP storage, and
+security-limit storage. The initial admin account is created by the
+environment-controlled `AdminAccountSeeder`, never with a password committed
+to a migration.
 
 Planned order:
 
 ```text
-V4__course_classroom.sql
-V5__enrollment_payment.sql
-V6__learning_content.sql
-V7__assessment.sql
-V8__flashcard_assignment.sql
-V9__ai_rag.sql
-V10__analytics_notification_audit.sql
+V5__course_classroom.sql
+V6__enrollment_payment.sql
+V7__learning_content.sql
+V8__assessment.sql
+V9__flashcard_assignment.sql
+V10__ai_rag.sql
+V11__analytics_notification_audit.sql
 ```

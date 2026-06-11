@@ -48,7 +48,7 @@ public class AuthDevDataSeeder implements ApplicationRunner {
         log.info("Seeded user: email={} password={}", ACTIVE_EMAIL, ACTIVE_PASSWORD);
         log.info("Seeded user: email={} password={}", PENDING_EMAIL, PENDING_PASSWORD);
         log.info("Seeded user: email={} password=<google-only>", GOOGLE_EMAIL);
-        log.info("Password reset token for {} and verification token for {} were generated and logged above.", ACTIVE_EMAIL, PENDING_EMAIL);
+        log.info("Password reset token for {} and verification OTP for {} were generated.", ACTIVE_EMAIL, PENDING_EMAIL);
     }
 
     private void seedActiveUser() {

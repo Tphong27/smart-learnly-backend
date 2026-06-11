@@ -14,6 +14,7 @@ public enum ErrorCode {
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "Email verification is required"),
     ACCOUNT_LOCKED(HttpStatus.LOCKED, "Account is temporarily locked"),
     ACCOUNT_INACTIVE(HttpStatus.FORBIDDEN, "Account is inactive"),
+    RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Resource not found"),
     CONFLICT(HttpStatus.CONFLICT, "Resource conflict"),
     BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_CONTENT, "Business rule violation"),

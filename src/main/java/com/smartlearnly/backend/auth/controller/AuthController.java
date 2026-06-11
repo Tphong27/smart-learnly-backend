@@ -132,7 +132,7 @@ public class AuthController {
     }
 
     @PostMapping("/verify-email")
-    @Operation(summary = "Verify email using verification token")
+    @Operation(summary = "Verify email using a six-digit OTP")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Email verified successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid input or token")
@@ -144,7 +144,7 @@ public class AuthController {
 
     @PostMapping("/resend-verification")
     @Operation(
-            summary = "Resend verification token",
+            summary = "Resend verification OTP",
             description = "Always returns a generic success message to avoid revealing whether the email exists."
     )
     @ApiResponses({

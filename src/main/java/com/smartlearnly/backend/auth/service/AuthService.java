@@ -11,11 +11,11 @@ import com.smartlearnly.backend.auth.dto.ResendVerificationRequest;
 import com.smartlearnly.backend.auth.dto.UpdateProfileRequest;
 import com.smartlearnly.backend.auth.dto.UserProfileResponse;
 import com.smartlearnly.backend.auth.dto.VerifyEmailRequest;
-import com.smartlearnly.backend.auth.entity.EmailVerificationToken;
 import com.smartlearnly.backend.auth.entity.LoginHistory;
+import com.smartlearnly.backend.auth.entity.OtpVerification;
 import com.smartlearnly.backend.auth.entity.PasswordResetToken;
-import com.smartlearnly.backend.auth.repository.EmailVerificationTokenRepository;
 import com.smartlearnly.backend.auth.repository.LoginHistoryRepository;
+import com.smartlearnly.backend.auth.repository.OtpVerificationRepository;
 import com.smartlearnly.backend.auth.repository.PasswordResetTokenRepository;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
@@ -46,7 +46,7 @@ public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
-    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final OtpVerificationRepository otpVerificationRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditLogService auditLogService;
@@ -75,7 +75,7 @@ public class AuthService {
         user.setFailedLoginAttempts(0);
         UserAccount savedUser = userRepository.save(user);
 
-        issueVerificationToken(savedUser);
+        issueVerificationOtp(savedUser);
         auditLogService.record(savedUser.getEmail(), "ACCOUNT_REGISTERED", "USER", savedUser.getId().toString());
     }
 
@@ -174,22 +174,36 @@ public class AuthService {
         findActiveUserByEmail(request.email())
                 .filter(user -> !user.isEmailVerified())
                 .ifPresent(user -> {
-                    issueVerificationToken(user);
+                    issueVerificationOtp(user);
                     auditLogService.record(user.getEmail(), "EMAIL_VERIFICATION_RESENT", "USER", user.getId().toString());
                 });
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public void verifyEmail(VerifyEmailRequest request) {
         Instant now = Instant.now();
-        EmailVerificationToken token = emailVerificationTokenRepository.findByTokenHash(hashToken(request.token()))
-                .filter(savedToken -> savedToken.isUsable(now))
+        String email = normalizeEmail(request.email());
+        OtpVerification otp = otpVerificationRepository
+                .findTopByEmailIgnoreCaseAndPurposeAndVerifiedAtIsNullOrderByCreatedAtDesc(
+                        email,
+                        OtpVerification.EMAIL_VERIFY_PURPOSE
+                )
+                .filter(savedOtp -> savedOtp.isUsable(now))
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.INVALID_OR_EXPIRED_TOKEN,
-                        "Email verification token is invalid or expired"
+                        "Email verification OTP is invalid or expired"
                 ));
 
-        UserAccount user = token.getUser();
+        if (!passwordEncoder.matches(request.otpCode(), otp.getOtpHash())) {
+            otp.setAttempts(otp.getAttempts() + 1);
+            otpVerificationRepository.save(otp);
+            throw new BusinessException(
+                    ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+                    "Email verification OTP is invalid or expired"
+            );
+        }
+
+        UserAccount user = otp.getUser();
         if (!user.isEmailVerified()) {
             user.setEmailVerifiedAt(now);
             if ("pending_verify".equalsIgnoreCase(user.getStatus())) {
@@ -198,8 +212,8 @@ public class AuthService {
             userRepository.save(user);
         }
 
-        token.setUsedAt(now);
-        emailVerificationTokenRepository.save(token);
+        otp.setVerifiedAt(now);
+        otpVerificationRepository.save(otp);
         auditLogService.record(user.getEmail(), "EMAIL_VERIFIED", "USER", user.getId().toString());
     }
 
@@ -328,22 +342,42 @@ public class AuthService {
         return userRepository.save(user);
     }
 
-    private void issueVerificationToken(UserAccount user) {
+    private void issueVerificationOtp(UserAccount user) {
         Instant now = Instant.now();
-        emailVerificationTokenRepository.markAllUnusedAsUsed(user.getId(), now);
+        long recentRequests = otpVerificationRepository.countByEmailIgnoreCaseAndPurposeAndCreatedAtAfter(
+                user.getEmail(),
+                OtpVerification.EMAIL_VERIFY_PURPOSE,
+                now.minus(authProperties.getEmailVerificationRequestWindow())
+        );
+        if (recentRequests >= authProperties.getEmailVerificationRequestLimit()) {
+            throw new BusinessException(
+                    ErrorCode.RATE_LIMIT_EXCEEDED,
+                    "Too many verification OTP requests. Please try again later"
+            );
+        }
 
-        String rawToken = generateRawToken();
-        EmailVerificationToken token = new EmailVerificationToken();
-        token.setUser(user);
-        token.setTokenHash(hashToken(rawToken));
-        token.setExpiresAt(now.plus(authProperties.getEmailVerificationTokenTtl()));
-        emailVerificationTokenRepository.save(token);
+        otpVerificationRepository.markAllUnverifiedAsVerified(
+                user.getId(),
+                OtpVerification.EMAIL_VERIFY_PURPOSE,
+                now
+        );
 
-        logDebugToken("email-verification", user.getEmail(), rawToken, token.getExpiresAt());
-        emailService.sendVerificationLink(
+        String otpCode = generateOtpCode();
+        OtpVerification otp = new OtpVerification();
+        otp.setUser(user);
+        otp.setEmail(user.getEmail());
+        otp.setOtpHash(passwordEncoder.encode(otpCode));
+        otp.setPurpose(OtpVerification.EMAIL_VERIFY_PURPOSE);
+        otp.setExpiresAt(now.plus(authProperties.getEmailVerificationOtpTtl()));
+        otp.setAttempts(0);
+        otp.setMaxAttempts(authProperties.getEmailVerificationOtpMaxAttempts());
+        otpVerificationRepository.save(otp);
+
+        logDebugToken("email-verification-otp", user.getEmail(), otpCode, otp.getExpiresAt());
+        emailService.sendVerificationOtp(
                 user.getEmail(),
                 user.getFullName(),
-                authProperties.getFrontendBaseUrl() + "/verify-email?token=" + rawToken
+                otpCode
         );
     }
 
@@ -447,6 +481,10 @@ public class AuthService {
         byte[] tokenBytes = new byte[32];
         secureRandom.nextBytes(tokenBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+    }
+
+    private String generateOtpCode() {
+        return "%06d".formatted(secureRandom.nextInt(1_000_000));
     }
 
     private String hashToken(String rawToken) {
