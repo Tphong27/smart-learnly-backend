@@ -52,4 +52,12 @@ public class OpenApiConfig {
                 .pathsToMatch("/api/v1/auth/**")
                 .build();
     }
+
+    @Bean
+    GroupedOpenApi adminApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("admin")
+                .pathsToMatch("/api/v1/admin/**")
+                .build();
+    }
 }

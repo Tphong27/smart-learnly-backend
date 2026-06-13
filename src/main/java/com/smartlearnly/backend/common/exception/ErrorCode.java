@@ -16,7 +16,12 @@ public enum ErrorCode {
     ACCOUNT_INACTIVE(HttpStatus.FORBIDDEN, "Account is inactive"),
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Resource not found"),
+    CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Category not found"),
     CONFLICT(HttpStatus.CONFLICT, "Resource conflict"),
+    CATEGORY_SLUG_CONFLICT(HttpStatus.CONFLICT, "Category slug already exists"),
+    CATEGORY_IN_USE(HttpStatus.CONFLICT, "Category is in use"),
+    CATEGORY_HIERARCHY_INVALID(HttpStatus.UNPROCESSABLE_CONTENT, "Category hierarchy is invalid"),
+    PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Payload exceeds the allowed size"),
     BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_CONTENT, "Business rule violation"),
     EXTERNAL_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "External service unavailable"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");

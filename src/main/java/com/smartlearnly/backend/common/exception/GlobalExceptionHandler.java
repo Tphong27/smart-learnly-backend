@@ -13,6 +13,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -134,6 +135,19 @@ public class GlobalExceptionHandler {
         return buildResponse(
                 ErrorCode.UNSUPPORTED_MEDIA_TYPE,
                 ErrorCode.UNSUPPORTED_MEDIA_TYPE.defaultMessage(),
+                List.of(),
+                request
+        );
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException exception,
+            HttpServletRequest request
+    ) {
+        return buildResponse(
+                ErrorCode.PAYLOAD_TOO_LARGE,
+                ErrorCode.PAYLOAD_TOO_LARGE.defaultMessage(),
                 List.of(),
                 request
         );
