@@ -17,6 +17,9 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 2
+    # The shared development database contains V6/V7 migrations whose source
+    # files have not yet been recovered. Keep strict validation outside dev.
+    ignore-migration-patterns: "*:missing"
 
 app:
   seed:

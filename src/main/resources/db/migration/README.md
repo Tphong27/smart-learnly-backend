@@ -27,7 +27,20 @@ Implemented course/content foundation:
 
 ```text
 V5__course_catalog_content_foundation.sql
+V7_1__reconcile_course_catalog_with_existing_schema.sql
 ```
+
+`V7.1` preserves and upgrades the legacy Supabase course/content tables that
+already existed before Flyway ownership. It retains legacy columns and
+backfills `course_sections` and the new lesson relationships without dropping
+existing data.
+
+The shared development database also contains applied migrations `V6` and
+`V7` (`fix lessons lesson type enum` and `ensure lessons lesson type enum`)
+whose source files are currently missing from the repository. The `dev`
+profile temporarily ignores applied-but-missing migrations so local startup is
+not blocked. Recover and commit those exact migration files before using this
+history outside the shared development database.
 
 Planned order:
 
