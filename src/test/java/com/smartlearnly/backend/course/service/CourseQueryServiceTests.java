@@ -359,18 +359,18 @@ class CourseQueryServiceTests {
 				.contains("clo.course_id = :courseId")
 				.contains("ORDER BY clo.code ASC, clo.id ASC");
 		assertThat(curriculumQuery.value())
-				.contains("LEFT JOIN public.lessons l")
-				.contains("ON l.module_id = m.id")
-				.contains("AND l.status = 'active'")
-				.contains("m.course_id = :courseId")
-				.contains("m.status = 'active'")
-				.contains("l.lesson_type::text AS \"lessonType\"")
-				.contains(
-						"m.order_index ASC",
-						"m.id ASC",
-						"l.order_index ASC",
-						"l.id ASC")
-				.doesNotContain("l.content")
-				.doesNotContain("materials");
+        .contains("LEFT JOIN public.lessons l")
+        .contains("ON l.module_id = m.id")
+        .contains("AND l.status = 'published'::public.lesson_status")
+        .contains("m.course_id = :courseId")
+        .contains("m.status = 'active'")
+        .contains("l.lesson_type::text AS \"lessonType\"")
+        .contains(
+                "m.order_index ASC",
+                "m.id ASC",
+                "l.order_index ASC",
+                "l.id ASC")
+        .doesNotContain("l.content")
+        .doesNotContain("materials");
 	}
 }
