@@ -46,10 +46,31 @@ public class OpenApiConfig {
     }
 
     @Bean
+    GroupedOpenApi allApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("all")
+                .pathsToMatch("/api/v1/**")
+                .build();
+    }
+
+    @Bean
     GroupedOpenApi authApiGroup() {
         return GroupedOpenApi.builder()
                 .group("auth")
                 .pathsToMatch("/api/v1/auth/**")
+                .build();
+    }
+
+    @Bean
+    GroupedOpenApi courseContentApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("course-content")
+                .pathsToMatch(
+                        "/api/v1/admin/courses/**",
+                        "/api/v1/admin/sections/**",
+                        "/api/v1/admin/lessons/**",
+                        "/api/v1/courses/**"
+                )
                 .build();
     }
 }
