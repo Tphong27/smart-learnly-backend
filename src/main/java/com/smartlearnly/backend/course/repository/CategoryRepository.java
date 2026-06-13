@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 public interface CategoryRepository extends JpaRepository<Category, UUID> {
     Optional<Category> findBySlugIgnoreCase(String slug);
     boolean existsBySlugIgnoreCase(String slug);
+    boolean existsBySlug(String slug);
     boolean existsBySlugIgnoreCaseAndIdNot(String slug, UUID id);
     boolean existsByParentId(UUID parentId);
 
@@ -30,3 +31,4 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
             @Param("parentId") UUID parentId
     );
 }
+
