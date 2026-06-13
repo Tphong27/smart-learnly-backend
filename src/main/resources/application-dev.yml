@@ -21,3 +21,4 @@ spring:
 app:
   seed:
     auth-users-enabled: ${APP_SEED_AUTH_USERS_ENABLED:true}
+    categories-enabled: ${APP_SEED_CATEGORIES_ENABLED:false}

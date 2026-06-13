@@ -1,6 +1,10 @@
 spring:
   application:
     name: smart-learnly-backend
+  servlet:
+    multipart:
+      max-file-size: ${APP_STORAGE_COURSE_THUMBNAIL_MAX_SIZE:5MB}
+      max-request-size: ${APP_STORAGE_COURSE_THUMBNAIL_MAX_REQUEST_SIZE:6MB}
   mail:
     host: ${RESEND_SMTP_HOST:smtp.resend.com}
     port: ${RESEND_SMTP_PORT:587}
@@ -37,6 +41,7 @@ app:
     debug-log-tokens: ${APP_AUTH_DEBUG_LOG_TOKENS:false}
   seed:
     auth-users-enabled: ${APP_SEED_AUTH_USERS_ENABLED:false}
+    categories-enabled: ${APP_SEED_CATEGORIES_ENABLED:false}
     admin-enabled: ${APP_SEED_ADMIN_ENABLED:false}
     admin-email: ${APP_SEED_ADMIN_EMAIL:admin@slp.vn}
     admin-password: ${APP_SEED_ADMIN_PASSWORD:}
@@ -53,6 +58,11 @@ app:
   integrations:
     ai-provider: ${AI_PROVIDER:none}
     payment-provider: ${PAYMENT_PROVIDER:none}
+  storage:
+    supabase-url: ${SUPABASE_URL:}
+    supabase-service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
+    course-thumbnail-bucket: ${SUPABASE_COURSE_THUMBNAIL_BUCKET:course-thumbnails}
+    course-thumbnail-max-size: ${APP_STORAGE_COURSE_THUMBNAIL_MAX_SIZE:5MB}
 
 springdoc:
   api-docs:
