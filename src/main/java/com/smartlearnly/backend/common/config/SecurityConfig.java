@@ -49,6 +49,11 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/swagger-ui/**"
                         ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/courses/*/preview-lessons",
+                                "/api/v1/courses/*/preview-lessons/*"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(Customizer.withDefaults());
@@ -83,6 +88,11 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/courses/*/preview-lessons",
+                                "/api/v1/courses/*/preview-lessons/*"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

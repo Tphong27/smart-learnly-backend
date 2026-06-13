@@ -60,4 +60,17 @@ public class OpenApiConfig {
                 .pathsToMatch("/api/v1/admin/**")
                 .build();
     }
+
+    @Bean
+    GroupedOpenApi courseContentApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("course-content")
+                .pathsToMatch(
+                        "/api/v1/admin/courses/**",
+                        "/api/v1/admin/sections/**",
+                        "/api/v1/admin/lessons/**",
+                        "/api/v1/courses/**"
+                )
+                .build();
+    }
 }
