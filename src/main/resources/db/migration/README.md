@@ -23,10 +23,15 @@ security-limit storage. The initial admin account is created by the
 environment-controlled `AdminAccountSeeder`, never with a password committed
 to a migration.
 
+Implemented course/content foundation:
+
+```text
+V5__course_catalog_content_foundation.sql
+```
+
 Planned order:
 
 ```text
-V5__course_classroom.sql
 V6__enrollment_payment.sql
 V7__learning_content.sql
 V8__assessment.sql

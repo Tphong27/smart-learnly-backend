@@ -25,6 +25,19 @@ RESEND_FROM_EMAIL=Smart Learnly <no-reply@mail.smartlearnly.online>
 GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 ```
 
+Optional Supabase Storage configuration for course-thumbnail uploads:
+
+```text
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_COURSE_THUMBNAIL_BUCKET=course-thumbnails
+APP_STORAGE_COURSE_THUMBNAIL_MAX_SIZE=5MB
+```
+
+Provision `course-thumbnails` as a public Supabase Storage bucket before using
+the upload endpoint. The service-role key is backend-only and must never be
+exposed to the frontend.
+
 The sending domain `mail.smartlearnly.online` must remain verified in Resend. When
 `RESEND_API_KEY` is empty, email delivery is skipped. Set `APP_AUTH_DEBUG_LOG_TOKENS=true`
 only in a trusted local environment when the generated OTP/token must be logged. The application connects to
@@ -49,6 +62,12 @@ Use `run-dev.example.ps1` as the non-secret template for a local `run-dev.ps1`.
 
 Swagger UI is available at `http://localhost:8080/swagger-ui.html`.
 
+To seed three development course categories while using the `dev` profile:
+
+```text
+APP_SEED_CATEGORIES_ENABLED=true
+```
+
 ## Auth API
 
 Auth endpoints use the `/api/v1/auth` prefix:
@@ -64,6 +83,14 @@ Auth endpoints use the `/api/v1/auth` prefix:
 - `POST /resend-verification`
 - `GET/PATCH /profile`
 - `POST /change-password`
+
+## Sprint 2 Dev A APIs
+
+Admin-only endpoints use bearer JWT authentication:
+
+- `GET/POST /api/v1/admin/categories`
+- `GET/PATCH/DELETE /api/v1/admin/categories/{categoryId}`
+- `POST /api/v1/admin/uploads/course-thumbnails`
 
 Login returns a 15-minute bearer access token. The seven-day rotating refresh token is stored in an HttpOnly cookie.
 Registration sends a six-digit email-verification OTP. Verify it with:

@@ -20,5 +20,8 @@ $env:RESEND_FROM_EMAIL = "Smart Learnly <no-reply@mail.smartlearnly.online>"
 # Without it, email delivery is skipped. Set APP_AUTH_DEBUG_LOG_TOKENS=true only for trusted local testing.
 # Set GOOGLE_CLIENT_ID to enable Google Identity Services login.
 # Set APP_SEED_ADMIN_ENABLED=true and APP_SEED_ADMIN_PASSWORD to create the initial admin safely.
+# Set APP_SEED_CATEGORIES_ENABLED=true to seed three development course categories.
+# Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to enable course-thumbnail uploads.
+# The public Supabase Storage bucket defaults to SUPABASE_COURSE_THUMBNAIL_BUCKET=course-thumbnails.
 
 .\mvnw.cmd spring-boot:run
