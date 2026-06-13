@@ -165,10 +165,10 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
                         l.is_preview AS "lessonPreview"
                     FROM public.modules m
                     LEFT JOIN public.lessons l
-                        ON l.module_id = m.id
-                       AND l.status = 'active'
-                    WHERE m.course_id = :courseId
-                      AND m.status = 'active'
+    ON l.module_id = m.id
+   AND l.status = 'published'::public.lesson_status
+WHERE m.course_id = :courseId
+  AND m.status = 'active'
                     ORDER BY
                         m.order_index ASC,
                         m.id ASC,
