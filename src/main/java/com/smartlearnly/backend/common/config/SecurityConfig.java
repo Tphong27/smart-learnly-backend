@@ -37,10 +37,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET,
-                                "/api/courses",
-                                "/api/courses/search",
-                                "/api/courses/category/{categorySlug}",
-                                "/api/courses/{slug}"
+                                "/api/v1/courses",
+"/api/v1/courses/search",
+"/api/v1/courses/category/{categorySlug}",
+"/api/v1/courses/{slug}"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/**",
@@ -68,10 +68,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET,
-                                "/api/courses",
-                                "/api/courses/search",
-                                "/api/courses/category/{categorySlug}",
-                                "/api/courses/{slug}"
+                               "/api/v1/courses",
+"/api/v1/courses/search",
+"/api/v1/courses/category/{categorySlug}",
+"/api/v1/courses/{slug}"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/register",
