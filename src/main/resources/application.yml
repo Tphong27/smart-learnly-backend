@@ -25,6 +25,11 @@ app:
     from: "${RESEND_FROM_EMAIL:Smart Learnly <no-reply@mail.smartlearnly.online>}"
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  rate-limit:
+    auth:
+      enabled: ${APP_RATE_LIMIT_AUTH_ENABLED:true}
+      capacity: ${APP_RATE_LIMIT_AUTH_CAPACITY:5}
+      window: ${APP_RATE_LIMIT_AUTH_WINDOW:PT15M}
   auth:
     email-verification-otp-ttl: ${APP_AUTH_EMAIL_VERIFICATION_OTP_TTL:PT15M}
     email-verification-otp-max-attempts: ${APP_AUTH_EMAIL_VERIFICATION_OTP_MAX_ATTEMPTS:5}
