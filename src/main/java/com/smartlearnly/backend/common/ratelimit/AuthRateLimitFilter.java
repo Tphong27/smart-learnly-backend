@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.Ordered;
@@ -14,19 +15,32 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 @RequiredArgsConstructor
 public class AuthRateLimitFilter extends OncePerRequestFilter {
+    private static final Set<String> RATE_LIMITED_AUTH_PATHS = Set.of(
+            "/api/v1/auth/register",
+            "/api/v1/auth/login",
+            "/api/v1/auth/google",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/verify-email",
+            "/api/v1/auth/resend-verification"
+    );
+
     private final AuthRateLimitProperties properties;
     private final Map<String, WindowCounter> counters = new ConcurrentHashMap<>();
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         return !properties.isEnabled()
-                || !request.getRequestURI().startsWith("/api/v1/auth/");
+                || CorsUtils.isPreFlightRequest(request)
+                || !"POST".equalsIgnoreCase(request.getMethod())
+                || !RATE_LIMITED_AUTH_PATHS.contains(request.getRequestURI());
     }
 
     @Override
