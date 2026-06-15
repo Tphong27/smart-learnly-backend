@@ -12,6 +12,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -176,7 +177,29 @@ public class GlobalExceptionHandler {
     ) {
         return buildResponse(ErrorCode.RESOURCE_NOT_FOUND, ErrorCode.RESOURCE_NOT_FOUND.defaultMessage(), List.of(), request);
     }
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+            ResponseStatusException exception,
+            HttpServletRequest request
+    ) {
+        int status = exception.getStatusCode().value();
+        ErrorCode errorCode = status == 404
+                ? ErrorCode.RESOURCE_NOT_FOUND
+                : ErrorCode.INVALID_REQUEST;
+        String message = exception.getReason() != null
+                ? exception.getReason()
+                : errorCode.defaultMessage();
 
+        return ResponseEntity
+                .status(exception.getStatusCode())
+                .body(ErrorResponse.of(
+                        status,
+                        errorCode.name(),
+                        message,
+                        request.getRequestURI(),
+                        List.of()
+                ));
+    }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpectedException(
             Exception exception,
