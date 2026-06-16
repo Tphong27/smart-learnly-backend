@@ -30,5 +30,22 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
             @Param("active") Boolean active,
             @Param("parentId") UUID parentId
     );
+
+    @Query("""
+            SELECT category
+            FROM Category category
+            LEFT JOIN category.parent parent
+            WHERE category.active = true
+              AND (parent IS NULL OR parent.active = true)
+              AND (:keyword IS NULL
+                    OR LOWER(category.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR LOWER(category.slug) LIKE LOWER(CONCAT('%', :keyword, '%')))
+              AND (:parentId IS NULL OR parent.id = :parentId)
+            ORDER BY category.sortOrder ASC, LOWER(category.name) ASC
+            """)
+    List<Category> searchPublicActive(
+            @Param("keyword") String keyword,
+            @Param("parentId") UUID parentId
+    );
 }
 

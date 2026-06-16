@@ -18,6 +18,7 @@ import com.smartlearnly.backend.course.entity.Category;
 import com.smartlearnly.backend.course.repository.CategoryRepository;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,19 @@ class CategoryServiceTest {
                 auditLogService,
                 authenticatedUserResolver
         );
+    }
+
+    @Test
+    void listPublicShouldUsePublicActiveCategoryQuery() {
+        UUID parentId = UUID.randomUUID();
+        Category category = category(UUID.randomUUID(), "Programming", "programming", null);
+        when(categoryRepository.searchPublicActive("program", parentId)).thenReturn(List.of(category));
+
+        List<CategoryResponse> response = categoryService.listPublic(" program ", parentId);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).slug()).isEqualTo("programming");
+        verify(categoryRepository).searchPublicActive("program", parentId);
     }
 
     @Test
