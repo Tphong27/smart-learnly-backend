@@ -69,6 +69,7 @@ public class OpenApiConfig {
                         "/api/v1/admin/courses/**",
                         "/api/v1/admin/sections/**",
                         "/api/v1/admin/lessons/**",
+                        "/api/v1/categories/**",
                         "/api/v1/courses/**"
                 )
                 .build();

@@ -40,6 +40,14 @@ public class CategoryService {
     }
 
     @Transactional(readOnly = true)
+    public List<CategoryResponse> listPublic(String keyword, UUID parentId) {
+        return categoryRepository.searchPublicActive(normalizeNullable(keyword), parentId)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public CategoryResponse get(UUID categoryId) {
         return toResponse(findCategory(categoryId));
     }
