@@ -11,7 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface CourseRepository extends JpaRepository<Course, UUID> {
-    boolean existsByCategoryId(UUID categoryId);
+    boolean existsByCategory_Id(UUID categoryId);
 
     @Query(
             value = """

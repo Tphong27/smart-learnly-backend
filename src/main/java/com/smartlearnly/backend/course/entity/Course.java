@@ -65,6 +65,9 @@ public class Course {
     @Column(name = "thumbnail_url")
     private String thumbnailUrl;
 
+    @Column(name = "is_featured", nullable = false)
+    private Boolean featured;
+
     @Column(nullable = false)
     private BigDecimal price;
 
@@ -96,6 +99,9 @@ public class Course {
         }
         if (free == null) {
             free = false;
+        }
+        if (featured == null) {
+            featured = false;
         }
         if (status == null) {
             status = CourseStatus.DRAFT;

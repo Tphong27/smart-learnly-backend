@@ -104,7 +104,7 @@ public class CategoryService {
         if (categoryRepository.existsByParentId(categoryId)) {
             throw new BusinessException(ErrorCode.CATEGORY_IN_USE, "Category has child categories");
         }
-        if (courseRepository.existsByCategoryId(categoryId)) {
+        if (courseRepository.existsByCategory_Id(categoryId)) {
             throw new BusinessException(ErrorCode.CATEGORY_IN_USE, "Category is assigned to one or more courses");
         }
         categoryRepository.delete(category);
