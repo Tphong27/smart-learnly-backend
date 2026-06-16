@@ -1,8 +1,6 @@
 package com.smartlearnly.backend.learning.lesson.repository;
 
-import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
-import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,40 +16,56 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
     @Query("select coalesce(max(lesson.sortOrder), -1) from Lesson lesson where lesson.section.id = :sectionId")
     int findMaxSortOrderBySectionId(@Param("sectionId") UUID sectionId);
 
-    @Query("""
-            select lesson
-            from Lesson lesson
-            join fetch lesson.course course
-            join fetch lesson.section section
-            where course.id = :courseId
-              and course.status = :courseStatus
-              and course.deletedAt is null
-              and lesson.status = :lessonStatus
-              and lesson.preview = true
-            order by section.sortOrder asc, lesson.sortOrder asc, lesson.createdAt asc
-            """)
-    List<Lesson> findPreviewLessons(
-            @Param("courseId") UUID courseId,
-            @Param("courseStatus") CourseStatus courseStatus,
-            @Param("lessonStatus") LessonStatus lessonStatus
-    );
+    @Query(value = """
+            SELECT
+                lesson.course_id AS "courseId",
+                lesson.section_id AS "sectionId",
+                lesson.id AS "lessonId",
+                lesson.title AS "title",
+                lesson.lesson_type::text AS "lessonType",
+                lesson.video_url AS "videoUrl",
+                lesson.content AS "content",
+                lesson.attachment_url AS "attachmentUrl",
+                lesson.duration_seconds AS "durationSeconds",
+                section.sort_order AS "sectionSortOrder",
+                lesson.sort_order AS "lessonSortOrder"
+            FROM public.lessons lesson
+            JOIN public.courses course ON course.id = lesson.course_id
+            JOIN public.course_sections section ON section.id = lesson.section_id
+            WHERE lesson.course_id = :courseId
+              AND course.status = 'published'::public.course_status
+              AND course.deleted_at IS NULL
+              AND lesson.status = 'published'::public.lesson_status
+              AND lesson.is_preview = true
+            ORDER BY section.sort_order ASC, lesson.sort_order ASC, lesson.created_at ASC
+            """, nativeQuery = true)
+    List<PreviewLessonProjection> findPreviewLessons(@Param("courseId") UUID courseId);
 
-    @Query("""
-            select lesson
-            from Lesson lesson
-            join fetch lesson.course course
-            join fetch lesson.section section
-            where course.id = :courseId
-              and lesson.id = :lessonId
-              and course.status = :courseStatus
-              and course.deletedAt is null
-              and lesson.status = :lessonStatus
-              and lesson.preview = true
-            """)
-    Optional<Lesson> findPreviewLesson(
+    @Query(value = """
+            SELECT
+                lesson.course_id AS "courseId",
+                lesson.section_id AS "sectionId",
+                lesson.id AS "lessonId",
+                lesson.title AS "title",
+                lesson.lesson_type::text AS "lessonType",
+                lesson.video_url AS "videoUrl",
+                lesson.content AS "content",
+                lesson.attachment_url AS "attachmentUrl",
+                lesson.duration_seconds AS "durationSeconds",
+                section.sort_order AS "sectionSortOrder",
+                lesson.sort_order AS "lessonSortOrder"
+            FROM public.lessons lesson
+            JOIN public.courses course ON course.id = lesson.course_id
+            JOIN public.course_sections section ON section.id = lesson.section_id
+            WHERE lesson.course_id = :courseId
+              AND lesson.id = :lessonId
+              AND course.status = 'published'::public.course_status
+              AND course.deleted_at IS NULL
+              AND lesson.status = 'published'::public.lesson_status
+              AND lesson.is_preview = true
+            """, nativeQuery = true)
+    Optional<PreviewLessonProjection> findPreviewLesson(
             @Param("courseId") UUID courseId,
-            @Param("lessonId") UUID lessonId,
-            @Param("courseStatus") CourseStatus courseStatus,
-            @Param("lessonStatus") LessonStatus lessonStatus
+            @Param("lessonId") UUID lessonId
     );
 }
