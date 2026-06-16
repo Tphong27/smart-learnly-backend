@@ -15,34 +15,34 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
     boolean existsBySlugIgnoreCaseAndIdNot(String slug, UUID id);
     boolean existsByParentId(UUID parentId);
 
-    @Query("""
-            SELECT category
-            FROM Category category
-            WHERE (:keyword IS NULL
-                    OR LOWER(category.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                    OR LOWER(category.slug) LIKE LOWER(CONCAT('%', :keyword, '%')))
-              AND (:active IS NULL OR category.active = :active)
-              AND (:parentId IS NULL OR category.parent.id = :parentId)
-            ORDER BY category.sortOrder ASC, LOWER(category.name) ASC
-            """)
+    @Query(value = """
+            SELECT category.*
+            FROM public.categories category
+            WHERE (CAST(:keyword AS text) IS NULL
+                    OR LOWER(category.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS text), '%'))
+                    OR LOWER(category.slug) LIKE LOWER(CONCAT('%', CAST(:keyword AS text), '%')))
+              AND (CAST(:active AS boolean) IS NULL OR category.is_active = CAST(:active AS boolean))
+              AND (CAST(:parentId AS uuid) IS NULL OR category.parent_id = CAST(:parentId AS uuid))
+            ORDER BY category.sort_order ASC, LOWER(category.name) ASC
+            """, nativeQuery = true)
     List<Category> search(
             @Param("keyword") String keyword,
             @Param("active") Boolean active,
             @Param("parentId") UUID parentId
     );
 
-    @Query("""
-            SELECT category
-            FROM Category category
-            LEFT JOIN category.parent parent
-            WHERE category.active = true
-              AND (parent IS NULL OR parent.active = true)
-              AND (:keyword IS NULL
-                    OR LOWER(category.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                    OR LOWER(category.slug) LIKE LOWER(CONCAT('%', :keyword, '%')))
-              AND (:parentId IS NULL OR parent.id = :parentId)
-            ORDER BY category.sortOrder ASC, LOWER(category.name) ASC
-            """)
+    @Query(value = """
+            SELECT category.*
+            FROM public.categories category
+            LEFT JOIN public.categories parent ON parent.id = category.parent_id
+            WHERE category.is_active = true
+              AND (parent.id IS NULL OR parent.is_active = true)
+              AND (CAST(:keyword AS text) IS NULL
+                    OR LOWER(category.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS text), '%'))
+                    OR LOWER(category.slug) LIKE LOWER(CONCAT('%', CAST(:keyword AS text), '%')))
+              AND (CAST(:parentId AS uuid) IS NULL OR parent.id = CAST(:parentId AS uuid))
+            ORDER BY category.sort_order ASC, LOWER(category.name) ASC
+            """, nativeQuery = true)
     List<Category> searchPublicActive(
             @Param("keyword") String keyword,
             @Param("parentId") UUID parentId

@@ -6,6 +6,7 @@ import com.smartlearnly.backend.course.dto.PreviewLessonResponse;
 import com.smartlearnly.backend.course.dto.SectionResponse;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
+import com.smartlearnly.backend.learning.lesson.repository.PreviewLessonProjection;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import java.util.Locale;
 import java.util.UUID;
@@ -82,6 +83,22 @@ final class CourseDtoMapper {
                 lesson.getDurationSeconds(),
                 lesson.getSection().getSortOrder(),
                 lesson.getSortOrder()
+        );
+    }
+
+    static PreviewLessonResponse toPreviewLessonResponse(PreviewLessonProjection lesson) {
+        return new PreviewLessonResponse(
+                lesson.getCourseId(),
+                lesson.getSectionId(),
+                lesson.getLessonId(),
+                lesson.getTitle(),
+                lesson.getLessonType(),
+                lesson.getVideoUrl(),
+                lesson.getContent(),
+                lesson.getAttachmentUrl(),
+                lesson.getDurationSeconds(),
+                lesson.getSectionSortOrder(),
+                lesson.getLessonSortOrder()
         );
     }
 

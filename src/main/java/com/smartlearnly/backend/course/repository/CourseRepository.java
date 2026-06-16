@@ -1,7 +1,6 @@
 package com.smartlearnly.backend.course.repository;
 
 import com.smartlearnly.backend.course.entity.Course;
-import com.smartlearnly.backend.course.entity.CourseStatus;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -184,7 +183,18 @@ WHERE m.course_id = :courseId
 
     Optional<Course> findByIdAndDeletedAtIsNull(UUID id);
 
-    Optional<Course> findByIdAndStatusAndDeletedAtIsNull(UUID id, CourseStatus status);
+    @Query(
+            value = """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM public.courses c
+                        WHERE c.id = :id
+                          AND c.status = 'published'::public.course_status
+                          AND c.deleted_at IS NULL
+                    )
+                    """,
+            nativeQuery = true)
+    boolean existsPublishedById(@Param("id") UUID id);
 
     Page<Course> findAllByDeletedAtIsNull(Pageable pageable);
 }
