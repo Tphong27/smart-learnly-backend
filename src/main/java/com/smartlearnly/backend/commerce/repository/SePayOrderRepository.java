@@ -9,4 +9,6 @@ public interface SePayOrderRepository extends JpaRepository<SePayOrder, UUID> {
     Optional<SePayOrder> findByOrderId(UUID orderId);
 
     Optional<SePayOrder> findByTransactionId(UUID transactionId);
+
+    boolean existsByPaymentCode(String paymentCode);
 }
