@@ -15,30 +15,44 @@ import org.springframework.transaction.annotation.Transactional;
 public class SePayWebhookService {
     private final SePayWebhookSignatureVerifier signatureVerifier;
     private final SePayWebhookEventRepository webhookEventRepository;
+    private final SePayPaymentMatchingService paymentMatchingService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
     public void receive(byte[] rawBody, String signature, String timestampHeader) {
         long eventTimestamp = signatureVerifier.verify(rawBody, signature, timestampHeader);
         String payload = new String(rawBody == null ? new byte[0] : rawBody, StandardCharsets.UTF_8);
-        long gatewayEventId = extractGatewayEventId(rawBody);
-        webhookEventRepository.saveReceivedEvent(gatewayEventId, signature, eventTimestamp, payload);
+        JsonNode root = parseRoot(rawBody);
+        long gatewayEventId = extractGatewayEventId(root);
+        boolean inserted = webhookEventRepository.saveReceivedEvent(gatewayEventId, signature, eventTimestamp, payload);
+        if (!inserted && shouldSkipDuplicate(gatewayEventId)) {
+            return;
+        }
+        paymentMatchingService.process(SePayWebhookPayload.from(root));
     }
 
-    private long extractGatewayEventId(byte[] rawBody) {
+    private JsonNode parseRoot(byte[] rawBody) {
         try {
-            JsonNode root = objectMapper.readTree(rawBody == null ? new byte[0] : rawBody);
-            JsonNode id = root == null ? null : root.get("id");
-            if (id == null || !id.isIntegralNumber()) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "SePay webhook event id is required");
-            }
-            return id.longValue();
+            return objectMapper.readTree(rawBody == null ? new byte[0] : rawBody);
         }
-        catch (BusinessException exception) {
-            throw exception;
-        }
-        catch (IOException | RuntimeException exception) {
+        catch (IOException exception) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "SePay webhook payload is invalid");
         }
+    }
+
+    private long extractGatewayEventId(JsonNode root) {
+        JsonNode id = root == null ? null : root.get("id");
+        if (id == null || !id.isIntegralNumber()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "SePay webhook event id is required");
+        }
+        return id.longValue();
+    }
+
+    private boolean shouldSkipDuplicate(long gatewayEventId) {
+        String status = webhookEventRepository.findProcessingStatusByGatewayEventIdForUpdate(gatewayEventId)
+                .orElse("FAILED");
+        return "PROCESSED".equals(status)
+                || "MISMATCHED".equals(status)
+                || "DUPLICATE".equals(status);
     }
 }
