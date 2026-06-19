@@ -74,4 +74,16 @@ public class OpenApiConfig {
                 )
                 .build();
     }
+
+    @Bean
+    GroupedOpenApi commerceApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("commerce")
+                .pathsToMatch(
+                        "/api/v1/cart/**",
+                        "/api/v1/orders/**",
+                        "/api/v1/transactions/**"
+                )
+                .build();
+    }
 }
