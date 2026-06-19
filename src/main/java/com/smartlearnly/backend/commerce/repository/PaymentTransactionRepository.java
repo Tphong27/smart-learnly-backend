@@ -25,4 +25,6 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select paymentTransaction from PaymentTransaction paymentTransaction where paymentTransaction.id = :id")
     Optional<PaymentTransaction> findByIdForUpdate(@Param("id") UUID id);
+
+    boolean existsByGatewayTransactionIdAndIdNot(String gatewayTransactionId, UUID id);
 }

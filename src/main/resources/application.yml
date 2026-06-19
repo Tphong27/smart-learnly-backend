@@ -67,6 +67,7 @@ app:
     sepay:
       webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
       api-token: ${SEPAY_API_TOKEN:}
+      api-base-url: ${SEPAY_API_BASE_URL:https://userapi.sepay.vn}
       account-number: ${SEPAY_ACCOUNT_NUMBER:}
       bank-name: ${SEPAY_BANK_NAME:}
       account-name: ${SEPAY_ACCOUNT_NAME:}

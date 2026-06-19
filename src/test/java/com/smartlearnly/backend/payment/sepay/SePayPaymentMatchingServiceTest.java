@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.commerce.entity.OrderItem;
@@ -204,6 +205,79 @@ class SePayPaymentMatchingServiceTest {
         verify(invoiceNumberRepository, never()).nextInvoiceNumber();
     }
 
+    @Test
+    void processReconciledTransactionShouldApplySuccessfulPaymentWithoutWebhookEvent() {
+        UUID studentId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID transactionId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        SePayOrder sePayOrder = sePayOrder(orderId, transactionId);
+        PaymentTransaction transaction = transaction(transactionId, orderId, studentId, TransactionStatus.PENDING);
+        PurchaseOrder order = order(orderId, studentId, OrderStatus.PENDING);
+        OrderItem item = orderItem(orderId, courseId, null, new BigDecimal("399000"));
+        when(sePayOrderRepository.findByPaymentCodeForUpdate(PAYMENT_CODE)).thenReturn(Optional.of(sePayOrder));
+        when(paymentTransactionRepository.findByIdForUpdate(transactionId)).thenReturn(Optional.of(transaction));
+        when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+        when(invoiceNumberRepository.nextInvoiceNumber()).thenReturn("SLP-INV-0000000044");
+        when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId)).thenReturn(List.of(item));
+
+        service.processReconciledTransaction(transactionCandidate(PAYMENT_CODE, new BigDecimal("399000")));
+
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+        assertThat(transaction.getGatewayEventId()).isNull();
+        assertThat(transaction.getGatewayTransactionId()).isEqualTo("FT24012345678");
+        assertThat(transaction.getPaidAt()).isEqualTo(NOW);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(sePayOrder.getStatus()).isEqualTo(SePayOrderStatus.MATCHED);
+        verify(courseEnrollmentService).grantPaidCourseEnrollment(studentId, courseId, transactionId);
+        verifyNoInteractions(webhookEventRepository);
+    }
+
+    @Test
+    void processReconciledTransactionShouldRejectAlreadyUsedGatewayTransaction() {
+        UUID studentId = UUID.randomUUID();
+        UUID transactionId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        SePayOrder sePayOrder = sePayOrder(orderId, transactionId);
+        PaymentTransaction transaction = transaction(transactionId, orderId, studentId, TransactionStatus.PENDING);
+        PurchaseOrder order = order(orderId, studentId, OrderStatus.PENDING);
+        when(sePayOrderRepository.findByPaymentCodeForUpdate(PAYMENT_CODE)).thenReturn(Optional.of(sePayOrder));
+        when(paymentTransactionRepository.findByIdForUpdate(transactionId)).thenReturn(Optional.of(transaction));
+        when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+        when(paymentTransactionRepository.existsByGatewayTransactionIdAndIdNot("FT24012345678", transactionId))
+                .thenReturn(true);
+
+        service.processReconciledTransaction(transactionCandidate(PAYMENT_CODE, new BigDecimal("399000")));
+
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.PENDING);
+        assertThat(sePayOrder.getStatus()).isEqualTo(SePayOrderStatus.WAITING_PAYMENT);
+        verify(paymentTransactionRepository, never()).saveAndFlush(any());
+        verify(courseEnrollmentService, never()).grantPaidCourseEnrollment(any(), any(), any());
+        verify(classEnrollmentService, never()).grantPaidClassEnrollment(any(), any(), any(), any());
+        verifyNoInteractions(webhookEventRepository);
+    }
+
+    @Test
+    void processReconciledTransactionShouldHandleAlreadyPaidTransactionIdempotently() {
+        UUID studentId = UUID.randomUUID();
+        UUID transactionId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        SePayOrder sePayOrder = sePayOrder(orderId, transactionId);
+        sePayOrder.setStatus(SePayOrderStatus.MATCHED);
+        PaymentTransaction transaction = transaction(transactionId, orderId, studentId, TransactionStatus.SUCCESS);
+        PurchaseOrder order = order(orderId, studentId, OrderStatus.PAID);
+        when(sePayOrderRepository.findByPaymentCodeForUpdate(PAYMENT_CODE)).thenReturn(Optional.of(sePayOrder));
+        when(paymentTransactionRepository.findByIdForUpdate(transactionId)).thenReturn(Optional.of(transaction));
+        when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+
+        service.processReconciledTransaction(transactionCandidate(PAYMENT_CODE, new BigDecimal("399000")));
+
+        verify(courseEnrollmentService, never()).grantPaidCourseEnrollment(any(), any(), any());
+        verify(classEnrollmentService, never()).grantPaidClassEnrollment(any(), any(), any(), any());
+        verify(invoiceNumberRepository, never()).nextInvoiceNumber();
+        verifyNoInteractions(webhookEventRepository);
+    }
+
     private SePayWebhookPayload payload(
             String code,
             String content,
@@ -220,6 +294,19 @@ class SePayPaymentMatchingServiceTest {
                 accountNumber,
                 null,
                 "FT24012345678"
+        );
+    }
+
+    private SePayTransactionCandidate transactionCandidate(String paymentCode, BigDecimal amount) {
+        return new SePayTransactionCandidate(
+                "0f171a36-5a4e-4e00-b7fb-c8a4560d9c10",
+                "2026-06-19T17:30:00+07:00",
+                "123456789",
+                "in",
+                amount,
+                "Thanh toan " + paymentCode,
+                "FT24012345678",
+                paymentCode
         );
     }
 

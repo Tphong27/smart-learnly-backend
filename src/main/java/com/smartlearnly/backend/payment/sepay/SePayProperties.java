@@ -12,9 +12,11 @@ public class SePayProperties {
     static final String DEFAULT_QR_URL_TEMPLATE =
             "https://img.vietqr.io/image/{bankName}-{accountNumber}-compact2.png"
                     + "?amount={amount}&addInfo={paymentCode}&accountName={accountName}";
+    static final String DEFAULT_API_BASE_URL = "https://userapi.sepay.vn";
 
     private String webhookSecret = "";
     private String apiToken = "";
+    private String apiBaseUrl = DEFAULT_API_BASE_URL;
     private String accountNumber = "";
     private String bankName = "";
     private String accountName = "";

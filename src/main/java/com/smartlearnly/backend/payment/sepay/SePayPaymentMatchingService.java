@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -27,7 +28,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,20 +103,32 @@ public class SePayPaymentMatchingService {
 
     @Transactional
     public void process(SePayWebhookPayload payload) {
-        if (!isInboundPayment(payload)) {
-            markMismatched(payload.id(), "SePay transfer is not inbound");
+        processCandidate(SePayPaymentMatchCandidate.fromWebhook(payload), webhookOutcome(payload.id()));
+    }
+
+    @Transactional
+    public void processReconciledTransaction(SePayTransactionCandidate transaction) {
+        processCandidate(
+                SePayPaymentMatchCandidate.fromReconciledTransaction(transaction),
+                MatchOutcomeRecorder.NO_OP
+        );
+    }
+
+    private void processCandidate(SePayPaymentMatchCandidate candidate, MatchOutcomeRecorder outcomeRecorder) {
+        if (!isInboundPayment(candidate)) {
+            outcomeRecorder.mismatched("SePay transfer is not inbound");
             return;
         }
 
-        Optional<String> paymentCode = resolvePaymentCode(payload);
+        Optional<String> paymentCode = resolvePaymentCode(candidate);
         if (paymentCode.isEmpty()) {
-            markMismatched(payload.id(), "SePay payment code was not found");
+            outcomeRecorder.mismatched("SePay payment code was not found");
             return;
         }
 
         SePayOrder sePayOrder = sePayOrderRepository.findByPaymentCodeForUpdate(paymentCode.get()).orElse(null);
         if (sePayOrder == null) {
-            markMismatched(payload.id(), "SePay payment code did not match an order");
+            outcomeRecorder.mismatched("SePay payment code did not match an order");
             return;
         }
 
@@ -125,35 +137,41 @@ public class SePayPaymentMatchingService {
                 .orElse(null);
         PurchaseOrder order = orderRepository.findByIdForUpdate(sePayOrder.getOrderId()).orElse(null);
         if (transaction == null || order == null) {
-            webhookEventRepository.markFailed(payload.id(), "Matched payment references missing local records");
+            outcomeRecorder.failed("Matched payment references missing local records");
             return;
         }
         if (isAlreadyPaid(transaction, order, sePayOrder)) {
-            webhookEventRepository.markProcessed(payload.id());
+            outcomeRecorder.processed();
             return;
         }
         if (!isProcessableSePayOrder(sePayOrder)) {
-            markMismatched(payload.id(), "SePay order is not waiting for payment");
+            outcomeRecorder.mismatched("SePay order is not waiting for payment");
             return;
         }
-        if (payload.transferAmount() == null || payload.transferAmount().compareTo(sePayOrder.getAmount()) != 0) {
-            markMismatched(payload.id(), "SePay payment amount did not match");
+        if (candidate.transferAmount() == null || candidate.transferAmount().compareTo(sePayOrder.getAmount()) != 0) {
+            outcomeRecorder.mismatched("SePay payment amount did not match");
             return;
         }
-        if (!matchesReceivingAccount(payload.accountNumber(), sePayOrder.getBankAccountNumber())) {
-            markMismatched(payload.id(), "SePay receiving account did not match");
+        if (!matchesReceivingAccount(candidate.accountNumber(), sePayOrder.getBankAccountNumber())) {
+            outcomeRecorder.mismatched("SePay receiving account did not match");
+            return;
+        }
+        if (isGatewayTransactionAlreadyUsed(candidate.gatewayTransactionId(), transaction.getId())) {
+            outcomeRecorder.mismatched("SePay gateway transaction was already used");
             return;
         }
         if (!isProcessableTransaction(transaction) || order.getStatus() != OrderStatus.PENDING) {
-            markMismatched(payload.id(), "Matched payment is not pending");
+            outcomeRecorder.mismatched("Matched payment is not pending");
             return;
         }
 
-        Instant paidAt = resolvePaidAt(payload.transactionDate());
+        Instant paidAt = resolvePaidAt(candidate.transactionDate());
         transaction.setStatus(TransactionStatus.SUCCESS);
-        transaction.setGatewayEventId(payload.id());
-        if (!isBlank(payload.referenceCode())) {
-            transaction.setGatewayTransactionId(payload.referenceCode().trim());
+        if (candidate.gatewayEventId() != null) {
+            transaction.setGatewayEventId(candidate.gatewayEventId());
+        }
+        if (!isBlank(candidate.gatewayTransactionId())) {
+            transaction.setGatewayTransactionId(candidate.gatewayTransactionId().trim());
         }
         if (isBlank(transaction.getInvoiceNumber())) {
             transaction.setInvoiceNumber(invoiceNumberRepository.nextInvoiceNumber());
@@ -170,14 +188,14 @@ public class SePayPaymentMatchingService {
         sePayOrderRepository.saveAndFlush(sePayOrder);
 
         grantEnrollments(order.getId(), order.getUserId(), transaction.getId());
-        webhookEventRepository.markProcessed(payload.id());
+        outcomeRecorder.processed();
     }
 
-    private boolean isInboundPayment(SePayWebhookPayload payload) {
+    private boolean isInboundPayment(SePayPaymentMatchCandidate payload) {
         return isBlank(payload.transferType()) || "in".equalsIgnoreCase(payload.transferType().trim());
     }
 
-    private Optional<String> resolvePaymentCode(SePayWebhookPayload payload) {
+    private Optional<String> resolvePaymentCode(SePayPaymentMatchCandidate payload) {
         if (!isBlank(payload.code())) {
             return Optional.of(normalizePaymentCode(payload.code()));
         }
@@ -245,10 +263,31 @@ public class SePayPaymentMatchingService {
                 || transaction.getStatus() == TransactionStatus.PROCESSING;
     }
 
+    private boolean isGatewayTransactionAlreadyUsed(String gatewayTransactionId, UUID currentTransactionId) {
+        return !isBlank(gatewayTransactionId)
+                && paymentTransactionRepository.existsByGatewayTransactionIdAndIdNot(
+                        gatewayTransactionId.trim(),
+                        currentTransactionId
+                );
+    }
+
     private Instant resolvePaidAt(String transactionDate) {
         if (!isBlank(transactionDate)) {
+            String normalizedDate = transactionDate.trim();
             try {
-                return LocalDateTime.parse(transactionDate.trim(), SEPAY_TRANSACTION_DATE_FORMAT)
+                return Instant.parse(normalizedDate);
+            }
+            catch (DateTimeParseException exception) {
+                // Continue with the formats SePay exposes for webhook and API responses.
+            }
+            try {
+                return OffsetDateTime.parse(normalizedDate).toInstant();
+            }
+            catch (DateTimeParseException exception) {
+                // Continue with the local Vietnam timestamp used by webhook payloads.
+            }
+            try {
+                return LocalDateTime.parse(normalizedDate, SEPAY_TRANSACTION_DATE_FORMAT)
                         .atZone(VIETNAM_ZONE)
                         .toInstant();
             }
@@ -279,11 +318,40 @@ public class SePayPaymentMatchingService {
         }
     }
 
-    private void markMismatched(long gatewayEventId, String reason) {
-        webhookEventRepository.markMismatched(gatewayEventId, reason);
-    }
-
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private MatchOutcomeRecorder webhookOutcome(long gatewayEventId) {
+        return new MatchOutcomeRecorder() {
+            @Override
+            public void processed() {
+                webhookEventRepository.markProcessed(gatewayEventId);
+            }
+
+            @Override
+            public void mismatched(String reason) {
+                webhookEventRepository.markMismatched(gatewayEventId, reason);
+            }
+
+            @Override
+            public void failed(String reason) {
+                webhookEventRepository.markFailed(gatewayEventId, reason);
+            }
+        };
+    }
+
+    private interface MatchOutcomeRecorder {
+        MatchOutcomeRecorder NO_OP = new MatchOutcomeRecorder() {
+        };
+
+        default void processed() {
+        }
+
+        default void mismatched(String reason) {
+        }
+
+        default void failed(String reason) {
+        }
     }
 }
