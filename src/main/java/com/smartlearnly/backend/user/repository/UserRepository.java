@@ -10,4 +10,9 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID> {
     Optional<UserAccount> findByGoogleIdAndDeletedAtIsNull(String googleId);
     Optional<UserAccount> findByAuthUserIdAndDeletedAtIsNull(UUID authUserId);
     Optional<UserAccount> findByIdAndDeletedAtIsNull(UUID id);
+    Optional<UserAccount> findByIdAndRoleIgnoreCaseAndStatusIgnoreCaseAndDeletedAtIsNull(
+            UUID id,
+            String role,
+            String status
+    );
 }
