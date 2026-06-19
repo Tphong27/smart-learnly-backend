@@ -91,6 +91,16 @@ public class Course {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    @Column(name = "access_blocked_at")
+    private Instant accessBlockedAt;
+
+    @Column(name = "access_block_reason")
+    private String accessBlockReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "access_blocked_by")
+    private UserAccount accessBlockedBy;
+
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();

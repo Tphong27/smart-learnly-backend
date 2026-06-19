@@ -4,8 +4,10 @@ import com.smartlearnly.backend.course.entity.Course;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -182,6 +184,10 @@ WHERE m.course_id = :courseId
     boolean existsBySlugIgnoreCaseAndIdNotAndDeletedAtIsNull(String slug, UUID id);
 
     Optional<Course> findByIdAndDeletedAtIsNull(UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select course from Course course where course.id = :id and course.deletedAt is null")
+    Optional<Course> findByIdAndDeletedAtIsNullForUpdate(@Param("id") UUID id);
 
     @Query(
             value = """
