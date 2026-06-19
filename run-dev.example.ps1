@@ -3,6 +3,14 @@ $requiredVariables = @(
     "JWT_SECRET"
 )
 
+$javaHomeBin = Join-Path $env:JAVA_HOME "bin"
+
+if (-not $env:JAVA_HOME -or -not (Test-Path (Join-Path $javaHomeBin "java.exe"))) {
+    throw "JAVA_HOME must point to a Java 17+ JDK."
+}
+
+$env:PATH = "$javaHomeBin;$env:PATH"
+
 foreach ($variable in $requiredVariables) {
     if (-not (Test-Path "Env:$variable")) {
         throw "Missing required environment variable: $variable"
@@ -24,4 +32,23 @@ $env:RESEND_FROM_EMAIL = "Smart Learnly <no-reply@mail.smartlearnly.online>"
 # Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to enable course-thumbnail uploads.
 # The public Supabase Storage bucket defaults to SUPABASE_COURSE_THUMBNAIL_BUCKET=course-thumbnails.
 
-.\mvnw.cmd spring-boot:run
+$projectRoot = $PSScriptRoot
+$launchRoot = "C:\tmp\smart-learnly-backend"
+
+if (Test-Path -LiteralPath $launchRoot) {
+    $launchRootItem = Get-Item -LiteralPath $launchRoot
+    if (-not ($launchRootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or $launchRootItem.Target -ne $projectRoot) {
+        throw "$launchRoot already exists and does not point to $projectRoot."
+    }
+}
+else {
+    New-Item -ItemType Junction -Path $launchRoot -Target $projectRoot | Out-Null
+}
+
+Push-Location $launchRoot
+try {
+    .\mvnw.cmd spring-boot:run
+}
+finally {
+    Pop-Location
+}
