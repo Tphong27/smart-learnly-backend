@@ -132,7 +132,7 @@ class CategoryServiceTest {
         Category category = category(categoryId, "Cloud", "cloud", null);
         when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
         when(categoryRepository.existsByParentId(categoryId)).thenReturn(false);
-        when(courseRepository.existsByCategoryId(categoryId)).thenReturn(true);
+        when(courseRepository.existsByCategory_Id(categoryId)).thenReturn(true);
 
         assertThatThrownBy(() -> categoryService.delete(categoryId))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
