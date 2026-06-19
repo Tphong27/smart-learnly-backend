@@ -35,6 +35,17 @@ already existed before Flyway ownership. It retains legacy columns and
 backfills `course_sections` and the new lesson relationships without dropping
 existing data.
 
+Sprint 3 commerce/enrollment foundation:
+
+```text
+V10__sepay_order_enrollment_foundation.sql
+```
+
+`V10` reconciles the pre-Flyway class, enrollment, and transaction tables,
+adds SePay to the payment gateway enum, and creates carts, immutable orders,
+SePay matching/audit tables, enrollment transition audit, explicit course
+access-block fields, constraints, indexes, and invoice sequencing.
+
 The shared development database also contains applied migrations `V6` and
 `V7` (`fix lessons lesson type enum` and `ensure lessons lesson type enum`)
 whose source files are currently missing from the repository. The `dev`
@@ -42,7 +53,8 @@ profile temporarily ignores applied-but-missing migrations so local startup is
 not blocked. Recover and commit those exact migration files before using this
 history outside the shared development database.
 
-Planned order:
+Original high-level planning order (the committed migration numbers are the
+source of truth):
 
 ```text
 V6__enrollment_payment.sql
