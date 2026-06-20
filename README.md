@@ -38,6 +38,25 @@ Provision `course-thumbnails` as a public Supabase Storage bucket before using
 the upload endpoint. The service-role key is backend-only and must never be
 exposed to the frontend.
 
+SePay runtime configuration:
+
+```text
+SEPAY_WEBHOOK_SECRET=replace-with-webhook-secret
+SEPAY_ACCOUNT_NUMBER=replace-with-bank-account-number
+SEPAY_BANK_NAME=replace-with-bank-name
+SEPAY_ACCOUNT_NAME=replace-with-bank-account-name
+SEPAY_PAYMENT_CODE_PREFIX=SLP
+SEPAY_RECONCILIATION_INTERVAL=PT5M
+SEPAY_API_TOKEN=replace-with-sepay-api-token
+SEPAY_API_BASE_URL=https://userapi.sepay.vn
+```
+
+`SEPAY_ACCOUNT_NUMBER`, `SEPAY_BANK_NAME`, and `SEPAY_ACCOUNT_NAME` are
+required to generate checkout payment instructions. `SEPAY_API_TOKEN` and
+`SEPAY_API_BASE_URL` are used by reconciliation for missed webhooks. Use
+placeholder values in shared examples only; never commit real bank account
+values or payment secrets.
+
 The sending domain `mail.smartlearnly.online` must remain verified in Resend. When
 `RESEND_API_KEY` is empty, email delivery is skipped. Set `APP_AUTH_DEBUG_LOG_TOKENS=true`
 only in a trusted local environment when the generated OTP/token must be logged. The application connects to
