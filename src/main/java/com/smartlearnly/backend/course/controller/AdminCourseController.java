@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
 @RequestMapping("/api/v1/admin/courses")
 @Tag(name = "Admin Courses", description = "Administrator course management APIs.")
 @SecurityRequirement(name = "bearerAuth")

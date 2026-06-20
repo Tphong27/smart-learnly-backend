@@ -18,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
 @RequestMapping("/api/v1/admin/uploads")
 @Tag(name = "Admin Uploads", description = "Administrator-managed upload APIs.")
 @SecurityRequirement(name = "bearerAuth")
