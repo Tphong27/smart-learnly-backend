@@ -63,6 +63,16 @@ app:
   integrations:
     ai-provider: ${AI_PROVIDER:none}
     payment-provider: ${PAYMENT_PROVIDER:none}
+  payment:
+    sepay:
+      webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
+      api-token: ${SEPAY_API_TOKEN:}
+      api-base-url: ${SEPAY_API_BASE_URL:https://userapi.sepay.vn}
+      account-number: ${SEPAY_ACCOUNT_NUMBER:}
+      bank-name: ${SEPAY_BANK_NAME:}
+      account-name: ${SEPAY_ACCOUNT_NAME:}
+      reconciliation-interval: ${SEPAY_RECONCILIATION_INTERVAL:PT5M}
+      payment-code-prefix: ${SEPAY_PAYMENT_CODE_PREFIX:SLP}
   storage:
     supabase-url: ${SUPABASE_URL:}
     supabase-service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}

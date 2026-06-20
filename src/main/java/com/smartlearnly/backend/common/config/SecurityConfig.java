@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/sepay").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categories",
                                 "/api/v1/courses",
@@ -68,6 +69,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/sepay").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categories",
                                 "/api/v1/courses",
