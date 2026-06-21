@@ -21,6 +21,7 @@ public class SePayProperties {
     private String bankName = "";
     private String accountName = "";
     private Duration reconciliationInterval = Duration.ofMinutes(5);
+    private Duration reconciliationInitialDelay = Duration.ofMinutes(5);
     private String paymentCodePrefix = "SLP";
     private String qrUrlTemplate = DEFAULT_QR_URL_TEMPLATE;
 }

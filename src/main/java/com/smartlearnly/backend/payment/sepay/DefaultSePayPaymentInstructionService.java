@@ -98,7 +98,7 @@ public class DefaultSePayPaymentInstructionService implements SePayPaymentInstru
                 "accountNumber", accountNumber,
                 "bankName", bankName,
                 "accountName", accountName,
-                "amount", request.amount().toPlainString(),
+                "amount", formatVndAmount(request.amount()),
                 "orderCode", request.orderCode() == null ? "" : request.orderCode()
         );
 
@@ -115,6 +115,14 @@ public class DefaultSePayPaymentInstructionService implements SePayPaymentInstru
     private String encodePlaceholderValue(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8)
                 .replace("+", "%20");
+    }
+
+    private String formatVndAmount(BigDecimal amount) {
+        BigDecimal normalized = amount.stripTrailingZeros();
+        if (normalized.scale() > 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "SePay payment amount must be a whole VND value");
+        }
+        return normalized.toPlainString();
     }
 
     private boolean isBlank(String value) {

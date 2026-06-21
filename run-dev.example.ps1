@@ -31,6 +31,10 @@ $env:RESEND_FROM_EMAIL = "Smart Learnly <no-reply@mail.smartlearnly.online>"
 # Set APP_SEED_CATEGORIES_ENABLED=true to seed three development course categories.
 # Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to enable course-thumbnail uploads.
 # The public Supabase Storage bucket defaults to SUPABASE_COURSE_THUMBNAIL_BUCKET=course-thumbnails.
+# Local paid-course payment can run without webhook by using SePay reconciliation polling.
+# Required for local polling: SEPAY_ACCOUNT_NUMBER, SEPAY_BANK_NAME, SEPAY_ACCOUNT_NAME, SEPAY_API_TOKEN.
+# Optional webhook testing: expose localhost with a tunnel, then set SEPAY_WEBHOOK_SECRET
+# and configure the SePay webhook security mode as HMAC-SHA256.
 
 $projectRoot = $PSScriptRoot
 $launchRoot = "C:\tmp\smart-learnly-backend"

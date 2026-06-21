@@ -31,6 +31,7 @@ public class SePayReconciliationService {
                 List.of(SePayOrderStatus.CREATED, SePayOrderStatus.WAITING_PAYMENT),
                 PageRequest.of(0, MAX_PENDING_ORDERS)
         );
+        log.info("SePay reconciliation scanning pendingOrders={}", pendingOrders.size());
         for (SePayOrder sePayOrder : pendingOrders) {
             reconcileOrder(sePayOrder);
         }
@@ -40,6 +41,11 @@ public class SePayReconciliationService {
         try {
             List<SePayTransactionCandidate> candidates = sePayTransactionClient.findTransactions(
                     SePayTransactionQuery.forPaymentCode(sePayOrder.getPaymentCode(), sePayOrder.getAmount())
+            );
+            log.info(
+                    "SePay reconciliation fetched candidates={} for paymentCode={}",
+                    candidates.size(),
+                    sePayOrder.getPaymentCode()
             );
             for (SePayTransactionCandidate candidate : candidates) {
                 processCandidate(sePayOrder.getPaymentCode(), candidate);

@@ -28,12 +28,15 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SePayPaymentMatchingService {
+    private static final Logger log = LoggerFactory.getLogger(SePayPaymentMatchingService.class);
     private static final String DEFAULT_PAYMENT_CODE_PREFIX = "SLP";
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final DateTimeFormatter SEPAY_TRANSACTION_DATE_FORMAT =
@@ -110,7 +113,7 @@ public class SePayPaymentMatchingService {
     public void processReconciledTransaction(SePayTransactionCandidate transaction) {
         processCandidate(
                 SePayPaymentMatchCandidate.fromReconciledTransaction(transaction),
-                MatchOutcomeRecorder.NO_OP
+                reconciliationOutcome(transaction.gatewayTransactionId())
         );
     }
 
@@ -337,6 +340,38 @@ public class SePayPaymentMatchingService {
             @Override
             public void failed(String reason) {
                 webhookEventRepository.markFailed(gatewayEventId, reason);
+            }
+        };
+    }
+
+    private MatchOutcomeRecorder reconciliationOutcome(String gatewayTransactionId) {
+        return new MatchOutcomeRecorder() {
+            @Override
+            public void processed() {
+                logReconciliationOutcome("processed", null);
+            }
+
+            @Override
+            public void mismatched(String reason) {
+                logReconciliationOutcome("mismatched", reason);
+            }
+
+            @Override
+            public void failed(String reason) {
+                logReconciliationOutcome("failed", reason);
+            }
+
+            private void logReconciliationOutcome(String outcome, String reason) {
+                if (reason == null) {
+                    log.info("SePay reconciliation candidate {} gatewayTransactionId={}", outcome, gatewayTransactionId);
+                    return;
+                }
+                log.info(
+                        "SePay reconciliation candidate {} gatewayTransactionId={} reason={}",
+                        outcome,
+                        gatewayTransactionId,
+                        reason
+                );
             }
         };
     }

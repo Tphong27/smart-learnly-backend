@@ -68,7 +68,10 @@ public class DefaultSePayTransactionClient implements SePayTransactionClient {
 
     private List<SePayTransactionCandidate> parseTransactions(String response) throws IOException {
         JsonNode root = objectMapper.readTree(response == null ? "{}" : response);
-        JsonNode transactions = root.isArray() ? root : root.get("transactions");
+        JsonNode transactions = root.isArray() ? root : root.get("data");
+        if (transactions == null || !transactions.isArray()) {
+            transactions = root.get("transactions");
+        }
         if (transactions == null || !transactions.isArray()) {
             return List.of();
         }

@@ -16,7 +16,7 @@ public class SePayReconciliationScheduler {
 
     @Scheduled(
             fixedDelayString = "${app.payment.sepay.reconciliation-interval:PT5M}",
-            initialDelayString = "${app.payment.sepay.reconciliation-interval:PT5M}"
+            initialDelayString = "${app.payment.sepay.reconciliation-initial-delay:${app.payment.sepay.reconciliation-interval:PT5M}}"
     )
     public void run() {
         if (!hasApiToken()) {

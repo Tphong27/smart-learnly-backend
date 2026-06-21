@@ -72,7 +72,9 @@ app:
       bank-name: ${SEPAY_BANK_NAME:${APP_PAYMENT_SEPAY_BANK_NAME:}}
       account-name: ${SEPAY_ACCOUNT_NAME:${APP_PAYMENT_SEPAY_ACCOUNT_NAME:}}
       reconciliation-interval: ${SEPAY_RECONCILIATION_INTERVAL:PT5M}
+      reconciliation-initial-delay: ${SEPAY_RECONCILIATION_INITIAL_DELAY:${SEPAY_RECONCILIATION_INTERVAL:PT5M}}
       payment-code-prefix: ${SEPAY_PAYMENT_CODE_PREFIX:SLP}
+      qr-url-template: ${SEPAY_QR_URL_TEMPLATE:}
   storage:
     supabase-url: ${SUPABASE_URL:}
     supabase-service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
