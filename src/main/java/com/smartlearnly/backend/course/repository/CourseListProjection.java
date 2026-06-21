@@ -15,6 +15,8 @@ public interface CourseListProjection {
 
 	BigDecimal getPrice();
 
+	BigDecimal getDiscountedPrice();
+
 	String getAvatarUrl();
 
 	boolean isFeatured();

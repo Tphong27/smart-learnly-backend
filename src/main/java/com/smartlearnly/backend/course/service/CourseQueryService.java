@@ -92,6 +92,7 @@ public class CourseQueryService {
 				course.getSlug(),
 				course.getDescription(),
 				course.getPrice(),
+				course.getDiscountedPrice(),
 				course.getAvatarUrl(),
 				course.isFeatured(),
 				new CategorySummaryResponse(
@@ -155,6 +156,7 @@ public class CourseQueryService {
 				course.getSlug(),
 				course.getDescription(),
 				course.getPrice(),
+				course.getDiscountedPrice(),
 				course.getAvatarUrl(),
 				course.isFeatured(),
 				category);

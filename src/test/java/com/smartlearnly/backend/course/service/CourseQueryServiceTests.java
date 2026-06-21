@@ -71,6 +71,7 @@ class CourseQueryServiceTests {
 		when(projection.getSlug()).thenReturn("spring-boot-fundamentals");
 		when(projection.getDescription()).thenReturn("Build production-ready Spring applications.");
 		when(projection.getPrice()).thenReturn(new BigDecimal("49.90"));
+		when(projection.getDiscountedPrice()).thenReturn(new BigDecimal("39.90"));
 		when(projection.getAvatarUrl()).thenReturn("https://example.test/course.png");
 		when(projection.isFeatured()).thenReturn(true);
 		when(projection.getCategoryId()).thenReturn(categoryId);
@@ -90,6 +91,7 @@ class CourseQueryServiceTests {
 						"spring-boot-fundamentals",
 						"Build production-ready Spring applications.",
 						new BigDecimal("49.90"),
+						new BigDecimal("39.90"),
 						"https://example.test/course.png",
 						true,
 						new CategorySummaryResponse(
@@ -230,6 +232,7 @@ class CourseQueryServiceTests {
 		when(detailProjection.getDescription())
 				.thenReturn("Build production-ready Spring applications.");
 		when(detailProjection.getPrice()).thenReturn(new BigDecimal("49.90"));
+		when(detailProjection.getDiscountedPrice()).thenReturn(new BigDecimal("39.90"));
 		when(detailProjection.getAvatarUrl()).thenReturn("https://example.test/course.png");
 		when(detailProjection.isFeatured()).thenReturn(true);
 		when(detailProjection.getCategoryId()).thenReturn(categoryId);
@@ -273,6 +276,7 @@ class CourseQueryServiceTests {
 				"spring-boot-fundamentals",
 				"Build production-ready Spring applications.",
 				new BigDecimal("49.90"),
+				new BigDecimal("39.90"),
 				"https://example.test/course.png",
 				true,
 				new CategorySummaryResponse(

@@ -10,6 +10,7 @@ public record CourseDetailResponse(
 		String slug,
 		String description,
 		BigDecimal price,
+		BigDecimal discountedPrice,
 		String avatarUrl,
 		boolean featured,
 		CategorySummaryResponse category,
