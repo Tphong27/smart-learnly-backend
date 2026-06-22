@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.course.dto;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record LessonResponse(
@@ -15,6 +16,7 @@ public record LessonResponse(
         Integer durationSeconds,
         boolean isPreview,
         String status,
+        List<LessonResourceResponse> resources,
         Integer sortOrder,
         Instant createdAt,
         Instant updatedAt
