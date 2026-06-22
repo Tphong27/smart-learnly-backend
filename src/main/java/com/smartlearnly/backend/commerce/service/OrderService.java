@@ -15,6 +15,10 @@ import com.smartlearnly.backend.commerce.repository.OrderItemRepository;
 import com.smartlearnly.backend.commerce.repository.OrderRepository;
 import com.smartlearnly.backend.commerce.repository.PaymentTransactionRepository;
 import com.smartlearnly.backend.commerce.repository.SePayOrderRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.AuditDomain;
+import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -34,6 +38,7 @@ public class OrderService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final SePayOrderRepository sePayOrderRepository;
     private final CurrentUserService currentUserService;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID orderId) {
@@ -74,6 +79,13 @@ public class OrderService {
                             });
                 });
 
+        auditLogService.recordUser(
+                actor, AuditAction.ORDER_CANCELLED, AuditDomain.ORDER, AuditResult.SUCCESS,
+                "ORDER", saved.getId().toString(), "Order was cancelled",
+                java.util.Map.of("status", OrderStatus.PENDING.name()),
+                java.util.Map.of("status", OrderStatus.CANCELLED.name()),
+                java.util.Map.of("orderCode", saved.getOrderCode())
+        );
         return toOrderResponse(saved);
     }
 

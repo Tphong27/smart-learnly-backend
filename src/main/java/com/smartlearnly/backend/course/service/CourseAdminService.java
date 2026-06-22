@@ -1,7 +1,10 @@
 package com.smartlearnly.backend.course.service;
 
 import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.AuditDomain;
 import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -92,6 +95,7 @@ public class CourseAdminService {
         }
 
         Course course = findCourse(courseId);
+        CourseStatus previousStatus = course.getStatus();
         if (request.isCategoryIdProvided()) {
             if (request.getCategoryId() == null) {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST, "Category is required");
@@ -143,7 +147,24 @@ public class CourseAdminService {
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
-        audit("COURSE_UPDATED", saved.getId());
+        if (previousStatus != saved.getStatus()) {
+            AuditAction action = saved.getStatus() == CourseStatus.PUBLISHED
+                    ? AuditAction.COURSE_PUBLISHED
+                    : saved.getStatus() == CourseStatus.INACTIVE
+                    ? AuditAction.COURSE_DEACTIVATED
+                    : AuditAction.COURSE_UPDATED;
+            UserAccount actor = currentUserService.requireAuthenticatedUser();
+            auditLogService.recordUser(
+                    actor, action, AuditDomain.COURSE, AuditResult.SUCCESS,
+                    "COURSE", saved.getId().toString(), "Course status was changed",
+                    java.util.Map.of("status", previousStatus.name()),
+                    java.util.Map.of("status", saved.getStatus().name()),
+                    java.util.Map.of("courseTitle", saved.getTitle())
+            );
+        }
+        else {
+            audit("COURSE_UPDATED", saved.getId());
+        }
         return CourseDtoMapper.toCourseResponse(saved);
     }
 

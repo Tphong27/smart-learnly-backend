@@ -27,6 +27,7 @@ import com.smartlearnly.backend.commerce.repository.OrderItemRepository;
 import com.smartlearnly.backend.commerce.repository.OrderRepository;
 import com.smartlearnly.backend.commerce.repository.PaymentTransactionRepository;
 import com.smartlearnly.backend.commerce.repository.SePayOrderRepository;
+import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -80,6 +81,8 @@ class CheckoutServiceTest {
     @Mock
     private CurrentUserService currentUserService;
     @Mock
+    private AuditLogService auditLogService;
+    @Mock
     private ObjectProvider<SePayPaymentInstructionService> sePayInstructionServices;
 
     private CheckoutService service;
@@ -98,6 +101,7 @@ class CheckoutServiceTest {
                 courseEnrollmentRepository,
                 classEnrollmentRepository,
                 currentUserService,
+                auditLogService,
                 sePayInstructionServices
         );
         ReflectionTestUtils.setField(service, "checkoutExpiration", Duration.ofMinutes(30));

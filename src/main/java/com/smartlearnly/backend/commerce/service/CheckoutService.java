@@ -20,6 +20,10 @@ import com.smartlearnly.backend.commerce.repository.OrderItemRepository;
 import com.smartlearnly.backend.commerce.repository.OrderRepository;
 import com.smartlearnly.backend.commerce.repository.PaymentTransactionRepository;
 import com.smartlearnly.backend.commerce.repository.SePayOrderRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.AuditDomain;
+import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -70,6 +74,7 @@ public class CheckoutService {
     private final CourseEnrollmentRepository courseEnrollmentRepository;
     private final ClassEnrollmentRepository classEnrollmentRepository;
     private final CurrentUserService currentUserService;
+    private final AuditLogService auditLogService;
     private final ObjectProvider<SePayPaymentInstructionService> sePayInstructionServices;
 
     @Value("${app.payment.checkout-expiration:PT30M}")
@@ -108,7 +113,16 @@ public class CheckoutService {
         SePayPaymentInstruction instruction = createPaymentInstruction(order, transaction, totalAmount, expiresAt);
         SePayOrder sePayOrder = createSePayOrder(order.getId(), transaction.getId(), instruction, totalAmount, expiresAt);
         cartItemRepository.deleteByCartId(cart.getId());
-
+        auditLogService.recordUser(
+                user, AuditAction.ORDER_CREATED, AuditDomain.ORDER, AuditResult.SUCCESS,
+                "ORDER", order.getId().toString(), "Order was created",
+                null, null, java.util.Map.of("amount", totalAmount, "currency", CURRENCY)
+        );
+        auditLogService.recordUser(
+                user, AuditAction.PAYMENT_CREATED, AuditDomain.PAYMENT, AuditResult.SUCCESS,
+                "PAYMENT_TRANSACTION", transaction.getId().toString(), "Payment transaction was created",
+                null, null, java.util.Map.of("orderId", order.getId(), "gateway", PaymentGateway.SEPAY.name())
+        );
         return new CheckoutResponse(
                 order.getId(),
                 order.getOrderCode(),

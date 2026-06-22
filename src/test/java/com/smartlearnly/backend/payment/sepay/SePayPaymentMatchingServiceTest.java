@@ -2,6 +2,7 @@ package com.smartlearnly.backend.payment.sepay;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -18,6 +19,8 @@ import com.smartlearnly.backend.commerce.repository.OrderItemRepository;
 import com.smartlearnly.backend.commerce.repository.OrderRepository;
 import com.smartlearnly.backend.commerce.repository.PaymentTransactionRepository;
 import com.smartlearnly.backend.commerce.repository.SePayOrderRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.enrollment.service.ClassEnrollmentService;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
 import java.math.BigDecimal;
@@ -55,6 +58,8 @@ class SePayPaymentMatchingServiceTest {
     private SePayWebhookEventRepository webhookEventRepository;
     @Mock
     private SePayInvoiceNumberRepository invoiceNumberRepository;
+    @Mock
+    private AuditLogService auditLogService;
 
     private SePayProperties sePayProperties;
     private SePayPaymentMatchingService service;
@@ -73,6 +78,7 @@ class SePayPaymentMatchingServiceTest {
                 classEnrollmentService,
                 webhookEventRepository,
                 invoiceNumberRepository,
+                auditLogService,
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );
     }
@@ -203,6 +209,9 @@ class SePayPaymentMatchingServiceTest {
         verify(courseEnrollmentService, never()).grantPaidCourseEnrollment(any(), any(), any());
         verify(classEnrollmentService, never()).grantPaidClassEnrollment(any(), any(), any(), any());
         verify(invoiceNumberRepository, never()).nextInvoiceNumber();
+        verify(auditLogService, never()).recordPaymentProvider(
+                any(), eq(AuditAction.PAYMENT_SUCCEEDED), any(), any(), any(), any(), any(), any(), any()
+        );
     }
 
     @Test

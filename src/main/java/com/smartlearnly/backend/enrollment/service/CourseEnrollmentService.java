@@ -1,6 +1,10 @@
 package com.smartlearnly.backend.enrollment.service;
 
 import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.AuditDomain;
+import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -41,6 +45,7 @@ public class CourseEnrollmentService {
     private final EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
     private final SuccessfulPaymentRepository successfulPaymentRepository;
     private final CurrentUserService currentUserService;
+    private final AuditLogService auditLogService;
 
     @Transactional
     public EnrollmentResponse enrollFree(UUID courseId) {
@@ -72,6 +77,12 @@ public class CourseEnrollmentService {
                     null,
                     "Initial free course enrollment"
             );
+            auditLogService.recordUser(
+                    student, AuditAction.ENROLLMENT_CREATED, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
+                    "COURSE_ENROLLMENT", saved.getId().toString(), "Free course enrollment was created",
+                    null, java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
+                    java.util.Map.of("courseId", courseId)
+            );
             return toEnrollmentResponse(saved, false, false);
         }
 
@@ -86,6 +97,13 @@ public class CourseEnrollmentService {
                 EnrollmentTransitionSource.FREE_ENROLLMENT,
                 null,
                 "Free enrollment reactivation"
+        );
+        auditLogService.recordUser(
+                student, AuditAction.ENROLLMENT_REACTIVATED, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
+                "COURSE_ENROLLMENT", saved.getId().toString(), "Course enrollment was reactivated",
+                java.util.Map.of("status", fromStatus.name()),
+                java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
+                java.util.Map.of("courseId", courseId)
         );
         return toEnrollmentResponse(saved, false, true);
     }
@@ -120,6 +138,12 @@ public class CourseEnrollmentService {
                     transactionId,
                     "Initial paid course enrollment"
             );
+            auditLogService.recordSystem(
+                    "payment-processing", AuditAction.ENROLLMENT_CREATED, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
+                    "COURSE_ENROLLMENT", saved.getId().toString(), "Paid course enrollment was created",
+                    java.util.Map.of("courseId", courseId, "studentId", studentId, "transactionId", transactionId),
+                    "transaction:" + transactionId, null
+            );
             return toEnrollmentResponse(saved, false, false);
         }
 
@@ -134,6 +158,12 @@ public class CourseEnrollmentService {
                 EnrollmentTransitionSource.PAYMENT_SUCCESS,
                 transactionId,
                 "Paid course enrollment reactivation"
+        );
+        auditLogService.recordSystem(
+                "payment-processing", AuditAction.ENROLLMENT_REACTIVATED, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
+                "COURSE_ENROLLMENT", saved.getId().toString(), "Paid course enrollment was reactivated",
+                java.util.Map.of("courseId", courseId, "studentId", studentId, "transactionId", transactionId),
+                "transaction:" + transactionId, null
         );
         return toEnrollmentResponse(saved, false, true);
     }
