@@ -48,8 +48,7 @@ public class ClassAdminService {
             String status,
             String keyword,
             int page,
-            int size
-    ) {
+            int size) {
         String normalizedStatus = normalizeStatusFilter(status);
         String keywordPattern = normalizeKeyword(keyword);
         Page<ClassAdminProjection> result = classOfferingRepository.findAdminClasses(
@@ -57,20 +56,24 @@ public class ClassAdminService {
                 trainerId,
                 normalizedStatus,
                 keywordPattern,
-                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE))
-        );
+                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
         return new PageResponse<>(
                 result.stream().map(this::toResponse).toList(),
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
-                result.getTotalPages()
-        );
+                result.getTotalPages());
     }
 
     @Transactional(readOnly = true)
     public ClassResponse get(UUID classId) {
-        return toResponse(findClass(classId));
+        ClassAdminProjection classDetail = classOfferingRepository
+                .findAdminClassDetail(classId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "Class was not found"));
+
+        return toResponse(classDetail);
     }
 
     @Transactional
@@ -117,8 +120,7 @@ public class ClassAdminService {
                     && classOfferingRepository.hasCommercialHistory(classId)) {
                 throw new BusinessException(
                         ErrorCode.CONFLICT,
-                        "Course cannot be changed after the class has enrollment or commercial history"
-                );
+                        "Course cannot be changed after the class has enrollment or commercial history");
             }
             classOffering.setCourseId(requireCourse(request.getCourseId()).getId());
         }
@@ -146,8 +148,7 @@ public class ClassAdminService {
             if (request.getMaxStudents() < activeCount) {
                 throw new BusinessException(
                         ErrorCode.CLASS_CAPACITY_INVALID,
-                        "Maximum students cannot be lower than the active enrollment count"
-                );
+                        "Maximum students cannot be lower than the active enrollment count");
             }
             classOffering.setMaxStudents(request.getMaxStudents());
         }
@@ -202,14 +203,12 @@ public class ClassAdminService {
             return null;
         }
         return userRepository.findByIdAndRoleIgnoreCaseAndStatusIgnoreCaseAndDeletedAtIsNull(
-                        trainerId,
-                        "TRAINER",
-                        "active"
-                )
+                trainerId,
+                "TRAINER",
+                "active")
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.INVALID_TRAINER,
-                        "Trainer must exist, be active, and have the TRAINER role"
-                ));
+                        "Trainer must exist, be active, and have the TRAINER role"));
     }
 
     private ClassResponse toResponse(ClassOffering classOffering) {
@@ -224,8 +223,7 @@ public class ClassAdminService {
             ClassOffering classOffering,
             Course course,
             UserAccount trainer,
-            long activeCount
-    ) {
+            long activeCount) {
         return new ClassResponse(
                 classOffering.getId(),
                 classOffering.getCourseId(),
@@ -242,8 +240,7 @@ public class ClassAdminService {
                 Math.max(0, (long) classOffering.getMaxStudents() - activeCount),
                 classOffering.getStatus().name().toLowerCase(Locale.ROOT),
                 classOffering.getCreatedAt(),
-                classOffering.getUpdatedAt()
-        );
+                classOffering.getUpdatedAt());
     }
 
     private ClassResponse toResponse(ClassAdminProjection classOffering) {
@@ -266,8 +263,7 @@ public class ClassAdminService {
                 Math.max(0, (long) classOffering.getMaxStudents() - activeCount),
                 classOffering.getStatus(),
                 classOffering.getCreatedAt(),
-                classOffering.getUpdatedAt()
-        );
+                classOffering.getUpdatedAt());
     }
 
     private long activeEnrollmentCount(UUID classId) {
@@ -287,8 +283,7 @@ public class ClassAdminService {
         if (price.signum() <= 0) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    "Class price must be greater than 0"
-            );
+                    "Class price must be greater than 0");
         }
     }
 
@@ -301,12 +296,10 @@ public class ClassAdminService {
             return ClassStatus.valueOf(normalized.toUpperCase(Locale.ROOT))
                     .name()
                     .toLowerCase(Locale.ROOT);
-        }
-        catch (IllegalArgumentException exception) {
+        } catch (IllegalArgumentException exception) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    "Class status must be upcoming, ongoing, completed, or cancelled"
-            );
+                    "Class status must be upcoming, ongoing, completed, or cancelled");
         }
     }
 
