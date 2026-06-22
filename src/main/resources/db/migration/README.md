@@ -45,6 +45,16 @@ V10__sepay_order_enrollment_foundation.sql
 adds SePay to the payment gateway enum, and creates carts, immutable orders,
 SePay matching/audit tables, enrollment transition audit, explicit course
 access-block fields, constraints, indexes, and invoice sequencing.
+FT-18 system activity audit foundation:
+
+```text
+V11__system_activity_audit_log.sql
+```
+
+`V11` creates the backend-only `audit_logs` ledger with UUID identifiers,
+query indexes, JSONB change metadata, RLS/Data API hardening, and database-level
+append-only protection using a trigger function with a fixed empty
+`search_path`.
 
 The shared development database also contains applied migrations `V6` and
 `V7` (`fix lessons lesson type enum` and `ensure lessons lesson type enum`)
