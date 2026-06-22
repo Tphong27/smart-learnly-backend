@@ -18,6 +18,7 @@ import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Locale;
@@ -87,6 +88,8 @@ public class ClassAdminService {
         classOffering.setStartDate(request.startDate());
         classOffering.setEndDate(request.endDate());
         classOffering.setMaxStudents(request.maxStudents());
+        validatePrice(request.price());
+        classOffering.setPrice(request.price());
         classOffering.setStatus(ClassStatus.UPCOMING);
         classOffering.setCreatedBy(actor.getId());
 
@@ -147,6 +150,10 @@ public class ClassAdminService {
                 );
             }
             classOffering.setMaxStudents(request.getMaxStudents());
+        }
+        if (request.isPriceProvided()) {
+            validatePrice(request.getPrice());
+            classOffering.setPrice(request.getPrice());
         }
         validateDates(classOffering.getStartDate(), classOffering.getEndDate());
 
@@ -230,6 +237,7 @@ public class ClassAdminService {
                 classOffering.getStartDate(),
                 classOffering.getEndDate(),
                 classOffering.getMaxStudents(),
+                classOffering.getPrice(),
                 activeCount,
                 Math.max(0, (long) classOffering.getMaxStudents() - activeCount),
                 classOffering.getStatus().name().toLowerCase(Locale.ROOT),
@@ -253,6 +261,7 @@ public class ClassAdminService {
                 classOffering.getStartDate(),
                 classOffering.getEndDate(),
                 classOffering.getMaxStudents(),
+                classOffering.getPrice(),
                 activeCount,
                 Math.max(0, (long) classOffering.getMaxStudents() - activeCount),
                 classOffering.getStatus(),
@@ -268,6 +277,18 @@ public class ClassAdminService {
     private void validateDates(LocalDate startDate, LocalDate endDate) {
         if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "End date must not be before start date");
+        }
+    }
+
+    private void validatePrice(BigDecimal price) {
+        if (price == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Class price is required");
+        }
+        if (price.signum() <= 0) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Class price must be greater than 0"
+            );
         }
     }
 
