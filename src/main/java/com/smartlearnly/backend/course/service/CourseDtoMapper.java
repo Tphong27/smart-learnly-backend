@@ -1,13 +1,16 @@
 package com.smartlearnly.backend.course.service;
 
 import com.smartlearnly.backend.course.dto.CourseResponse;
+import com.smartlearnly.backend.course.dto.LessonResourceResponse;
 import com.smartlearnly.backend.course.dto.LessonResponse;
 import com.smartlearnly.backend.course.dto.PreviewLessonResponse;
 import com.smartlearnly.backend.course.dto.SectionResponse;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
+import com.smartlearnly.backend.learning.lesson.entity.LessonResource;
 import com.smartlearnly.backend.learning.lesson.repository.PreviewLessonProjection;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
+import java.util.Comparator;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -57,13 +60,18 @@ final class CourseDtoMapper {
                 lesson.getCourse().getId(),
                 lesson.getSection().getId(),
                 lesson.getTitle(),
-                enumValue(lesson.getType()),
+                lessonTypeValue(lesson.getType()),
                 lesson.getVideoUrl(),
                 lesson.getContent(),
                 lesson.getAttachmentUrl(),
                 lesson.getDurationSeconds(),
                 Boolean.TRUE.equals(lesson.getPreview()),
                 enumValue(lesson.getStatus()),
+                lesson.getResources()
+                        .stream()
+                        .sorted(Comparator.comparing(LessonResource::getSortOrder))
+                        .map(CourseDtoMapper::toLessonResourceResponse)
+                        .toList(),
                 lesson.getSortOrder(),
                 lesson.getCreatedAt(),
                 lesson.getUpdatedAt()
@@ -76,7 +84,7 @@ final class CourseDtoMapper {
                 lesson.getSection().getId(),
                 lesson.getId(),
                 lesson.getTitle(),
-                enumValue(lesson.getType()),
+                lessonTypeValue(lesson.getType()),
                 lesson.getVideoUrl(),
                 lesson.getContent(),
                 lesson.getAttachmentUrl(),
@@ -92,7 +100,7 @@ final class CourseDtoMapper {
                 lesson.getSectionId(),
                 lesson.getLessonId(),
                 lesson.getTitle(),
-                lesson.getLessonType(),
+                normalizeLessonType(lesson.getLessonType()),
                 lesson.getVideoUrl(),
                 lesson.getContent(),
                 lesson.getAttachmentUrl(),
@@ -102,7 +110,27 @@ final class CourseDtoMapper {
         );
     }
 
+    private static LessonResourceResponse toLessonResourceResponse(LessonResource resource) {
+        return new LessonResourceResponse(
+                resource.getId(),
+                resource.getUrl(),
+                resource.getObjectPath(),
+                resource.getName(),
+                resource.getFileSize(),
+                resource.getContentType(),
+                resource.getSortOrder()
+        );
+    }
+
     private static String enumValue(Enum<?> value) {
         return value == null ? null : value.name().toLowerCase(Locale.ROOT);
+    }
+
+    private static String lessonTypeValue(Enum<?> value) {
+        return value == null ? null : value.name();
+    }
+
+    private static String normalizeLessonType(String value) {
+        return value == null ? null : value.toUpperCase(Locale.ROOT);
     }
 }

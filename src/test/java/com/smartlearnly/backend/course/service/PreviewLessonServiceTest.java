@@ -49,7 +49,7 @@ class PreviewLessonServiceTest {
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).lessonId()).isEqualTo(lessonId);
-        assertThat(response.get(0).lessonType()).isEqualTo("rich_text");
+        assertThat(response.get(0).lessonType()).isEqualTo("RICH_TEXT");
     }
 
     @Test

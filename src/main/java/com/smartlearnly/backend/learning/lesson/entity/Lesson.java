@@ -10,10 +10,14 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -69,6 +73,10 @@ public class Lesson {
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;
 
+    @OneToMany(mappedBy = "lesson", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC, createdAt ASC")
+    private List<LessonResource> resources = new ArrayList<>();
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -96,5 +104,18 @@ public class Lesson {
     @PreUpdate
     void preUpdate() {
         updatedAt = Instant.now();
+    }
+
+    public void replaceResources(List<LessonResource> newResources) {
+        resources.clear();
+        if (newResources == null) {
+            return;
+        }
+        newResources.forEach(this::addResource);
+    }
+
+    public void addResource(LessonResource resource) {
+        resource.setLesson(this);
+        resources.add(resource);
     }
 }
