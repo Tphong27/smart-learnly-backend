@@ -3,6 +3,10 @@ package com.smartlearnly.backend.enrollment.service;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.entity.ClassStatus;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.AuditDomain;
+import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
@@ -26,6 +30,7 @@ public class ClassEnrollmentService {
     private final EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
     private final SuccessfulPaymentRepository successfulPaymentRepository;
     private final CourseEnrollmentService courseEnrollmentService;
+    private final AuditLogService auditLogService;
 
     @Transactional
     public ClassEnrollment grantPaidClassEnrollment(
@@ -92,6 +97,15 @@ public class ClassEnrollmentService {
                 studentId,
                 classOffering.getCourseId(),
                 transactionId
+        );
+        AuditAction action = fromStatus == null
+                ? AuditAction.ENROLLMENT_CREATED
+                : AuditAction.ENROLLMENT_REACTIVATED;
+        auditLogService.recordSystem(
+                "payment-processing", action, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
+                "CLASS_ENROLLMENT", saved.getId().toString(), "Paid class enrollment was granted",
+                java.util.Map.of("classId", classId, "studentId", studentId, "transactionId", transactionId),
+                "transaction:" + transactionId, null
         );
         return saved;
     }

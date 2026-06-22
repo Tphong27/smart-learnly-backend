@@ -11,6 +11,10 @@ import com.smartlearnly.backend.commerce.repository.OrderItemRepository;
 import com.smartlearnly.backend.commerce.repository.OrderRepository;
 import com.smartlearnly.backend.commerce.repository.PaymentTransactionRepository;
 import com.smartlearnly.backend.commerce.repository.SePayOrderRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.AuditDomain;
+import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.enrollment.service.ClassEnrollmentService;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
 import java.math.BigDecimal;
@@ -21,8 +25,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -49,6 +55,7 @@ public class SePayPaymentMatchingService {
     private final ClassEnrollmentService classEnrollmentService;
     private final SePayWebhookEventRepository webhookEventRepository;
     private final SePayInvoiceNumberRepository invoiceNumberRepository;
+    private final AuditLogService auditLogService;
     private final Clock clock;
 
     @Autowired
@@ -61,7 +68,8 @@ public class SePayPaymentMatchingService {
             CourseEnrollmentService courseEnrollmentService,
             ClassEnrollmentService classEnrollmentService,
             SePayWebhookEventRepository webhookEventRepository,
-            SePayInvoiceNumberRepository invoiceNumberRepository
+            SePayInvoiceNumberRepository invoiceNumberRepository,
+            AuditLogService auditLogService
     ) {
         this(
                 sePayProperties,
@@ -73,6 +81,7 @@ public class SePayPaymentMatchingService {
                 classEnrollmentService,
                 webhookEventRepository,
                 invoiceNumberRepository,
+                auditLogService,
                 Clock.systemUTC()
         );
     }
@@ -87,6 +96,7 @@ public class SePayPaymentMatchingService {
             ClassEnrollmentService classEnrollmentService,
             SePayWebhookEventRepository webhookEventRepository,
             SePayInvoiceNumberRepository invoiceNumberRepository,
+            AuditLogService auditLogService,
             Clock clock
     ) {
         this.sePayProperties = sePayProperties;
@@ -98,23 +108,35 @@ public class SePayPaymentMatchingService {
         this.classEnrollmentService = classEnrollmentService;
         this.webhookEventRepository = webhookEventRepository;
         this.invoiceNumberRepository = invoiceNumberRepository;
+        this.auditLogService = auditLogService;
         this.clock = clock;
     }
 
     @Transactional
     public void process(SePayWebhookPayload payload) {
-        processCandidate(SePayPaymentMatchCandidate.fromWebhook(payload), webhookOutcome(payload.id()));
+        SePayPaymentMatchCandidate candidate = SePayPaymentMatchCandidate.fromWebhook(payload);
+        auditLogService.recordPaymentProvider(
+                "sepay", AuditAction.PAYMENT_CALLBACK_RECEIVED, AuditResult.SUCCESS,
+                "GATEWAY_EVENT", Long.toString(payload.id()), "SePay payment callback was received",
+                safePaymentMetadata(candidate), correlationId(payload.id()), null
+        );
+        processCandidate(candidate, webhookOutcome(payload.id()), false);
     }
 
     @Transactional
     public void processReconciledTransaction(SePayTransactionCandidate transaction) {
         processCandidate(
                 SePayPaymentMatchCandidate.fromReconciledTransaction(transaction),
-                MatchOutcomeRecorder.NO_OP
+                MatchOutcomeRecorder.NO_OP,
+                true
         );
     }
 
-    private void processCandidate(SePayPaymentMatchCandidate candidate, MatchOutcomeRecorder outcomeRecorder) {
+    private void processCandidate(
+            SePayPaymentMatchCandidate candidate,
+            MatchOutcomeRecorder outcomeRecorder,
+            boolean reconciled
+    ) {
         if (!isInboundPayment(candidate)) {
             outcomeRecorder.mismatched("SePay transfer is not inbound");
             return;
@@ -188,6 +210,20 @@ public class SePayPaymentMatchingService {
         sePayOrderRepository.saveAndFlush(sePayOrder);
 
         grantEnrollments(order.getId(), order.getUserId(), transaction.getId());
+        if (reconciled) {
+            auditLogService.recordSystem(
+                    "sepay-reconciliation", AuditAction.PAYMENT_RECONCILED, AuditDomain.PAYMENT, AuditResult.SUCCESS,
+                    "PAYMENT_TRANSACTION", transaction.getId().toString(), "SePay payment was reconciled",
+                    safePaymentMetadata(candidate), "transaction:" + transaction.getId(), null
+            );
+        }
+        else {
+            auditLogService.recordPaymentProvider(
+                    "sepay", AuditAction.PAYMENT_SUCCEEDED, AuditResult.SUCCESS,
+                    "PAYMENT_TRANSACTION", transaction.getId().toString(), "SePay payment succeeded",
+                    safePaymentMetadata(candidate), correlationId(candidate.gatewayEventId()), null
+            );
+        }
         outcomeRecorder.processed();
     }
 
@@ -322,6 +358,21 @@ public class SePayPaymentMatchingService {
         return value == null || value.isBlank();
     }
 
+    private Map<String, Object> safePaymentMetadata(SePayPaymentMatchCandidate candidate) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (!isBlank(candidate.code())) metadata.put("paymentCode", normalizePaymentCode(candidate.code()));
+        if (candidate.transferAmount() != null) metadata.put("amount", candidate.transferAmount());
+        if (!isBlank(candidate.transferType())) metadata.put("transferType", candidate.transferType().trim());
+        if (!isBlank(candidate.gatewayTransactionId())) {
+            metadata.put("gatewayTransactionId", candidate.gatewayTransactionId().trim());
+        }
+        return metadata;
+    }
+
+    private String correlationId(Long gatewayEventId) {
+        return gatewayEventId == null ? null : "sepay:" + gatewayEventId;
+    }
+
     private MatchOutcomeRecorder webhookOutcome(long gatewayEventId) {
         return new MatchOutcomeRecorder() {
             @Override
@@ -332,11 +383,21 @@ public class SePayPaymentMatchingService {
             @Override
             public void mismatched(String reason) {
                 webhookEventRepository.markMismatched(gatewayEventId, reason);
+                auditLogService.recordPaymentProvider(
+                        "sepay", AuditAction.PAYMENT_MISMATCHED, AuditResult.FAILURE,
+                        "GATEWAY_EVENT", Long.toString(gatewayEventId), reason,
+                        null, correlationId(gatewayEventId), "PAYMENT_MISMATCHED"
+                );
             }
 
             @Override
             public void failed(String reason) {
                 webhookEventRepository.markFailed(gatewayEventId, reason);
+                auditLogService.recordPaymentProvider(
+                        "sepay", AuditAction.PAYMENT_FAILED, AuditResult.FAILURE,
+                        "GATEWAY_EVENT", Long.toString(gatewayEventId), reason,
+                        null, correlationId(gatewayEventId), "PAYMENT_FAILED"
+                );
             }
         };
     }
