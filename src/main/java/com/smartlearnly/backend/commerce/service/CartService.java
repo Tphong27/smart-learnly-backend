@@ -53,14 +53,16 @@ public class CartService {
     @Transactional
     public CartResponse addItem(AddCartItemRequest request) {
         UserAccount user = currentUserService.requireAuthenticatedUser();
-        Course course = requirePaidPublishedCourse(request.courseId());
+        Course course = requirePublishedCourse(request.courseId());
         ClassOffering classOffering = null;
 
         if (request.classId() == null) {
+            requirePaidCourse(course);
             rejectExistingCourseAccess(user.getId(), course.getId());
         }
         else {
             classOffering = requireSellableClass(request.classId(), course.getId());
+            requirePaidClass(classOffering);
             rejectExistingClassAccess(user.getId(), classOffering.getId());
         }
 
@@ -107,32 +109,37 @@ public class CartService {
     private CartItemResponse toItemResponse(CartItem item) {
         Course course = courseRepository.findByIdAndDeletedAtIsNull(item.getCourseId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
-        ClassOffering classOffering = item.getClassId() == null
-                ? null
-                : classOfferingRepository.findByIdAndDeletedAtIsNull(item.getClassId()).orElse(null);
+        ClassOffering classOffering = requireCartClass(item.getClassId());
+        BigDecimal price = classOffering == null
+                ? resolveCourseFinalAmount(course)
+                : money(classOffering.getPrice());
         return new CartItemResponse(
                 item.getId(),
                 item.getCourseId(),
                 course.getTitle(),
                 item.getClassId(),
                 classOffering == null ? null : classOffering.getClassName(),
+                price,
                 item.getAddedAt()
         );
     }
 
-    private Course requirePaidPublishedCourse(UUID courseId) {
+    private Course requirePublishedCourse(UUID courseId) {
         Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessException(ErrorCode.COURSE_NOT_ENROLLABLE);
         }
+        return course;
+    }
+
+    private void requirePaidCourse(Course course) {
         if (isFree(course)) {
             throw new BusinessException(
                     ErrorCode.COURSE_NOT_ENROLLABLE,
                     "Free courses must use the free enrollment flow"
             );
         }
-        return course;
     }
 
     private ClassOffering requireSellableClass(UUID classId, UUID courseId) {
@@ -146,6 +153,23 @@ public class CartService {
             throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
         }
         return classOffering;
+    }
+
+    private void requirePaidClass(ClassOffering classOffering) {
+        if (money(classOffering.getPrice()).signum() <= 0) {
+            throw new BusinessException(
+                    ErrorCode.CLASS_NOT_AVAILABLE,
+                    "Class price must be greater than 0 for checkout"
+            );
+        }
+    }
+
+    private ClassOffering requireCartClass(UUID classId) {
+        if (classId == null) {
+            return null;
+        }
+        return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
     }
 
     private void rejectExistingCourseAccess(UUID studentId, UUID courseId) {
@@ -171,7 +195,17 @@ public class CartService {
     }
 
     private boolean isFree(Course course) {
-        BigDecimal price = course.getPrice() == null ? BigDecimal.ZERO : course.getPrice();
+        BigDecimal price = money(course.getPrice());
         return Boolean.TRUE.equals(course.getFree()) || price.compareTo(BigDecimal.ZERO) == 0;
+    }
+
+    private BigDecimal resolveCourseFinalAmount(Course course) {
+        return course.getDiscountedPrice() == null
+                ? money(course.getPrice())
+                : money(course.getDiscountedPrice());
+    }
+
+    private BigDecimal money(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

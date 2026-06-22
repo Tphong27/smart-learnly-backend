@@ -127,18 +127,24 @@ public class CheckoutService {
     }
 
     private OrderItemSnapshot toSnapshot(UUID studentId, CartItem cartItem) {
-        Course course = requirePaidPublishedCourse(cartItem.getCourseId());
+        Course course = requirePublishedCourse(cartItem.getCourseId());
         ClassOffering classOffering = null;
         if (cartItem.getClassId() == null) {
+            requirePaidCourse(course);
             rejectExistingCourseAccess(studentId, course.getId());
         }
         else {
             classOffering = requireSellableClass(cartItem.getClassId(), course.getId());
+            requirePaidClass(classOffering);
             rejectExistingClassAccess(studentId, classOffering.getId());
         }
 
-        BigDecimal unitPrice = money(course.getPrice());
-        BigDecimal finalAmount = resolveFinalAmount(course);
+        BigDecimal unitPrice = classOffering == null
+                ? money(course.getPrice())
+                : money(classOffering.getPrice());
+        BigDecimal finalAmount = classOffering == null
+                ? resolveFinalAmount(course)
+                : unitPrice;
         BigDecimal discountAmount = unitPrice.subtract(finalAmount);
         String title = classOffering == null
                 ? course.getTitle()
@@ -250,19 +256,22 @@ public class CheckoutService {
         return sePayOrderRepository.save(sePayOrder);
     }
 
-    private Course requirePaidPublishedCourse(UUID courseId) {
+    private Course requirePublishedCourse(UUID courseId) {
         Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessException(ErrorCode.COURSE_NOT_ENROLLABLE);
         }
+        return course;
+    }
+
+    private void requirePaidCourse(Course course) {
         if (isFree(course)) {
             throw new BusinessException(
                     ErrorCode.COURSE_NOT_ENROLLABLE,
                     "Free courses must use the free enrollment flow"
             );
         }
-        return course;
     }
 
     private ClassOffering requireSellableClass(UUID classId, UUID courseId) {
@@ -276,6 +285,15 @@ public class CheckoutService {
             throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
         }
         return classOffering;
+    }
+
+    private void requirePaidClass(ClassOffering classOffering) {
+        if (money(classOffering.getPrice()).signum() <= 0) {
+            throw new BusinessException(
+                    ErrorCode.CLASS_NOT_AVAILABLE,
+                    "Class price must be greater than 0 for checkout"
+            );
+        }
     }
 
     private void rejectExistingCourseAccess(UUID studentId, UUID courseId) {
