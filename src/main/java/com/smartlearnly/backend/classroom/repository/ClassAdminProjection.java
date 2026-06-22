@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.classroom.repository;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -15,6 +16,7 @@ public interface ClassAdminProjection {
     LocalDate getStartDate();
     LocalDate getEndDate();
     Integer getMaxStudents();
+    BigDecimal getPrice();
     Long getActiveEnrollmentCount();
     String getStatus();
     Instant getCreatedAt();

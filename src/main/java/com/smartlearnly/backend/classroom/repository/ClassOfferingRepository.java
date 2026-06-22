@@ -32,6 +32,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                         class_offering.start_date AS "startDate",
                         class_offering.end_date AS "endDate",
                         class_offering.max_students AS "maxStudents",
+                        class_offering.price AS "price",
                         COUNT(class_enrollment.id) FILTER (
                             WHERE class_enrollment.status = 'active'::public.enroll_status
                         ) AS "activeEnrollmentCount",

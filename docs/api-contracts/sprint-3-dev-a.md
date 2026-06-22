@@ -115,3 +115,13 @@ Learner content endpoints must call
 only active/completed enrollment, honors explicit course access blocks, and
 does not revoke access merely because a course is no longer published or was
 soft-deleted.
+
+## Class pricing contract
+
+`price` is required when creating a class, must be greater than zero, and is
+returned by the Admin/TMO class list and detail APIs. A class price may be
+updated for future purchases.
+
+Cart items with a `classId` return the class `price`, and checkout uses that
+price instead of the related course price. Existing `order_items` remain
+immutable snapshots when a class price changes later.

@@ -1,8 +1,10 @@
 package com.smartlearnly.backend.classroom.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -23,6 +25,9 @@ public class UpdateClassRequest {
     @Positive
     private Integer maxStudents;
 
+    @DecimalMin(value = "0.01", message = "Class price must be greater than 0")
+    private BigDecimal price;
+
     private boolean courseIdProvided;
     private boolean classNameProvided;
     private boolean trainerIdProvided;
@@ -30,6 +35,7 @@ public class UpdateClassRequest {
     private boolean startDateProvided;
     private boolean endDateProvided;
     private boolean maxStudentsProvided;
+    private boolean priceProvided;
 
     public UUID getCourseId() {
         return courseId;
@@ -94,6 +100,15 @@ public class UpdateClassRequest {
         this.maxStudentsProvided = true;
     }
 
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+        this.priceProvided = true;
+    }
+
     public boolean isCourseIdProvided() {
         return courseIdProvided;
     }
@@ -122,10 +137,14 @@ public class UpdateClassRequest {
         return maxStudentsProvided;
     }
 
+    public boolean isPriceProvided() {
+        return priceProvided;
+    }
+
     @JsonIgnore
     public boolean hasAnyField() {
         return courseIdProvided || classNameProvided || trainerIdProvided
                 || scheduleDescriptionProvided || startDateProvided
-                || endDateProvided || maxStudentsProvided;
+                || endDateProvided || maxStudentsProvided || priceProvided;
     }
 }
