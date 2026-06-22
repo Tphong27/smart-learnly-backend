@@ -5,6 +5,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.dto.LessonRequest;
+import com.smartlearnly.backend.course.dto.LessonResourceRequest;
 import com.smartlearnly.backend.course.dto.LessonResponse;
 import com.smartlearnly.backend.course.dto.ReorderRequest;
 import com.smartlearnly.backend.course.dto.SectionRequest;
@@ -12,6 +13,7 @@ import com.smartlearnly.backend.course.dto.SectionResponse;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
+import com.smartlearnly.backend.learning.lesson.entity.LessonResource;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
@@ -185,7 +187,7 @@ public class CourseContentAdminService {
 
     private void applyLessonRequest(Lesson lesson, LessonRequest request, boolean create) {
         lesson.setTitle(normalizeRequired(request.title(), "Lesson title is required"));
-        lesson.setType(parseLessonType(request.lessonType(), create ? LessonType.RICH_TEXT : lesson.getType()));
+        lesson.setType(parseLessonType(resolveLessonType(request), create ? LessonType.RICH_TEXT : lesson.getType()));
         lesson.setVideoUrl(normalizeNullable(request.videoUrl()));
         lesson.setContent(normalizeNullable(request.content()));
         lesson.setAttachmentUrl(normalizeNullable(request.attachmentUrl()));
@@ -194,6 +196,9 @@ public class CourseContentAdminService {
             lesson.setPreview(Boolean.TRUE.equals(request.isPreview()));
         }
         lesson.setStatus(parseLessonStatus(request.status(), create ? LessonStatus.DRAFT : lesson.getStatus()));
+        if (request.resources() != null) {
+            lesson.replaceResources(toLessonResources(request.resources()));
+        }
     }
 
     private Course findCourse(UUID courseId) {
@@ -236,12 +241,27 @@ public class CourseContentAdminService {
         if (value == null || value.isBlank()) {
             return defaultType;
         }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if ("DOCUMENT".equals(normalized)) {
+            return LessonType.PDF;
+        }
+        if ("QUIZ".equals(normalized)) {
+            return LessonType.RICH_TEXT;
+        }
         try {
-            return LessonType.valueOf(value.trim().toUpperCase(Locale.ROOT));
+            return LessonType.valueOf(normalized);
         }
         catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Lesson type must be video, pdf, or rich_text");
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Lesson type must be video, pdf, document, rich_text, or quiz"
+            );
         }
+    }
+
+    private String resolveLessonType(LessonRequest request) {
+        String lessonType = normalizeNullable(request.lessonType());
+        return lessonType == null ? normalizeNullable(request.type()) : lessonType;
     }
 
     private LessonStatus parseLessonStatus(String value, LessonStatus defaultStatus) {
@@ -275,5 +295,50 @@ public class CourseContentAdminService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private List<LessonResource> toLessonResources(List<LessonResourceRequest> requests) {
+        return java.util.stream.IntStream.range(0, requests.size())
+                .mapToObj(index -> toLessonResource(requests.get(index), index))
+                .toList();
+    }
+
+    private LessonResource toLessonResource(LessonResourceRequest request, int index) {
+        LessonResource resource = new LessonResource();
+        String url = normalizeRequired(request.url(), "Resource URL is required");
+        resource.setUrl(url);
+        resource.setObjectPath(normalizeNullable(request.objectPath()));
+        resource.setName(resolveResourceName(request, url, index));
+        resource.setFileSize(request.fileSize());
+        resource.setContentType(normalizeNullable(request.contentType()));
+        resource.setSortOrder(request.sortOrder() == null ? index : request.sortOrder());
+        return resource;
+    }
+
+    private String resolveResourceName(LessonResourceRequest request, String url, int index) {
+        String name = normalizeNullable(request.name());
+        if (name == null) {
+            name = normalizeNullable(request.fileName());
+        }
+        if (name == null) {
+            name = fileNameFromUrl(url);
+        }
+        if (name == null) {
+            name = "resource-" + (index + 1);
+        }
+        if (name.length() > 255) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Resource name must not exceed 255 characters");
+        }
+        return name;
+    }
+
+    private String fileNameFromUrl(String url) {
+        int fragmentIndex = url.indexOf('#');
+        String withoutFragment = fragmentIndex < 0 ? url : url.substring(0, fragmentIndex);
+        int queryIndex = withoutFragment.indexOf('?');
+        String withoutQuery = queryIndex < 0 ? withoutFragment : withoutFragment.substring(0, queryIndex);
+        int slashIndex = withoutQuery.lastIndexOf('/');
+        String fileName = slashIndex < 0 ? withoutQuery : withoutQuery.substring(slashIndex + 1);
+        return normalizeNullable(fileName);
     }
 }

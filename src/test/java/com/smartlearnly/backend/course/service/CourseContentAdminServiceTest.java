@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.course.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
@@ -10,14 +11,21 @@ import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.dto.LessonRequest;
+import com.smartlearnly.backend.course.dto.LessonResourceRequest;
+import com.smartlearnly.backend.course.dto.LessonResponse;
 import com.smartlearnly.backend.course.dto.ReorderRequest;
 import com.smartlearnly.backend.course.entity.Category;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.learning.lesson.entity.Lesson;
+import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
+import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
+import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -75,6 +83,48 @@ class CourseContentAdminServiceTest {
         verify(courseSectionRepository, never()).saveAll(anyList());
     }
 
+    @Test
+    void updateLessonShouldAcceptTypeAliasAndReplaceResources() {
+        Course course = course();
+        CourseSection section = section(course, 0);
+        Lesson lesson = lesson(course, section);
+        UserAccount actor = new UserAccount();
+        actor.setEmail("admin@smartlearnly.dev");
+        when(lessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(lessonRepository.save(lesson)).thenReturn(lesson);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+        LessonResponse response = courseContentAdminService.updateLesson(
+                lesson.getId(),
+                new LessonRequest(
+                        "Document lesson",
+                        null,
+                        "DOCUMENT",
+                        null,
+                        "Summary",
+                        "https://storage.test/material.pdf",
+                        0,
+                        false,
+                        "PUBLISHED",
+                        List.of(new LessonResourceRequest(
+                                "https://storage.test/resource.pdf",
+                                "2026/06/resource.pdf",
+                                null,
+                                "resource.pdf",
+                                123L,
+                                "application/pdf",
+                                null
+                        )),
+                        null
+                )
+        );
+
+        assertThat(response.lessonType()).isEqualTo("PDF");
+        assertThat(response.resources()).hasSize(1);
+        assertThat(response.resources().get(0).name()).isEqualTo("resource.pdf");
+        assertThat(response.resources().get(0).sortOrder()).isZero();
+    }
+
     private Course course() {
         Category category = new Category();
         category.setId(UUID.randomUUID());
@@ -102,5 +152,20 @@ class CourseContentAdminServiceTest {
         section.setCreatedAt(Instant.now());
         section.setUpdatedAt(Instant.now());
         return section;
+    }
+
+    private Lesson lesson(Course course, CourseSection section) {
+        Lesson lesson = new Lesson();
+        lesson.setId(UUID.randomUUID());
+        lesson.setCourse(course);
+        lesson.setSection(section);
+        lesson.setTitle("Lesson");
+        lesson.setType(LessonType.RICH_TEXT);
+        lesson.setPreview(false);
+        lesson.setStatus(LessonStatus.DRAFT);
+        lesson.setSortOrder(0);
+        lesson.setCreatedAt(Instant.now());
+        lesson.setUpdatedAt(Instant.now());
+        return lesson;
     }
 }
