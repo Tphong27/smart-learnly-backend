@@ -52,16 +52,19 @@ public class AuthSessionService {
     }
 
     @Transactional
-    public void revoke(String rawRefreshToken) {
+    public UserAccount revoke(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
-            return;
+            return null;
         }
-        refreshTokenRepository.findByTokenHash(hashToken(rawRefreshToken)).ifPresent(token -> {
-            if (token.getRevokedAt() == null) {
-                token.setRevokedAt(Instant.now());
-                refreshTokenRepository.save(token);
-            }
-        });
+        RefreshToken token = refreshTokenRepository.findByTokenHash(hashToken(rawRefreshToken)).orElse(null);
+        if (token == null) {
+            return null;
+        }
+        if (token.getRevokedAt() == null) {
+            token.setRevokedAt(Instant.now());
+            refreshTokenRepository.save(token);
+        }
+        return token.getUser();
     }
 
     @Transactional

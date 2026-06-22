@@ -17,7 +17,9 @@ import com.smartlearnly.backend.auth.entity.PasswordResetToken;
 import com.smartlearnly.backend.auth.repository.LoginHistoryRepository;
 import com.smartlearnly.backend.auth.repository.OtpVerificationRepository;
 import com.smartlearnly.backend.auth.repository.PasswordResetTokenRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
@@ -85,24 +87,43 @@ public class AuthService {
         UserAccount user = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email)
                 .orElseThrow(() -> {
                     recordLogin(null, email, ipAddress, deviceInfo, "email", "failed");
+                    auditLogService.recordAuthentication(null, email, AuditAction.LOGIN_FAILED, AuditResult.FAILURE,
+                            "Login failed", ipAddress, deviceInfo, ErrorCode.INVALID_CREDENTIALS.name());
                     return new BusinessException(ErrorCode.INVALID_CREDENTIALS);
                 });
 
         Instant now = Instant.now();
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
             recordLogin(user, email, ipAddress, deviceInfo, "email", "blocked");
+            auditLogService.recordAuthentication(user, email, AuditAction.LOGIN_BLOCKED, AuditResult.DENIED,
+                    "Login was blocked", ipAddress, deviceInfo, ErrorCode.ACCOUNT_LOCKED.name());
             throw new BusinessException(ErrorCode.ACCOUNT_LOCKED, "Account is locked until " + user.getLockedUntil());
         }
         if (!"active".equalsIgnoreCase(user.getStatus())) {
-            if ("pending_verify".equalsIgnoreCase(user.getStatus()) || !user.isEmailVerified()) {
-                throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
-            }
-            throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE);
+            ErrorCode errorCode = "pending_verify".equalsIgnoreCase(user.getStatus()) || !user.isEmailVerified()
+                    ? ErrorCode.EMAIL_NOT_VERIFIED
+                    : ErrorCode.ACCOUNT_INACTIVE;
+            auditLogService.recordAuthentication(
+                    user, email, AuditAction.LOGIN_FAILED, AuditResult.DENIED,
+                    "Login was denied", ipAddress, deviceInfo, errorCode.name()
+            );
+            throw new BusinessException(errorCode);
         }
         if (user.getPasswordHash() == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             registerFailedLogin(user, now);
-            recordLogin(user, email, ipAddress, deviceInfo, "email", "failed");
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+            boolean locked = user.getLockedUntil() != null && user.getLockedUntil().isAfter(now);
+            recordLogin(user, email, ipAddress, deviceInfo, "email", locked ? "blocked" : "failed");
+            auditLogService.recordAuthentication(
+                    user,
+                    email,
+                    locked ? AuditAction.LOGIN_BLOCKED : AuditAction.LOGIN_FAILED,
+                    locked ? AuditResult.DENIED : AuditResult.FAILURE,
+                    locked ? "Login was blocked" : "Login failed",
+                    ipAddress,
+                    deviceInfo,
+                    locked ? ErrorCode.ACCOUNT_LOCKED.name() : ErrorCode.INVALID_CREDENTIALS.name()
+            );
+            throw new BusinessException(locked ? ErrorCode.ACCOUNT_LOCKED : ErrorCode.INVALID_CREDENTIALS);
         }
 
         user.setFailedLoginAttempts(0);
@@ -110,7 +131,8 @@ public class AuthService {
         user.setLastLoginAt(now);
         userRepository.save(user);
         recordLogin(user, email, ipAddress, deviceInfo, "email", "success");
-        auditLogService.record(email, "LOGIN_SUCCEEDED", "USER", user.getId().toString());
+        auditLogService.recordAuthentication(user, email, AuditAction.LOGIN_SUCCEEDED, AuditResult.SUCCESS,
+                "Login succeeded", ipAddress, deviceInfo, null);
         return authSessionService.issue(user, deviceInfo, ipAddress);
     }
 
@@ -132,7 +154,8 @@ public class AuthService {
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
         recordLogin(user, email, ipAddress, deviceInfo, "google", "success");
-        auditLogService.record(email, "GOOGLE_LOGIN_SUCCEEDED", "USER", user.getId().toString());
+        auditLogService.recordAuthentication(user, email, AuditAction.GOOGLE_LOGIN_SUCCEEDED, AuditResult.SUCCESS,
+                "Google login succeeded", ipAddress, deviceInfo, null);
         return authSessionService.issue(user, deviceInfo, ipAddress);
     }
 
@@ -143,7 +166,13 @@ public class AuthService {
 
     @Transactional
     public void logout(String refreshToken) {
-        authSessionService.revoke(refreshToken);
+        UserAccount user = authSessionService.revoke(refreshToken);
+        if (user != null) {
+            auditLogService.recordAuthentication(
+                    user, user.getEmail(), AuditAction.LOGOUT_SUCCEEDED, AuditResult.SUCCESS,
+                    "Logout succeeded", null, null, null
+            );
+        }
     }
 
     @Transactional
@@ -175,7 +204,6 @@ public class AuthService {
                 .filter(user -> !user.isEmailVerified())
                 .ifPresent(user -> {
                     issueVerificationOtp(user);
-                    auditLogService.record(user.getEmail(), "EMAIL_VERIFICATION_RESENT", "USER", user.getId().toString());
                 });
     }
 
