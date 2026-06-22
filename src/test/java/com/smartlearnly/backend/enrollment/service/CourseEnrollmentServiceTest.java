@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -45,6 +46,8 @@ class CourseEnrollmentServiceTest {
     private SuccessfulPaymentRepository successfulPaymentRepository;
     @Mock
     private CurrentUserService currentUserService;
+    @Mock
+    private AuditLogService auditLogService;
 
     private CourseEnrollmentService service;
 
@@ -55,7 +58,8 @@ class CourseEnrollmentServiceTest {
                 courseEnrollmentRepository,
                 enrollmentStatusHistoryRepository,
                 successfulPaymentRepository,
-                currentUserService
+                currentUserService,
+                auditLogService
         );
     }
 

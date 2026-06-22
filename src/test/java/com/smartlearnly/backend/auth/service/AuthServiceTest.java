@@ -23,7 +23,9 @@ import com.smartlearnly.backend.auth.entity.PasswordResetToken;
 import com.smartlearnly.backend.auth.repository.LoginHistoryRepository;
 import com.smartlearnly.backend.auth.repository.OtpVerificationRepository;
 import com.smartlearnly.backend.auth.repository.PasswordResetTokenRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.config.SecurityProperties;
 import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
 import com.smartlearnly.backend.common.exception.BusinessException;
@@ -203,6 +205,10 @@ class AuthServiceTest {
         assertThat(user.getLockedUntil()).isNull();
         assertThat(user.getLastLoginAt()).isNotNull();
         verify(authSessionService).issue(user, "browser", "127.0.0.1");
+        verify(auditLogService).recordAuthentication(
+                user, "student@example.com", AuditAction.LOGIN_SUCCEEDED, AuditResult.SUCCESS,
+                "Login succeeded", "127.0.0.1", "browser", null
+        );
     }
 
     @Test
@@ -225,8 +231,24 @@ class AuthServiceTest {
 
         assertThat(user.getLockedUntil()).isAfter(Instant.now());
         assertThat(user.getFailedLoginAttempts()).isZero();
+        verify(auditLogService).recordAuthentication(
+                user, "student@example.com", AuditAction.LOGIN_BLOCKED, AuditResult.DENIED,
+                "Login was blocked", "127.0.0.1", "browser", ErrorCode.ACCOUNT_LOCKED.name()
+        );
     }
 
+    @Test
+    void logoutShouldAuditResolvedRefreshTokenOwnerWithoutLoggingToken() {
+        UserAccount user = createUser();
+        when(authSessionService.revoke("raw-refresh-token")).thenReturn(user);
+
+        authService.logout("raw-refresh-token");
+
+        verify(auditLogService).recordAuthentication(
+                user, user.getEmail(), AuditAction.LOGOUT_SUCCEEDED, AuditResult.SUCCESS,
+                "Logout succeeded", null, null, null
+        );
+    }
     @Test
     void forgotPasswordShouldNotCreateTokenForUnknownEmail() {
         when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("missing@example.com"))
