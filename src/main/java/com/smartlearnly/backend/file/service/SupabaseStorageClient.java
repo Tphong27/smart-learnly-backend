@@ -39,7 +39,7 @@ public class SupabaseStorageClient implements FileStorageService {
         catch (RestClientException | IllegalArgumentException exception) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "Thumbnail storage service is unavailable"
+                    "File storage service is unavailable"
             );
         }
 
@@ -59,7 +59,7 @@ public class SupabaseStorageClient implements FileStorageService {
                 || storageProperties.getSupabaseServiceRoleKey().isBlank()) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "Thumbnail storage service is not configured"
+                    "File storage service is not configured"
             );
         }
     }

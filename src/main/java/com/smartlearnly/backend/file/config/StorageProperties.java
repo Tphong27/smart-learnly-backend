@@ -15,4 +15,8 @@ public class StorageProperties {
     private String supabaseServiceRoleKey;
     private String courseThumbnailBucket = "course-thumbnails";
     private DataSize courseThumbnailMaxSize = DataSize.ofMegabytes(5);
+    private String lessonMaterialBucket = "lesson-materials";
+    private DataSize lessonMaterialMaxSize = DataSize.ofMegabytes(50);
+    private String lessonResourceBucket = "lesson-resources";
+    private DataSize lessonResourceMaxSize = DataSize.ofMegabytes(20);
 }
