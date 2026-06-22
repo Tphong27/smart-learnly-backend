@@ -7,8 +7,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.classroom.entity.ClassStatus;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.commerce.dto.AddCartItemRequest;
+import com.smartlearnly.backend.commerce.dto.CartResponse;
 import com.smartlearnly.backend.commerce.entity.Cart;
 import com.smartlearnly.backend.commerce.entity.CartItem;
 import com.smartlearnly.backend.commerce.repository.CartItemRepository;
@@ -101,6 +104,31 @@ class CartServiceTest {
     }
 
     @Test
+    void getCartShouldReturnClassPriceInsteadOfCoursePrice() {
+        UserAccount user = user();
+        Course course = paidPublishedCourse();
+        ClassOffering classOffering = paidClass(course.getId());
+        Cart cart = cart(user.getId());
+        CartItem item = new CartItem();
+        item.setId(UUID.randomUUID());
+        item.setCartId(cart.getId());
+        item.setCourseId(course.getId());
+        item.setClassId(classOffering.getId());
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCartIdOrderByAddedAtAsc(cart.getId())).thenReturn(List.of(item));
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
+                .thenReturn(Optional.of(classOffering));
+
+        CartResponse response = service.getCart();
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).price()).isEqualByComparingTo("1500000");
+        assertThat(response.items().get(0).price()).isNotEqualByComparingTo(course.getPrice());
+    }
+
+    @Test
     void getCartShouldReturnEmptyResponseWhenCartDoesNotExistYet() {
         UserAccount user = user();
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
@@ -132,5 +160,15 @@ class CartServiceTest {
         course.setFree(false);
         course.setStatus(CourseStatus.PUBLISHED);
         return course;
+    }
+
+    private ClassOffering paidClass(UUID courseId) {
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(UUID.randomUUID());
+        classOffering.setCourseId(courseId);
+        classOffering.setClassName("Java Backend - K01");
+        classOffering.setPrice(new BigDecimal("1500000"));
+        classOffering.setStatus(ClassStatus.UPCOMING);
+        return classOffering;
     }
 }

@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.classroom.entity.ClassStatus;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.commerce.dto.CheckoutResponse;
 import com.smartlearnly.backend.commerce.entity.Cart;
@@ -189,6 +191,57 @@ class CheckoutServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void checkoutShouldUseClassPriceInsteadOfCoursePrice() {
+        UserAccount user = user();
+        Cart cart = cart(user.getId());
+        Course course = paidPublishedCourse();
+        ClassOffering classOffering = paidClass(course.getId());
+        CartItem cartItem = cartItem(cart.getId(), course.getId());
+        cartItem.setClassId(classOffering.getId());
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(cartRepository.findByIdAndUserId(cart.getId(), user.getId())).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCartIdOrderByAddedAtAsc(cart.getId())).thenReturn(List.of(cartItem));
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
+                .thenReturn(Optional.of(classOffering));
+        when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
+                .thenReturn(Optional.empty());
+        when(orderRepository.existsByOrderCode(anyString())).thenReturn(false);
+        when(orderRepository.save(any(PurchaseOrder.class))).thenAnswer(invocation -> {
+            PurchaseOrder order = invocation.getArgument(0);
+            order.setId(UUID.randomUUID());
+            return order;
+        });
+        when(orderItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentTransactionRepository.save(any(PaymentTransaction.class))).thenAnswer(invocation -> {
+            PaymentTransaction transaction = invocation.getArgument(0);
+            transaction.setId(UUID.randomUUID());
+            return transaction;
+        });
+        when(sePayInstructionServices.getIfAvailable()).thenReturn(request ->
+                new SePayPaymentInstruction(
+                        "SLPCLASS1",
+                        "123456789",
+                        "MBBANK",
+                        "SMART LEARNLY",
+                        "https://qr.example/SLPCLASS1",
+                        request.amount(),
+                        request.expiresAt()
+                ));
+        when(sePayOrderRepository.save(any(SePayOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CheckoutResponse response = service.checkout(cart.getId());
+
+        assertThat(response.amount()).isEqualByComparingTo("1500000");
+        ArgumentCaptor<List<OrderItem>> itemsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(orderItemRepository).saveAll(itemsCaptor.capture());
+        assertThat(itemsCaptor.getValue().get(0).getUnitPrice()).isEqualByComparingTo("1500000");
+        assertThat(itemsCaptor.getValue().get(0).getDiscountAmount()).isEqualByComparingTo("0");
+        assertThat(itemsCaptor.getValue().get(0).getFinalAmount()).isEqualByComparingTo("1500000");
+    }
+
+    @Test
     void checkoutShouldRollbackBeforePersistingSePayOrderWhenAdapterMissing() {
         UserAccount user = user();
         Cart cart = cart(user.getId());
@@ -251,5 +304,15 @@ class CheckoutServiceTest {
         course.setFree(false);
         course.setStatus(CourseStatus.PUBLISHED);
         return course;
+    }
+
+    private ClassOffering paidClass(UUID courseId) {
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(UUID.randomUUID());
+        classOffering.setCourseId(courseId);
+        classOffering.setClassName("Java Backend - K01");
+        classOffering.setPrice(new BigDecimal("1500000"));
+        classOffering.setStatus(ClassStatus.UPCOMING);
+        return classOffering;
     }
 }
