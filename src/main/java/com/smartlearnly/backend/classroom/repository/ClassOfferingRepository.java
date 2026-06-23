@@ -14,6 +14,38 @@ import org.springframework.data.repository.query.Param;
 public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UUID> {
     Optional<ClassOffering> findByIdAndDeletedAtIsNull(UUID id);
 
+    @Query(
+            value = """
+                    SELECT
+                        class_offering.id AS "id",
+                        class_offering.course_id AS "courseId",
+                        course.title AS "courseTitle",
+                        class_offering.class_name AS "className",
+                        class_offering.trainer_id AS "trainerId",
+                        trainer.full_name AS "trainerName",
+                        class_offering.schedule_description AS "scheduleDescription",
+                        class_offering.start_date AS "startDate",
+                        class_offering.end_date AS "endDate",
+                        class_offering.max_students AS "maxStudents",
+                        class_offering.price AS "price",
+                        COUNT(class_enrollment.id) FILTER (
+                            WHERE class_enrollment.status = 'active'::public.enroll_status
+                        ) AS "activeEnrollmentCount",
+                        class_offering.status::text AS "status",
+                        class_offering.created_at AS "createdAt",
+                        class_offering.updated_at AS "updatedAt"
+                    FROM public.classes class_offering
+                    JOIN public.courses course ON course.id = class_offering.course_id
+                    LEFT JOIN public.users trainer ON trainer.id = class_offering.trainer_id
+                    LEFT JOIN public.class_enrollments class_enrollment
+                        ON class_enrollment.class_id = class_offering.id
+                    WHERE class_offering.id = :classId
+                      AND class_offering.deleted_at IS NULL
+                    GROUP BY class_offering.id, course.title, trainer.full_name
+                    """,
+            nativeQuery = true)
+    Optional<ClassAdminProjection> findAdminClassById(@Param("classId") UUID classId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select classOffering from ClassOffering classOffering "
             + "where classOffering.id = :id and classOffering.deletedAt is null")

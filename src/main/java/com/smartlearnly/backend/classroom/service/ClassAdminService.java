@@ -70,7 +70,9 @@ public class ClassAdminService {
 
     @Transactional(readOnly = true)
     public ClassResponse get(UUID classId) {
-        return toResponse(findClass(classId));
+        return classOfferingRepository.findAdminClassById(classId)
+                .map(this::toResponse)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
     }
 
     @Transactional
@@ -226,6 +228,7 @@ public class ClassAdminService {
             UserAccount trainer,
             long activeCount
     ) {
+        int maxStudents = safeMaxStudents(classOffering.getMaxStudents());
         return new ClassResponse(
                 classOffering.getId(),
                 classOffering.getCourseId(),
@@ -236,11 +239,11 @@ public class ClassAdminService {
                 classOffering.getScheduleDescription(),
                 classOffering.getStartDate(),
                 classOffering.getEndDate(),
-                classOffering.getMaxStudents(),
-                classOffering.getPrice(),
+                maxStudents,
+                safePrice(classOffering.getPrice()),
                 activeCount,
-                Math.max(0, (long) classOffering.getMaxStudents() - activeCount),
-                classOffering.getStatus().name().toLowerCase(Locale.ROOT),
+                Math.max(0, (long) maxStudents - activeCount),
+                classOffering.getStatus() == null ? null : classOffering.getStatus().name().toLowerCase(Locale.ROOT),
                 classOffering.getCreatedAt(),
                 classOffering.getUpdatedAt()
         );
@@ -250,6 +253,7 @@ public class ClassAdminService {
         long activeCount = classOffering.getActiveEnrollmentCount() == null
                 ? 0
                 : classOffering.getActiveEnrollmentCount();
+        int maxStudents = safeMaxStudents(classOffering.getMaxStudents());
         return new ClassResponse(
                 classOffering.getId(),
                 classOffering.getCourseId(),
@@ -260,14 +264,27 @@ public class ClassAdminService {
                 classOffering.getScheduleDescription(),
                 classOffering.getStartDate(),
                 classOffering.getEndDate(),
-                classOffering.getMaxStudents(),
-                classOffering.getPrice(),
+                maxStudents,
+                safePrice(classOffering.getPrice()),
                 activeCount,
-                Math.max(0, (long) classOffering.getMaxStudents() - activeCount),
-                classOffering.getStatus(),
+                Math.max(0, (long) maxStudents - activeCount),
+                normalizeStatusValue(classOffering.getStatus()),
                 classOffering.getCreatedAt(),
                 classOffering.getUpdatedAt()
         );
+    }
+
+    private int safeMaxStudents(Integer maxStudents) {
+        return maxStudents == null ? 0 : maxStudents;
+    }
+
+    private BigDecimal safePrice(BigDecimal price) {
+        return price == null ? BigDecimal.ZERO : price;
+    }
+
+    private String normalizeStatusValue(String status) {
+        String normalized = normalizeNullable(status);
+        return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);
     }
 
     private long activeEnrollmentCount(UUID classId) {

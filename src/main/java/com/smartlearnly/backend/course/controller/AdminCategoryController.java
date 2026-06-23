@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
 @RequestMapping("/api/v1/admin/categories")
 @Tag(name = "Admin Categories", description = "Administrator course-category management APIs.")
 @SecurityRequirement(name = "bearerAuth")
