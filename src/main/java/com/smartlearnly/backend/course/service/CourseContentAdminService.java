@@ -245,9 +245,6 @@ public class CourseContentAdminService {
         if ("DOCUMENT".equals(normalized)) {
             return LessonType.PDF;
         }
-        if ("QUIZ".equals(normalized)) {
-            return LessonType.RICH_TEXT;
-        }
         try {
             return LessonType.valueOf(normalized);
         }
