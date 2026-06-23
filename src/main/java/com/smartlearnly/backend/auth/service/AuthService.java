@@ -169,7 +169,7 @@ public class AuthService {
         });
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public void resendVerification(ResendVerificationRequest request) {
         findActiveUserByEmail(request.email())
                 .filter(user -> !user.isEmailVerified())
