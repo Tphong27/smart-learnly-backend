@@ -50,7 +50,31 @@ public class LearningContentService {
 
     @Transactional(readOnly = true)
     public LearningContentResponse getPreviewContent(UUID courseId) {
-        courseRepository.findByIdAndDeletedAtIsNull(courseId)
+        Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+                .orElseThrow(() -> new RuntimeException("Course not found"));
+
+        List<CourseSection> sections = courseSectionRepository
+                .findByCourseIdOrderBySortOrderAscCreatedAtAsc(courseId);
+
+        List<LearningSectionResponse> sectionResponses = sections.stream()
+                .map(this::toPreviewSectionResponse)
+                .filter(s -> s != null)
+                .toList();
+
+        LearningStats stats = calculateStats(sections);
+
+        return new LearningContentResponse(
+                courseId,
+                course.getTitle(),
+                course.getThumbnailUrl(),
+                sectionResponses,
+                stats
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public LearningContentResponse getAdminPreviewContent(UUID courseId) {
+        Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
                 .orElseThrow(() -> new RuntimeException("Course not found"));
 
         List<CourseSection> sections = courseSectionRepository
@@ -64,10 +88,24 @@ public class LearningContentService {
 
         return new LearningContentResponse(
                 courseId,
-                null,
-                null,
+                course.getTitle(),
+                course.getThumbnailUrl(),
                 sectionResponses,
                 stats
+        );
+    }
+
+    private LearningSectionResponse toPreviewSectionResponse(CourseSection section) {
+        List<LearningLessonResponse> lessonResponses = section.getLessons().stream()
+                .filter(lesson -> Boolean.TRUE.equals(lesson.getPreview()))
+                .map(this::toLessonResponse)
+                .toList();
+        if (lessonResponses.isEmpty()) return null;
+        return new LearningSectionResponse(
+                section.getId(),
+                section.getTitle(),
+                section.getSortOrder(),
+                lessonResponses
         );
     }
 
