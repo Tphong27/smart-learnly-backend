@@ -55,6 +55,11 @@ public class SecurityConfig {
                                 "/api/v1/courses/*/preview-lessons",
                                 "/api/v1/courses/*/preview-lessons/*"
                         ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/courses/*/preview",
+                                "/api/v1/courses/{courseId}/preview"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(Customizer.withDefaults());
@@ -95,6 +100,11 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/v1/courses/*/preview-lessons",
                                 "/api/v1/courses/*/preview-lessons/*"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/courses/*/preview",
+                                "/api/v1/courses/{courseId}/preview"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
