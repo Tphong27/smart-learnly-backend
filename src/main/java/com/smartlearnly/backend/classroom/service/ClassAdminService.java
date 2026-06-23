@@ -67,13 +67,7 @@ public class ClassAdminService {
 
     @Transactional(readOnly = true)
     public ClassResponse get(UUID classId) {
-        ClassAdminProjection classDetail = classOfferingRepository
-                .findAdminClassDetail(classId)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.RESOURCE_NOT_FOUND,
-                        "Class was not found"));
-
-        return toResponse(classDetail);
+        return getClassDetailResponse(classId);
     }
 
     @Transactional
@@ -158,9 +152,10 @@ public class ClassAdminService {
         }
         validateDates(classOffering.getStartDate(), classOffering.getEndDate());
 
-        ClassOffering saved = classOfferingRepository.save(classOffering);
+        classOfferingRepository.saveAndFlush(classOffering);
         audit("CLASS_UPDATED", classId);
-        return toResponse(saved);
+
+        return getClassDetailResponse(classId);
     }
 
     @Transactional
@@ -333,5 +328,15 @@ public class ClassAdminService {
     private void audit(String action, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         auditLogService.record(actor.getEmail(), action, "CLASS", classId.toString());
+    }
+
+    private ClassResponse getClassDetailResponse(UUID classId) {
+        ClassAdminProjection classDetail = classOfferingRepository
+                .findAdminClassDetail(classId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "Class was not found"));
+
+        return toResponse(classDetail);
     }
 }

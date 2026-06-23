@@ -4,16 +4,22 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriUtils;
 
 @Service
 @RequiredArgsConstructor
 public class SupabaseStorageClient implements FileStorageService {
+    private static final Logger log = LoggerFactory.getLogger(SupabaseStorageClient.class);
+
     private final StorageProperties storageProperties;
     private final RestClient.Builder restClientBuilder;
 
@@ -36,7 +42,22 @@ public class SupabaseStorageClient implements FileStorageService {
                     .retrieve()
                     .toBodilessEntity();
         }
+        catch (RestClientResponseException exception) {
+            String responseBody = exception.getResponseBodyAsString();
+            log.warn(
+                    "Supabase storage upload failed for bucket={} path={} status={} body={}",
+                    bucket,
+                    objectPath,
+                    exception.getStatusCode(),
+                    truncate(responseBody)
+            );
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    resolveStorageFailureMessage(responseBody)
+            );
+        }
         catch (RestClientException | IllegalArgumentException exception) {
+            log.warn("Supabase storage upload failed for bucket={} path={}", bucket, objectPath, exception);
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
                     "File storage service is unavailable"
@@ -66,5 +87,20 @@ public class SupabaseStorageClient implements FileStorageService {
 
     private String normalizeBaseUrl() {
         return storageProperties.getSupabaseUrl().replaceAll("/+$", "");
+    }
+
+    private String resolveStorageFailureMessage(String responseBody) {
+        if (responseBody != null
+                && responseBody.toLowerCase(Locale.ROOT).contains("bucket not found")) {
+            return "File storage bucket was not found";
+        }
+        return "File storage service is unavailable";
+    }
+
+    private String truncate(String value) {
+        if (value == null || value.length() <= 500) {
+            return value;
+        }
+        return value.substring(0, 500) + "...";
     }
 }

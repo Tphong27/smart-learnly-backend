@@ -3,6 +3,8 @@ package com.smartlearnly.backend.auth.seed;
 import com.smartlearnly.backend.auth.dto.ForgotPasswordRequest;
 import com.smartlearnly.backend.auth.dto.ResendVerificationRequest;
 import com.smartlearnly.backend.auth.service.AuthService;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import java.time.Instant;
@@ -42,13 +44,28 @@ public class AuthDevDataSeeder implements ApplicationRunner {
         seedGoogleOnlyUser();
 
         authService.forgotPassword(new ForgotPasswordRequest(ACTIVE_EMAIL));
-        authService.resendVerification(new ResendVerificationRequest(PENDING_EMAIL));
+        resendVerificationOtpForSeed();
 
         log.info("Dev auth seed ready");
         log.info("Seeded user: email={} password={}", ACTIVE_EMAIL, ACTIVE_PASSWORD);
         log.info("Seeded user: email={} password={}", PENDING_EMAIL, PENDING_PASSWORD);
         log.info("Seeded user: email={} password=<google-only>", GOOGLE_EMAIL);
-        log.info("Password reset token for {} and verification OTP for {} were generated.", ACTIVE_EMAIL, PENDING_EMAIL);
+        log.info("Password reset token for {} was generated. Verification OTP for {} was requested.", ACTIVE_EMAIL, PENDING_EMAIL);
+    }
+
+    private void resendVerificationOtpForSeed() {
+        try {
+            authService.resendVerification(new ResendVerificationRequest(PENDING_EMAIL));
+        }
+        catch (BusinessException exception) {
+            if (exception.errorCode() != ErrorCode.RATE_LIMIT_EXCEEDED) {
+                throw exception;
+            }
+            log.warn(
+                    "Skipping dev verification OTP generation for {} because the resend quota is already exhausted.",
+                    PENDING_EMAIL
+            );
+        }
     }
 
     private void seedActiveUser() {

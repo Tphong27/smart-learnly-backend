@@ -24,7 +24,10 @@ public class LessonFileUploadService {
             "doc",
             "docx",
             "ppt",
-            "pptx"
+            "pptx",
+            "mp4",
+            "webm",
+            "mov"
     );
     private static final Set<String> RESOURCE_EXTENSIONS = Set.of(
             "pdf",
