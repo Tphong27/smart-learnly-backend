@@ -2,12 +2,15 @@ package com.smartlearnly.backend.auth.service;
 
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.EmailSettings;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.HtmlUtils;
 
 @Service
@@ -76,18 +79,48 @@ public class ResendEmailService implements EmailService {
             log.info("Email transport is not configured. Email fallback to={} subject={}", to, subject);
             return;
         }
-        dispatch(settings, to, subject, html);
+        try {
+            dispatch(settings, to, subject, html);
+        } catch (RuntimeException exception) {
+            // Email delivery is a best-effort side task. A provider failure (e.g. unverified
+            // domain) must not break the calling flow (registration, password reset) or crash
+            // startup seeding. Log without leaking secrets and continue.
+            log.error("Failed to send email to={} subject={}: {}", to, subject, exception.getMessage());
+        }
     }
 
     private void dispatch(EmailSettings settings, String to, String subject, String html) {
         RestClient client = RestClient.create(settings.apiUrl());
-        client.post()
-                .uri("/emails")
-                .header("Authorization", "Bearer " + settings.apiKey())
-                .header("Content-Type", "application/json")
-                .body(new ResendEmailRequest(settings.fromAddress(), List.of(to), subject, html))
-                .retrieve()
-                .toBodilessEntity();
+        try {
+            client.post()
+                    .uri("/emails")
+                    .header("Authorization", "Bearer " + settings.apiKey())
+                    .header("Content-Type", "application/json")
+                    .body(new ResendEmailRequest(settings.fromAddress(), List.of(to), subject, html))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientResponseException exception) {
+            // Surface the provider's own message (e.g. unverified domain) for actionable feedback.
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, extractProviderMessage(exception));
+        }
+    }
+
+    private String extractProviderMessage(RestClientResponseException exception) {
+        try {
+            String body = exception.getResponseBodyAsString();
+            int messageIndex = body.indexOf("\"message\"");
+            if (messageIndex >= 0) {
+                int colon = body.indexOf(':', messageIndex);
+                int firstQuote = body.indexOf('"', colon + 1);
+                int secondQuote = body.indexOf('"', firstQuote + 1);
+                if (firstQuote >= 0 && secondQuote > firstQuote) {
+                    return body.substring(firstQuote + 1, secondQuote);
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Fall through to generic message.
+        }
+        return "Email provider rejected the request (status " + exception.getStatusText() + ")";
     }
 
     private String buildEmailHtml(String fullName, String heading, String message, String buttonText, String link) {

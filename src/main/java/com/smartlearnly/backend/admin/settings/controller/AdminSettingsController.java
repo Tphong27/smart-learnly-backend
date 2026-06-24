@@ -78,6 +78,9 @@ public class AdminSettingsController {
         }
         try {
             emailService.sendTestEmail(recipient);
+        } catch (BusinessException exception) {
+            // Provider error already carries an actionable message (e.g. unverified domain).
+            throw exception;
         } catch (IllegalStateException exception) {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, exception.getMessage());
         } catch (RuntimeException exception) {
