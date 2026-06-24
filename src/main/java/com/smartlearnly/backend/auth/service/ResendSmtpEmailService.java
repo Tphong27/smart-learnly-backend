@@ -56,6 +56,36 @@ public class ResendSmtpEmailService implements EmailService {
         );
     }
 
+    @Override
+    public void sendTestEmail(String email) {
+        // Synchronous on purpose: the admin test action needs the real outcome (success/failure)
+        // surfaced back to the caller, so do not run this on the async executor.
+        if (smtpPassword == null || smtpPassword.isBlank()) {
+            throw new IllegalStateException("Email transport is not configured. Set the SMTP password (API key) first.");
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, false, StandardCharsets.UTF_8.name());
+            helper.setFrom(fromAddress);
+            helper.setTo(email);
+            helper.setSubject("Smart Learnly email configuration test");
+            helper.setText(
+                    buildLinkEmailHtml(
+                            "there",
+                            "Email configuration test",
+                            "This is a test email confirming your Smart Learnly email settings are working.",
+                            "Open Smart Learnly",
+                            "https://smartlearnly.online"
+                    ),
+                    true
+            );
+            mailSender.send(message);
+        }
+        catch (MessagingException exception) {
+            throw new IllegalStateException("Could not prepare the test email for SMTP delivery", exception);
+        }
+    }
+
     private void send(String to, String subject, String html) {
         if (smtpPassword == null || smtpPassword.isBlank()) {
             log.info("Resend SMTP is not configured. Skipping email to={} subject={}", to, subject);
