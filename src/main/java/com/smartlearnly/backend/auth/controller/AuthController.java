@@ -13,6 +13,7 @@ import com.smartlearnly.backend.auth.dto.UserProfileResponse;
 import com.smartlearnly.backend.auth.dto.VerifyEmailRequest;
 import com.smartlearnly.backend.auth.service.AuthService;
 import com.smartlearnly.backend.auth.service.AuthSessionService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.auth.config.AuthProperties;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -43,6 +44,20 @@ import org.springframework.http.ResponseEntity;
 public class AuthController {
     private final AuthService authService;
     private final AuthProperties authProperties;
+    private final SystemSettingsService systemSettingsService;
+
+    @GetMapping("/google/config")
+    @Operation(summary = "Get the public Google OAuth client ID for the sign-in button")
+    public com.smartlearnly.backend.common.api.ApiResponse<GoogleConfigResponse> getGoogleConfig() {
+        String clientId = systemSettingsService.resolveGoogleSettings().clientId();
+        return com.smartlearnly.backend.common.api.ApiResponse.success(
+                "Google config loaded",
+                new GoogleConfigResponse(clientId == null ? "" : clientId)
+        );
+    }
+
+    public record GoogleConfigResponse(String clientId) {
+    }
 
     @PostMapping("/register")
     @Operation(summary = "Register a trainee account")

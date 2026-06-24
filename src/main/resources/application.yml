@@ -82,6 +82,8 @@ app:
     lesson-material-max-size: ${APP_STORAGE_LESSON_MATERIAL_MAX_SIZE:50MB}
     lesson-resource-bucket: ${SUPABASE_LESSON_RESOURCE_BUCKET:lesson-resources}
     lesson-resource-max-size: ${APP_STORAGE_LESSON_RESOURCE_MAX_SIZE:20MB}
+  settings:
+    encryption-key: ${SETTINGS_ENCRYPTION_KEY:}
 
 springdoc:
   api-docs:
