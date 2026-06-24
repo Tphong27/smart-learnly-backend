@@ -93,10 +93,10 @@ public class AdminSettingsController {
     }
 
     @GetMapping("/oauth/google")
-    @Operation(summary = "Get current Google OAuth settings (secret masked)")
+    @Operation(summary = "Get current Google OAuth settings (secrets masked)")
     public ApiResponse<GoogleOAuthSettingsResponse> getGoogleOAuth() {
         GoogleOAuthSettingsResponse response = new GoogleOAuthSettingsResponse(
-                settingsService.getOrDefault(SettingKeys.GOOGLE_CLIENT_ID, null),
+                settingsService.hasValue(SettingKeys.GOOGLE_CLIENT_ID),
                 settingsService.hasValue(SettingKeys.GOOGLE_CLIENT_SECRET),
                 settingsService.getOrDefault(SettingKeys.GOOGLE_SCOPE, "openid,profile,email"),
                 GOOGLE_REDIRECT_URI_HINT
@@ -110,7 +110,7 @@ public class AdminSettingsController {
             @Valid @RequestBody GoogleOAuthSettingsUpdateRequest request
     ) {
         UUID actor = currentUserId();
-        settingsService.put(SettingKeys.GOOGLE_CLIENT_ID, request.clientId(), false, actor);
+        settingsService.put(SettingKeys.GOOGLE_CLIENT_ID, request.clientId(), true, actor);
         settingsService.put(SettingKeys.GOOGLE_CLIENT_SECRET, request.clientSecret(), true, actor);
         settingsService.put(SettingKeys.GOOGLE_SCOPE, request.scope(), false, actor);
         auditLogService.record(actorLabel(), "SETTINGS_UPDATE_OAUTH_GOOGLE", "system_settings", "oauth.google");
