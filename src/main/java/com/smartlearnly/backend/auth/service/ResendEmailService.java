@@ -1,12 +1,11 @@
 package com.smartlearnly.backend.auth.service;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.EmailSettings;
 import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.HtmlUtils;
@@ -15,18 +14,10 @@ import org.springframework.web.util.HtmlUtils;
 public class ResendEmailService implements EmailService {
     private static final Logger log = LoggerFactory.getLogger(ResendEmailService.class);
 
-    private final RestClient resendClient;
-    private final String apiKey;
-    private final String fromAddress;
+    private final SystemSettingsService settingsService;
 
-    public ResendEmailService(
-            @Value("${app.resend.api-url:https://api.resend.com}") String apiUrl,
-            @Value("${app.resend.api-key:}") String apiKey,
-            @Value("${app.resend.from-email:Smart Learnly <no-reply@mail.smartlearnly.online>}") String fromAddress
-    ) {
-        this.resendClient = RestClient.create(apiUrl);
-        this.apiKey = apiKey;
-        this.fromAddress = fromAddress;
+    public ResendEmailService(SystemSettingsService settingsService) {
+        this.settingsService = settingsService;
     }
 
     @Override
@@ -59,17 +50,42 @@ public class ResendEmailService implements EmailService {
         );
     }
 
+    @Override
+    public void sendTestEmail(String email) {
+        EmailSettings settings = settingsService.resolveEmailSettings();
+        if (!settings.isConfigured()) {
+            throw new IllegalStateException("Email transport is not configured. Set an API key first.");
+        }
+        dispatch(
+                settings,
+                email,
+                "Smart Learnly email configuration test",
+                buildEmailHtml(
+                        "there",
+                        "Email configuration test",
+                        "This is a test email confirming your Smart Learnly email settings are working.",
+                        "Open Smart Learnly",
+                        "https://smartlearnly.online"
+                )
+        );
+    }
+
     private void send(String to, String subject, String html) {
-        if (apiKey == null || apiKey.isBlank()) {
-            log.info("Resend is not configured. Email fallback to={} subject={} content={}", to, subject, html);
+        EmailSettings settings = settingsService.resolveEmailSettings();
+        if (!settings.isConfigured()) {
+            log.info("Email transport is not configured. Email fallback to={} subject={}", to, subject);
             return;
         }
+        dispatch(settings, to, subject, html);
+    }
 
-        resendClient.post()
+    private void dispatch(EmailSettings settings, String to, String subject, String html) {
+        RestClient client = RestClient.create(settings.apiUrl());
+        client.post()
                 .uri("/emails")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(new ResendEmailRequest(fromAddress, List.of(to), subject, html))
+                .header("Authorization", "Bearer " + settings.apiKey())
+                .header("Content-Type", "application/json")
+                .body(new ResendEmailRequest(settings.fromAddress(), List.of(to), subject, html))
                 .retrieve()
                 .toBodilessEntity();
     }

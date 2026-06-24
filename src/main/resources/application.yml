@@ -36,6 +36,8 @@ app:
   integrations:
     ai-provider: ${AI_PROVIDER:none}
     payment-provider: ${PAYMENT_PROVIDER:none}
+  settings:
+    encryption-key: ${SETTINGS_ENCRYPTION_KEY:}
 
 springdoc:
   api-docs:

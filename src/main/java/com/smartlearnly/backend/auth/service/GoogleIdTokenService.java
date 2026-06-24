@@ -1,9 +1,9 @@
 package com.smartlearnly.backend.auth.service;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
@@ -19,13 +19,14 @@ import org.springframework.web.client.RestClientException;
 @Service
 public class GoogleIdTokenService {
     private final JwtDecoder decoder = googleDecoder();
-    private final String clientId;
+    private final SystemSettingsService settingsService;
 
-    public GoogleIdTokenService(@Value("${app.auth.google-client-id:}") String clientId) {
-        this.clientId = clientId;
+    public GoogleIdTokenService(SystemSettingsService settingsService) {
+        this.settingsService = settingsService;
     }
 
     public GoogleIdentity verify(String idToken) {
+        String clientId = settingsService.resolveGoogleSettings().clientId();
         if (clientId == null || clientId.isBlank()) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
