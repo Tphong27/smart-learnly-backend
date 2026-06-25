@@ -11,7 +11,7 @@ public class TestTypeConverter implements AttributeConverter<TestType, String> {
         if (attribute == null) {
             return null;
         }
-        // Chuyển sang chữ thường để khớp với kiểu enum thông thường trong Postgres
+        // Chuyển sang chữ hoa để khớp với kiểu enum thông thường trong Postgres
         return attribute.name().toLowerCase();
     }
 
@@ -21,6 +21,6 @@ public class TestTypeConverter implements AttributeConverter<TestType, String> {
             return null;
         }
         // Chuyển ngược từ DB String sang Java Enum
-        return TestType.valueOf(dbData.toUpperCase());
+        return TestType.valueOf(dbData.toLowerCase());
     }
 }

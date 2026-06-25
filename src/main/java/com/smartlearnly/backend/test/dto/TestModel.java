@@ -1,0 +1,72 @@
+package com.smartlearnly.backend.test.dto;
+
+
+import com.smartlearnly.backend.test.entity.TestType;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+public class TestModel {
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class CreateRequest {
+        private UUID moduleId;
+        private UUID classId;
+        private UUID courseId;
+        private String title;
+        private String description;
+        private TestType testType;
+        private Integer durationMinutes;
+        private Integer maxAttempts;
+        private BigDecimal passScore;
+        private Boolean shuffleQuestions;
+        private Boolean shuffleAnswers;
+        private Boolean showAnswersAfter;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class UpdateRequest {
+        private String title;
+        private String description;
+        private TestType testType;
+        private Integer durationMinutes;
+        private Integer maxAttempts;
+        private BigDecimal passScore;
+        private Boolean shuffleQuestions;
+        private Boolean shuffleAnswers;
+        private Boolean showAnswersAfter;
+        private Boolean isPublished;
+        private Boolean isArchived;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class Response {
+        private UUID id;
+        private UUID moduleId;
+        private UUID classId;
+        private UUID courseId;
+        private String title;
+        private String description;
+        private TestType testType;
+        private Integer durationMinutes;
+        private Integer maxAttempts;
+        private BigDecimal passScore;
+        private Boolean shuffleQuestions;
+        private Boolean shuffleAnswers;
+        private Boolean showAnswersAfter;
+        private Boolean isPublished;
+        private Boolean isArchived;
+        private UUID createdBy;
+        private Instant createdAt;
+        private Instant updatedAt;
+    }
+}

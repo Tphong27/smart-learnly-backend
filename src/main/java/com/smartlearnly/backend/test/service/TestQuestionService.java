@@ -1,0 +1,115 @@
+
+package com.smartlearnly.backend.test.service;
+
+import com.smartlearnly.backend.test.dto.TestQuestionModel;
+import com.smartlearnly.backend.test.entity.TestQuestion;
+import com.smartlearnly.backend.test.entity.TestQuestion.TestQuestionId;
+import com.smartlearnly.backend.test.repository.TestQuestionRepository;
+import jakarta.persistence.EntityNotFoundException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class TestQuestionService {
+
+    private final TestQuestionRepository repository;
+
+    public TestQuestionModel.Response addQuestionToTest(
+            TestQuestionModel.AddRequest request) {
+
+        TestQuestion entity = new TestQuestion();
+
+        entity.setId(new TestQuestionId(
+                request.getTestId(),
+                request.getQuestionId()));
+
+        entity.setOrderIndex(
+                request.getOrderIndex());
+
+        entity.setMarks(request.getMarks());
+
+        TestQuestion saved = repository.save(entity);
+
+        return mapToResponse(saved);
+    }
+
+    public List<TestQuestionModel.Response>
+    getQuestionsByTest(UUID testId) {
+
+        List<TestQuestion> entities =
+                repository.findByIdTestId(testId);
+
+        List<TestQuestionModel.Response> responses =
+                new ArrayList<>();
+
+        for (TestQuestion entity : entities) {
+            responses.add(mapToResponse(entity));
+        }
+
+        return responses;
+    }
+
+    public TestQuestionModel.Response updateTestQuestion(
+            UUID testId,
+            UUID questionId,
+            TestQuestionModel.UpdateRequest request) {
+
+        TestQuestionId id =
+                new TestQuestionId(testId, questionId);
+
+        TestQuestion entity = repository.findById(id)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(
+                                "Test question not found"));
+
+        entity.setOrderIndex(
+                request.getOrderIndex());
+
+        entity.setMarks(request.getMarks());
+
+        TestQuestion updated = repository.save(entity);
+
+        return mapToResponse(updated);
+    }
+
+    public void removeQuestionFromTest(
+            UUID testId,
+            UUID questionId) {
+
+        TestQuestionId id =
+                new TestQuestionId(testId, questionId);
+
+        if (!repository.existsById(id)) {
+            throw new EntityNotFoundException(
+                    "Test question not found");
+        }
+
+        repository.deleteById(id);
+    }
+
+    private TestQuestionModel.Response mapToResponse(
+            TestQuestion entity) {
+
+        TestQuestionModel.Response response =
+                new TestQuestionModel.Response();
+
+        response.setTestId(
+                entity.getId().getTestId());
+
+        response.setQuestionId(
+                entity.getId().getQuestionId());
+
+        response.setOrderIndex(
+                entity.getOrderIndex());
+
+        response.setMarks(
+                entity.getMarks());
+
+        return response;
+    }
+}
+
