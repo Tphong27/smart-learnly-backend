@@ -1,6 +1,5 @@
 package com.smartlearnly.backend.assignment.entity;
 
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
