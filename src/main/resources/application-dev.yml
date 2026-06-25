@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${SUPABASE_DB_HOST:aws-1-ap-northeast-1.pooler.supabase.com}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require
+    url: jdbc:postgresql://${SUPABASE_DB_HOST:aws-1-ap-northeast-1.pooler.supabase.com}:${SUPABASE_DB_PORT:6543}/${SUPABASE_DB_NAME:postgres}?sslmode=require&prepareThreshold=0
     username: ${SUPABASE_DB_USERNAME:postgres.csbtyhjfzhizaasahwub}
     password: ${SUPABASE_DB_PASSWORD}
     hikari:
