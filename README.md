@@ -17,6 +17,11 @@ SUPABASE_DB_PASSWORD=...
 JWT_SECRET=...
 ```
 
+The `dev` profile defaults to the Supabase pooler on port `6543`. If you
+override the database URL or port locally, keep PgJDBC server-side prepared
+statements disabled for the transaction pooler by retaining
+`prepareThreshold=0` in the JDBC URL.
+
 Optional Resend SMTP configuration:
 
 ```text

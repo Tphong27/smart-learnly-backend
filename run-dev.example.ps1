@@ -18,7 +18,7 @@ foreach ($variable in $requiredVariables) {
 }
 
 $env:SUPABASE_DB_HOST = "your-supabase-pooler-host"
-$env:SUPABASE_DB_PORT = "5432"
+$env:SUPABASE_DB_PORT = "6543"
 $env:SUPABASE_DB_NAME = "postgres"
 $env:SUPABASE_DB_USERNAME = "your-supabase-pooler-username"
 $env:SPRING_PROFILES_ACTIVE = "dev"
