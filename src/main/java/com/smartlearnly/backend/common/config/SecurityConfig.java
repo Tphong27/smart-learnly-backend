@@ -107,6 +107,10 @@ public class SecurityConfig {
                                 "/api/v1/courses/*/preview",
                                 "/api/v1/courses/{courseId}/preview"
                         ).permitAll()
+                        .requestMatchers("/api/v1/admin/question-banks/**", "/api/v1/admin/questions/**")
+                        .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
+                        .requestMatchers("/api/v1/admin/question-answers/**")
+                        .hasAnyRole("ADMIN", "SME")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
@@ -157,3 +161,4 @@ public class SecurityConfig {
         return System.getenv("JWT_SECRET");
     }
 }
+
