@@ -4,5 +4,6 @@ public enum QuestionStatus {
     DRAFT,
     PENDING_REVIEW,
     APPROVED,
-    REJECTED; 
+    REJECTED,
+    ARCHIVED;
 }
