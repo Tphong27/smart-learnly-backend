@@ -14,6 +14,7 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.core.exception.SdkException;
 
 @Slf4j
 @Service
@@ -43,7 +44,11 @@ public class CloudflareR2StorageClient implements FileStorageService {
                 .region(Region.of(storageProperties.getR2Region()))
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(S3Configuration.builder()
-                        .pathStyleAccessEnabled(false)
+                        // R2 hoạt động ổn định với path-style access:
+                        // https://<account>.r2.cloudflarestorage.com/<bucket>/<key>
+                        // Virtual-hosted style (bucket ghép vào hostname) dễ gây
+                        // connection reset giữa chừng khi upload tới R2.
+                        .pathStyleAccessEnabled(true)
                         .build())
                 .build();
     }
@@ -73,6 +78,14 @@ public class CloudflareR2StorageClient implements FileStorageService {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
                     "File storage service is unavailable: " + exception.awsErrorDetails().errorMessage()
+            );
+        } catch (SdkException exception) {
+            // Lỗi tầng client/mạng (vd kết nối bị ngắt, timeout) - không phải lỗi nghiệp vụ S3.
+            log.warn("R2 storage upload failed for bucket={} path={} due to network/client error",
+                    bucket, objectPath, exception);
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "File storage service is unreachable. Please try again."
             );
         }
 
