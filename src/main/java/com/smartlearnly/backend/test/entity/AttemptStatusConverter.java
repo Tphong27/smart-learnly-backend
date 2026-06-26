@@ -11,7 +11,6 @@ public class AttemptStatusConverter implements AttributeConverter<AttemptStatus,
         if (attribute == null) {
             return null;
         }
-        // Chuyển thành chữ thường để khớp với giá trị lưu trong Postgres
         return attribute.name().toLowerCase();
     }
 
@@ -20,7 +19,10 @@ public class AttemptStatusConverter implements AttributeConverter<AttemptStatus,
         if (dbData == null) {
             return null;
         }
-        // Chuyển ngược từ String dưới DB thành Enum trong Java
-        return AttemptStatus.valueOf(dbData.toUpperCase());
+        return switch (dbData.toLowerCase()) {
+            case "in_progress" -> AttemptStatus.DOING;
+            case "timeout" -> AttemptStatus.EXPIRED;
+            default -> AttemptStatus.valueOf(dbData.toUpperCase());
+        };
     }
 }

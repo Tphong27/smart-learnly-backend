@@ -18,6 +18,7 @@ public class TestAttemptModel {
     public static class StartRequest {
         private UUID testId;
         private UUID studentId;
+        private String studentName;
         private UUID assignmentId;
     }
 
@@ -26,9 +27,7 @@ public class TestAttemptModel {
     @Setter
     @NoArgsConstructor
     public static class SubmitRequest {
-        private Instant endTime;
-        private BigDecimal score;
-        private AttemptStatus status;
+        private Boolean forceSubmit;
     }
 
     @Getter
@@ -41,6 +40,7 @@ public class TestAttemptModel {
         private Instant startTime;
         private Instant endTime;
         private BigDecimal score;
+        private BigDecimal percentage;
         private AttemptStatus status;
         private Instant createdAt;
         private UUID assignmentId;

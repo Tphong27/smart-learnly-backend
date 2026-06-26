@@ -12,5 +12,7 @@ public interface TestAttemptRepository
     List<TestAttempt> findByTestIdAndStudentId(
             UUID testId,
             UUID studentId);
+
+    List<TestAttempt> findByTestId(UUID testId);
 }
 

@@ -54,5 +54,11 @@ public class TestAttemptController {
                         testId,
                         studentId));
     }
+
+    @GetMapping("/test/{testId}")
+    public ResponseEntity<List<TestAttemptModel.Response>>
+    getAttemptsByTest(@PathVariable UUID testId) {
+        return ResponseEntity.ok(service.getAttemptsByTest(testId));
+    }
 }
 
