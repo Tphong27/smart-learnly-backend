@@ -1,160 +1,248 @@
-
 package com.smartlearnly.backend.question.service;
 
+import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.question.dto.QuestionModel;
+import com.smartlearnly.backend.question.entity.BloomLevel;
 import com.smartlearnly.backend.question.entity.Question;
+import com.smartlearnly.backend.question.entity.QuestionAnswer;
+import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
+import com.smartlearnly.backend.question.entity.QuestionType;
+import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
-import jakarta.persistence.EntityNotFoundException;
+import com.smartlearnly.backend.user.entity.UserAccount;
+import jakarta.persistence.criteria.Predicate;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class QuestionService {
+    private static final int MIN_ANSWERS = 2;
+    private static final int MAX_MCQ_ANSWERS = 6;
 
     private final QuestionRepository questionRepository;
+    private final QuestionAnswerRepository answerRepository;
+    private final QuestionBankService questionBankService;
+    private final CourseSectionRepository courseSectionRepository;
+    private final CurrentUserService currentUserService;
 
-    public QuestionModel.Response create(
-            QuestionModel.CreateRequest request) {
+    @Transactional(readOnly = true)
+    public PageResponse<QuestionModel.Response> list(UUID bankId, UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
+        Specification<Question> specification = buildSpecification(bankId, courseId, moduleId, search, type, status, difficulty);
+        Page<Question> questionPage = questionRepository.findAll(specification, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt")));
+        return new PageResponse<>(questionPage.getContent().stream().map(this::toResponse).toList(), questionPage.getNumber(), questionPage.getSize(), questionPage.getTotalElements(), questionPage.getTotalPages());
+    }
 
+    @Transactional(readOnly = true)
+    public QuestionModel.Response get(UUID questionId) {
+        return toResponse(findQuestion(questionId));
+    }
+
+    @Transactional
+    public QuestionModel.Response create(QuestionModel.CreateRequest request) {
+        QuestionBank bank = resolveBank(request.resolvedBankId(), request.courseId());
+        QuestionType questionType = parseSupportedQuestionType(request.questionType());
+        validateAnswers(questionType, request.answers());
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
         Question question = new Question();
-
-        question.setQuestionBankId(
-                request.getQuestionBankId());
-        question.setCourseId(request.getCourseId());
-        question.setCloId(request.getCloId());
-        question.setQuestionText(
-                request.getQuestionText());
-        question.setQuestionType(
-                request.getQuestionType());
-        question.setBloomLevel(
-                request.getBloomLevel());
-        question.setDifficulty(
-                request.getDifficulty());
-        question.setExplanation(
-                request.getExplanation());
-        question.setIsAiGenerated(
-                request.getIsAiGenerated());
-        question.setStatus(
-                request.getStatus() != null
-                        ? request.getStatus()
-                        : QuestionStatus.DRAFT);
-
+        question.setQuestionBankId(bank.getId());
+        question.setCourseId(bank.getCourseId());
+        question.setModuleId(validateModuleId(bank.getCourseId(), request.moduleId()));
+        question.setQuestionText(normalizeRequired(request.questionText(), "Question text is required"));
+        question.setQuestionType(questionType);
+        question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
+        question.setDifficulty(request.difficulty());
+        question.setExplanation(normalizeNullable(request.explanation()));
+        question.setIsAiGenerated(false);
+        question.setStatus(parseQuestionStatus(request.status(), QuestionStatus.DRAFT));
+        question.setCreatedBy(actor.getId());
         Question saved = questionRepository.save(question);
-
-        return mapToResponse(saved);
+        replaceAnswers(saved.getId(), request.answers());
+        return toResponse(saved);
     }
 
-    public List<QuestionModel.Response> getAll() {
-
-        List<Question> questions =
-                questionRepository.findAll();
-
-        List<QuestionModel.Response> responses =
-                new ArrayList<>();
-
-        for (Question question : questions) {
-            responses.add(mapToResponse(question));
+    @Transactional
+    public QuestionModel.Response update(UUID questionId, QuestionModel.UpdateRequest request) {
+        Question question = findQuestion(questionId);
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question");
         }
-
-        return responses;
+        QuestionBank bank = resolveBank(request.resolvedBankId() == null ? question.getQuestionBankId() : request.resolvedBankId(), request.courseId());
+        QuestionType questionType = parseSupportedQuestionType(request.questionType());
+        validateAnswers(questionType, request.answers());
+        question.setQuestionBankId(bank.getId());
+        question.setCourseId(bank.getCourseId());
+        question.setModuleId(validateModuleId(bank.getCourseId(), request.moduleId()));
+        question.setQuestionText(normalizeRequired(request.questionText(), "Question text is required"));
+        question.setQuestionType(questionType);
+        question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
+        question.setDifficulty(request.difficulty());
+        question.setExplanation(normalizeNullable(request.explanation()));
+        question.setStatus(parseQuestionStatus(request.status(), question.getStatus()));
+        Question saved = questionRepository.save(question);
+        replaceAnswers(saved.getId(), request.answers());
+        return toResponse(saved);
     }
 
-    public QuestionModel.Response getById(UUID id) {
-
-        Question question = questionRepository.findById(id)
-                .orElseThrow(() ->
-                        new EntityNotFoundException(
-                                "Question not found"));
-
-        return mapToResponse(question);
-    }
-
-    public QuestionModel.Response update(
-            UUID id,
-            QuestionModel.UpdateRequest request) {
-
-        Question question = questionRepository.findById(id)
-                .orElseThrow(() ->
-                        new EntityNotFoundException(
-                                "Question not found"));
-
-        question.setCloId(request.getCloId());
-        question.setQuestionText(
-                request.getQuestionText());
-        question.setQuestionType(
-                request.getQuestionType());
-        question.setBloomLevel(
-                request.getBloomLevel());
-        question.setDifficulty(
-                request.getDifficulty());
-        question.setExplanation(
-                request.getExplanation());
-        question.setStatus(request.getStatus());
-
-        question.setReviewedBy(
-                request.getReviewedBy());
-
-        if (request.getReviewedBy() != null) {
-            question.setReviewedAt(Instant.now());
+    @Transactional
+    public void archive(UUID questionId) {
+        Question question = findQuestion(questionId);
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
         }
-
-        Question updated = questionRepository.save(question);
-
-        return mapToResponse(updated);
+        question.setStatus(QuestionStatus.ARCHIVED);
+        questionRepository.save(question);
     }
 
-    public void delete(UUID id) {
+    @Transactional
+    public QuestionModel.Response approve(UUID questionId) {
+        return review(questionId, QuestionStatus.APPROVED);
+    }
 
-        if (!questionRepository.existsById(id)) {
-            throw new EntityNotFoundException(
-                    "Question not found");
+    @Transactional
+    public QuestionModel.Response reject(UUID questionId) {
+        return review(questionId, QuestionStatus.REJECTED);
+    }
+
+    private QuestionModel.Response review(UUID questionId, QuestionStatus status) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        Question question = findQuestion(questionId);
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot review an archived question");
         }
-
-        questionRepository.deleteById(id);
+        question.setStatus(status);
+        question.setReviewedBy(actor.getId());
+        question.setReviewedAt(Instant.now());
+        return toResponse(questionRepository.save(question));
     }
 
-    private QuestionModel.Response mapToResponse(
-            Question question) {
+    private Specification<Question> buildSpecification(UUID bankId, UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty) {
+        return (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (bankId != null) predicates.add(criteriaBuilder.equal(root.get("questionBankId"), bankId));
+            if (courseId != null) predicates.add(criteriaBuilder.equal(root.get("courseId"), courseId));
+            if (moduleId != null) predicates.add(criteriaBuilder.equal(root.get("moduleId"), moduleId));
+            String normalizedSearch = normalizeNullable(search);
+            if (normalizedSearch != null) predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("questionText")), "%" + normalizedSearch.toLowerCase(Locale.ROOT) + "%"));
+            if (type != null && !type.isBlank()) predicates.add(criteriaBuilder.equal(root.get("questionType"), parseSupportedQuestionType(type)));
+            if (status != null && !status.isBlank()) predicates.add(criteriaBuilder.equal(root.get("status"), parseQuestionStatus(status, null)));
+            if (difficulty != null) predicates.add(criteriaBuilder.equal(root.get("difficulty"), difficulty));
+            return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
+        };
+    }
 
-        QuestionModel.Response response =
-                new QuestionModel.Response();
+    private QuestionBank resolveBank(UUID bankId, UUID requestCourseId) {
+        if (bankId == null) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question bank ID is required");
+        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
+        if (requestCourseId != null && !requestCourseId.equals(bank.getCourseId())) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question course must match the selected question bank");
+        return bank;
+    }
 
-        response.setId(question.getId());
-        response.setQuestionBankId(
-                question.getQuestionBankId());
-        response.setCourseId(question.getCourseId());
-        response.setCloId(question.getCloId());
-        response.setQuestionText(
-                question.getQuestionText());
-        response.setQuestionType(
-                question.getQuestionType());
-        response.setBloomLevel(
-                question.getBloomLevel());
-        response.setDifficulty(
-                question.getDifficulty());
-        response.setExplanation(
-                question.getExplanation());
-        response.setIsAiGenerated(
-                question.getIsAiGenerated());
-        response.setStatus(question.getStatus());
-        response.setCreatedBy(
-                question.getCreatedBy());
-        response.setReviewedBy(
-                question.getReviewedBy());
-        response.setReviewedAt(
-                question.getReviewedAt());
-        response.setCreatedAt(
-                question.getCreatedAt());
-        response.setUpdatedAt(
-                question.getUpdatedAt());
+    private UUID validateModuleId(UUID courseId, UUID moduleId) {
+        if (moduleId == null) return null;
+        boolean exists = courseSectionRepository.findByIdAndCourseId(moduleId, courseId).isPresent();
+        if (!exists) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module must belong to the selected course");
+        return moduleId;
+    }
 
-        return response;
+    private Question findQuestion(UUID questionId) {
+        return questionRepository.findById(questionId).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question not found"));
+    }
+
+    private void replaceAnswers(UUID questionId, List<QuestionModel.AnswerRequest> answers) {
+        answerRepository.deleteByQuestionId(questionId);
+        for (int index = 0; index < answers.size(); index += 1) {
+            QuestionModel.AnswerRequest request = answers.get(index);
+            QuestionAnswer answer = new QuestionAnswer();
+            answer.setQuestionId(questionId);
+            answer.setAnswerText(normalizeRequired(request.answerText(), "Answer text is required"));
+            answer.setIsCorrect(request.correctValue());
+            answer.setOrderIndex(request.resolvedOrder() == null ? index + 1 : request.resolvedOrder());
+            answerRepository.save(answer);
+        }
+    }
+
+    private void validateAnswers(QuestionType questionType, List<QuestionModel.AnswerRequest> answers) {
+        if (answers == null || answers.size() < MIN_ANSWERS) throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least two answers are required");
+        long correctCount = answers.stream().filter(QuestionModel.AnswerRequest::correctValue).count();
+        if (correctCount != 1) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Exactly one correct answer is required");
+        for (QuestionModel.AnswerRequest answer : answers) normalizeRequired(answer.answerText(), "Answer text is required");
+        if (questionType == QuestionType.MULTIPLE_CHOICE && answers.size() > MAX_MCQ_ANSWERS) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Multiple choice questions support 2 to 6 answers");
+        if (questionType == QuestionType.TRUE_FALSE) validateTrueFalseAnswers(answers);
+    }
+
+    private void validateTrueFalseAnswers(List<QuestionModel.AnswerRequest> answers) {
+        if (answers.size() != 2) throw new BusinessException(ErrorCode.INVALID_REQUEST, "True/false questions must have exactly two answers");
+        boolean hasTrue = false;
+        boolean hasFalse = false;
+        for (QuestionModel.AnswerRequest answer : answers) {
+            String text = normalizeRequired(answer.answerText(), "Answer text is required").toLowerCase(Locale.ROOT);
+            hasTrue = hasTrue || "true".equals(text);
+            hasFalse = hasFalse || "false".equals(text);
+        }
+        if (!hasTrue || !hasFalse) throw new BusinessException(ErrorCode.INVALID_REQUEST, "True/false answers must be True and False");
+    }
+
+    private QuestionModel.Response toResponse(Question question) {
+        List<QuestionModel.AnswerResponse> answers = answerRepository.findByQuestionIdOrderByOrderIndexAsc(question.getId()).stream().map(answer -> new QuestionModel.AnswerResponse(answer.getId(), answer.getId(), answer.getAnswerText(), Boolean.TRUE.equals(answer.getIsCorrect()), Boolean.TRUE.equals(answer.getIsCorrect()), answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(), answer.getOrderIndex() == null ? 0 : answer.getOrderIndex())).toList();
+        return new QuestionModel.Response(question.getId(), question.getId(), question.getQuestionBankId(), question.getQuestionBankId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), Boolean.TRUE.equals(question.getIsAiGenerated()), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
+    }
+
+    private QuestionType parseSupportedQuestionType(String value) {
+        QuestionType type = parseEnum(value, QuestionType.class, "Question type must be multiple_choice or true_false");
+        if (type != QuestionType.MULTIPLE_CHOICE && type != QuestionType.TRUE_FALSE) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question type must be multiple_choice or true_false");
+        return type;
+    }
+
+    private QuestionStatus parseQuestionStatus(String value, QuestionStatus defaultStatus) {
+        if (value == null || value.isBlank()) return defaultStatus;
+        return parseEnum(value, QuestionStatus.class, "Question status is invalid");
+    }
+
+    private BloomLevel parseBloomLevel(String value) {
+        if (value == null || value.isBlank()) return null;
+        return parseEnum(value, BloomLevel.class, "Bloom level is invalid");
+    }
+
+    private <T extends Enum<T>> T parseEnum(String value, Class<T> enumClass, String message) {
+        if (value == null || value.isBlank()) throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
+        String normalized = value.trim().replace('-', '_').toUpperCase(Locale.ROOT);
+        try {
+            return Enum.valueOf(enumClass, normalized);
+        }
+        catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
+        }
+    }
+
+    private String toApiValue(Enum<?> value) {
+        return value == null ? null : value.name().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeRequired(String value, String message) {
+        String normalized = normalizeNullable(value);
+        if (normalized == null) throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
+        return normalized;
+    }
+
+    private String normalizeNullable(String value) {
+        if (value == null) return null;
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }
-
