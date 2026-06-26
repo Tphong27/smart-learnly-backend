@@ -42,6 +42,9 @@ public class AssignmentSubmission {
     @Column(name = "file_name")
     private String fileName;
 
+    @Column(name = "start_time")
+    private Instant startTime;
+
     @Column(name = "submitted_at", nullable = false)
     private Instant submittedAt;
 
@@ -81,6 +84,9 @@ public class AssignmentSubmission {
         }
         if (submittedAt == null) {
             submittedAt = now;
+        }
+        if (startTime == null) {
+            startTime = now;
         }
         if (createdAt == null) {
             createdAt = now;

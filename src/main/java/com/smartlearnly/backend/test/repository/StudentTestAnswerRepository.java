@@ -3,6 +3,7 @@ package com.smartlearnly.backend.test.repository;
 
 import com.smartlearnly.backend.test.entity.StudentTestAnswer;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -11,5 +12,9 @@ public interface StudentTestAnswerRepository
 
     List<StudentTestAnswer>
     findByAttemptId(UUID attemptId);
+
+    Optional<StudentTestAnswer> findByAttemptIdAndQuestionId(
+            UUID attemptId,
+            UUID questionId);
 }
 

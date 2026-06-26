@@ -3,8 +3,11 @@ package com.smartlearnly.backend.test.service;
 
 import com.smartlearnly.backend.test.dto.StudentTestAnswerModel;
 import com.smartlearnly.backend.test.entity.StudentTestAnswer;
+import com.smartlearnly.backend.test.entity.TestAttempt;
 import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
+import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import jakarta.persistence.EntityNotFoundException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -16,12 +19,22 @@ import org.springframework.stereotype.Service;
 public class StudentTestAnswerService {
 
     private final StudentTestAnswerRepository repository;
+    private final TestAttemptRepository attemptRepository;
 
     public StudentTestAnswerModel.Response saveStudentAnswer(
             StudentTestAnswerModel.SaveRequest request) {
 
-        StudentTestAnswer entity =
-                new StudentTestAnswer();
+        TestAttempt attempt = attemptRepository.findById(request.getAttemptId())
+                .orElseThrow(() ->
+                        new EntityNotFoundException("Attempt not found"));
+
+        if (attempt.getEndTime() != null && Instant.now().isAfter(attempt.getEndTime())) {
+            throw new IllegalStateException("Attempt has expired");
+        }
+
+        StudentTestAnswer entity = repository
+                .findByAttemptIdAndQuestionId(request.getAttemptId(), request.getQuestionId())
+                .orElseGet(StudentTestAnswer::new);
 
         entity.setAttemptId(request.getAttemptId());
         entity.setQuestionId(request.getQuestionId());

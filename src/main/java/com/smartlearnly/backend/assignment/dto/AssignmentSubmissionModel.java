@@ -18,9 +18,19 @@ public class AssignmentSubmissionModel {
     public static class CreateRequest {
         private UUID assignmentId;
         private UUID studentId;
+        private String studentName;
         private String submissionText;
         private String fileUrl;
         private String fileName;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class StartRequest {
+        private UUID assignmentId;
+        private UUID studentId;
+        private String studentName;
     }
 
     // Học sinh nộp lại hoặc sửa bài (Update)
@@ -56,6 +66,7 @@ public class AssignmentSubmissionModel {
         private String submissionText;
         private String fileUrl;
         private String fileName;
+        private Instant startTime;
         private Instant submittedAt;
         private Boolean isLate;
         private BigDecimal score;

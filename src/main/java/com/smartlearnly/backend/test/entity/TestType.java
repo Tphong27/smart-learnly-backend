@@ -4,6 +4,5 @@ public enum TestType {
     practice,
     mock,
     module,
-    simulation; 
-    
+    simulation
 }
