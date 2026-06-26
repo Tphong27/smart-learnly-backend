@@ -132,7 +132,6 @@ public class CourseQueryService {
 				classOffering.getStartDate(),
 				classOffering.getEndDate(),
 				classOffering.getMaxStudents(),
-				classOffering.getPrice(),
 				activeCount,
 				Math.max(0, maxStudents - activeCount),
 				classOffering.getStatus());

@@ -1,6 +1,5 @@
 package com.smartlearnly.backend.course.dto;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -14,7 +13,6 @@ public record CourseClassResponse(
         LocalDate startDate,
         LocalDate endDate,
         Integer maxStudents,
-        BigDecimal price,
         Long activeEnrollmentCount,
         Long availableSlots,
         String status

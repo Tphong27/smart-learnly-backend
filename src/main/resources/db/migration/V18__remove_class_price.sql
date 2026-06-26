@@ -1,0 +1,2 @@
+ALTER TABLE public.classes
+DROP COLUMN IF EXISTS price;
