@@ -24,6 +24,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.classroom.repository.CoursePublicProjection;
+import com.smartlearnly.backend.course.dto.CourseClassResponse;
 
 @Service
 @Transactional(readOnly = true)
@@ -34,12 +37,15 @@ public class CourseQueryService {
 
 	private final CourseRepository courseRepository;
 	private final CategoryRepository categoryRepository;
+	private final ClassOfferingRepository classOfferingRepository;
 
 	public CourseQueryService(
 			CourseRepository courseRepository,
-			CategoryRepository categoryRepository) {
+			CategoryRepository categoryRepository,
+			ClassOfferingRepository classOfferingRepository) {
 		this.courseRepository = courseRepository;
 		this.categoryRepository = categoryRepository;
+		this.classOfferingRepository = classOfferingRepository;
 	}
 
 	public Page<CourseListItemResponse> getCourses(int page, int size) {
@@ -62,8 +68,8 @@ public class CourseQueryService {
 		}
 
 		return courseRepository.findPublishedCoursesByCategorySlug(
-					categorySlug,
-					pageRequest(page, size))
+				categorySlug,
+				pageRequest(page, size))
 				.map(this::toResponse);
 	}
 
@@ -73,34 +79,63 @@ public class CourseQueryService {
 		}
 
 		CourseDetailProjection course = courseRepository.findPublishedCourseBySlug(slug)
-				.orElseThrow(() ->
-						new ResponseStatusException(HttpStatus.NOT_FOUND, "Course not found"));
-		List<LearningObjectiveResponse> objectives =
-				courseRepository.findLearningObjectivesByCourseId(course.getId())
-						.stream()
-						.map(objective -> new LearningObjectiveResponse(
-								objective.getId(),
-								objective.getCode(),
-								objective.getDescription()))
-						.toList();
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Course not found"));
+		List<LearningObjectiveResponse> objectives = courseRepository.findLearningObjectivesByCourseId(course.getId())
+				.stream()
+				.map(objective -> new LearningObjectiveResponse(
+						objective.getId(),
+						objective.getCode(),
+						objective.getDescription()))
+				.toList();
 		List<ModulePreviewResponse> modules = toModules(
 				courseRepository.findActiveCurriculumByCourseId(course.getId()));
+		List<CourseClassResponse> classes = classOfferingRepository
+        .findPublicClassesByCourseId(course.getId())
+        .stream()
+        .map(this::toCourseClassResponse)
+        .toList();
 
 		return new CourseDetailResponse(
-				course.getId(),
-				course.getTitle(),
-				course.getSlug(),
-				course.getDescription(),
-				course.getPrice(),
-				course.getDiscountedPrice(),
-				course.getAvatarUrl(),
-				course.isFeatured(),
-				new CategorySummaryResponse(
-						course.getCategoryId(),
-						course.getCategoryName(),
-						course.getCategorySlug()),
-				objectives,
-				modules);
+        course.getId(),
+        course.getTitle(),
+        course.getSlug(),
+        course.getDescription(),
+        course.getPrice(),
+        course.getDiscountedPrice(),
+        course.getAvatarUrl(),
+        course.isFeatured(),
+        new CategorySummaryResponse(
+                course.getCategoryId(),
+                course.getCategoryName(),
+                course.getCategorySlug()),
+        objectives,
+        modules,
+        classes);
+	}
+
+	private CourseClassResponse toCourseClassResponse(CoursePublicProjection classOffering) {
+		long activeCount = classOffering.getActiveEnrollmentCount() == null
+				? 0
+				: classOffering.getActiveEnrollmentCount();
+
+		long maxStudents = classOffering.getMaxStudents() == null
+				? 0
+				: classOffering.getMaxStudents();
+
+		return new CourseClassResponse(
+				classOffering.getId(),
+				classOffering.getCourseId(),
+				classOffering.getClassName(),
+				classOffering.getTrainerId(),
+				classOffering.getTrainerName(),
+				classOffering.getScheduleDescription(),
+				classOffering.getStartDate(),
+				classOffering.getEndDate(),
+				classOffering.getMaxStudents(),
+				classOffering.getPrice(),
+				activeCount,
+				Math.max(0, maxStudents - activeCount),
+				classOffering.getStatus());
 	}
 
 	private List<ModulePreviewResponse> toModules(List<CurriculumRowProjection> rows) {

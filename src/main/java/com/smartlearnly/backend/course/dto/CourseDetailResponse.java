@@ -15,5 +15,6 @@ public record CourseDetailResponse(
 		boolean featured,
 		CategorySummaryResponse category,
 		List<LearningObjectiveResponse> learningObjectives,
-		List<ModulePreviewResponse> modules) {
+		List<ModulePreviewResponse> modules,
+	    List<CourseClassResponse> classes) {
 }
