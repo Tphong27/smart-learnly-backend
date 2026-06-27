@@ -53,21 +53,20 @@ public class CartService {
     @Transactional
     public CartResponse addItem(AddCartItemRequest request) {
         UserAccount user = currentUserService.requireAuthenticatedUser();
-        Course course = requirePublishedCourse(request.courseId());
-        ClassOffering classOffering = null;
 
-        if (request.classId() == null) {
-            requirePaidCourse(course);
-            rejectExistingCourseAccess(user.getId(), course.getId());
-        }
-        else {
-            classOffering = requireSellableClass(request.classId(), course.getId());
-            requirePaidClass(classOffering);
-            rejectExistingClassAccess(user.getId(), classOffering.getId());
-        }
+        Course course = requirePublishedCourse(request.courseId());
+        requirePaidCourse(course);
+
+        ClassOffering classOffering = requireSellableClass(
+                request.classId(),
+                course.getId());
+
+        rejectExistingCourseAccess(user.getId(), course.getId());
+        rejectExistingClassAccess(user.getId(), classOffering.getId());
 
         Cart cart = cartRepository.findByUserId(user.getId())
                 .orElseGet(() -> createCart(user.getId()));
+
         if (cartItemRepository.existsSameProduct(cart.getId(), course.getId(), request.classId())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Cart item already exists");
         }
@@ -75,8 +74,10 @@ public class CartService {
         CartItem item = new CartItem();
         item.setCartId(cart.getId());
         item.setCourseId(course.getId());
-        item.setClassId(classOffering == null ? null : classOffering.getId());
+        item.setClassId(classOffering.getId());
+
         cartItemRepository.save(item);
+
         return toCartResponse(cart);
     }
 
@@ -102,17 +103,14 @@ public class CartService {
                 cartItemRepository.findByCartIdOrderByAddedAtAsc(cart.getId())
                         .stream()
                         .map(this::toItemResponse)
-                        .toList()
-        );
+                        .toList());
     }
 
     private CartItemResponse toItemResponse(CartItem item) {
         Course course = courseRepository.findByIdAndDeletedAtIsNull(item.getCourseId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
         ClassOffering classOffering = requireCartClass(item.getClassId());
-        BigDecimal price = classOffering == null
-                ? resolveCourseFinalAmount(course)
-                : money(classOffering.getPrice());
+        BigDecimal price = resolveCourseFinalAmount(course);
         return new CartItemResponse(
                 item.getId(),
                 item.getCourseId(),
@@ -120,8 +118,7 @@ public class CartService {
                 item.getClassId(),
                 classOffering == null ? null : classOffering.getClassName(),
                 price,
-                item.getAddedAt()
-        );
+                item.getAddedAt());
     }
 
     private Course requirePublishedCourse(UUID courseId) {
@@ -137,8 +134,7 @@ public class CartService {
         if (isFree(course)) {
             throw new BusinessException(
                     ErrorCode.COURSE_NOT_ENROLLABLE,
-                    "Free courses must use the free enrollment flow"
-            );
+                    "Free courses must use the free enrollment flow");
         }
     }
 
@@ -153,15 +149,6 @@ public class CartService {
             throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
         }
         return classOffering;
-    }
-
-    private void requirePaidClass(ClassOffering classOffering) {
-        if (money(classOffering.getPrice()).signum() <= 0) {
-            throw new BusinessException(
-                    ErrorCode.CLASS_NOT_AVAILABLE,
-                    "Class price must be greater than 0 for checkout"
-            );
-        }
     }
 
     private ClassOffering requireCartClass(UUID classId) {

@@ -10,40 +10,38 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.util.List;
 
 public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UUID> {
     Optional<ClassOffering> findByIdAndDeletedAtIsNull(UUID id);
 
-    @Query(
-            value = """
-                    SELECT
-                        class_offering.id AS "id",
-                        class_offering.course_id AS "courseId",
-                        course.title AS "courseTitle",
-                        class_offering.class_name AS "className",
-                        class_offering.trainer_id AS "trainerId",
-                        trainer.full_name AS "trainerName",
-                        class_offering.schedule_description AS "scheduleDescription",
-                        class_offering.start_date AS "startDate",
-                        class_offering.end_date AS "endDate",
-                        class_offering.max_students AS "maxStudents",
-                        class_offering.price AS "price",
-                        COUNT(class_enrollment.id) FILTER (
-                            WHERE class_enrollment.status = 'active'::public.enroll_status
-                        ) AS "activeEnrollmentCount",
-                        class_offering.status::text AS "status",
-                        class_offering.created_at AS "createdAt",
-                        class_offering.updated_at AS "updatedAt"
-                    FROM public.classes class_offering
-                    JOIN public.courses course ON course.id = class_offering.course_id
-                    LEFT JOIN public.users trainer ON trainer.id = class_offering.trainer_id
-                    LEFT JOIN public.class_enrollments class_enrollment
-                        ON class_enrollment.class_id = class_offering.id
-                    WHERE class_offering.id = :classId
-                      AND class_offering.deleted_at IS NULL
-                    GROUP BY class_offering.id, course.title, trainer.full_name
-                    """,
-            nativeQuery = true)
+    @Query(value = """
+            SELECT
+                class_offering.id AS "id",
+                class_offering.course_id AS "courseId",
+                course.title AS "courseTitle",
+                class_offering.class_name AS "className",
+                class_offering.trainer_id AS "trainerId",
+                trainer.full_name AS "trainerName",
+                class_offering.schedule_description AS "scheduleDescription",
+                class_offering.start_date AS "startDate",
+                class_offering.end_date AS "endDate",
+                class_offering.max_students AS "maxStudents",
+                COUNT(class_enrollment.id) FILTER (
+                    WHERE class_enrollment.status = 'active'::public.enroll_status
+                ) AS "activeEnrollmentCount",
+                class_offering.status::text AS "status",
+                class_offering.created_at AS "createdAt",
+                class_offering.updated_at AS "updatedAt"
+            FROM public.classes class_offering
+            JOIN public.courses course ON course.id = class_offering.course_id
+            LEFT JOIN public.users trainer ON trainer.id = class_offering.trainer_id
+            LEFT JOIN public.class_enrollments class_enrollment
+                ON class_enrollment.class_id = class_offering.id
+            WHERE class_offering.id = :classId
+              AND class_offering.deleted_at IS NULL
+            GROUP BY class_offering.id, course.title, trainer.full_name
+            """, nativeQuery = true)
     Optional<ClassAdminProjection> findAdminClassById(@Param("classId") UUID classId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -63,7 +61,6 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                 class_offering.start_date AS "startDate",
                 class_offering.end_date AS "endDate",
                 class_offering.max_students AS "maxStudents",
-                class_offering.price AS "price",
                 COUNT(class_enrollment.id) FILTER (
                     WHERE class_enrollment.status = 'active'::public.enroll_status
                 ) AS "activeEnrollmentCount",
@@ -116,7 +113,6 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                 class_offering.start_date AS "startDate",
                 class_offering.end_date AS "endDate",
                 class_offering.max_students AS "maxStudents",
-                class_offering.price AS "price",
                 COUNT(class_enrollment.id) FILTER (
                     WHERE class_enrollment.status = 'active'::public.enroll_status
                 ) AS "activeEnrollmentCount",
@@ -147,4 +143,35 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             )
             """, nativeQuery = true)
     boolean hasCommercialHistory(@Param("classId") UUID classId);
+
+    @Query(value = """
+            SELECT
+                class_offering.id AS "id",
+                class_offering.course_id AS "courseId",
+                class_offering.class_name AS "className",
+                class_offering.trainer_id AS "trainerId",
+                trainer.full_name AS "trainerName",
+                class_offering.schedule_description AS "scheduleDescription",
+                class_offering.start_date AS "startDate",
+                class_offering.end_date AS "endDate",
+                class_offering.max_students AS "maxStudents",
+                COUNT(class_enrollment.id) FILTER (
+                    WHERE class_enrollment.status = 'active'::public.enroll_status
+                ) AS "activeEnrollmentCount",
+                class_offering.status::text AS "status"
+            FROM public.classes class_offering
+            LEFT JOIN public.users trainer ON trainer.id = class_offering.trainer_id
+            LEFT JOIN public.class_enrollments class_enrollment
+                ON class_enrollment.class_id = class_offering.id
+            WHERE class_offering.course_id = :courseId
+              AND class_offering.deleted_at IS NULL
+              AND class_offering.status IN (
+                  'upcoming'::public.class_status,
+                  'ongoing'::public.class_status
+              )
+            GROUP BY class_offering.id, trainer.full_name
+            ORDER BY class_offering.start_date ASC NULLS LAST,
+                     class_offering.created_at DESC
+            """, nativeQuery = true)
+    List<CoursePublicProjection> findPublicClassesByCourseId(@Param("courseId") UUID courseId);
 }

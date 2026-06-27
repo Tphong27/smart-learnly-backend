@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/courses")
 @Tag(name = "Admin Courses", description = "Administrator course management APIs.")
 @SecurityRequirement(name = "bearerAuth")
@@ -49,6 +49,7 @@ public class AdminCourseController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
     @Operation(summary = "Create a course")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Course created"),
@@ -67,6 +68,7 @@ public class AdminCourseController {
     }
 
     @PatchMapping("/{courseId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
     @Operation(summary = "Update selected course fields")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,
@@ -76,6 +78,7 @@ public class AdminCourseController {
     }
 
     @DeleteMapping("/{courseId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
     @Operation(summary = "Soft delete a course")
     public ApiResponse<Void> delete(@PathVariable UUID courseId) {
         courseAdminService.delete(courseId);

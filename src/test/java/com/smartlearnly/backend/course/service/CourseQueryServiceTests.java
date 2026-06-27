@@ -27,6 +27,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.web.server.ResponseStatusException;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -41,6 +42,9 @@ class CourseQueryServiceTests {
 
 	@Mock
 	private CategoryRepository categoryRepository;
+
+	@Mock
+	private ClassOfferingRepository classOfferingRepository;
 
 	@Mock
 	private CourseListProjection projection;
@@ -80,8 +84,9 @@ class CourseQueryServiceTests {
 		when(courseRepository.findPublishedCourses(pageable))
 				.thenReturn(new PageImpl<>(List.of(projection), pageable, 1));
 
-		Page<CourseListItemResponse> result =
-				new CourseQueryService(courseRepository, categoryRepository).getCourses(0, 20);
+		Page<CourseListItemResponse> result = new CourseQueryService(courseRepository, categoryRepository,
+				classOfferingRepository).getCourses(0,
+						20);
 
 		assertThat(result.getTotalElements()).isEqualTo(1);
 		assertThat(result.getContent().get(0))
@@ -107,7 +112,7 @@ class CourseQueryServiceTests {
 		when(courseRepository.findPublishedCourses(cappedPageable))
 				.thenReturn(Page.empty(cappedPageable));
 
-		new CourseQueryService(courseRepository, categoryRepository).getCourses(2, 250);
+		new CourseQueryService(courseRepository, categoryRepository, classOfferingRepository).getCourses(2, 250);
 
 		verify(courseRepository).findPublishedCourses(cappedPageable);
 	}
@@ -120,8 +125,8 @@ class CourseQueryServiceTests {
 				cappedPageable))
 				.thenReturn(new PageImpl<>(List.of(projection), cappedPageable, 1));
 
-		Page<CourseListItemResponse> result =
-				new CourseQueryService(courseRepository, categoryRepository)
+		Page<CourseListItemResponse> result = new CourseQueryService(courseRepository, categoryRepository,
+				classOfferingRepository)
 				.searchCourses("  50%_off\\today  ", 1, 250);
 
 		assertThat(result.getContent()).hasSize(1);
@@ -168,9 +173,10 @@ class CourseQueryServiceTests {
 	void unknownCategoryReturnsNotFoundWithoutQueryingCourses() {
 		when(categoryRepository.existsBySlug("Java")).thenReturn(false);
 
-		assertThat(org.assertj.core.api.Assertions.catchThrowable(() ->
-				new CourseQueryService(courseRepository, categoryRepository)
-						.getCoursesByCategory("Java", 0, 20)))
+		assertThat(org.assertj.core.api.Assertions
+				.catchThrowable(
+						() -> new CourseQueryService(courseRepository, categoryRepository, classOfferingRepository)
+								.getCoursesByCategory("Java", 0, 20)))
 				.isInstanceOf(ResponseStatusException.class)
 				.satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value())
 						.isEqualTo(404));
@@ -186,9 +192,9 @@ class CourseQueryServiceTests {
 		when(courseRepository.findPublishedCoursesByCategorySlug("java", cappedPageable))
 				.thenReturn(Page.empty(cappedPageable));
 
-		Page<CourseListItemResponse> result =
-				new CourseQueryService(courseRepository, categoryRepository)
-						.getCoursesByCategory("java", 2, 250);
+		Page<CourseListItemResponse> result = new CourseQueryService(courseRepository, categoryRepository,
+				classOfferingRepository)
+				.getCoursesByCategory("java", 2, 250);
 
 		assertThat(result).isEmpty();
 		verify(categoryRepository).existsBySlug("java");
@@ -266,9 +272,9 @@ class CourseQueryServiceTests {
 		when(courseRepository.findActiveCurriculumByCourseId(courseId))
 				.thenReturn(List.of(firstLessonRow, secondLessonRow, emptyModuleRow));
 
-		CourseDetailResponse result =
-				new CourseQueryService(courseRepository, categoryRepository)
-						.getCourseDetail("spring-boot-fundamentals");
+		CourseDetailResponse result = new CourseQueryService(courseRepository, categoryRepository,
+				classOfferingRepository)
+				.getCourseDetail("spring-boot-fundamentals");
 
 		assertThat(result).isEqualTo(new CourseDetailResponse(
 				courseId,
@@ -309,19 +315,22 @@ class CourseQueryServiceTests {
 								secondModuleId,
 								"Advanced Topics",
 								1,
-								List.of()))));
+								List.of())),
+				List.of()));
 		verify(courseRepository).findPublishedCourseBySlug("spring-boot-fundamentals");
 		verify(courseRepository).findLearningObjectivesByCourseId(courseId);
 		verify(courseRepository).findActiveCurriculumByCourseId(courseId);
+		verify(classOfferingRepository).findPublicClassesByCourseId(courseId);
 	}
 
 	@Test
 	void missingPublishedCourseReturnsNotFoundWithoutLoadingObjectives() {
 		when(courseRepository.findPublishedCourseBySlug("missing")).thenReturn(Optional.empty());
 
-		assertThat(org.assertj.core.api.Assertions.catchThrowable(() ->
-				new CourseQueryService(courseRepository, categoryRepository)
-						.getCourseDetail("missing")))
+		assertThat(org.assertj.core.api.Assertions
+				.catchThrowable(
+						() -> new CourseQueryService(courseRepository, categoryRepository, classOfferingRepository)
+								.getCourseDetail("missing")))
 				.isInstanceOf(ResponseStatusException.class)
 				.satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value())
 						.isEqualTo(404));
@@ -331,13 +340,12 @@ class CourseQueryServiceTests {
 
 	@Test
 	void reservedCourseSlugsReturnNotFoundWithoutRepositoryAccess() {
-		CourseQueryService service = new CourseQueryService(courseRepository, categoryRepository);
+		CourseQueryService service = new CourseQueryService(courseRepository, categoryRepository,
+				classOfferingRepository);
 
-		assertThat(org.assertj.core.api.Assertions.catchThrowable(() ->
-				service.getCourseDetail("search")))
+		assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> service.getCourseDetail("search")))
 				.isInstanceOf(ResponseStatusException.class);
-		assertThat(org.assertj.core.api.Assertions.catchThrowable(() ->
-				service.getCourseDetail("category")))
+		assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> service.getCourseDetail("category")))
 				.isInstanceOf(ResponseStatusException.class);
 
 		verifyNoInteractions(courseRepository, categoryRepository);
@@ -363,18 +371,18 @@ class CourseQueryServiceTests {
 				.contains("clo.course_id = :courseId")
 				.contains("ORDER BY clo.code ASC, clo.id ASC");
 		assertThat(curriculumQuery.value())
-        .contains("LEFT JOIN public.lessons l")
-        .contains("ON l.module_id = m.id")
-        .contains("AND l.status = 'published'::public.lesson_status")
-        .contains("m.course_id = :courseId")
-        .contains("m.status = 'active'")
-        .contains("l.lesson_type::text AS \"lessonType\"")
-        .contains(
-                "m.order_index ASC",
-                "m.id ASC",
-                "l.order_index ASC",
-                "l.id ASC")
-        .doesNotContain("l.content")
-        .doesNotContain("materials");
+				.contains("LEFT JOIN public.lessons l")
+				.contains("ON l.module_id = m.id")
+				.contains("AND l.status = 'published'::public.lesson_status")
+				.contains("m.course_id = :courseId")
+				.contains("m.status = 'active'")
+				.contains("l.lesson_type::text AS \"lessonType\"")
+				.contains(
+						"m.order_index ASC",
+						"m.id ASC",
+						"l.order_index ASC",
+						"l.id ASC")
+				.doesNotContain("l.content")
+				.doesNotContain("materials");
 	}
 }

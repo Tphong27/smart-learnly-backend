@@ -5,7 +5,6 @@ import com.smartlearnly.backend.assignment.dto.AssignmentSubmissionModel;
 import com.smartlearnly.backend.assignment.service.AssignmentSubmissionService;
 import jakarta.validation.Valid;
 import java.io.IOException;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriUtils;
 
 @RestController
 @RequestMapping("/api/v1/submissions")
@@ -61,7 +61,7 @@ public class AssignmentSubmissionController {
         String storedName = UUID.randomUUID() + "_" + originalName;
         Files.createDirectories(SUBMISSION_UPLOAD_DIR);
         Files.copy(file.getInputStream(), SUBMISSION_UPLOAD_DIR.resolve(storedName));
-        String encoded = URLEncoder.encode(storedName, StandardCharsets.UTF_8);
+        String encoded = UriUtils.encodePathSegment(storedName, StandardCharsets.UTF_8);
         return ResponseEntity.ok(Map.of(
                 "fileName", originalName,
                 "fileUrl", "/api/v1/submissions/files/" + encoded));
@@ -71,6 +71,9 @@ public class AssignmentSubmissionController {
     public ResponseEntity<ByteArrayResource> downloadSubmissionFile(
             @PathVariable String storedName) throws IOException {
         Path file = SUBMISSION_UPLOAD_DIR.resolve(storedName).normalize();
+        if (!Files.exists(file) && storedName.contains("+")) {
+            file = SUBMISSION_UPLOAD_DIR.resolve(storedName.replace("+", " ")).normalize();
+        }
         if (!file.startsWith(SUBMISSION_UPLOAD_DIR) || !Files.exists(file)) {
             return ResponseEntity.notFound().build();
         }
@@ -117,6 +120,22 @@ public class AssignmentSubmissionController {
                 submissionService.getSubmissionsByAssignment(assignmentId);
 
         return ResponseEntity.ok(responses);
+    }
+
+    @GetMapping("/assignment/{assignmentId}/student/{studentId}")
+    public ResponseEntity<AssignmentSubmissionModel.Response>
+    getSubmissionByAssignmentAndStudent(
+            @PathVariable UUID assignmentId,
+            @PathVariable UUID studentId) {
+
+        AssignmentSubmissionModel.Response response =
+                submissionService.getSubmissionByAssignmentAndStudent(
+                        assignmentId,
+                        studentId);
+
+        return response == null
+                ? ResponseEntity.notFound().build()
+                : ResponseEntity.ok(response);
     }
 }
 

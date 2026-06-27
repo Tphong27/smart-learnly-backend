@@ -17,6 +17,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonResource;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
+import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -40,6 +41,7 @@ public class CourseContentAdminService {
     private final LessonRepository lessonRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
+    private final QuizContentValidator quizContentValidator;
 
     @Transactional(readOnly = true)
     public List<SectionResponse> listSections(UUID courseId) {
@@ -117,6 +119,7 @@ public class CourseContentAdminService {
         findSection(sectionId);
         return lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(sectionId)
                 .stream()
+                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
                 .map(CourseDtoMapper::toLessonResponse)
                 .toList();
     }
@@ -166,7 +169,10 @@ public class CourseContentAdminService {
     @Transactional
     public List<LessonResponse> reorderLessons(UUID sectionId, ReorderRequest request) {
         findSection(sectionId);
-        List<Lesson> lessons = lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(sectionId);
+        List<Lesson> lessons = lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(sectionId)
+                .stream()
+                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
+                .toList();
         Map<UUID, Lesson> lessonsById = lessons.stream()
                 .collect(LinkedHashMap::new, (map, lesson) -> map.put(lesson.getId(), lesson), LinkedHashMap::putAll);
         assertReorderMatchesAllItems(request.ids(), lessonsById.keySet(), "Lesson");
@@ -189,7 +195,11 @@ public class CourseContentAdminService {
         lesson.setTitle(normalizeRequired(request.title(), "Lesson title is required"));
         lesson.setType(parseLessonType(resolveLessonType(request), create ? LessonType.RICH_TEXT : lesson.getType()));
         lesson.setVideoUrl(normalizeNullable(request.videoUrl()));
-        lesson.setContent(normalizeNullable(request.content()));
+        String content = normalizeNullable(request.content());
+        if (lesson.getType() == LessonType.QUIZ) {
+            quizContentValidator.validate(content);
+        }
+        lesson.setContent(content);
         lesson.setAttachmentUrl(normalizeNullable(request.attachmentUrl()));
         lesson.setDurationSeconds(request.durationSeconds());
         if (create || request.isPreview() != null) {

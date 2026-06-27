@@ -315,7 +315,6 @@ class CheckoutServiceTest {
         classOffering.setId(UUID.randomUUID());
         classOffering.setCourseId(courseId);
         classOffering.setClassName("Java Backend - K01");
-        classOffering.setPrice(new BigDecimal("1500000"));
         classOffering.setStatus(ClassStatus.UPCOMING);
         return classOffering;
     }

@@ -5,6 +5,6 @@ import java.util.UUID;
 
 public record AddCartItemRequest(
         @NotNull UUID courseId,
-        UUID classId
+        @NotNull UUID classId
 ) {
 }

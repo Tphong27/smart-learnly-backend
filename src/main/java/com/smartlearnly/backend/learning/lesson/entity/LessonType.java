@@ -5,6 +5,6 @@ public enum LessonType {
     PDF,
     RICH_TEXT,
     QUIZ,
-    ASSIGNMENT,
-    FLASHCARD
+    FLASHCARD,
+    ASSIGNMENT
 }

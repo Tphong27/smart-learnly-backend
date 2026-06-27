@@ -13,6 +13,7 @@ public record LearningLessonResponse(
     Integer durationSeconds,
     boolean isPreview,
     int sortOrder,
+    boolean completed,
     List<LearningResourceResponse> resources
 ) {
 }

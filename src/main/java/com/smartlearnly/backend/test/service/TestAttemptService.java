@@ -40,11 +40,17 @@ public class TestAttemptService {
     public TestAttemptModel.Response startAttempt(TestAttemptModel.StartRequest request) {
         Test test = testRepository.findById(required(request.getTestId(), "testId"))
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        UUID studentId = required(request.getStudentId(), "studentId");
+
+        List<TestAttempt> existingAttempts = repository.findByTestIdAndStudentId(test.getId(), studentId);
+        if (!existingAttempts.isEmpty()) {
+            return mapToResponse(existingAttempts.get(0));
+        }
 
         Instant start = Instant.now();
         TestAttempt attempt = new TestAttempt();
         attempt.setTestId(test.getId());
-        attempt.setStudentId(required(request.getStudentId(), "studentId"));
+        attempt.setStudentId(studentId);
         attempt.setAssignmentId(request.getAssignmentId());
         attempt.setStartTime(start);
         attempt.setEndTime(start.plus(Duration.ofMinutes(resolveDuration(test))));
@@ -92,6 +98,27 @@ public class TestAttemptService {
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
+    }
+
+    @Transactional
+    public void reopenAttempt(UUID testId, UUID studentId) {
+        List<TestAttempt> attempts = repository.findByTestIdAndStudentId(testId, studentId);
+        if (attempts.isEmpty()) {
+            return;
+        }
+        List<UUID> attemptIds = attempts.stream()
+                .map(TestAttempt::getId)
+                .toList();
+        studentTestAnswerRepository.deleteByAttemptIds(attemptIds);
+        repository.deleteAll(attempts);
+
+        MonitorEvent event = new MonitorEvent();
+        event.setTargetId(testId);
+        event.setStudentId(studentId);
+        event.setType("mcq");
+        event.setStatus("REOPENED");
+        messagingTemplate.convertAndSend("/topic/tests/monitor/" + testId, event);
+        messagingTemplate.convertAndSend("/topic/tests/monitor", event);
     }
 
     private GradeResult gradeAttempt(TestAttempt attempt) {

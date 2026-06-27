@@ -36,6 +36,9 @@ public class AssignmentSubmissionService {
                         request.getAssignmentId(),
                         required(request.getStudentId(), "studentId"))
                 .orElseGet(AssignmentSubmission::new);
+        if (isFinalStatus(submission.getStatus())) {
+            return mapToResponse(submission);
+        }
         submission.setAssignmentId(request.getAssignmentId());
         submission.setStudentId(request.getStudentId());
         if (submission.getStartTime() == null) {
@@ -73,6 +76,9 @@ public class AssignmentSubmissionService {
         AssignmentSubmission submission = repository
                 .findByAssignmentIdAndStudentId(request.getAssignmentId(), request.getStudentId())
                 .orElseGet(AssignmentSubmission::new);
+        if (isFinalStatus(submission.getStatus())) {
+            return mapToResponse(submission);
+        }
         submission.setAssignmentId(request.getAssignmentId());
         submission.setStudentId(request.getStudentId());
         submission.setSubmissionText(request.getSubmissionText());
@@ -131,6 +137,14 @@ public class AssignmentSubmissionService {
                 .toList();
     }
 
+    public AssignmentSubmissionModel.Response getSubmissionByAssignmentAndStudent(
+            UUID assignmentId,
+            UUID studentId) {
+        return repository.findByAssignmentIdAndStudentId(assignmentId, studentId)
+                .map(this::mapToResponse)
+                .orElse(null);
+    }
+
     private Assignment loadAssignment(UUID assignmentId) {
         return assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
@@ -140,6 +154,13 @@ public class AssignmentSubmissionService {
         if (assignment.getDueDate() != null && Instant.now().isAfter(assignment.getDueDate())) {
             throw new IllegalStateException("Assignment due date has passed");
         }
+    }
+
+    private boolean isFinalStatus(SubmissionStatus status) {
+        return status == SubmissionStatus.SUBMITTED
+                || status == SubmissionStatus.GRADED
+                || status == SubmissionStatus.LATE
+                || status == SubmissionStatus.EXPIRED;
     }
 
     private void broadcast(

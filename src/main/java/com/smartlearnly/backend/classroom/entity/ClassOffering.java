@@ -8,7 +8,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -48,9 +47,6 @@ public class ClassOffering {
     @Column(name = "max_students", nullable = false)
     private Integer maxStudents;
 
-    @Column(nullable = false)
-    private BigDecimal price;
-
     @Convert(converter = ClassStatusConverter.class)
     @Column(nullable = false, columnDefinition = "class_status")
     @ColumnTransformer(write = "?::class_status")
@@ -73,9 +69,6 @@ public class ClassOffering {
         Instant now = Instant.now();
         if (maxStudents == null) {
             maxStudents = 30;
-        }
-        if (price == null) {
-            price = BigDecimal.ZERO;
         }
         if (status == null) {
             status = ClassStatus.UPCOMING;

@@ -73,8 +73,7 @@ class ClassAdminServiceTest {
                 "Mon/Wed 19:00",
                 LocalDate.of(2026, 7, 1),
                 LocalDate.of(2026, 8, 1),
-                25,
-                new BigDecimal("1500000")
+                25
         );
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
@@ -94,7 +93,6 @@ class ClassAdminServiceTest {
         assertThat(response.className()).isEqualTo("Spring Cohort");
         assertThat(response.maxStudents()).isEqualTo(25);
         assertThat(response.availableSeats()).isEqualTo(25);
-        assertThat(response.price()).isEqualByComparingTo("1500000");
         assertThat(response.status()).isEqualTo("upcoming");
         verify(auditLogService).record(
                 actor.getEmail(),
@@ -165,7 +163,6 @@ class ClassAdminServiceTest {
         classOffering.setCourseId(UUID.randomUUID());
         classOffering.setClassName("Existing class");
         classOffering.setMaxStudents(30);
-        classOffering.setPrice(new BigDecimal("1500000"));
         classOffering.setStatus(com.smartlearnly.backend.classroom.entity.ClassStatus.UPCOMING);
         return classOffering;
     }

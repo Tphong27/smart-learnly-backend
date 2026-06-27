@@ -27,6 +27,7 @@ public class TestModel {
         private Boolean shuffleQuestions;
         private Boolean shuffleAnswers;
         private Boolean showAnswersAfter;
+        private Boolean isFlashtest;
     }
 
     @Getter
@@ -44,6 +45,7 @@ public class TestModel {
         private Boolean showAnswersAfter;
         private Boolean isPublished;
         private Boolean isArchived;
+        private Boolean isFlashtest;
     }
 
     @Getter
@@ -65,6 +67,7 @@ public class TestModel {
         private Boolean showAnswersAfter;
         private Boolean isPublished;
         private Boolean isArchived;
+        private Boolean isFlashtest;
         private UUID createdBy;
         private Instant createdAt;
         private Instant updatedAt;
