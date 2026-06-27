@@ -24,6 +24,9 @@ public class StorageProperties {
     private String r2AccessKeyId;
     private String r2SecretAccessKey;
     private String r2PublicUrl;
+    private String r2CourseThumbnailPublicUrl;
+    private String r2LessonMaterialPublicUrl;
+    private String r2LessonResourcePublicUrl;
 
     private String courseThumbnailBucket = "course-thumbnails";
     private DataSize courseThumbnailMaxSize = DataSize.ofMegabytes(5);
