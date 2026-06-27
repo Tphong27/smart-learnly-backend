@@ -42,7 +42,8 @@ public class SecurityConfig {
                                 "/api/v1/courses",
                                 "/api/v1/courses/search",
                                 "/api/v1/courses/category/{categorySlug}",
-                                "/api/v1/courses/{slug}"
+                                "/api/v1/courses/{slug}",
+                                "/api/v1/users/trainers/*/profile"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/**",
@@ -80,7 +81,8 @@ public class SecurityConfig {
                                 "/api/v1/courses",
                                 "/api/v1/courses/search",
                                 "/api/v1/courses/category/{categorySlug}",
-                                "/api/v1/courses/{slug}"
+                                "/api/v1/courses/{slug}",
+                                "/api/v1/users/trainers/*/profile"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/register",
