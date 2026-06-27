@@ -56,6 +56,9 @@ public class Assignment {
     @Column(name = "is_archived", nullable = false)
     private Boolean isArchived;
 
+    @Column(name = "is_flashtest", nullable = false)
+    private Boolean isFlashtest;
+
     @Column(name = "created_by")
     private UUID createdBy;
 
@@ -76,6 +79,9 @@ public class Assignment {
         }
         if (isArchived == null) {
             isArchived = false;
+        }
+        if (isFlashtest == null) {
+            isFlashtest = false;
         }
         if (createdAt == null) {
             createdAt = now;

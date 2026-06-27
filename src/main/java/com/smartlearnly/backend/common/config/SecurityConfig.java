@@ -113,6 +113,8 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
                         .requestMatchers("/api/v1/admin/question-answers/**")
                         .hasAnyRole("ADMIN", "SME")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/courses", "/api/v1/admin/courses/**")
+                        .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

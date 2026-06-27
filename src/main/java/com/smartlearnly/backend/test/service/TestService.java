@@ -1,6 +1,7 @@
 
 package com.smartlearnly.backend.test.service;
 
+import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.test.dto.TestModel;
 import com.smartlearnly.backend.test.entity.Test;
 import com.smartlearnly.backend.test.repository.TestRepository;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 public class TestService {
 
     private final TestRepository testRepository;
+    private final CurrentUserService currentUserService;
 
     public TestModel.Response createTest(
             TestModel.CreateRequest request) {
@@ -40,6 +42,10 @@ public class TestService {
                 request.getShuffleAnswers());
         test.setShowAnswersAfter(
                 request.getShowAnswersAfter());
+        test.setIsFlashtest(
+                request.getIsFlashtest());
+        test.setCreatedBy(
+                currentUserService.requireAuthenticatedUser().getId());
 
         Test saved = testRepository.save(test);
 
@@ -101,6 +107,8 @@ public class TestService {
                 request.getIsPublished());
         test.setIsArchived(
                 request.getIsArchived());
+        test.setIsFlashtest(
+                request.getIsFlashtest());
 
         Test updated = testRepository.save(test);
 
@@ -148,6 +156,8 @@ public class TestService {
                 test.getIsPublished());
         response.setIsArchived(
                 test.getIsArchived());
+        response.setIsFlashtest(
+                test.getIsFlashtest());
         response.setCreatedBy(
                 test.getCreatedBy());
         response.setCreatedAt(

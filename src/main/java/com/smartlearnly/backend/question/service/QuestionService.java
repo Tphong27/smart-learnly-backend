@@ -16,6 +16,8 @@ import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -135,7 +137,16 @@ public class QuestionService {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (bankId != null) predicates.add(criteriaBuilder.equal(root.get("questionBankId"), bankId));
-            if (courseId != null) predicates.add(criteriaBuilder.equal(root.get("courseId"), courseId));
+            if (courseId != null) {
+                Subquery<UUID> courseBankIds = query.subquery(UUID.class);
+                Root<QuestionBank> bankRoot = courseBankIds.from(QuestionBank.class);
+                courseBankIds.select(bankRoot.get("id"))
+                        .where(criteriaBuilder.equal(bankRoot.get("courseId"), courseId));
+                predicates.add(criteriaBuilder.or(
+                        criteriaBuilder.equal(root.get("courseId"), courseId),
+                        root.get("questionBankId").in(courseBankIds)
+                ));
+            }
             if (moduleId != null) predicates.add(criteriaBuilder.equal(root.get("moduleId"), moduleId));
             String normalizedSearch = normalizeNullable(search);
             if (normalizedSearch != null) predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("questionText")), "%" + normalizedSearch.toLowerCase(Locale.ROOT) + "%"));

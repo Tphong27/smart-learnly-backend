@@ -1,6 +1,10 @@
 
 package com.smartlearnly.backend.test.service;
 
+import com.smartlearnly.backend.question.dto.QuestionModel;
+import com.smartlearnly.backend.question.entity.Question;
+import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
+import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.test.dto.TestQuestionModel;
 import com.smartlearnly.backend.test.entity.TestQuestion;
 import com.smartlearnly.backend.test.entity.TestQuestion.TestQuestionId;
@@ -17,6 +21,8 @@ import org.springframework.stereotype.Service;
 public class TestQuestionService {
 
     private final TestQuestionRepository repository;
+    private final QuestionRepository questionRepository;
+    private final QuestionAnswerRepository answerRepository;
 
     public TestQuestionModel.Response addQuestionToTest(
             TestQuestionModel.AddRequest request) {
@@ -109,7 +115,32 @@ public class TestQuestionService {
         response.setMarks(
                 entity.getMarks());
 
+        questionRepository.findById(entity.getId().getQuestionId())
+                .ifPresent(question -> appendQuestionDetails(response, question));
+
         return response;
+    }
+
+    private void appendQuestionDetails(
+            TestQuestionModel.Response response,
+            Question question) {
+
+        response.setQuestionText(question.getQuestionText());
+        response.setQuestionType(question.getQuestionType() == null
+                ? null
+                : question.getQuestionType().name().toLowerCase());
+        response.setAnswers(answerRepository
+                .findByQuestionIdOrderByOrderIndexAsc(question.getId())
+                .stream()
+                .map(answer -> new QuestionModel.AnswerResponse(
+                        answer.getId(),
+                        answer.getId(),
+                        answer.getAnswerText(),
+                        Boolean.TRUE.equals(answer.getIsCorrect()),
+                        Boolean.TRUE.equals(answer.getIsCorrect()),
+                        answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(),
+                        answer.getOrderIndex() == null ? 0 : answer.getOrderIndex()))
+                .toList());
     }
 }
 
