@@ -138,6 +138,93 @@ public class CheckoutService {
                 order.getExpiresAt());
     }
 
+    @Transactional
+    public CheckoutResponse buyNowCheckout(UUID courseId, UUID classId) {
+        UserAccount user = currentUserService.requireAuthenticatedUser();
+
+        CartItem directItem = new CartItem();
+        directItem.setCourseId(courseId);
+        directItem.setClassId(classId);
+
+        OrderItemSnapshot snapshot = toSnapshot(user.getId(), directItem);
+
+        BigDecimal totalAmount = snapshot.finalAmount();
+        if (totalAmount.signum() <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Checkout amount must be greater than 0");
+        }
+
+        Instant expiresAt = Instant.now().plus(checkoutExpiration);
+
+        PurchaseOrder order = createOrder(user.getId(), totalAmount, expiresAt);
+
+        OrderItem orderItem = createOrderItem(order.getId(), snapshot);
+        orderItemRepository.saveAll(List.of(orderItem));
+
+        PaymentTransaction transaction = createPendingTransaction(
+                user.getId(),
+                order.getId(),
+                totalAmount,
+                expiresAt);
+
+        SePayPaymentInstruction instruction = createPaymentInstruction(
+                order,
+                transaction,
+                totalAmount,
+                expiresAt);
+
+        SePayOrder sePayOrder = createSePayOrder(
+                order.getId(),
+                transaction.getId(),
+                instruction,
+                totalAmount,
+                expiresAt);
+
+        auditLogService.recordUser(
+                user,
+                AuditAction.ORDER_CREATED,
+                AuditDomain.ORDER,
+                AuditResult.SUCCESS,
+                "ORDER",
+                order.getId().toString(),
+                "Order was created by Buy Now",
+                null,
+                null,
+                java.util.Map.of(
+                        "amount", totalAmount,
+                        "currency", CURRENCY,
+                        "courseId", courseId,
+                        "classId", classId));
+
+        auditLogService.recordUser(
+                user,
+                AuditAction.PAYMENT_CREATED,
+                AuditDomain.PAYMENT,
+                AuditResult.SUCCESS,
+                "PAYMENT_TRANSACTION",
+                transaction.getId().toString(),
+                "Payment transaction was created by Buy Now",
+                null,
+                null,
+                java.util.Map.of(
+                        "orderId", order.getId(),
+                        "gateway", PaymentGateway.SEPAY.name()));
+
+        return new CheckoutResponse(
+                order.getId(),
+                order.getOrderCode(),
+                transaction.getId(),
+                PaymentGateway.SEPAY.name(),
+                sePayOrder.getPaymentCode(),
+                sePayOrder.getAmount(),
+                order.getCurrency(),
+                sePayOrder.getBankAccountNumber(),
+                sePayOrder.getBankName(),
+                sePayOrder.getAccountName(),
+                sePayOrder.getQrUrl(),
+                order.getStatus().name(),
+                order.getExpiresAt());
+    }
+
     private OrderItemSnapshot toSnapshot(UUID studentId, CartItem cartItem) {
         Course course = requirePublishedCourse(cartItem.getCourseId());
         requirePaidCourse(course);
