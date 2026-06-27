@@ -157,6 +157,69 @@ class CourseAdminServiceTest {
         verify(courseRepository, never()).save(any());
     }
 
+    @Test
+    void createShouldAcceptR2ThumbnailFromConfiguredBucketPublicUrl() {
+        storageProperties.setProvider("r2");
+        storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
+        UUID categoryId = UUID.randomUUID();
+        UserAccount admin = admin();
+        Category category = category(categoryId);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
+        when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("r2-course")).thenReturn(false);
+        when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> persist(invocation.getArgument(0)));
+
+        CourseResponse response = courseAdminService.create(new CreateCourseRequest(
+                categoryId,
+                "R2 Course",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "https://course-thumbnails.example.com/2026/06/thumb.webp",
+                BigDecimal.ZERO,
+                null,
+                false,
+                null
+        ));
+
+        assertThat(response.thumbnailUrl()).isEqualTo("https://course-thumbnails.example.com/2026/06/thumb.webp");
+    }
+
+    @Test
+    void createShouldRejectR2ThumbnailOutsideConfiguredBucketPublicUrl() {
+        storageProperties.setProvider("r2");
+        storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
+        UUID categoryId = UUID.randomUUID();
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
+        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+
+        assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
+                categoryId,
+                "Course",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "https://lesson-materials.example.com/2026/06/thumb.webp",
+                BigDecimal.ZERO,
+                null,
+                false,
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        verify(courseRepository, never()).save(any());
+    }
+
     private Course persist(Course course) {
         course.setId(UUID.randomUUID());
         course.setCreatedAt(Instant.now());
