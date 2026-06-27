@@ -1,26 +1,26 @@
 package com.smartlearnly.backend.learning.service;
 
+import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.enrollment.service.EnrollmentAccessService;
 import com.smartlearnly.backend.learning.dto.*;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
-import com.smartlearnly.backend.learning.lesson.entity.LessonResource;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
-import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -110,7 +110,7 @@ public class LearningContentService {
     }
 
     private LearningSectionResponse toSectionResponseWithoutProgress(CourseSection section) {
-        List<LearningLessonResponse> lessonResponses = section.getLessons().stream()
+        List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
                 .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
                 .map(lesson -> toLessonResponse(lesson, false))
                 .toList();
@@ -123,13 +123,14 @@ public class LearningContentService {
     }
 
     private LearningSectionResponse toPreviewSectionResponse(CourseSection section) {
-        List<LearningLessonResponse> lessonResponses = section.getLessons().stream()
+        List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
                 .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
                 .filter(lesson -> Boolean.TRUE.equals(lesson.getPreview()))
                 .map(lesson -> toLessonResponse(lesson, false))
                 .toList();
-        if (lessonResponses.isEmpty())
+        if (lessonResponses.isEmpty()) {
             return null;
+        }
         return new LearningSectionResponse(
                 section.getId(),
                 section.getTitle(),
@@ -140,7 +141,7 @@ public class LearningContentService {
     private LearningSectionResponse toSectionResponse(
             CourseSection section,
             Set<UUID> completedLessonIds) {
-        List<LearningLessonResponse> lessonResponses = section.getLessons().stream()
+        List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
                 .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
                 .map(lesson -> toLessonResponse(
                         lesson,
@@ -152,6 +153,15 @@ public class LearningContentService {
                 section.getTitle(),
                 section.getSortOrder(),
                 lessonResponses);
+    }
+
+    private List<Lesson> orderedLessons(CourseSection section) {
+        return section.getLessons().stream()
+                .sorted(Comparator
+                        .comparing(Lesson::getSortOrder, Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(Lesson::getCreatedAt, Comparator.nullsLast(Instant::compareTo))
+                        .thenComparing(Lesson::getId, Comparator.nullsLast(UUID::compareTo)))
+                .toList();
     }
 
     private LearningLessonResponse toLessonResponse(Lesson lesson, boolean completed) {
