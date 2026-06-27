@@ -7,6 +7,7 @@ import com.smartlearnly.backend.enrollment.entity.CourseEnrollment;
 import com.smartlearnly.backend.learning.dto.*;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonResource;
+import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
@@ -97,6 +98,7 @@ public class LearningContentService {
 
     private LearningSectionResponse toPreviewSectionResponse(CourseSection section) {
         List<LearningLessonResponse> lessonResponses = section.getLessons().stream()
+                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
                 .filter(lesson -> Boolean.TRUE.equals(lesson.getPreview()))
                 .map(this::toLessonResponse)
                 .toList();
@@ -111,6 +113,7 @@ public class LearningContentService {
 
     private LearningSectionResponse toSectionResponse(CourseSection section) {
         List<LearningLessonResponse> lessonResponses = section.getLessons().stream()
+                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
                 .map(this::toLessonResponse)
                 .toList();
 
