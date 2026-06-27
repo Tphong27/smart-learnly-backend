@@ -253,6 +253,17 @@ public class CourseAdminService {
         if (thumbnailUrl == null) {
             return null;
         }
+        if ("r2".equalsIgnoreCase(normalizeNullable(storageProperties.getProvider()))) {
+            String expectedPrefix = normalizeNullable(storageProperties.getR2CourseThumbnailPublicUrl());
+            if (expectedPrefix == null) {
+                expectedPrefix = normalizeNullable(storageProperties.getR2PublicUrl());
+            }
+            if (expectedPrefix == null) {
+                return thumbnailUrl;
+            }
+            return validateUrlPrefix(thumbnailUrl, expectedPrefix,
+                    "Course thumbnail URL must come from the configured R2 course thumbnail bucket");
+        }
         String supabaseUrl = normalizeNullable(storageProperties.getSupabaseUrl());
         if (supabaseUrl == null) {
             return thumbnailUrl;
@@ -261,13 +272,19 @@ public class CourseAdminService {
                 + "/storage/v1/object/public/"
                 + storageProperties.getCourseThumbnailBucket()
                 + "/";
-        if (!thumbnailUrl.startsWith(expectedPrefix)) {
+        return validateUrlPrefix(thumbnailUrl, expectedPrefix,
+                "Course thumbnail URL must come from the configured course thumbnail storage bucket");
+    }
+
+    private String validateUrlPrefix(String url, String expectedPrefix, String message) {
+        String normalizedPrefix = expectedPrefix.replaceAll("/+$", "") + "/";
+        if (!url.startsWith(normalizedPrefix)) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    "Course thumbnail URL must come from the configured course thumbnail storage bucket"
+                    message
             );
         }
-        return thumbnailUrl;
+        return url;
     }
 
     private void audit(String action, UUID courseId) {
