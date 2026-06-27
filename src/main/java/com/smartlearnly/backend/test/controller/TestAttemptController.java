@@ -60,5 +60,13 @@ public class TestAttemptController {
     getAttemptsByTest(@PathVariable UUID testId) {
         return ResponseEntity.ok(service.getAttemptsByTest(testId));
     }
+
+    @PutMapping("/test/{testId}/student/{studentId}/reopen")
+    public ResponseEntity<Void> reopenAttempt(
+            @PathVariable UUID testId,
+            @PathVariable UUID studentId) {
+        service.reopenAttempt(testId, studentId);
+        return ResponseEntity.noContent().build();
+    }
 }
 
