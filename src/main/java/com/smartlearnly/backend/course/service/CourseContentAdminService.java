@@ -17,6 +17,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonResource;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
+import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -40,6 +41,7 @@ public class CourseContentAdminService {
     private final LessonRepository lessonRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
+    private final QuizContentValidator quizContentValidator;
 
     @Transactional(readOnly = true)
     public List<SectionResponse> listSections(UUID courseId) {
@@ -193,7 +195,11 @@ public class CourseContentAdminService {
         lesson.setTitle(normalizeRequired(request.title(), "Lesson title is required"));
         lesson.setType(parseLessonType(resolveLessonType(request), create ? LessonType.RICH_TEXT : lesson.getType()));
         lesson.setVideoUrl(normalizeNullable(request.videoUrl()));
-        lesson.setContent(normalizeNullable(request.content()));
+        String content = normalizeNullable(request.content());
+        if (lesson.getType() == LessonType.QUIZ) {
+            quizContentValidator.validate(content);
+        }
+        lesson.setContent(content);
         lesson.setAttachmentUrl(normalizeNullable(request.attachmentUrl()));
         lesson.setDurationSeconds(request.durationSeconds());
         if (create || request.isPreview() != null) {
