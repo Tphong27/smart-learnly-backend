@@ -23,6 +23,7 @@ import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
+import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -49,6 +50,8 @@ class CourseContentAdminServiceTest {
     private CurrentUserService currentUserService;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private QuizContentValidator quizContentValidator;
 
     private CourseContentAdminService courseContentAdminService;
 
@@ -59,7 +62,8 @@ class CourseContentAdminServiceTest {
                 courseSectionRepository,
                 lessonRepository,
                 currentUserService,
-                auditLogService
+                auditLogService,
+                quizContentValidator
         );
     }
 
