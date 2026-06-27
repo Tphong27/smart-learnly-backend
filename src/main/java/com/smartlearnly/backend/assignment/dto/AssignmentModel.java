@@ -25,6 +25,7 @@ public class AssignmentModel {
         private Instant lockoutDate;
         private BigDecimal maxScore;
         private UUID testId;
+        private Boolean isFlashtest;
     }
 
     // Request dùng cho API Cập nhật (Update)
@@ -42,6 +43,7 @@ public class AssignmentModel {
         private BigDecimal maxScore;
         private Boolean isArchived;
         private UUID testId;
+        private Boolean isFlashtest;
     }
 
     // Response dùng cho API Xem chi tiết và Danh sách (Get/List)
@@ -60,6 +62,7 @@ public class AssignmentModel {
         private Instant lockoutDate;
         private BigDecimal maxScore;
         private Boolean isArchived;
+        private Boolean isFlashtest;
         private UUID createdBy;
         private Instant createdAt;
         private Instant updatedAt;

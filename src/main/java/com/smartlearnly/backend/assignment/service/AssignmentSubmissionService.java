@@ -131,6 +131,14 @@ public class AssignmentSubmissionService {
                 .toList();
     }
 
+    public AssignmentSubmissionModel.Response getSubmissionByAssignmentAndStudent(
+            UUID assignmentId,
+            UUID studentId) {
+        return repository.findByAssignmentIdAndStudentId(assignmentId, studentId)
+                .map(this::mapToResponse)
+                .orElse(null);
+    }
+
     private Assignment loadAssignment(UUID assignmentId) {
         return assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));

@@ -42,6 +42,7 @@ public class QuestionController {
             @RequestParam(required = false) UUID bankId,
             @RequestParam(required = false) UUID questionBankId,
             @RequestParam(required = false) UUID courseId,
+            @RequestParam(name = "course_id", required = false) UUID courseIdSnakeCase,
             @RequestParam(required = false) UUID moduleId,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String type,
@@ -51,7 +52,8 @@ public class QuestionController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
         UUID resolvedBankId = bankId != null ? bankId : questionBankId;
-        return ApiResponse.success("Questions loaded successfully", questionService.list(resolvedBankId, courseId, moduleId, search, type, status, difficulty, page, size));
+        UUID resolvedCourseId = courseId != null ? courseId : courseIdSnakeCase;
+        return ApiResponse.success("Questions loaded successfully", questionService.list(resolvedBankId, resolvedCourseId, moduleId, search, type, status, difficulty, page, size));
     }
 
     @PostMapping

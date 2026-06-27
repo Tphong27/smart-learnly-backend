@@ -4,6 +4,7 @@ package com.smartlearnly.backend.assignment.service;
 import com.smartlearnly.backend.assignment.dto.AssignmentModel;
 import com.smartlearnly.backend.assignment.entity.Assignment;
 import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
+import com.smartlearnly.backend.common.security.CurrentUserService;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
 import java.util.UUID;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 public class AssignmentService {
 
     private final AssignmentRepository assignmentRepository;
+    private final CurrentUserService currentUserService;
 
     public AssignmentModel.Response createAssignment(
             AssignmentModel.CreateRequest request) {
@@ -31,6 +33,8 @@ public class AssignmentService {
         assignment.setLockoutDate(request.getLockoutDate());
         assignment.setMaxScore(request.getMaxScore());
         assignment.setTestId(request.getTestId());
+        assignment.setIsFlashtest(request.getIsFlashtest());
+        assignment.setCreatedBy(currentUserService.requireAuthenticatedUser().getId());
 
         Assignment saved = assignmentRepository.save(assignment);
 
@@ -72,6 +76,7 @@ public class AssignmentService {
         assignment.setMaxScore(request.getMaxScore());
         assignment.setIsArchived(request.getIsArchived());
         assignment.setTestId(request.getTestId());
+        assignment.setIsFlashtest(request.getIsFlashtest());
 
         Assignment updated = assignmentRepository.save(assignment);
 
@@ -106,6 +111,7 @@ public class AssignmentService {
         response.setLockoutDate(assignment.getLockoutDate());
         response.setMaxScore(assignment.getMaxScore());
         response.setIsArchived(assignment.getIsArchived());
+        response.setIsFlashtest(assignment.getIsFlashtest());
         response.setCreatedBy(assignment.getCreatedBy());
         response.setCreatedAt(assignment.getCreatedAt());
         response.setUpdatedAt(assignment.getUpdatedAt());
