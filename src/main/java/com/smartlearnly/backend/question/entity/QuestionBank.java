@@ -49,7 +49,7 @@ public class QuestionBank {
     void prePersist() {
         Instant now = Instant.now();
         if (status == null) {
-            status = "active";
+            status = "draft";
         }
         if (createdAt == null) {
             createdAt = now;

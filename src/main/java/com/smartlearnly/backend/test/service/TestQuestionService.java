@@ -1,4 +1,3 @@
-
 package com.smartlearnly.backend.test.service;
 
 import com.smartlearnly.backend.question.dto.QuestionModel;
@@ -59,6 +58,22 @@ public class TestQuestionService {
         return responses;
     }
 
+    public List<TestQuestionModel.LearnerResponse>
+    getLearnerQuestionsByTest(UUID testId) {
+
+        List<TestQuestion> entities =
+                repository.findByIdTestId(testId);
+
+        List<TestQuestionModel.LearnerResponse> responses =
+                new ArrayList<>();
+
+        for (TestQuestion entity : entities) {
+            responses.add(mapToLearnerResponse(entity));
+        }
+
+        return responses;
+    }
+
     public TestQuestionModel.Response updateTestQuestion(
             UUID testId,
             UUID questionId,
@@ -103,6 +118,35 @@ public class TestQuestionService {
         TestQuestionModel.Response response =
                 new TestQuestionModel.Response();
 
+        populateBaseResponse(response, entity);
+
+        questionRepository.findById(entity.getId().getQuestionId())
+                .ifPresent(question -> appendQuestionDetails(response, question));
+
+        return response;
+    }
+
+    private TestQuestionModel.LearnerResponse mapToLearnerResponse(
+            TestQuestion entity) {
+
+        TestQuestionModel.LearnerResponse response =
+                new TestQuestionModel.LearnerResponse();
+
+        response.setTestId(entity.getId().getTestId());
+        response.setQuestionId(entity.getId().getQuestionId());
+        response.setOrderIndex(entity.getOrderIndex());
+        response.setMarks(entity.getMarks());
+
+        questionRepository.findById(entity.getId().getQuestionId())
+                .ifPresent(question -> appendLearnerQuestionDetails(response, question));
+
+        return response;
+    }
+
+    private void populateBaseResponse(
+            TestQuestionModel.Response response,
+            TestQuestion entity) {
+
         response.setTestId(
                 entity.getId().getTestId());
 
@@ -114,11 +158,6 @@ public class TestQuestionService {
 
         response.setMarks(
                 entity.getMarks());
-
-        questionRepository.findById(entity.getId().getQuestionId())
-                .ifPresent(question -> appendQuestionDetails(response, question));
-
-        return response;
     }
 
     private void appendQuestionDetails(
@@ -142,5 +181,29 @@ public class TestQuestionService {
                         answer.getOrderIndex() == null ? 0 : answer.getOrderIndex()))
                 .toList());
     }
-}
 
+    private void appendLearnerQuestionDetails(
+            TestQuestionModel.LearnerResponse response,
+            Question question) {
+
+        response.setQuestionText(question.getQuestionText());
+        response.setQuestionType(question.getQuestionType() == null
+                ? null
+                : question.getQuestionType().name().toLowerCase());
+        response.setAnswers(answerRepository
+                .findByQuestionIdOrderByOrderIndexAsc(question.getId())
+                .stream()
+                .map(answer -> {
+                    TestQuestionModel.LearnerAnswerResponse learnerAnswer =
+                            new TestQuestionModel.LearnerAnswerResponse();
+                    Integer order = answer.getOrderIndex() == null ? 0 : answer.getOrderIndex();
+                    learnerAnswer.setAnswerId(answer.getId());
+                    learnerAnswer.setId(answer.getId());
+                    learnerAnswer.setAnswerText(answer.getAnswerText());
+                    learnerAnswer.setDisplayOrder(order);
+                    learnerAnswer.setOrderIndex(order);
+                    return learnerAnswer;
+                })
+                .toList());
+    }
+}

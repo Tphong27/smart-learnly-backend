@@ -20,7 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class QuestionBankService {
-    private static final String STATUS_ACTIVE = "active";
+    private static final String STATUS_DRAFT = "draft";
+    private static final String STATUS_APPROVED = "approved";
     private static final String STATUS_ARCHIVED = "archived";
 
     private final QuestionBankRepository questionBankRepository;
@@ -56,7 +57,7 @@ public class QuestionBankService {
         bank.setCourseId(request.courseId());
         bank.setName(normalizeRequired(request.name(), "Bank name is required"));
         bank.setDescription(normalizeNullable(request.description()));
-        bank.setStatus(normalizeStatus(request.status(), STATUS_ACTIVE));
+        bank.setStatus(normalizeStatus(request.status(), STATUS_DRAFT));
         bank.setCreatedBy(actor.getId());
 
         return toResponse(questionBankRepository.save(bank));
@@ -151,8 +152,10 @@ public class QuestionBankService {
             return defaultStatus;
         }
         String normalized = status.trim().toLowerCase(Locale.ROOT);
-        if (!STATUS_ACTIVE.equals(normalized) && !STATUS_ARCHIVED.equals(normalized)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question bank status must be active or archived");
+        if (!STATUS_DRAFT.equals(normalized)
+                && !STATUS_APPROVED.equals(normalized)
+                && !STATUS_ARCHIVED.equals(normalized)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question bank status must be draft, approved, or archived");
         }
         return normalized;
     }
