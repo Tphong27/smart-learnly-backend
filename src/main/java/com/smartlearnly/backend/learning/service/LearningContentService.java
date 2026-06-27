@@ -14,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -96,7 +98,7 @@ public class LearningContentService {
     }
 
     private LearningSectionResponse toPreviewSectionResponse(CourseSection section) {
-        List<LearningLessonResponse> lessonResponses = section.getLessons().stream()
+        List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
                 .filter(lesson -> Boolean.TRUE.equals(lesson.getPreview()))
                 .map(this::toLessonResponse)
                 .toList();
@@ -110,7 +112,7 @@ public class LearningContentService {
     }
 
     private LearningSectionResponse toSectionResponse(CourseSection section) {
-        List<LearningLessonResponse> lessonResponses = section.getLessons().stream()
+        List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
                 .map(this::toLessonResponse)
                 .toList();
 
@@ -120,6 +122,15 @@ public class LearningContentService {
                 section.getSortOrder(),
                 lessonResponses
         );
+    }
+
+    private List<Lesson> orderedLessons(CourseSection section) {
+        return section.getLessons().stream()
+                .sorted(Comparator
+                        .comparing(Lesson::getSortOrder, Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(Lesson::getCreatedAt, Comparator.nullsLast(Instant::compareTo))
+                        .thenComparing(Lesson::getId, Comparator.nullsLast(UUID::compareTo)))
+                .toList();
     }
 
     private LearningLessonResponse toLessonResponse(Lesson lesson) {
