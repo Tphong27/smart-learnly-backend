@@ -1,4 +1,3 @@
-
 package com.smartlearnly.backend.test.controller;
 
 import com.smartlearnly.backend.test.dto.TestQuestionModel;
@@ -9,6 +8,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,6 +19,7 @@ public class TestQuestionController {
     private final TestQuestionService service;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')")
     public ResponseEntity<TestQuestionModel.Response>
     addQuestionToTest(
             @Valid @RequestBody
@@ -33,15 +34,16 @@ public class TestQuestionController {
     }
 
     @GetMapping("/test/{testId}")
-    public ResponseEntity<List<TestQuestionModel.Response>>
-    getQuestionsByTest(
+    public ResponseEntity<List<TestQuestionModel.LearnerResponse>>
+    getLearnerQuestionsByTest(
             @PathVariable UUID testId) {
 
         return ResponseEntity.ok(
-                service.getQuestionsByTest(testId));
+                service.getLearnerQuestionsByTest(testId));
     }
 
     @PutMapping("/test/{testId}/question/{questionId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')")
     public ResponseEntity<TestQuestionModel.Response>
     updateTestQuestion(
             @PathVariable UUID testId,
@@ -57,6 +59,7 @@ public class TestQuestionController {
     }
 
     @DeleteMapping("/test/{testId}/question/{questionId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')")
     public ResponseEntity<Void>
     removeQuestionFromTest(
             @PathVariable UUID testId,
@@ -69,4 +72,3 @@ public class TestQuestionController {
         return ResponseEntity.noContent().build();
     }
 }
-
