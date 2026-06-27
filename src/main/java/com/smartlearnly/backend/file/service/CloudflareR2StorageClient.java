@@ -105,20 +105,36 @@ public class CloudflareR2StorageClient implements FileStorageService {
     }
 
     private String buildPublicUrl(String bucket, String objectPath) {
-        String baseUrl = storageProperties.getR2PublicUrl();
+        String baseUrl = resolveBucketPublicUrl(bucket);
         if (baseUrl == null || baseUrl.isBlank()) {
-            // Fallback: extract account ID from endpoint
-            String endpoint = storageProperties.getR2Endpoint();
-            if (endpoint != null && endpoint.contains(".r2.cloudflarestorage.com")) {
-                baseUrl = endpoint.replace(".cloudflarestorage.com", ".r2.dev");
-            } else {
-                baseUrl = String.format("https://%s.r2.dev", storageProperties.getR2AccountId());
-            }
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Cloudflare R2 public URL is not configured for bucket: " + bucket
+            );
         }
         if (!baseUrl.endsWith("/")) {
             baseUrl += "/";
         }
-        // R2 public URL format: baseUrl + objectPath (without bucket name)
         return baseUrl + objectPath;
+    }
+
+    private String resolveBucketPublicUrl(String bucket) {
+        if (bucket.equals(storageProperties.getCourseThumbnailBucket())) {
+            return firstConfigured(storageProperties.getR2CourseThumbnailPublicUrl(), storageProperties.getR2PublicUrl());
+        }
+        if (bucket.equals(storageProperties.getLessonMaterialBucket())) {
+            return firstConfigured(storageProperties.getR2LessonMaterialPublicUrl(), storageProperties.getR2PublicUrl());
+        }
+        if (bucket.equals(storageProperties.getLessonResourceBucket())) {
+            return firstConfigured(storageProperties.getR2LessonResourcePublicUrl(), storageProperties.getR2PublicUrl());
+        }
+        return storageProperties.getR2PublicUrl();
+    }
+
+    private String firstConfigured(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        return fallback;
     }
 }
