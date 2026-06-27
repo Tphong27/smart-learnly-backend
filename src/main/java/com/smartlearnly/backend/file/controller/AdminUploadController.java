@@ -29,7 +29,7 @@ public class AdminUploadController {
     private final LessonFileUploadService lessonFileUploadService;
 
     @PostMapping(value = "/course-thumbnails", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload a course thumbnail to Supabase Storage")
+    @Operation(summary = "Upload a course thumbnail to the configured storage provider")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Thumbnail uploaded"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "413", description = "File exceeds size limit"),
