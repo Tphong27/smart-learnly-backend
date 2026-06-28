@@ -6,6 +6,8 @@ import com.smartlearnly.backend.assignment.entity.AssignmentSubmission;
 import com.smartlearnly.backend.assignment.entity.SubmissionStatus;
 import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
 import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.Duration;
@@ -29,7 +31,6 @@ public class AssignmentSubmissionService {
     public AssignmentSubmissionModel.Response startAssignment(
             AssignmentSubmissionModel.StartRequest request) {
         Assignment assignment = loadAssignment(required(request.getAssignmentId(), "assignmentId"));
-        assertAssignmentOpen(assignment);
 
         AssignmentSubmission submission = repository
                 .findByAssignmentIdAndStudentId(
@@ -39,6 +40,7 @@ public class AssignmentSubmissionService {
         if (isFinalStatus(submission.getStatus())) {
             return mapToResponse(submission);
         }
+        assertAssignmentOpen(assignment);
         submission.setAssignmentId(request.getAssignmentId());
         submission.setStudentId(request.getStudentId());
         if (submission.getStartTime() == null) {
@@ -70,7 +72,9 @@ public class AssignmentSubmissionService {
             expiredSubmission.setStatus(SubmissionStatus.EXPIRED);
             AssignmentSubmission saved = repository.save(expiredSubmission);
             broadcast(mapToResponse(saved), assignment, request.getStudentName());
-            throw new IllegalStateException("Assignment due date has passed");
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Assignment due date has passed");
         }
 
         AssignmentSubmission submission = repository
@@ -152,7 +156,9 @@ public class AssignmentSubmissionService {
 
     private void assertAssignmentOpen(Assignment assignment) {
         if (assignment.getDueDate() != null && Instant.now().isAfter(assignment.getDueDate())) {
-            throw new IllegalStateException("Assignment due date has passed");
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Assignment due date has passed");
         }
     }
 
@@ -173,7 +179,7 @@ public class AssignmentSubmissionService {
         event.setStudentId(response.getStudentId());
         event.setStudentName(studentName);
         event.setType("essay");
-        event.setStatus(response.getStatus().name());
+        event.setStatus(response.getStatus() == null ? "DOING" : response.getStatus().name());
         event.setStartTime(response.getStartTime());
         event.setEndTime(assignment.getDueDate());
         event.setRemainingSeconds(remainingSeconds(assignment.getDueDate()));

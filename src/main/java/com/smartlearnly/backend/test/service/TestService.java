@@ -2,8 +2,14 @@
 package com.smartlearnly.backend.test.service;
 
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.test.dto.TestModel;
+import com.smartlearnly.backend.test.entity.AttemptStatus;
 import com.smartlearnly.backend.test.entity.Test;
+import com.smartlearnly.backend.test.entity.TestAttempt;
+import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
+import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.ArrayList;
@@ -11,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -18,6 +25,8 @@ public class TestService {
 
     private final TestRepository testRepository;
     private final CurrentUserService currentUserService;
+    private final TestAttemptRepository testAttemptRepository;
+    private final StudentTestAnswerRepository studentTestAnswerRepository;
 
     public TestModel.Response createTest(
             TestModel.CreateRequest request) {
@@ -77,6 +86,7 @@ public class TestService {
         return mapToResponse(test);
     }
 
+    @Transactional
     public TestModel.Response updateTest(
             UUID id,
             TestModel.UpdateRequest request) {
@@ -86,31 +96,39 @@ public class TestService {
                         new EntityNotFoundException(
                                 "Test not found"));
 
-        test.setTitle(request.getTitle());
-        test.setDescription(
-                request.getDescription());
-        test.setTestType(
-                request.getTestType());
-        test.setDurationMinutes(
-                request.getDurationMinutes());
-        test.setMaxAttempts(
-                request.getMaxAttempts());
-        test.setPassScore(
-                request.getPassScore());
-        test.setShuffleQuestions(
-                request.getShuffleQuestions());
-        test.setShuffleAnswers(
-                request.getShuffleAnswers());
-        test.setShowAnswersAfter(
-                request.getShowAnswersAfter());
-        test.setIsPublished(
-                request.getIsPublished());
-        test.setIsArchived(
-                request.getIsArchived());
-        test.setIsFlashtest(
-                request.getIsFlashtest());
+        boolean isFlashTest = Boolean.TRUE.equals(test.getIsFlashtest()) ||
+                Boolean.TRUE.equals(request.getIsFlashtest());
+        if (isFlashTest) {
+            boolean hasActiveAttempt = testAttemptRepository.existsByTestIdAndStatusIn(
+                    id,
+                    List.of(AttemptStatus.DOING, AttemptStatus.IN_PROGRESS));
+            if (hasActiveAttempt) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_RULE_VIOLATION,
+                        "Cannot update this test while students are taking it");
+            }
+        }
+
+        if (request.getModuleId() != null) test.setModuleId(request.getModuleId());
+        if (request.getClassId() != null) test.setClassId(request.getClassId());
+        if (request.getCourseId() != null) test.setCourseId(request.getCourseId());
+        if (request.getTitle() != null) test.setTitle(request.getTitle());
+        if (request.getDescription() != null) test.setDescription(request.getDescription());
+        if (request.getTestType() != null) test.setTestType(request.getTestType());
+        if (request.getDurationMinutes() != null) test.setDurationMinutes(request.getDurationMinutes());
+        if (request.getMaxAttempts() != null) test.setMaxAttempts(request.getMaxAttempts());
+        if (request.getPassScore() != null) test.setPassScore(request.getPassScore());
+        if (request.getShuffleQuestions() != null) test.setShuffleQuestions(request.getShuffleQuestions());
+        if (request.getShuffleAnswers() != null) test.setShuffleAnswers(request.getShuffleAnswers());
+        if (request.getShowAnswersAfter() != null) test.setShowAnswersAfter(request.getShowAnswersAfter());
+        if (request.getIsPublished() != null) test.setIsPublished(request.getIsPublished());
+        if (request.getIsArchived() != null) test.setIsArchived(request.getIsArchived());
+        if (request.getIsFlashtest() != null) test.setIsFlashtest(request.getIsFlashtest());
 
         Test updated = testRepository.save(test);
+        if (isFlashTest) {
+            resetAttempts(id);
+        }
 
         return mapToResponse(updated);
     }
@@ -123,6 +141,20 @@ public class TestService {
         }
 
         testRepository.deleteById(id);
+    }
+
+    private void resetAttempts(UUID testId) {
+        List<TestAttempt> attempts =
+                testAttemptRepository.findByTestId(testId);
+        if (attempts.isEmpty()) {
+            return;
+        }
+
+        List<UUID> attemptIds = attempts.stream()
+                .map(TestAttempt::getId)
+                .toList();
+        studentTestAnswerRepository.deleteByAttemptIds(attemptIds);
+        testAttemptRepository.deleteAll(attempts);
     }
 
     private TestModel.Response mapToResponse(
