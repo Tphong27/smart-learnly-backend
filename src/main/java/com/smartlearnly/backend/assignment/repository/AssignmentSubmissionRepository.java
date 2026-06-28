@@ -17,4 +17,6 @@ public interface AssignmentSubmissionRepository
             UUID assignmentId,
             UUID studentId);
 
+    void deleteByAssignmentId(UUID assignmentId);
+
 }
