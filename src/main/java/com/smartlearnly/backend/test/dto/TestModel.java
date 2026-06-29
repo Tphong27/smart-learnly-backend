@@ -34,6 +34,9 @@ public class TestModel {
     @Setter
     @NoArgsConstructor
     public static class UpdateRequest {
+        private UUID moduleId;
+        private UUID classId;
+        private UUID courseId;
         private String title;
         private String description;
         private TestType testType;

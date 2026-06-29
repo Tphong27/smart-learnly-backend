@@ -4,12 +4,14 @@ package com.smartlearnly.backend.assignment.service;
 import com.smartlearnly.backend.assignment.dto.AssignmentModel;
 import com.smartlearnly.backend.assignment.entity.Assignment;
 import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
+import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -17,6 +19,7 @@ public class AssignmentService {
 
     private final AssignmentRepository assignmentRepository;
     private final CurrentUserService currentUserService;
+    private final AssignmentSubmissionRepository assignmentSubmissionRepository;
 
     public AssignmentModel.Response createAssignment(
             AssignmentModel.CreateRequest request) {
@@ -58,6 +61,7 @@ public class AssignmentService {
         return mapToResponse(assignment);
     }
 
+    @Transactional
     public AssignmentModel.Response updateAssignment(
             UUID id,
             AssignmentModel.UpdateRequest request) {
@@ -66,19 +70,24 @@ public class AssignmentService {
                 .orElseThrow(() ->
                         new EntityNotFoundException("Assignment not found"));
 
-        assignment.setTitle(request.getTitle());
-        assignment.setDescription(request.getDescription());
+        if (request.getTitle() != null) assignment.setTitle(request.getTitle());
+        if (request.getDescription() != null) assignment.setDescription(request.getDescription());
         assignment.setInstructionFileUrl(request.getInstructionFileUrl());
         assignment.setInstructionFileName(request.getInstructionFileName());
-        assignment.setDueDate(request.getDueDate());
-        assignment.setAllowLateSubmission(request.getAllowLateSubmission());
-        assignment.setLockoutDate(request.getLockoutDate());
-        assignment.setMaxScore(request.getMaxScore());
-        assignment.setIsArchived(request.getIsArchived());
-        assignment.setTestId(request.getTestId());
-        assignment.setIsFlashtest(request.getIsFlashtest());
+        if (request.getDueDate() != null) assignment.setDueDate(request.getDueDate());
+        if (request.getAllowLateSubmission() != null) {
+            assignment.setAllowLateSubmission(request.getAllowLateSubmission());
+        }
+        if (request.getLockoutDate() != null) assignment.setLockoutDate(request.getLockoutDate());
+        if (request.getMaxScore() != null) assignment.setMaxScore(request.getMaxScore());
+        if (request.getIsArchived() != null) assignment.setIsArchived(request.getIsArchived());
+        if (request.getTestId() != null) assignment.setTestId(request.getTestId());
+        if (request.getIsFlashtest() != null) assignment.setIsFlashtest(request.getIsFlashtest());
 
         Assignment updated = assignmentRepository.save(assignment);
+        if (Boolean.TRUE.equals(updated.getIsFlashtest())) {
+            assignmentSubmissionRepository.deleteByAssignmentId(updated.getId());
+        }
 
         return mapToResponse(updated);
     }
