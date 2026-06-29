@@ -2,6 +2,7 @@ package com.smartlearnly.backend.question.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.service.QuestionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -98,5 +99,14 @@ public class QuestionController {
     @Operation(summary = "Reject a question")
     public ApiResponse<QuestionModel.Response> reject(@PathVariable UUID questionId) {
         return ApiResponse.success("Question rejected successfully", questionService.reject(questionId));
+    }
+
+    @PostMapping("/import-batch")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @Operation(summary = "Bulk import questions from a parsed Excel/CSV payload")
+    public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(
+            @Valid @RequestBody QuestionImportDtos.ImportBatchRequest request
+    ) {
+        return ApiResponse.success("Questions imported successfully", questionService.importBatch(request));
     }
 }
