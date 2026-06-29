@@ -7,6 +7,7 @@ import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
 import com.smartlearnly.backend.enrollment.service.EnrollmentAccessService;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
+import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
@@ -128,12 +129,13 @@ public class TraineeProgressService {
                 .findByCourseIdOrderBySortOrderAscCreatedAtAsc(course.id());
 
         List<Lesson> lessons = sections.stream()
-                .flatMap(section -> section.getLessons().stream())
-                .sorted(Comparator
-                        .comparing((Lesson lesson) -> lesson.getSection().getSortOrder())
-                        .thenComparing(Lesson::getSortOrder)
-                        .thenComparing(Lesson::getCreatedAt))
-                .toList();
+        .flatMap(section -> section.getLessons().stream())
+        .filter(this::isVisibleForLearningProgress)
+        .sorted(Comparator
+                .comparing((Lesson lesson) -> lesson.getSection().getSortOrder())
+                .thenComparing(Lesson::getSortOrder)
+                .thenComparing(Lesson::getCreatedAt))
+        .toList();
 
         Map<UUID, LessonProgress> progressByLessonId = progressItems.stream()
                 .collect(Collectors.toMap(
@@ -189,6 +191,10 @@ public class TraineeProgressService {
                 quizMetric,
                 flashcardMetric
         );
+    }
+
+    private boolean isVisibleForLearningProgress(Lesson lesson) {
+        return lesson.getStatus() == LessonStatus.PUBLISHED;
     }
 
     private int countByProgressGroup(List<Lesson> lessons, ProgressGroup group) {
