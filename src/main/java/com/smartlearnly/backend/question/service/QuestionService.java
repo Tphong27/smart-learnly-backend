@@ -5,6 +5,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
+import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.entity.BloomLevel;
 import com.smartlearnly.backend.question.entity.Question;
@@ -20,8 +21,10 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -169,6 +172,241 @@ public class QuestionService {
         boolean exists = courseSectionRepository.findByIdAndCourseId(moduleId, courseId).isPresent();
         if (!exists) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module must belong to the selected course");
         return moduleId;
+    }
+
+    @Transactional
+    public QuestionImportDtos.ImportBatchResponse importBatch(QuestionImportDtos.ImportBatchRequest request) {
+        QuestionBank bank = questionBankService.findActiveBankEntity(request.bankId());
+
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        List<QuestionImportDtos.ImportRow> rows = request.rows();
+
+        List<QuestionImportDtos.ImportRowError> errors = new ArrayList<>();
+        Set<Integer> duplicateRowNumbers = new HashSet<>();
+        List<QuestionImportDtos.ImportRow> validatedRows = new ArrayList<>();
+        for (QuestionImportDtos.ImportRow row : rows) {
+            List<String> rowErrors = validateImportRow(bank, row);
+            if (!rowErrors.isEmpty()) {
+                errors.add(new QuestionImportDtos.ImportRowError(row.rowNumber(), rowErrors));
+            } else {
+                validatedRows.add(row);
+            }
+        }
+
+        for (QuestionImportDtos.ImportRow row : validatedRows) {
+            String normalizedText = normalizeRequired(row.questionText(), "Question text is required");
+            if (questionRepository.existsByQuestionBankIdAndQuestionTextIgnoreCase(bank.getId(), normalizedText)) {
+                duplicateRowNumbers.add(row.rowNumber());
+                errors.add(new QuestionImportDtos.ImportRowError(row.rowNumber(), List.of("A question with the same text already exists in this bank")));
+            }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, buildImportErrorSummary(errors));
+        }
+
+        List<UUID> createdIds = new ArrayList<>();
+        for (QuestionImportDtos.ImportRow row : validatedRows) {
+            if (duplicateRowNumbers.contains(row.rowNumber())) {
+                continue;
+            }
+            Question saved = persistImportedQuestion(bank, row, actor);
+            createdIds.add(saved.getId());
+        }
+
+        return new QuestionImportDtos.ImportBatchResponse(rows.size(), createdIds.size(), createdIds, List.of());
+    }
+
+    private Question persistImportedQuestion(QuestionBank bank, QuestionImportDtos.ImportRow row, UserAccount actor) {
+        QuestionType questionType = parseSupportedQuestionType(row.questionType());
+        Question question = new Question();
+        question.setQuestionBankId(bank.getId());
+        question.setCourseId(bank.getCourseId());
+        question.setModuleId(validateModuleId(bank.getCourseId(), row.moduleId()));
+        question.setQuestionText(normalizeRequired(row.questionText(), "Question text is required"));
+        question.setQuestionType(questionType);
+        question.setBloomLevel(parseBloomLevel(row.bloomLevel()));
+        question.setDifficulty(row.difficulty());
+        question.setExplanation(normalizeNullable(row.explanation()));
+        question.setIsAiGenerated(false);
+        question.setStatus(QuestionStatus.DRAFT);
+        question.setCreatedBy(actor.getId());
+        Question saved = questionRepository.save(question);
+
+        List<QuestionModel.AnswerRequest> answers = buildAnswersForImport(row, questionType);
+        replaceAnswers(saved.getId(), answers);
+        return saved;
+    }
+
+    private List<QuestionModel.AnswerRequest> buildAnswersForImport(QuestionImportDtos.ImportRow row, QuestionType questionType) {
+        List<String> options = row.options().stream()
+                .map(option -> normalizeRequired(option, "Answer text is required"))
+                .toList();
+        int correctIndex = resolveCorrectAnswerIndex(questionType, options, row.correctAnswer());
+        List<QuestionModel.AnswerRequest> answers = new ArrayList<>();
+        for (int index = 0; index < options.size(); index += 1) {
+            answers.add(new QuestionModel.AnswerRequest(
+                    null,
+                    null,
+                    options.get(index),
+                    index == correctIndex,
+                    index == correctIndex,
+                    index + 1,
+                    index + 1
+            ));
+        }
+        return answers;
+    }
+
+    private int resolveCorrectAnswerIndex(QuestionType questionType, List<String> options, String correctAnswer) {
+        String normalized = correctAnswer == null ? "" : correctAnswer.trim();
+        if (questionType == QuestionType.TRUE_FALSE) {
+            boolean isTrue = "true".equalsIgnoreCase(normalized);
+            boolean isFalse = "false".equalsIgnoreCase(normalized);
+            if (!isTrue && !isFalse) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer for true/false must be True or False");
+            }
+            for (int index = 0; index < options.size(); index += 1) {
+                String text = options.get(index).trim().toLowerCase(Locale.ROOT);
+                if (isTrue && "true".equals(text)) return index;
+                if (isFalse && "false".equals(text)) return index;
+            }
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "True/false options must contain True and False answers");
+        }
+        if (normalized.length() != 1) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer must be a single letter A-F");
+        }
+        char letter = Character.toUpperCase(normalized.charAt(0));
+        if (letter < 'A' || letter > 'F') {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer must be A, B, C, D, E, or F");
+        }
+        int index = letter - 'A';
+        if (index >= options.size()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer refers to an option that was not provided");
+        }
+        return index;
+    }
+
+    private List<String> validateImportRow(QuestionBank bank, QuestionImportDtos.ImportRow row) {
+        List<String> rowErrors = new ArrayList<>();
+        if (row.questionText() == null || row.questionText().isBlank()) {
+            rowErrors.add("Question text is required");
+        } else if (row.questionText().length() > 10000) {
+            rowErrors.add("Question text must not exceed 10000 characters");
+        }
+
+        QuestionType type = null;
+        String rawType = row.questionType();
+        if (rawType == null || rawType.isBlank()) {
+            rowErrors.add("Question type is required");
+        } else {
+            String normalizedType = rawType.trim().replace('-', '_').toUpperCase(Locale.ROOT);
+            try {
+                type = QuestionType.valueOf(normalizedType);
+            } catch (IllegalArgumentException exception) {
+                rowErrors.add("Question type must be multiple_choice or true_false");
+            }
+            if (type != null && type != QuestionType.MULTIPLE_CHOICE && type != QuestionType.TRUE_FALSE) {
+                rowErrors.add("Question type must be multiple_choice or true_false");
+                type = null;
+            }
+        }
+
+        List<String> options = row.options();
+        if (options == null || options.size() < 2) {
+            rowErrors.add("At least two answers are required");
+        } else if (options.size() > 6) {
+            rowErrors.add("Multiple choice questions support 2 to 6 answers");
+        } else {
+            for (int index = 0; index < options.size(); index += 1) {
+                String option = options.get(index);
+                if (option == null || option.isBlank()) {
+                    rowErrors.add("Answer " + (char) ('A' + index) + " is required");
+                } else if (option.length() > 4000) {
+                    rowErrors.add("Answer " + (char) ('A' + index) + " must not exceed 4000 characters");
+                }
+            }
+        }
+
+        if (options != null && type == QuestionType.TRUE_FALSE && options.size() != 2) {
+            rowErrors.add("True/false questions must have exactly two answers");
+        }
+
+        if (options != null && type == QuestionType.TRUE_FALSE) {
+            boolean hasTrue = false;
+            boolean hasFalse = false;
+            for (String option : options) {
+                if (option == null) continue;
+                String text = option.trim().toLowerCase(Locale.ROOT);
+                if ("true".equals(text)) hasTrue = true;
+                if ("false".equals(text)) hasFalse = true;
+            }
+            if (!hasTrue || !hasFalse) {
+                rowErrors.add("True/false answers must be True and False");
+            }
+        }
+
+        String correctAnswer = row.correctAnswer();
+        if (correctAnswer == null || correctAnswer.isBlank()) {
+            rowErrors.add("Correct answer is required");
+        } else if (type == QuestionType.TRUE_FALSE) {
+            String normalized = correctAnswer.trim();
+            if (!"true".equalsIgnoreCase(normalized) && !"false".equalsIgnoreCase(normalized)) {
+                rowErrors.add("Correct answer for true/false must be True or False");
+            }
+        } else if (type == QuestionType.MULTIPLE_CHOICE) {
+            String normalized = correctAnswer.trim();
+            if (normalized.length() != 1) {
+                rowErrors.add("Correct answer must be a single letter A-F");
+            } else {
+                char letter = Character.toUpperCase(normalized.charAt(0));
+                if (letter < 'A' || letter > 'F') {
+                    rowErrors.add("Correct answer must be A, B, C, D, E, or F");
+                } else if (options != null && (letter - 'A') >= options.size()) {
+                    rowErrors.add("Correct answer refers to an option that was not provided");
+                }
+            }
+        }
+
+        if (row.difficulty() != null && (row.difficulty() < 1 || row.difficulty() > 5)) {
+            rowErrors.add("Difficulty must be between 1 and 5");
+        }
+
+        if (row.bloomLevel() != null && !row.bloomLevel().isBlank()) {
+            String normalized = row.bloomLevel().trim().replace('-', '_').toUpperCase(Locale.ROOT);
+            try {
+                BloomLevel.valueOf(normalized);
+            } catch (IllegalArgumentException exception) {
+                rowErrors.add("Bloom level is invalid");
+            }
+        }
+
+        if (row.moduleId() != null) {
+            boolean moduleExists = courseSectionRepository.findByIdAndCourseId(row.moduleId(), bank.getCourseId()).isPresent();
+            if (!moduleExists) {
+                rowErrors.add("Question module must belong to the selected course");
+            }
+        }
+
+        if (row.explanation() != null && row.explanation().length() > 10000) {
+            rowErrors.add("Explanation must not exceed 10000 characters");
+        }
+
+        return rowErrors;
+    }
+
+    private String buildImportErrorSummary(List<QuestionImportDtos.ImportRowError> errors) {
+        StringBuilder builder = new StringBuilder("Import validation failed:");
+        int limit = Math.min(errors.size(), 5);
+        for (int index = 0; index < limit; index += 1) {
+            QuestionImportDtos.ImportRowError error = errors.get(index);
+            builder.append(" Row ").append(error.rowNumber()).append(": ")
+                    .append(String.join("; ", error.errors())).append('.');
+        }
+        if (errors.size() > limit) {
+            builder.append(" And ").append(errors.size() - limit).append(" more rows with errors.");
+        }
+        return builder.toString();
     }
 
     private Question findQuestion(UUID questionId) {

@@ -13,4 +13,8 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
     List<Question> findByQuestionBankId(UUID questionBankId);
 
     long countByQuestionBankId(UUID questionBankId);
+
+    long countByQuestionBankIdAndQuestionTextIgnoreCase(UUID questionBankId, String questionText);
+
+    boolean existsByQuestionBankIdAndQuestionTextIgnoreCase(UUID questionBankId, String questionText);
 }
