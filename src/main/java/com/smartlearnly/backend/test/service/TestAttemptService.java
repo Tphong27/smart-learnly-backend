@@ -44,7 +44,7 @@ public class TestAttemptService {
 
         List<TestAttempt> existingAttempts = repository.findByTestIdAndStudentId(test.getId(), studentId);
         if (!existingAttempts.isEmpty()) {
-            return mapToResponse(existingAttempts.get(0));
+            return mapToResponse(expireIfOverdue(existingAttempts.get(0)));
         }
 
         Instant start = Instant.now();
@@ -86,16 +86,20 @@ public class TestAttemptService {
         return response;
     }
 
+    @Transactional
     public List<TestAttemptModel.Response> getAttempts(UUID testId, UUID studentId) {
         return repository.findByTestIdAndStudentId(testId, studentId)
                 .stream()
+                .map(this::expireIfOverdue)
                 .map(this::mapToResponse)
                 .toList();
     }
 
+    @Transactional
     public List<TestAttemptModel.Response> getAttemptsByTest(UUID testId) {
         return repository.findByTestId(testId)
                 .stream()
+                .map(this::expireIfOverdue)
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -155,6 +159,23 @@ public class TestAttemptService {
                 : score.multiply(BigDecimal.valueOf(100))
                         .divide(total, 2, RoundingMode.HALF_UP);
         return new GradeResult(score, percentage);
+    }
+
+    private TestAttempt expireIfOverdue(TestAttempt attempt) {
+        if (!isActive(attempt.getStatus())
+                || attempt.getEndTime() == null
+                || !Instant.now().isAfter(attempt.getEndTime())) {
+            return attempt;
+        }
+
+        GradeResult grade = gradeAttempt(attempt);
+        attempt.setScore(grade.score());
+        attempt.setStatus(AttemptStatus.EXPIRED);
+        return repository.save(attempt);
+    }
+
+    private boolean isActive(AttemptStatus status) {
+        return status == AttemptStatus.DOING || status == AttemptStatus.IN_PROGRESS;
     }
 
     private void broadcast(TestAttemptModel.Response response, String studentName) {

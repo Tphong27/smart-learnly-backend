@@ -5,7 +5,6 @@ import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.test.dto.TestModel;
-import com.smartlearnly.backend.test.entity.AttemptStatus;
 import com.smartlearnly.backend.test.entity.Test;
 import com.smartlearnly.backend.test.entity.TestAttempt;
 import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
@@ -99,9 +98,7 @@ public class TestService {
         boolean isFlashTest = Boolean.TRUE.equals(test.getIsFlashtest()) ||
                 Boolean.TRUE.equals(request.getIsFlashtest());
         if (isFlashTest) {
-            boolean hasActiveAttempt = testAttemptRepository.existsByTestIdAndStatusIn(
-                    id,
-                    List.of(AttemptStatus.DOING, AttemptStatus.IN_PROGRESS));
+            boolean hasActiveAttempt = testAttemptRepository.existsActiveByTestId(id);
             if (hasActiveAttempt) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_RULE_VIOLATION,
