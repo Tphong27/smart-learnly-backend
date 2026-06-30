@@ -1,6 +1,11 @@
 $requiredVariables = @(
     "SUPABASE_DB_PASSWORD",
     "JWT_SECRET"
+    # SETTINGS_ENCRYPTION_KEY is optional. Without it the backend will keep working
+    # but Admin > System Settings cannot persist secret values (Google client secret,
+    # Resend API key) and a warning is logged at startup. Generate one with:
+    #   [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+    # then paste the base64 string below or export it in your shell before running.
 )
 
 $javaHomeBin = Join-Path $env:JAVA_HOME "bin"
@@ -23,6 +28,12 @@ $env:SUPABASE_DB_NAME = "postgres"
 $env:SUPABASE_DB_USERNAME = "your-supabase-pooler-username"
 $env:SPRING_PROFILES_ACTIVE = "dev"
 $env:RESEND_FROM_EMAIL = "Smart Learnly <no-reply@mail.smartlearnly.online>"
+
+# AES-256-GCM key used to encrypt secret system settings (email API key, Google
+# client secret, ...). Must decode to exactly 32 bytes. Leave blank if you do not
+# need to edit secret settings from the admin UI; env fallbacks (e.g. RESEND_API_KEY,
+# GOOGLE_CLIENT_SECRET) will still work for non-UI flows.
+$env:SETTINGS_ENCRYPTION_KEY = "REPLACE_WITH_32_BYTE_BASE64_KEY"
 
 $env:APP_STORAGE_PROVIDER = "r2"
 
