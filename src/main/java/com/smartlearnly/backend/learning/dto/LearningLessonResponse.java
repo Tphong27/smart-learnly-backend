@@ -14,6 +14,8 @@ public record LearningLessonResponse(
     boolean isPreview,
     int sortOrder,
     boolean completed,
-    List<LearningResourceResponse> resources
+    List<LearningResourceResponse> resources,
+    boolean hlsReady,
+    String hlsPlaylistUrl
 ) {
 }

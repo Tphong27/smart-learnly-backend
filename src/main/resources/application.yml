@@ -1,104 +1,114 @@
 spring:
-  application:
-    name: smart-learnly-backend
-  servlet:
-    multipart:
-      max-file-size: ${APP_STORAGE_MULTIPART_MAX_FILE_SIZE:50MB}
-      max-request-size: ${APP_STORAGE_MULTIPART_MAX_REQUEST_SIZE:55MB}
-  mail:
-    host: ${RESEND_SMTP_HOST:smtp.resend.com}
-    port: ${RESEND_SMTP_PORT:587}
-    username: ${RESEND_SMTP_USERNAME:resend}
-    password: ${RESEND_API_KEY:}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-            required: true
+    application:
+        name: smart-learnly-backend
+    servlet:
+        multipart:
+            max-file-size: ${APP_STORAGE_MULTIPART_MAX_FILE_SIZE:500MB}
+            max-request-size: ${APP_STORAGE_MULTIPART_MAX_REQUEST_SIZE:550MB}
+    mail:
+        host: ${RESEND_SMTP_HOST:smtp.resend.com}
+        port: ${RESEND_SMTP_PORT:587}
+        username: ${RESEND_SMTP_USERNAME:resend}
+        password: ${RESEND_API_KEY:}
+        properties:
+            mail:
+                smtp:
+                    auth: true
+                    starttls:
+                        enable: true
+                        required: true
 server:
-  port: ${SERVER_PORT:8080}
+    port: ${SERVER_PORT:8080}
 
 app:
-  email:
-    from: "${RESEND_FROM_EMAIL:Smart Learnly <no-reply@mail.smartlearnly.online>}"
-  cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
-  rate-limit:
+    email:
+        from: "${RESEND_FROM_EMAIL:Smart Learnly <no-reply@mail.smartlearnly.online>}"
+    cors:
+        allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    rate-limit:
+        auth:
+            enabled: ${APP_RATE_LIMIT_AUTH_ENABLED:true}
+            capacity: ${APP_RATE_LIMIT_AUTH_CAPACITY:5}
+            window: ${APP_RATE_LIMIT_AUTH_WINDOW:PT15M}
     auth:
-      enabled: ${APP_RATE_LIMIT_AUTH_ENABLED:true}
-      capacity: ${APP_RATE_LIMIT_AUTH_CAPACITY:5}
-      window: ${APP_RATE_LIMIT_AUTH_WINDOW:PT15M}
-  auth:
-    email-verification-otp-ttl: ${APP_AUTH_EMAIL_VERIFICATION_OTP_TTL:PT15M}
-    email-verification-otp-max-attempts: ${APP_AUTH_EMAIL_VERIFICATION_OTP_MAX_ATTEMPTS:5}
-    email-verification-request-limit: ${APP_AUTH_EMAIL_VERIFICATION_REQUEST_LIMIT:3}
-    email-verification-request-window: ${APP_AUTH_EMAIL_VERIFICATION_REQUEST_WINDOW:PT15M}
-    password-reset-token-ttl: ${APP_AUTH_PASSWORD_RESET_TOKEN_TTL:PT30M}
-    access-token-ttl: ${APP_AUTH_ACCESS_TOKEN_TTL:PT15M}
-    refresh-token-ttl: ${APP_AUTH_REFRESH_TOKEN_TTL:P7D}
-    frontend-base-url: ${APP_AUTH_FRONTEND_BASE_URL:http://localhost:5173}
-    refresh-cookie-secure: ${APP_AUTH_REFRESH_COOKIE_SECURE:false}
-    login-max-failures: ${APP_AUTH_LOGIN_MAX_FAILURES:5}
-    login-lock-duration: ${APP_AUTH_LOGIN_LOCK_DURATION:PT30M}
-    google-client-id: ${GOOGLE_CLIENT_ID:}
-    debug-log-tokens: ${APP_AUTH_DEBUG_LOG_TOKENS:false}
-  seed:
-    auth-users-enabled: ${APP_SEED_AUTH_USERS_ENABLED:false}
-    categories-enabled: ${APP_SEED_CATEGORIES_ENABLED:false}
-    admin-enabled: ${APP_SEED_ADMIN_ENABLED:false}
-    admin-email: ${APP_SEED_ADMIN_EMAIL:admin@slp.vn}
-    admin-password: ${APP_SEED_ADMIN_PASSWORD:}
-    admin-full-name: ${APP_SEED_ADMIN_FULL_NAME:System Administrator}
-  security:
-    authentication-mode: ${APP_SECURITY_AUTHENTICATION_MODE:jwt}
-    jwt-secret: ${JWT_SECRET:}
-    jwt:
-      email-claim: ${APP_SECURITY_JWT_EMAIL_CLAIM:email}
-      user-id-claim: ${APP_SECURITY_JWT_USER_ID_CLAIM:user_id}
-      auth-user-id-claim: ${APP_SECURITY_JWT_AUTH_USER_ID_CLAIM:sub}
-      roles-claim: ${APP_SECURITY_JWT_ROLES_CLAIM:roles}
-      role-prefix: ${APP_SECURITY_JWT_ROLE_PREFIX:ROLE_}
-  integrations:
-    ai-provider: ${AI_PROVIDER:none}
-    payment-provider: ${PAYMENT_PROVIDER:none}
-  payment:
-    sepay:
-      webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
-      api-token: ${SEPAY_API_TOKEN:}
-      api-base-url: ${SEPAY_API_BASE_URL:https://userapi.sepay.vn}
-      account-number: ${SEPAY_ACCOUNT_NUMBER:${APP_PAYMENT_SEPAY_ACCOUNT_NUMBER:}}
-      bank-name: ${SEPAY_BANK_NAME:${APP_PAYMENT_SEPAY_BANK_NAME:}}
-      account-name: ${SEPAY_ACCOUNT_NAME:${APP_PAYMENT_SEPAY_ACCOUNT_NAME:}}
-      reconciliation-interval: ${SEPAY_RECONCILIATION_INTERVAL:PT5M}
-      payment-code-prefix: ${SEPAY_PAYMENT_CODE_PREFIX:SLP}
-  storage:
-    provider: ${APP_STORAGE_PROVIDER:supabase}
-    supabase-url: ${SUPABASE_URL:}
-    supabase-service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
-    course-thumbnail-bucket: ${APP_STORAGE_COURSE_THUMBNAIL_BUCKET:course-thumbnails}
-    course-thumbnail-max-size: ${APP_STORAGE_COURSE_THUMBNAIL_MAX_SIZE:5MB}
-    lesson-material-bucket: ${APP_STORAGE_LESSON_MATERIAL_BUCKET:lesson-materials}
-    lesson-material-max-size: ${APP_STORAGE_LESSON_MATERIAL_MAX_SIZE:50MB}
-    lesson-resource-bucket: ${APP_STORAGE_LESSON_RESOURCE_BUCKET:lesson-resources}
-    lesson-resource-max-size: ${APP_STORAGE_LESSON_RESOURCE_MAX_SIZE:20MB}
-    r2-account-id: ${CLOUDFLARE_R2_ACCOUNT_ID:${R2_ACCOUNT_ID:}}
-    r2-endpoint: ${CLOUDFLARE_R2_ENDPOINT:${R2_ENDPOINT:}}
-    r2-region: ${CLOUDFLARE_R2_REGION:${R2_REGION:auto}}
-    r2-access-key-id: ${CLOUDFLARE_R2_ACCESS_KEY_ID:${R2_ACCESS_KEY_ID:}}
-    r2-secret-access-key: ${CLOUDFLARE_R2_SECRET_ACCESS_KEY:${R2_SECRET_ACCESS_KEY:}}
-    r2-public-url: ${CLOUDFLARE_R2_PUBLIC_BASE_URL:${R2_PUBLIC_BASE_URL:}}
-    r2-course-thumbnail-public-url: ${CLOUDFLARE_R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:${R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:}}
-    r2-lesson-material-public-url: ${CLOUDFLARE_R2_LESSON_MATERIAL_PUBLIC_BASE_URL:${R2_LESSON_MATERIAL_PUBLIC_BASE_URL:}}
-    r2-lesson-resource-public-url: ${CLOUDFLARE_R2_LESSON_RESOURCE_PUBLIC_BASE_URL:${R2_LESSON_RESOURCE_PUBLIC_BASE_URL:}}
-  settings:
-    encryption-key: ${SETTINGS_ENCRYPTION_KEY:}
+        email-verification-otp-ttl: ${APP_AUTH_EMAIL_VERIFICATION_OTP_TTL:PT15M}
+        email-verification-otp-max-attempts: ${APP_AUTH_EMAIL_VERIFICATION_OTP_MAX_ATTEMPTS:5}
+        email-verification-request-limit: ${APP_AUTH_EMAIL_VERIFICATION_REQUEST_LIMIT:3}
+        email-verification-request-window: ${APP_AUTH_EMAIL_VERIFICATION_REQUEST_WINDOW:PT15M}
+        password-reset-token-ttl: ${APP_AUTH_PASSWORD_RESET_TOKEN_TTL:PT30M}
+        access-token-ttl: ${APP_AUTH_ACCESS_TOKEN_TTL:PT15M}
+        refresh-token-ttl: ${APP_AUTH_REFRESH_TOKEN_TTL:P7D}
+        frontend-base-url: ${APP_AUTH_FRONTEND_BASE_URL:http://localhost:5173}
+        refresh-cookie-secure: ${APP_AUTH_REFRESH_COOKIE_SECURE:false}
+        login-max-failures: ${APP_AUTH_LOGIN_MAX_FAILURES:5}
+        login-lock-duration: ${APP_AUTH_LOGIN_LOCK_DURATION:PT30M}
+        google-client-id: ${GOOGLE_CLIENT_ID:}
+        debug-log-tokens: ${APP_AUTH_DEBUG_LOG_TOKENS:false}
+    seed:
+        auth-users-enabled: ${APP_SEED_AUTH_USERS_ENABLED:false}
+        categories-enabled: ${APP_SEED_CATEGORIES_ENABLED:false}
+        admin-enabled: ${APP_SEED_ADMIN_ENABLED:false}
+        admin-email: ${APP_SEED_ADMIN_EMAIL:admin@slp.vn}
+        admin-password: ${APP_SEED_ADMIN_PASSWORD:}
+        admin-full-name: ${APP_SEED_ADMIN_FULL_NAME:System Administrator}
+    security:
+        authentication-mode: ${APP_SECURITY_AUTHENTICATION_MODE:jwt}
+        jwt-secret: ${JWT_SECRET:}
+        jwt:
+            email-claim: ${APP_SECURITY_JWT_EMAIL_CLAIM:email}
+            user-id-claim: ${APP_SECURITY_JWT_USER_ID_CLAIM:user_id}
+            auth-user-id-claim: ${APP_SECURITY_JWT_AUTH_USER_ID_CLAIM:sub}
+            roles-claim: ${APP_SECURITY_JWT_ROLES_CLAIM:roles}
+            role-prefix: ${APP_SECURITY_JWT_ROLE_PREFIX:ROLE_}
+    integrations:
+        ai-provider: ${AI_PROVIDER:none}
+        payment-provider: ${PAYMENT_PROVIDER:none}
+    payment:
+        sepay:
+            webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
+            api-token: ${SEPAY_API_TOKEN:}
+            api-base-url: ${SEPAY_API_BASE_URL:https://userapi.sepay.vn}
+            account-number: ${SEPAY_ACCOUNT_NUMBER:${APP_PAYMENT_SEPAY_ACCOUNT_NUMBER:}}
+            bank-name: ${SEPAY_BANK_NAME:${APP_PAYMENT_SEPAY_BANK_NAME:}}
+            account-name: ${SEPAY_ACCOUNT_NAME:${APP_PAYMENT_SEPAY_ACCOUNT_NAME:}}
+            reconciliation-interval: ${SEPAY_RECONCILIATION_INTERVAL:PT5M}
+            payment-code-prefix: ${SEPAY_PAYMENT_CODE_PREFIX:SLP}
+    storage:
+        provider: ${APP_STORAGE_PROVIDER:supabase}
+        supabase-url: ${SUPABASE_URL:}
+        supabase-service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
+        course-thumbnail-bucket: ${APP_STORAGE_COURSE_THUMBNAIL_BUCKET:course-thumbnails}
+        course-thumbnail-max-size: ${APP_STORAGE_COURSE_THUMBNAIL_MAX_SIZE:5MB}
+        lesson-material-bucket: ${APP_STORAGE_LESSON_MATERIAL_BUCKET:lesson-materials}
+        lesson-material-max-size: ${APP_STORAGE_LESSON_MATERIAL_MAX_SIZE:50MB}
+        lesson-resource-bucket: ${APP_STORAGE_LESSON_RESOURCE_BUCKET:lesson-resources}
+        lesson-resource-max-size: ${APP_STORAGE_LESSON_RESOURCE_MAX_SIZE:20MB}
+        r2-account-id: ${CLOUDFLARE_R2_ACCOUNT_ID:${R2_ACCOUNT_ID:}}
+        r2-endpoint: ${CLOUDFLARE_R2_ENDPOINT:${R2_ENDPOINT:}}
+        r2-region: ${CLOUDFLARE_R2_REGION:${R2_REGION:auto}}
+        r2-access-key-id: ${CLOUDFLARE_R2_ACCESS_KEY_ID:${R2_ACCESS_KEY_ID:}}
+        r2-secret-access-key: ${CLOUDFLARE_R2_SECRET_ACCESS_KEY:${R2_SECRET_ACCESS_KEY:}}
+        r2-public-url: ${CLOUDFLARE_R2_PUBLIC_BASE_URL:${R2_PUBLIC_BASE_URL:}}
+        r2-course-thumbnail-public-url: ${CLOUDFLARE_R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:${R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:}}
+        r2-lesson-material-public-url: ${CLOUDFLARE_R2_LESSON_MATERIAL_PUBLIC_BASE_URL:${R2_LESSON_MATERIAL_PUBLIC_BASE_URL:}}
+        r2-lesson-resource-public-url: ${CLOUDFLARE_R2_LESSON_RESOURCE_PUBLIC_BASE_URL:${R2_LESSON_RESOURCE_PUBLIC_BASE_URL:}}
+    settings:
+        encryption-key: ${SETTINGS_ENCRYPTION_KEY:}
+    hls:
+        enabled: ${APP_HLS_ENABLED:true}
+        token-secret: ${HLS_TOKEN_SECRET:${APP_HLS_TOKEN_SECRET:change-me-in-production}}
+        r2-secret: ${HLS_R2_SECRET:${APP_HLS_R2_SECRET:}}
+        r2-base-path: ${APP_HLS_R2_BASE_PATH:hls}
+        segment-duration: ${APP_HLS_SEGMENT_DURATION:10}
+        qualities: ${APP_HLS_QUALITIES:480p,720p,1080p}
+        master-token-ttl-seconds: ${APP_HLS_MASTER_TOKEN_TTL:900}
+        r2-token-ttl-seconds: ${APP_HLS_R2_TOKEN_TTL:7200}
+        segment-token-ttl-seconds: ${APP_HLS_SEGMENT_TOKEN_TTL:7200}
 
 springdoc:
-  api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui.html
-    display-request-duration: true
-    try-it-out-enabled: true
+    api-docs:
+        path: /v3/api-docs
+    swagger-ui:
+        path: /swagger-ui.html
+        display-request-duration: true
+        try-it-out-enabled: true
