@@ -4,6 +4,8 @@ import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.enrollment.service.EnrollmentAccessService;
+import com.smartlearnly.backend.hls.entity.HlsLesson;
+import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.dto.*;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
@@ -15,6 +17,7 @@ import com.smartlearnly.backend.lessonprogress.repository.LessonProgressReposito
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -30,6 +33,7 @@ public class LearningContentService {
     private final EnrollmentAccessService enrollmentAccessService;
     private final CurrentUserService currentUserService;
     private final LessonProgressRepository lessonProgressRepository;
+    private final HlsLessonRepository hlsLessonRepository;
 
     @Transactional(readOnly = true)
     public LearningContentResponse getLearningContent(UUID courseId) {
@@ -169,6 +173,17 @@ public class LearningContentService {
                 .map(r -> new LearningResourceResponse(r.getUrl(), r.getName(), r.getContentType()))
                 .toList();
 
+        // Check if HLS content is available
+        boolean hlsReady = false;
+        String hlsPlaylistUrl = null;
+
+        Optional<HlsLesson> hlsLesson = hlsLessonRepository.findByLessonId(lesson.getId());
+        if (hlsLesson.isPresent() && hlsLesson.get().isReady()) {
+            hlsReady = true;
+            // The actual playlist URL is generated with a token, so we just indicate HLS is available
+            hlsPlaylistUrl = "/api/v1/hls/playlist/" + lesson.getId();
+        }
+
         return new LearningLessonResponse(
                 lesson.getId(),
                 lesson.getTitle(),
@@ -180,7 +195,9 @@ public class LearningContentService {
                 Boolean.TRUE.equals(lesson.getPreview()),
                 lesson.getSortOrder(),
                 completed,
-                resourceResponses);
+                resourceResponses,
+                hlsReady,
+                hlsPlaylistUrl);
     }
 
     private LearningStats calculateStats(List<CourseSection> sections) {

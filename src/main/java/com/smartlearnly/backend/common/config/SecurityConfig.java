@@ -61,6 +61,14 @@ public class SecurityConfig {
                                 "/api/v1/courses/*/preview",
                                 "/api/v1/courses/{courseId}/preview"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/hls/token/*",
+                                "/api/v1/hls/playlist/*",
+                                "/api/v1/hls/variant/**",
+                                "/api/v1/hls/key/*",
+                                "/api/v1/hls/segment/**",
+                                "/api/v1/hls/free_video/*"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(Customizer.withDefaults());
@@ -108,6 +116,16 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/v1/courses/*/preview",
                                 "/api/v1/courses/{courseId}/preview"
+                        ).permitAll()
+                        // Playback endpoints authenticate with short-lived HLS
+                        // query tokens. Upload/status remain JWT + role protected.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/hls/token/*",
+                                "/api/v1/hls/playlist/*",
+                                "/api/v1/hls/variant/**",
+                                "/api/v1/hls/key/*",
+                                "/api/v1/hls/segment/**",
+                                "/api/v1/hls/free_video/*"
                         ).permitAll()
                         .requestMatchers("/api/v1/admin/question-banks/**", "/api/v1/admin/questions/**", "/api/v1/admin/test-questions/**")
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
