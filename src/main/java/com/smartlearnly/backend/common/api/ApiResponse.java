@@ -19,4 +19,8 @@ public record ApiResponse<T>(
     public static ApiResponse<Void> success(String message) {
         return new ApiResponse<>(true, message, null, Instant.now());
     }
+
+    public static <T> ApiResponse<T> error(String message) {
+        return new ApiResponse<>(false, message, null, Instant.now());
+    }
 }
