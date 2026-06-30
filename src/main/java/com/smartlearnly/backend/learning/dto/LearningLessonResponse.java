@@ -7,6 +7,7 @@ public record LearningLessonResponse(
     UUID lessonId,
     String title,
     String lessonType,
+    String status,
     String videoUrl,
     String content,
     String attachmentUrl,
