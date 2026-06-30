@@ -9,7 +9,6 @@ import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.dto.*;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
-import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
@@ -17,6 +16,7 @@ import com.smartlearnly.backend.lessonprogress.repository.LessonProgressReposito
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -56,9 +56,10 @@ public class LearningContentService {
 
         List<LearningSectionResponse> sectionResponses = sections.stream()
                 .map(section -> toSectionResponse(section, completedLessonIds))
+                .filter(this::hasLessons)
                 .toList();
 
-        LearningStats stats = calculateStats(sections);
+        LearningStats stats = calculateStats(sectionResponses);
 
         return new LearningContentResponse(
                 courseId,
@@ -81,7 +82,7 @@ public class LearningContentService {
                 .filter(s -> s != null)
                 .toList();
 
-        LearningStats stats = calculateStats(sections);
+        LearningStats stats = calculateStats(sectionResponses);
 
         return new LearningContentResponse(
                 courseId,
@@ -101,9 +102,10 @@ public class LearningContentService {
 
         List<LearningSectionResponse> sectionResponses = sections.stream()
                 .map(this::toSectionResponseWithoutProgress)
+                .filter(this::hasLessons)
                 .toList();
 
-        LearningStats stats = calculateStats(sections);
+        LearningStats stats = calculateStats(sectionResponses);
 
         return new LearningContentResponse(
                 courseId,
@@ -115,7 +117,7 @@ public class LearningContentService {
 
     private LearningSectionResponse toSectionResponseWithoutProgress(CourseSection section) {
         List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
-                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
+                .filter(this::isPublishedLesson)
                 .map(lesson -> toLessonResponse(lesson, false))
                 .toList();
 
@@ -128,7 +130,7 @@ public class LearningContentService {
 
     private LearningSectionResponse toPreviewSectionResponse(CourseSection section) {
         List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
-                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
+                .filter(this::isPublishedLesson)
                 .filter(lesson -> Boolean.TRUE.equals(lesson.getPreview()))
                 .map(lesson -> toLessonResponse(lesson, false))
                 .toList();
@@ -146,7 +148,7 @@ public class LearningContentService {
             CourseSection section,
             Set<UUID> completedLessonIds) {
         List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
-                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
+                .filter(this::isPublishedLesson)
                 .map(lesson -> toLessonResponse(
                         lesson,
                         completedLessonIds.contains(lesson.getId())))
@@ -188,6 +190,7 @@ public class LearningContentService {
                 lesson.getId(),
                 lesson.getTitle(),
                 lesson.getType().name(),
+                lessonStatus(lesson),
                 lesson.getVideoUrl(),
                 lesson.getContent(),
                 lesson.getAttachmentUrl(),
@@ -200,31 +203,47 @@ public class LearningContentService {
                 hlsPlaylistUrl);
     }
 
-    private LearningStats calculateStats(List<CourseSection> sections) {
+    private boolean isPublishedLesson(Lesson lesson) {
+        return lesson.getStatus() == LessonStatus.PUBLISHED;
+    }
+
+    private boolean hasLessons(LearningSectionResponse section) {
+        return !section.lessons().isEmpty();
+    }
+
+    private String lessonStatus(Lesson lesson) {
+        return lesson.getStatus() == null
+                ? null
+                : lesson.getStatus().name().toLowerCase(Locale.ROOT);
+    }
+
+    private LearningStats calculateStats(List<LearningSectionResponse> sections) {
         int totalVideos = 0;
         int totalDocuments = 0;
         int totalQuizzes = 0;
         int totalDurationSeconds = 0;
+        int totalLessons = 0;
 
-        for (CourseSection section : sections) {
-            for (Lesson lesson : section.getLessons()) {
-                LessonType type = lesson.getType();
-                if (type == LessonType.VIDEO) {
+        for (LearningSectionResponse section : sections) {
+            for (LearningLessonResponse lesson : section.lessons()) {
+                totalLessons++;
+                String type = lesson.lessonType();
+                if ("VIDEO".equals(type)) {
                     totalVideos++;
-                } else if (type == LessonType.PDF) {
+                } else if ("PDF".equals(type)) {
                     totalDocuments++;
-                } else if (type == LessonType.QUIZ) {
+                } else if ("QUIZ".equals(type)) {
                     totalQuizzes++;
                 }
-                if (lesson.getDurationSeconds() != null) {
-                    totalDurationSeconds += lesson.getDurationSeconds();
+                if (lesson.durationSeconds() != null) {
+                    totalDurationSeconds += lesson.durationSeconds();
                 }
             }
         }
 
         return new LearningStats(
                 sections.size(),
-                sections.stream().mapToInt(s -> s.getLessons().size()).sum(),
+                totalLessons,
                 totalVideos,
                 totalDocuments,
                 totalQuizzes,
