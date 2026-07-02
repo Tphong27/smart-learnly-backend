@@ -18,6 +18,7 @@ import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
@@ -30,6 +31,7 @@ import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCar
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardTranscriptTextExtractionService.TranscriptTextExtractionResult;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
@@ -79,6 +81,8 @@ class AdminFlashcardStagingServiceTest {
     private FlashcardTextGenerationService flashcardTextGenerationService;
     @Mock
     private FlashcardDocumentTextExtractionService documentTextExtractionService;
+    @Mock
+    private FlashcardTranscriptTextExtractionService transcriptTextExtractionService;
 
     private AdminFlashcardStagingService service;
 
@@ -94,7 +98,8 @@ class AdminFlashcardStagingServiceTest {
                 questionBankRepository,
                 currentUserService,
                 flashcardTextGenerationService,
-                documentTextExtractionService
+                documentTextExtractionService,
+                transcriptTextExtractionService
         );
     }
 
@@ -482,6 +487,244 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void generateFromTranscriptCreatesDraftBatchAndCards() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UserAccount actor = actor();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+        when(transcriptTextExtractionService.extractRaw(any(), any())).thenReturn(new TranscriptTextExtractionResult(
+                "Lesson video transcript",
+                longSourceText()
+        ));
+        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+                "TEXT",
+                List.of(candidate("Transcript front", "Transcript back", "Transcript excerpt"))
+        ));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardStagingCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> card.setId(UUID.randomUUID()));
+            return cards;
+        });
+
+        StagingBatchResponse response = service.generateFromTranscript(
+                flashcardSet.getId(),
+                new GenerateFromTranscriptRequest(
+                        transcriptSourceText(),
+                        "Lesson video transcript",
+                        1,
+                        null,
+                        "medium",
+                        "AI"
+                )
+        );
+
+        assertThat(response.sourceType()).isEqualTo("VIDEO_TRANSCRIPT");
+        assertThat(response.sourceName()).isEqualTo("Lesson video transcript");
+        assertThat(response.cards()).hasSize(1);
+        assertThat(response.cards().get(0).sourceQuestionId()).isNull();
+        assertThat(response.cards().get(0).frontText()).isEqualTo("Transcript front");
+        ArgumentCaptor<FlashcardStagingBatch> batchCaptor = ArgumentCaptor.forClass(FlashcardStagingBatch.class);
+        verify(stagingBatchRepository).save(batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getSourceType()).isEqualTo("VIDEO_TRANSCRIPT");
+        assertThat(batchCaptor.getValue().getCreatedBy()).isSameAs(actor);
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromTranscriptRejectsBlankTranscriptText() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromTranscript(
+                flashcardSet.getId(),
+                new GenerateFromTranscriptRequest("   ", null, null, null, null, null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(flashcardTextGenerationService, never()).generate(any());
+        verify(stagingBatchRepository, never()).save(any());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromTranscriptRejectsCleanedTranscriptShorterThanMinimum() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(transcriptTextExtractionService.extractRaw(any(), any())).thenReturn(new TranscriptTextExtractionResult(
+                null,
+                "Too short."
+        ));
+
+        assertThatThrownBy(() -> service.generateFromTranscript(
+                flashcardSet.getId(),
+                new GenerateFromTranscriptRequest(transcriptSourceText(), null, null, null, null, null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(flashcardTextGenerationService, never()).generate(any());
+        verify(stagingBatchRepository, never()).save(any());
+    }
+
+    @Test
+    void generateFromTranscriptEnforcesDesiredCountMax() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromTranscript(
+                flashcardSet.getId(),
+                new GenerateFromTranscriptRequest(transcriptSourceText(), null, 31, null, null, null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(transcriptTextExtractionService, never()).extractRaw(any(), any());
+        verify(stagingBatchRepository, never()).save(any());
+    }
+
+    @Test
+    void generateFromTranscriptFileAcceptsSrtAndCreatesVideoTranscriptStaging() {
+        FlashcardSet flashcardSet = flashcardSet();
+        MockMultipartFile file = srtFile();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(transcriptTextExtractionService.extractFile(file)).thenReturn(new TranscriptTextExtractionResult(
+                "lesson.srt",
+                longSourceText()
+        ));
+        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+                "TEXT",
+                List.of(candidate("SRT front", "SRT back", "SRT excerpt"))
+        ));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        StagingBatchResponse response = service.generateFromTranscriptFile(
+                flashcardSet.getId(),
+                file,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(response.sourceType()).isEqualTo("VIDEO_TRANSCRIPT");
+        assertThat(response.sourceName()).isEqualTo("lesson.srt");
+        assertThat(response.cards()).hasSize(1);
+    }
+
+    @Test
+    void generateFromTranscriptFileAcceptsVttAndCreatesVideoTranscriptStaging() {
+        FlashcardSet flashcardSet = flashcardSet();
+        MockMultipartFile file = vttFile();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(transcriptTextExtractionService.extractFile(file)).thenReturn(new TranscriptTextExtractionResult(
+                "lesson.vtt",
+                longSourceText()
+        ));
+        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+                "TEXT",
+                List.of(candidate("VTT front", "VTT back", "VTT excerpt"))
+        ));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        StagingBatchResponse response = service.generateFromTranscriptFile(
+                flashcardSet.getId(),
+                file,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(response.sourceType()).isEqualTo("VIDEO_TRANSCRIPT");
+        assertThat(response.sourceName()).isEqualTo("lesson.vtt");
+        assertThat(response.cards()).hasSize(1);
+    }
+
+    @Test
+    void generateFromTranscriptFileRejectsUnsupportedExtension() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromTranscriptFile(
+                flashcardSet.getId(),
+                new MockMultipartFile("file", "lesson.txt", "text/plain", transcriptSourceText().getBytes()),
+                null,
+                null,
+                null,
+                null
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(transcriptTextExtractionService, never()).extractFile(any());
+        verify(stagingBatchRepository, never()).save(any());
+    }
+
+    @Test
+    void generateFromTranscriptFileRejectsEmptyFile() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromTranscriptFile(
+                flashcardSet.getId(),
+                new MockMultipartFile("file", "lesson.srt", "text/plain", new byte[0]),
+                null,
+                null,
+                null,
+                null
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(transcriptTextExtractionService, never()).extractFile(any());
+        verify(stagingBatchRepository, never()).save(any());
+    }
+
+    @Test
+    void transcriptCleanerRemovesSrtVttTimestampsHeaderCueNumbersAndTags() {
+        DefaultFlashcardTranscriptTextExtractionService extractionService = new DefaultFlashcardTranscriptTextExtractionService();
+        String transcript = """
+                \uFEFFWEBVTT
+
+                1
+                00:00:01,000 --> 00:00:04,000
+                <v Trainer>Hello and welcome to the flashcard lesson.</v>
+
+                2
+                00:00:04.000 --> 00:00:09.000 align:start position:0%
+                <i>We will review core ideas and practice them carefully.</i>
+                """;
+
+        TranscriptTextExtractionResult result = extractionService.extractRaw(transcript, "Video");
+
+        assertThat(result.text()).doesNotContain("WEBVTT");
+        assertThat(result.text()).doesNotContain("-->");
+        assertThat(result.text()).doesNotContain("<i>");
+        assertThat(result.text()).doesNotContain("<v Trainer>");
+        assertThat(result.text()).contains("Hello and welcome to the flashcard lesson.");
+        assertThat(result.text()).contains("We will review core ideas and practice them carefully.");
+    }
+
+    @Test
     void importRejectsQuestionFromAnotherCourse() {
         FlashcardSet flashcardSet = flashcardSet();
         Question question = question(UUID.randomUUID(), UUID.randomUUID(), "Wrong course");
@@ -563,11 +806,11 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
-    void approveGeneratedFileStagingCardWithNullSourceQuestionCreatesRealFlashcard() {
+    void approveGeneratedTranscriptStagingCardWithNullSourceQuestionCreatesRealFlashcard() {
         FlashcardSet flashcardSet = flashcardSet();
         FlashcardStagingBatch batch = stagingBatch(flashcardSet);
-        batch.setSourceType("PDF");
-        batch.setSourceName("lesson.pdf");
+        batch.setSourceType("VIDEO_TRANSCRIPT");
+        batch.setSourceName("lesson.srt");
         FlashcardStagingCard card = stagingCard(batch, "draft", 0);
         card.setSourceQuestionId(null);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
@@ -684,6 +927,14 @@ class AdminFlashcardStagingServiceTest {
                 """;
     }
 
+    private String transcriptSourceText() {
+        return """
+                Welcome to this lesson transcript. The trainer explains how staging flashcards are generated from \
+                video captions, then reviewed before publication. The workflow keeps draft cards separate from real \
+                flashcards until an admin or trainer approves them.
+                """;
+    }
+
     private MockMultipartFile pdfFile() {
         return new MockMultipartFile("file", "lesson.pdf", "application/pdf", "pdf-content".getBytes());
     }
@@ -695,6 +946,14 @@ class AdminFlashcardStagingServiceTest {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 "docx-content".getBytes()
         );
+    }
+
+    private MockMultipartFile srtFile() {
+        return new MockMultipartFile("file", "lesson.srt", "text/plain", transcriptSourceText().getBytes());
+    }
+
+    private MockMultipartFile vttFile() {
+        return new MockMultipartFile("file", "lesson.vtt", "text/vtt", transcriptSourceText().getBytes());
     }
 
     private GeneratedFlashcardCandidate candidate(String frontText, String backText, String sourceExcerpt) {

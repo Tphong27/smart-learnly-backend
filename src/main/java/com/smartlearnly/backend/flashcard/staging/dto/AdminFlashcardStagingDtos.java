@@ -66,6 +66,50 @@ public final class AdminFlashcardStagingDtos {
         }
     }
 
+    public record GenerateFromTranscriptRequest(
+            @NotBlank(message = "transcriptText is required")
+            String transcriptText,
+
+            String sourceName,
+
+            @Min(value = 1, message = "desiredCount must be at least 1")
+            @Max(value = 30, message = "desiredCount must not exceed 30")
+            Integer desiredCount,
+
+            String language,
+
+            @Pattern(regexp = "(?i)^(easy|medium|hard)$", message = "difficulty must be easy, medium, or hard")
+            String difficulty,
+
+            @Pattern(regexp = "(?i)^(AI|RULE_BASED)$", message = "generationMode must be AI or RULE_BASED")
+            String generationMode
+    ) {
+        public GenerateFromTranscriptRequest {
+            transcriptText = normalizeNullable(transcriptText);
+            sourceName = normalizeNullable(sourceName);
+            desiredCount = desiredCount == null ? 10 : desiredCount;
+            language = normalizeDefault(language, "en");
+            difficulty = normalizeNullable(difficulty);
+            difficulty = difficulty == null ? null : difficulty.toLowerCase(Locale.ROOT);
+            generationMode = normalizeDefault(generationMode, "AI")
+                    .replace('-', '_')
+                    .toUpperCase(Locale.ROOT);
+        }
+
+        private static String normalizeDefault(String value, String defaultValue) {
+            String normalized = normalizeNullable(value);
+            return normalized == null ? defaultValue : normalized;
+        }
+
+        private static String normalizeNullable(String value) {
+            if (value == null) {
+                return null;
+            }
+            String normalized = value.trim();
+            return normalized.isEmpty() ? null : normalized;
+        }
+    }
+
     public record ApproveStagingCardsRequest(
             @NotEmpty(message = "At least one staging card id is required")
             @Size(max = 500, message = "Approval request must not exceed 500 staging cards")

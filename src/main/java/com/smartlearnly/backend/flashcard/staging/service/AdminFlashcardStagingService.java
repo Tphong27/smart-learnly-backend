@@ -10,6 +10,7 @@ import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionAnswerResponse;
@@ -25,6 +26,7 @@ import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextE
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationRequest;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardTranscriptTextExtractionService.TranscriptTextExtractionResult;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.question.entity.Question;
@@ -64,13 +66,16 @@ public class AdminFlashcardStagingService {
     private static final String SOURCE_TYPE_AI = "AI";
     private static final String SOURCE_TYPE_DOCX = "DOCX";
     private static final String SOURCE_TYPE_PDF = "PDF";
+    private static final String SOURCE_TYPE_VIDEO_TRANSCRIPT = "VIDEO_TRANSCRIPT";
     private static final String SOURCE_NAME_PASTED_TEXT_GENERATION = "Pasted Text Generation";
     private static final String SOURCE_NAME_UPLOADED_DOCX_GENERATION = "Uploaded DOCX Generation";
     private static final String SOURCE_NAME_UPLOADED_PDF_GENERATION = "Uploaded PDF Generation";
+    private static final String SOURCE_NAME_VIDEO_TRANSCRIPT_GENERATION = "Video Transcript Generation";
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_APPROVED = "approved";
     private static final String STATUS_REJECTED = "rejected";
     private static final long MAX_GENERATION_FILE_SIZE_BYTES = 10L * 1024L * 1024L;
+    private static final long MAX_TRANSCRIPT_FILE_SIZE_BYTES = 5L * 1024L * 1024L;
     private static final int DEFAULT_DESIRED_COUNT = 10;
     private static final int MIN_SOURCE_TEXT_LENGTH = 100;
     private static final int MAX_SOURCE_TEXT_LENGTH = 20000;
@@ -99,6 +104,7 @@ public class AdminFlashcardStagingService {
     private final CurrentUserService currentUserService;
     private final FlashcardTextGenerationService flashcardTextGenerationService;
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
+    private final FlashcardTranscriptTextExtractionService transcriptTextExtractionService;
 
     @Transactional(readOnly = true)
     public List<SourceQuestionResponse> listSourceQuestions(
@@ -243,6 +249,88 @@ public class AdminFlashcardStagingService {
                 sourceType,
                 resolveDocumentSourceName(extraction, sourceType),
                 "Uploaded file did not produce any flashcard candidates"
+        );
+    }
+
+    @Transactional
+    public StagingBatchResponse generateFromTranscript(UUID setId, GenerateFromTranscriptRequest request) {
+        SetContext context = resolveSetContext(setId);
+        if (request == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Request body is required");
+        }
+        GenerationOptions options = validateGenerationOptions(
+                request.desiredCount(),
+                request.language(),
+                request.difficulty(),
+                request.generationMode()
+        );
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        TranscriptTextExtractionResult extraction = transcriptTextExtractionService.extractRaw(
+                request.transcriptText(),
+                request.sourceName()
+        );
+        String transcriptText = validateCleanedGenerationText(
+                extraction == null ? null : extraction.text(),
+                "Transcript text must be at least 100 characters after cleaning"
+        );
+
+        GenerationResult result = flashcardTextGenerationService.generate(new GenerationRequest(
+                transcriptText,
+                options.desiredCount(),
+                options.language(),
+                options.difficulty(),
+                options.generationMode()
+        ));
+        return createGeneratedStagingBatch(
+                context,
+                actor,
+                result,
+                options.desiredCount(),
+                SOURCE_TYPE_VIDEO_TRANSCRIPT,
+                resolveTranscriptSourceName(extraction),
+                "Transcript text did not produce any flashcard candidates"
+        );
+    }
+
+    @Transactional
+    public StagingBatchResponse generateFromTranscriptFile(
+            UUID setId,
+            MultipartFile file,
+            Integer desiredCount,
+            String language,
+            String difficulty,
+            String generationMode
+    ) {
+        SetContext context = resolveSetContext(setId);
+        validateGenerateFromTranscriptFileRequest(file);
+        GenerationOptions options = validateGenerationOptions(
+                desiredCount,
+                language,
+                difficulty,
+                generationMode
+        );
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        TranscriptTextExtractionResult extraction = transcriptTextExtractionService.extractFile(file);
+        String transcriptText = validateCleanedGenerationText(
+                extraction == null ? null : extraction.text(),
+                "Uploaded transcript file did not contain enough text to generate flashcards"
+        );
+
+        GenerationResult result = flashcardTextGenerationService.generate(new GenerationRequest(
+                transcriptText,
+                options.desiredCount(),
+                options.language(),
+                options.difficulty(),
+                options.generationMode()
+        ));
+        return createGeneratedStagingBatch(
+                context,
+                actor,
+                result,
+                options.desiredCount(),
+                SOURCE_TYPE_VIDEO_TRANSCRIPT,
+                resolveTranscriptSourceName(extraction),
+                "Uploaded transcript file did not produce any flashcard candidates"
         );
     }
 
@@ -414,6 +502,20 @@ public class AdminFlashcardStagingService {
         return new DocumentFileInput(originalFileName, extension);
     }
 
+    private void validateGenerateFromTranscriptFileRequest(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded transcript file is required");
+        }
+        if (file.getSize() > MAX_TRANSCRIPT_FILE_SIZE_BYTES) {
+            throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE, "Uploaded transcript file must not exceed 5 MB");
+        }
+        String originalFileName = sanitizeOriginalFileName(file.getOriginalFilename());
+        String extension = extractTranscriptFileExtension(originalFileName);
+        if (!"srt".equals(extension) && !"vtt".equals(extension)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded transcript file must be an SRT or VTT file");
+        }
+    }
+
     private GenerationOptions validateGenerationOptions(
             Integer desiredCountValue,
             String languageValue,
@@ -454,11 +556,18 @@ public class AdminFlashcardStagingService {
     }
 
     private String validateExtractedText(String value) {
-        String extractedText = normalizeExtractedText(value);
-        if (extractedText.length() < MIN_SOURCE_TEXT_LENGTH) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded file did not contain enough text to generate flashcards");
+        return validateCleanedGenerationText(
+                value,
+                "Uploaded file did not contain enough text to generate flashcards"
+        );
+    }
+
+    private String validateCleanedGenerationText(String value, String message) {
+        String cleanedText = normalizeExtractedText(value);
+        if (cleanedText.length() < MIN_SOURCE_TEXT_LENGTH) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
         }
-        return trimToMaxSourceText(extractedText);
+        return trimToMaxSourceText(cleanedText);
     }
 
     private StagingBatchResponse createGeneratedStagingBatch(
@@ -581,6 +690,11 @@ public class AdminFlashcardStagingService {
         return "Uploaded File Generation";
     }
 
+    private String resolveTranscriptSourceName(TranscriptTextExtractionResult extraction) {
+        String sourceName = normalizeNullable(extraction == null ? null : extraction.sourceName());
+        return sourceName == null ? SOURCE_NAME_VIDEO_TRANSCRIPT_GENERATION : sourceName;
+    }
+
     private String duplicateKey(String frontText, String backText) {
         return normalizeForDuplicate(frontText) + "\n" + normalizeForDuplicate(backText);
     }
@@ -605,6 +719,14 @@ public class AdminFlashcardStagingService {
         int extensionIndex = fileName.lastIndexOf('.');
         if (extensionIndex < 0 || extensionIndex == fileName.length() - 1) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded file must be a DOCX or PDF file");
+        }
+        return fileName.substring(extensionIndex + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String extractTranscriptFileExtension(String fileName) {
+        int extensionIndex = fileName.lastIndexOf('.');
+        if (extensionIndex < 0 || extensionIndex == fileName.length() - 1) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded transcript file must be an SRT or VTT file");
         }
         return fileName.substring(extensionIndex + 1).toLowerCase(Locale.ROOT);
     }

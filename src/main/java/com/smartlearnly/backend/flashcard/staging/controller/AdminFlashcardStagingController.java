@@ -3,6 +3,7 @@ package com.smartlearnly.backend.flashcard.staging.controller;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
@@ -95,6 +96,42 @@ public class AdminFlashcardStagingController {
             @RequestParam(required = false) String generationMode
     ) {
         StagingBatchResponse response = adminFlashcardStagingService.generateFromFile(
+                setId,
+                file,
+                desiredCount,
+                language,
+                difficulty,
+                generationMode
+        );
+        return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
+                .body(ApiResponse.success("Flashcard staging batch created successfully", response));
+    }
+
+    @PostMapping("/flashcard-sets/{setId}/staging/generate-from-transcript")
+    @Operation(summary = "Generate flashcard staging cards from pasted video transcript text")
+    public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromTranscript(
+            @PathVariable UUID setId,
+            @Valid @RequestBody GenerateFromTranscriptRequest request
+    ) {
+        StagingBatchResponse response = adminFlashcardStagingService.generateFromTranscript(setId, request);
+        return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
+                .body(ApiResponse.success("Flashcard staging batch created successfully", response));
+    }
+
+    @PostMapping(
+            value = "/flashcard-sets/{setId}/staging/generate-from-transcript-file",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    @Operation(summary = "Generate flashcard staging cards from an uploaded SRT or VTT transcript")
+    public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromTranscriptFile(
+            @PathVariable UUID setId,
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @RequestParam(required = false) Integer desiredCount,
+            @RequestParam(required = false) String language,
+            @RequestParam(required = false) String difficulty,
+            @RequestParam(required = false) String generationMode
+    ) {
+        StagingBatchResponse response = adminFlashcardStagingService.generateFromTranscriptFile(
                 setId,
                 file,
                 desiredCount,
