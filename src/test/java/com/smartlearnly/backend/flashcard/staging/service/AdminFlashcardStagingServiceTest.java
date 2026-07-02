@@ -27,6 +27,7 @@ import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingBatchRepository;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
@@ -54,6 +55,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class AdminFlashcardStagingServiceTest {
@@ -75,6 +77,8 @@ class AdminFlashcardStagingServiceTest {
     private CurrentUserService currentUserService;
     @Mock
     private FlashcardTextGenerationService flashcardTextGenerationService;
+    @Mock
+    private FlashcardDocumentTextExtractionService documentTextExtractionService;
 
     private AdminFlashcardStagingService service;
 
@@ -89,7 +93,8 @@ class AdminFlashcardStagingServiceTest {
                 questionAnswerRepository,
                 questionBankRepository,
                 currentUserService,
-                flashcardTextGenerationService
+                flashcardTextGenerationService,
+                documentTextExtractionService
         );
     }
 
@@ -294,6 +299,189 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void generateFromFileWithPdfExtractedTextCreatesDraftBatchAndCards() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UserAccount actor = actor();
+        MockMultipartFile file = pdfFile();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+        when(documentTextExtractionService.extract(file)).thenReturn(new DocumentTextExtractionResult(
+                "PDF",
+                "lesson.pdf",
+                longSourceText()
+        ));
+        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+                "TEXT",
+                List.of(candidate("PDF front", "PDF back", "PDF excerpt"))
+        ));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardStagingCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> card.setId(UUID.randomUUID()));
+            return cards;
+        });
+
+        StagingBatchResponse response = service.generateFromFile(
+                flashcardSet.getId(),
+                file,
+                1,
+                null,
+                "hard",
+                "RULE_BASED"
+        );
+
+        assertThat(response.sourceType()).isEqualTo("PDF");
+        assertThat(response.sourceName()).isEqualTo("lesson.pdf");
+        assertThat(response.cards()).hasSize(1);
+        assertThat(response.cards().get(0).sourceQuestionId()).isNull();
+        assertThat(response.cards().get(0).frontText()).isEqualTo("PDF front");
+        ArgumentCaptor<FlashcardStagingBatch> batchCaptor = ArgumentCaptor.forClass(FlashcardStagingBatch.class);
+        verify(stagingBatchRepository).save(batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getSourceType()).isEqualTo("PDF");
+        assertThat(batchCaptor.getValue().getCreatedBy()).isSameAs(actor);
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromFileWithDocxExtractedTextUsesDocxSourceType() {
+        FlashcardSet flashcardSet = flashcardSet();
+        MockMultipartFile file = docxFile();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(documentTextExtractionService.extract(file)).thenReturn(new DocumentTextExtractionResult(
+                "DOCX",
+                "lesson.docx",
+                longSourceText()
+        ));
+        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+                "TEXT",
+                List.of(candidate("DOCX front", "DOCX back", "DOCX excerpt"))
+        ));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        StagingBatchResponse response = service.generateFromFile(
+                flashcardSet.getId(),
+                file,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(response.sourceType()).isEqualTo("DOCX");
+        assertThat(response.sourceName()).isEqualTo("lesson.docx");
+        assertThat(response.cards()).hasSize(1);
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromFileRejectsUnsupportedExtensionAndContentType() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromFile(
+                flashcardSet.getId(),
+                new MockMultipartFile("file", "lesson.txt", "text/plain", "content".getBytes()),
+                null,
+                null,
+                null,
+                null
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        assertThatThrownBy(() -> service.generateFromFile(
+                flashcardSet.getId(),
+                new MockMultipartFile("file", "lesson.pdf", "text/plain", "content".getBytes()),
+                null,
+                null,
+                null,
+                null
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(documentTextExtractionService, never()).extract(any());
+        verify(stagingBatchRepository, never()).save(any());
+    }
+
+    @Test
+    void generateFromFileRejectsEmptyFile() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromFile(
+                flashcardSet.getId(),
+                new MockMultipartFile("file", "lesson.pdf", "application/pdf", new byte[0]),
+                null,
+                null,
+                null,
+                null
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(documentTextExtractionService, never()).extract(any());
+        verify(stagingBatchRepository, never()).save(any());
+    }
+
+    @Test
+    void generateFromFileRejectsExtractedTextShorterThanMinimum() {
+        FlashcardSet flashcardSet = flashcardSet();
+        MockMultipartFile file = pdfFile();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(documentTextExtractionService.extract(file)).thenReturn(new DocumentTextExtractionResult(
+                "PDF",
+                "lesson.pdf",
+                "Too short."
+        ));
+
+        assertThatThrownBy(() -> service.generateFromFile(
+                flashcardSet.getId(),
+                file,
+                null,
+                null,
+                null,
+                null
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(flashcardTextGenerationService, never()).generate(any());
+        verify(stagingBatchRepository, never()).save(any());
+    }
+
+    @Test
+    void generateFromFileEnforcesDesiredCountMax() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromFile(
+                flashcardSet.getId(),
+                pdfFile(),
+                31,
+                null,
+                null,
+                null
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(documentTextExtractionService, never()).extract(any());
+        verify(stagingBatchRepository, never()).save(any());
+    }
+
+    @Test
     void importRejectsQuestionFromAnotherCourse() {
         FlashcardSet flashcardSet = flashcardSet();
         Question question = question(UUID.randomUUID(), UUID.randomUUID(), "Wrong course");
@@ -375,10 +563,11 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
-    void approveGeneratedStagingCardWithNullSourceQuestionCreatesRealFlashcard() {
+    void approveGeneratedFileStagingCardWithNullSourceQuestionCreatesRealFlashcard() {
         FlashcardSet flashcardSet = flashcardSet();
         FlashcardStagingBatch batch = stagingBatch(flashcardSet);
-        batch.setSourceType("TEXT");
+        batch.setSourceType("PDF");
+        batch.setSourceName("lesson.pdf");
         FlashcardStagingCard card = stagingCard(batch, "draft", 0);
         card.setSourceQuestionId(null);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
@@ -493,6 +682,19 @@ class AdminFlashcardStagingServiceTest {
                 Trainers can paste lesson content, inspect generated draft cards, edit the wording, and approve only \
                 the cards that are accurate enough to become real learning material.
                 """;
+    }
+
+    private MockMultipartFile pdfFile() {
+        return new MockMultipartFile("file", "lesson.pdf", "application/pdf", "pdf-content".getBytes());
+    }
+
+    private MockMultipartFile docxFile() {
+        return new MockMultipartFile(
+                "file",
+                "lesson.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "docx-content".getBytes()
+        );
     }
 
     private GeneratedFlashcardCandidate candidate(String frontText, String backText, String sourceExcerpt) {

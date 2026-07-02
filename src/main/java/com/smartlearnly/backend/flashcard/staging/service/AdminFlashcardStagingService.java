@@ -21,6 +21,7 @@ import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingBatchRepository;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationRequest;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
@@ -53,6 +54,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -60,10 +62,15 @@ public class AdminFlashcardStagingService {
     private static final String SOURCE_TYPE_QUESTION_BANK = "QUESTION_BANK";
     private static final String SOURCE_TYPE_TEXT = "TEXT";
     private static final String SOURCE_TYPE_AI = "AI";
+    private static final String SOURCE_TYPE_DOCX = "DOCX";
+    private static final String SOURCE_TYPE_PDF = "PDF";
     private static final String SOURCE_NAME_PASTED_TEXT_GENERATION = "Pasted Text Generation";
+    private static final String SOURCE_NAME_UPLOADED_DOCX_GENERATION = "Uploaded DOCX Generation";
+    private static final String SOURCE_NAME_UPLOADED_PDF_GENERATION = "Uploaded PDF Generation";
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_APPROVED = "approved";
     private static final String STATUS_REJECTED = "rejected";
+    private static final long MAX_GENERATION_FILE_SIZE_BYTES = 10L * 1024L * 1024L;
     private static final int DEFAULT_DESIRED_COUNT = 10;
     private static final int MIN_SOURCE_TEXT_LENGTH = 100;
     private static final int MAX_SOURCE_TEXT_LENGTH = 20000;
@@ -71,6 +78,16 @@ public class AdminFlashcardStagingService {
     private static final int MAX_DESIRED_COUNT = 30;
     private static final Set<String> ALLOWED_DIFFICULTIES = Set.of("easy", "medium", "hard");
     private static final Set<String> ALLOWED_GENERATION_MODES = Set.of("AI", "RULE_BASED");
+    private static final Set<String> PDF_CONTENT_TYPES = Set.of(
+            "application/pdf",
+            "application/x-pdf",
+            "application/octet-stream"
+    );
+    private static final Set<String> DOCX_CONTENT_TYPES = Set.of(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/zip",
+            "application/octet-stream"
+    );
 
     private final FlashcardSetRepository flashcardSetRepository;
     private final FlashcardCardRepository flashcardCardRepository;
@@ -81,6 +98,7 @@ public class AdminFlashcardStagingService {
     private final QuestionBankRepository questionBankRepository;
     private final CurrentUserService currentUserService;
     private final FlashcardTextGenerationService flashcardTextGenerationService;
+    private final FlashcardDocumentTextExtractionService documentTextExtractionService;
 
     @Transactional(readOnly = true)
     public List<SourceQuestionResponse> listSourceQuestions(
@@ -177,41 +195,55 @@ public class AdminFlashcardStagingService {
                 input.difficulty(),
                 input.generationMode()
         ));
-        List<GeneratedFlashcardCandidate> candidates = validGeneratedCandidates(
-                result == null ? List.of() : result.candidates(),
-                input.desiredCount()
+        return createGeneratedStagingBatch(
+                context,
+                actor,
+                result,
+                input.desiredCount(),
+                resolveGeneratedSourceType(result),
+                SOURCE_NAME_PASTED_TEXT_GENERATION,
+                "Pasted text did not produce any flashcard candidates"
         );
-        if (candidates.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Pasted text did not produce any flashcard candidates");
-        }
+    }
 
-        FlashcardStagingBatch batch = new FlashcardStagingBatch();
-        batch.setFlashcardSet(context.flashcardSet());
-        batch.setLesson(context.lesson());
-        batch.setCourse(context.course());
-        batch.setCreatedBy(actor);
-        batch.setSourceType(resolveGeneratedSourceType(result));
-        batch.setStatus(STATUS_DRAFT);
-        batch.setSourceName(SOURCE_NAME_PASTED_TEXT_GENERATION);
-        FlashcardStagingBatch savedBatch = stagingBatchRepository.save(batch);
+    @Transactional
+    public StagingBatchResponse generateFromFile(
+            UUID setId,
+            MultipartFile file,
+            Integer desiredCount,
+            String language,
+            String difficulty,
+            String generationMode
+    ) {
+        SetContext context = resolveSetContext(setId);
+        DocumentFileInput fileInput = validateGenerateFromFileRequest(file);
+        GenerationOptions options = validateGenerationOptions(
+                desiredCount,
+                language,
+                difficulty,
+                generationMode
+        );
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        DocumentTextExtractionResult extraction = documentTextExtractionService.extract(file);
+        String extractedText = validateExtractedText(extraction == null ? null : extraction.text());
 
-        List<FlashcardStagingCard> cards = new ArrayList<>();
-        for (int index = 0; index < candidates.size(); index += 1) {
-            GeneratedFlashcardCandidate candidate = candidates.get(index);
-            FlashcardStagingCard card = new FlashcardStagingCard();
-            card.setBatch(savedBatch);
-            card.setFrontText(normalizeRequired(candidate.frontText(), "Generated flashcard front text is required"));
-            card.setBackText(normalizeRequired(candidate.backText(), "Generated flashcard back text is required"));
-            card.setExplanation(normalizeNullable(candidate.explanation()));
-            card.setSourceExcerpt(normalizeNullable(candidate.sourceExcerpt()));
-            card.setStatus(STATUS_DRAFT);
-            card.setSortOrder(index);
-            validateCard(card);
-            cards.add(card);
-        }
-
-        List<FlashcardStagingCard> savedCards = stagingCardRepository.saveAll(cards);
-        return toBatchResponse(savedBatch, savedCards);
+        GenerationResult result = flashcardTextGenerationService.generate(new GenerationRequest(
+                extractedText,
+                options.desiredCount(),
+                options.language(),
+                options.difficulty(),
+                options.generationMode()
+        ));
+        String sourceType = resolveDocumentSourceType(extraction, fileInput.extension());
+        return createGeneratedStagingBatch(
+                context,
+                actor,
+                result,
+                options.desiredCount(),
+                sourceType,
+                resolveDocumentSourceName(extraction, sourceType),
+                "Uploaded file did not produce any flashcard candidates"
+        );
     }
 
     @Transactional(readOnly = true)
@@ -340,7 +372,55 @@ public class AdminFlashcardStagingService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "sourceText must not exceed 20000 characters");
         }
 
-        int desiredCount = request.desiredCount() == null ? DEFAULT_DESIRED_COUNT : request.desiredCount();
+        GenerationOptions options = validateGenerationOptions(
+                request.desiredCount(),
+                request.language(),
+                request.difficulty(),
+                request.generationMode()
+        );
+        return new TextGenerationInput(
+                sourceText,
+                options.desiredCount(),
+                options.language(),
+                options.difficulty(),
+                options.generationMode()
+        );
+    }
+
+    private DocumentFileInput validateGenerateFromFileRequest(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded DOCX or PDF file is required");
+        }
+        if (file.getSize() > MAX_GENERATION_FILE_SIZE_BYTES) {
+            throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE, "Uploaded file must not exceed 10 MB");
+        }
+        String originalFileName = sanitizeOriginalFileName(file.getOriginalFilename());
+        String extension = extractFileExtension(originalFileName);
+        if (!SOURCE_TYPE_DOCX.toLowerCase(Locale.ROOT).equals(extension)
+                && !SOURCE_TYPE_PDF.toLowerCase(Locale.ROOT).equals(extension)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded file must be a DOCX or PDF file");
+        }
+
+        String contentType = normalizeNullable(file.getContentType());
+        if (contentType != null) {
+            contentType = contentType.toLowerCase(Locale.ROOT);
+            boolean supportedContentType = "pdf".equals(extension)
+                    ? PDF_CONTENT_TYPES.contains(contentType)
+                    : DOCX_CONTENT_TYPES.contains(contentType);
+            if (!supportedContentType) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded file content type must match the file extension");
+            }
+        }
+        return new DocumentFileInput(originalFileName, extension);
+    }
+
+    private GenerationOptions validateGenerationOptions(
+            Integer desiredCountValue,
+            String languageValue,
+            String difficultyValue,
+            String generationModeValue
+    ) {
+        int desiredCount = desiredCountValue == null ? DEFAULT_DESIRED_COUNT : desiredCountValue;
         if (desiredCount < MIN_DESIRED_COUNT) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "desiredCount must be at least 1");
         }
@@ -348,12 +428,12 @@ public class AdminFlashcardStagingService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "desiredCount must not exceed 30");
         }
 
-        String language = normalizeNullable(request.language());
+        String language = normalizeNullable(languageValue);
         if (language == null) {
             language = "en";
         }
 
-        String difficulty = normalizeNullable(request.difficulty());
+        String difficulty = normalizeNullable(difficultyValue);
         if (difficulty != null) {
             difficulty = difficulty.toLowerCase(Locale.ROOT);
             if (!ALLOWED_DIFFICULTIES.contains(difficulty)) {
@@ -361,7 +441,7 @@ public class AdminFlashcardStagingService {
             }
         }
 
-        String generationMode = normalizeNullable(request.generationMode());
+        String generationMode = normalizeNullable(generationModeValue);
         if (generationMode == null) {
             generationMode = SOURCE_TYPE_AI;
         }
@@ -370,7 +450,61 @@ public class AdminFlashcardStagingService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "generationMode must be AI or RULE_BASED");
         }
 
-        return new TextGenerationInput(sourceText, desiredCount, language, difficulty, generationMode);
+        return new GenerationOptions(desiredCount, language, difficulty, generationMode);
+    }
+
+    private String validateExtractedText(String value) {
+        String extractedText = normalizeExtractedText(value);
+        if (extractedText.length() < MIN_SOURCE_TEXT_LENGTH) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded file did not contain enough text to generate flashcards");
+        }
+        return trimToMaxSourceText(extractedText);
+    }
+
+    private StagingBatchResponse createGeneratedStagingBatch(
+            SetContext context,
+            UserAccount actor,
+            GenerationResult result,
+            int desiredCount,
+            String sourceType,
+            String sourceName,
+            String emptyResultMessage
+    ) {
+        List<GeneratedFlashcardCandidate> candidates = validGeneratedCandidates(
+                result == null ? List.of() : result.candidates(),
+                desiredCount
+        );
+        if (candidates.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, emptyResultMessage);
+        }
+
+        FlashcardStagingBatch batch = new FlashcardStagingBatch();
+        batch.setFlashcardSet(context.flashcardSet());
+        batch.setLesson(context.lesson());
+        batch.setCourse(context.course());
+        batch.setCreatedBy(actor);
+        batch.setSourceType(sourceType);
+        batch.setStatus(STATUS_DRAFT);
+        batch.setSourceName(sourceName);
+        FlashcardStagingBatch savedBatch = stagingBatchRepository.save(batch);
+
+        List<FlashcardStagingCard> cards = new ArrayList<>();
+        for (int index = 0; index < candidates.size(); index += 1) {
+            GeneratedFlashcardCandidate candidate = candidates.get(index);
+            FlashcardStagingCard card = new FlashcardStagingCard();
+            card.setBatch(savedBatch);
+            card.setFrontText(normalizeRequired(candidate.frontText(), "Generated flashcard front text is required"));
+            card.setBackText(normalizeRequired(candidate.backText(), "Generated flashcard back text is required"));
+            card.setExplanation(normalizeNullable(candidate.explanation()));
+            card.setSourceExcerpt(normalizeNullable(candidate.sourceExcerpt()));
+            card.setStatus(STATUS_DRAFT);
+            card.setSortOrder(index);
+            validateCard(card);
+            cards.add(card);
+        }
+
+        List<FlashcardStagingCard> savedCards = stagingCardRepository.saveAll(cards);
+        return toBatchResponse(savedBatch, savedCards);
     }
 
     private List<GeneratedFlashcardCandidate> validGeneratedCandidates(
@@ -416,12 +550,94 @@ public class AdminFlashcardStagingService {
         return SOURCE_TYPE_TEXT;
     }
 
+    private String resolveDocumentSourceType(DocumentTextExtractionResult extraction, String extension) {
+        if ("pdf".equals(extension)) {
+            return SOURCE_TYPE_PDF;
+        }
+        if ("docx".equals(extension)) {
+            return SOURCE_TYPE_DOCX;
+        }
+        String extractedSourceType = normalizeNullable(extraction == null ? null : extraction.sourceType());
+        if (extractedSourceType != null) {
+            extractedSourceType = extractedSourceType.toUpperCase(Locale.ROOT);
+            if (SOURCE_TYPE_DOCX.equals(extractedSourceType) || SOURCE_TYPE_PDF.equals(extractedSourceType)) {
+                return extractedSourceType;
+            }
+        }
+        throw new BusinessException(ErrorCode.INVALID_REQUEST, "Unsupported flashcard source file type");
+    }
+
+    private String resolveDocumentSourceName(DocumentTextExtractionResult extraction, String sourceType) {
+        String sourceName = normalizeNullable(extraction == null ? null : extraction.sourceName());
+        if (sourceName != null) {
+            return sourceName;
+        }
+        if (SOURCE_TYPE_DOCX.equals(sourceType)) {
+            return SOURCE_NAME_UPLOADED_DOCX_GENERATION;
+        }
+        if (SOURCE_TYPE_PDF.equals(sourceType)) {
+            return SOURCE_NAME_UPLOADED_PDF_GENERATION;
+        }
+        return "Uploaded File Generation";
+    }
+
     private String duplicateKey(String frontText, String backText) {
         return normalizeForDuplicate(frontText) + "\n" + normalizeForDuplicate(backText);
     }
 
     private String normalizeForDuplicate(String value) {
         return value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    private String sanitizeOriginalFileName(String originalFileName) {
+        if (originalFileName == null || originalFileName.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded file name is required");
+        }
+        String normalized = originalFileName.trim().replace('\\', '/');
+        String fileName = normalized.substring(normalized.lastIndexOf('/') + 1).trim();
+        if (fileName.isBlank() || fileName.contains("..")) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded file name is invalid");
+        }
+        return fileName;
+    }
+
+    private String extractFileExtension(String fileName) {
+        int extensionIndex = fileName.lastIndexOf('.');
+        if (extensionIndex < 0 || extensionIndex == fileName.length() - 1) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded file must be a DOCX or PDF file");
+        }
+        return fileName.substring(extensionIndex + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeExtractedText(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String normalized = value.replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replace('\u00a0', ' ');
+        String[] paragraphs = normalized.split("\\n\\s*\\n");
+        List<String> blocks = new ArrayList<>();
+        for (String paragraph : paragraphs) {
+            String block = paragraph.replaceAll("[\\t\\x0B\\f ]+", " ")
+                    .replaceAll(" *\\n *", "\n")
+                    .trim();
+            if (!block.isBlank()) {
+                blocks.add(block);
+            }
+        }
+        return String.join("\n\n", blocks);
+    }
+
+    private String trimToMaxSourceText(String value) {
+        if (value.length() <= MAX_SOURCE_TEXT_LENGTH) {
+            return value;
+        }
+        int end = value.lastIndexOf(' ', MAX_SOURCE_TEXT_LENGTH);
+        if (end < MIN_SOURCE_TEXT_LENGTH) {
+            end = MAX_SOURCE_TEXT_LENGTH;
+        }
+        return value.substring(0, end).trim();
     }
 
     private Specification<Question> sourceQuestionSpecification(
@@ -725,5 +941,16 @@ public class AdminFlashcardStagingService {
             String difficulty,
             String generationMode
     ) {
+    }
+
+    private record GenerationOptions(
+            int desiredCount,
+            String language,
+            String difficulty,
+            String generationMode
+    ) {
+    }
+
+    private record DocumentFileInput(String originalFileName, String extension) {
     }
 }

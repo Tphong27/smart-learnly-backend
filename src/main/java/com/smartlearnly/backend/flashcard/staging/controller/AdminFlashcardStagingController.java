@@ -18,6 +18,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -29,7 +30,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @Validated
 @RestController
@@ -74,6 +77,31 @@ public class AdminFlashcardStagingController {
             @Valid @RequestBody GenerateFromTextRequest request
     ) {
         StagingBatchResponse response = adminFlashcardStagingService.generateFromText(setId, request);
+        return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
+                .body(ApiResponse.success("Flashcard staging batch created successfully", response));
+    }
+
+    @PostMapping(
+            value = "/flashcard-sets/{setId}/staging/generate-from-file",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    @Operation(summary = "Generate flashcard staging cards from an uploaded DOCX or PDF")
+    public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromFile(
+            @PathVariable UUID setId,
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @RequestParam(required = false) Integer desiredCount,
+            @RequestParam(required = false) String language,
+            @RequestParam(required = false) String difficulty,
+            @RequestParam(required = false) String generationMode
+    ) {
+        StagingBatchResponse response = adminFlashcardStagingService.generateFromFile(
+                setId,
+                file,
+                desiredCount,
+                language,
+                difficulty,
+                generationMode
+        );
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
