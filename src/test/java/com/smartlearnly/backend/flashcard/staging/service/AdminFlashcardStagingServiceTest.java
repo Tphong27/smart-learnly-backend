@@ -18,6 +18,7 @@ import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
@@ -26,6 +27,8 @@ import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingBatchRepository;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
@@ -70,6 +73,8 @@ class AdminFlashcardStagingServiceTest {
     private QuestionBankRepository questionBankRepository;
     @Mock
     private CurrentUserService currentUserService;
+    @Mock
+    private FlashcardTextGenerationService flashcardTextGenerationService;
 
     private AdminFlashcardStagingService service;
 
@@ -83,7 +88,8 @@ class AdminFlashcardStagingServiceTest {
                 questionRepository,
                 questionAnswerRepository,
                 questionBankRepository,
-                currentUserService
+                currentUserService,
+                flashcardTextGenerationService
         );
     }
 
@@ -130,6 +136,161 @@ class AdminFlashcardStagingServiceTest {
         verify(stagingBatchRepository).save(batchCaptor.capture());
         assertThat(batchCaptor.getValue().getCreatedBy()).isSameAs(actor);
         assertThat(batchCaptor.getValue().getFlashcardSet()).isSameAs(flashcardSet);
+    }
+
+    @Test
+    void generateFromTextCreatesOneDraftBatchAndStagingCards() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UserAccount actor = actor();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+                "TEXT",
+                List.of(
+                        candidate("Front 1", "Back 1", "Excerpt 1"),
+                        candidate("Front 2", "Back 2", "Excerpt 2")
+                )
+        ));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardStagingCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> card.setId(UUID.randomUUID()));
+            return cards;
+        });
+
+        StagingBatchResponse response = service.generateFromText(
+                flashcardSet.getId(),
+                new GenerateFromTextRequest(longSourceText(), 2, null, "medium", "AI")
+        );
+
+        assertThat(response.sourceType()).isEqualTo("TEXT");
+        assertThat(response.status()).isEqualTo("draft");
+        assertThat(response.sourceName()).isEqualTo("Pasted Text Generation");
+        assertThat(response.cards()).hasSize(2);
+        assertThat(response.cards()).extracting(card -> card.frontText()).containsExactly("Front 1", "Front 2");
+        assertThat(response.cards()).extracting(card -> card.backText()).containsExactly("Back 1", "Back 2");
+        ArgumentCaptor<FlashcardStagingBatch> batchCaptor = ArgumentCaptor.forClass(FlashcardStagingBatch.class);
+        verify(stagingBatchRepository).save(batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getCreatedBy()).isSameAs(actor);
+        assertThat(batchCaptor.getValue().getFlashcardSet()).isSameAs(flashcardSet);
+        assertThat(batchCaptor.getValue().getSourceType()).isEqualTo("TEXT");
+        assertThat(batchCaptor.getValue().getSourceName()).isEqualTo("Pasted Text Generation");
+        ArgumentCaptor<List<FlashcardStagingCard>> cardsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(stagingCardRepository).saveAll(cardsCaptor.capture());
+        assertThat(cardsCaptor.getValue()).extracting(FlashcardStagingCard::getSourceQuestionId)
+                .containsExactly(null, null);
+        assertThat(cardsCaptor.getValue()).extracting(FlashcardStagingCard::getStatus)
+                .containsExactly("draft", "draft");
+        assertThat(cardsCaptor.getValue()).extracting(FlashcardStagingCard::getSortOrder)
+                .containsExactly(0, 1);
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromTextRejectsBlankSourceText() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromText(
+                flashcardSet.getId(),
+                new GenerateFromTextRequest("   ", null, null, null, null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(flashcardTextGenerationService, never()).generate(any());
+        verify(stagingBatchRepository, never()).save(any());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromTextRejectsSourceTextShorterThanMinimum() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromText(
+                flashcardSet.getId(),
+                new GenerateFromTextRequest("This source text is intentionally too short.", null, null, null, null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(flashcardTextGenerationService, never()).generate(any());
+        verify(stagingBatchRepository, never()).save(any());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromTextEnforcesDesiredCountMax() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.generateFromText(
+                flashcardSet.getId(),
+                new GenerateFromTextRequest(longSourceText(), 31, null, null, null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(flashcardTextGenerationService, never()).generate(any());
+        verify(stagingBatchRepository, never()).save(any());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromTextRejectsEmptyGeneratedResult() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult("TEXT", List.of()));
+
+        assertThatThrownBy(() -> service.generateFromText(
+                flashcardSet.getId(),
+                new GenerateFromTextRequest(longSourceText(), 10, null, null, null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(stagingBatchRepository, never()).save(any());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateFromTextDeduplicatesGeneratedCandidates() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+                "TEXT",
+                List.of(
+                        candidate("  Duplicate front  ", "Duplicate back", "Excerpt 1"),
+                        candidate("duplicate FRONT", " duplicate   back ", "Excerpt 2"),
+                        candidate("Unique front", "Unique back", "Excerpt 3")
+                )
+        ));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        StagingBatchResponse response = service.generateFromText(
+                flashcardSet.getId(),
+                new GenerateFromTextRequest(longSourceText(), 10, null, null, null)
+        );
+
+        assertThat(response.cards()).hasSize(2);
+        assertThat(response.cards()).extracting(card -> card.frontText())
+                .containsExactly("Duplicate front", "Unique front");
+        ArgumentCaptor<List<FlashcardStagingCard>> cardsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(stagingCardRepository).saveAll(cardsCaptor.capture());
+        assertThat(cardsCaptor.getValue()).extracting(FlashcardStagingCard::getSortOrder)
+                .containsExactly(0, 1);
     }
 
     @Test
@@ -214,6 +375,38 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void approveGeneratedStagingCardWithNullSourceQuestionCreatesRealFlashcard() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingBatch batch = stagingBatch(flashcardSet);
+        batch.setSourceType("TEXT");
+        FlashcardStagingCard card = stagingCard(batch, "draft", 0);
+        card.setSourceQuestionId(null);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(stagingCardRepository.findByIdIn(List.of(card.getId()))).thenReturn(List.of(card));
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
+        when(flashcardCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardCard> cards = invocation.getArgument(0);
+            cards.forEach(flashcard -> flashcard.setId(UUID.randomUUID()));
+            return cards;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stagingCardRepository.countByBatchIdAndStatus(batch.getId(), "draft")).thenReturn(0L);
+
+        ApproveStagingCardsResponse response = service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(List.of(card.getId()))
+        );
+
+        assertThat(response.approvedCount()).isEqualTo(1);
+        ArgumentCaptor<List<FlashcardCard>> flashcardsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(flashcardCardRepository).saveAll(flashcardsCaptor.capture());
+        assertThat(flashcardsCaptor.getValue()).extracting(FlashcardCard::getFrontText).containsExactly("Front 0");
+        assertThat(card.getStatus()).isEqualTo("approved");
+        assertThat(batch.getStatus()).isEqualTo("approved");
+    }
+
+    @Test
     void approveCannotDuplicateAlreadyApprovedStagingCards() {
         FlashcardSet flashcardSet = flashcardSet();
         FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet), "approved", 0);
@@ -292,6 +485,18 @@ class AdminFlashcardStagingServiceTest {
         flashcardSet.setCreatedAt(Instant.now());
         flashcardSet.setUpdatedAt(Instant.now());
         return flashcardSet;
+    }
+
+    private String longSourceText() {
+        return """
+                Smart Learnly flashcard lessons help trainees review important concepts after a structured lesson. \
+                Trainers can paste lesson content, inspect generated draft cards, edit the wording, and approve only \
+                the cards that are accurate enough to become real learning material.
+                """;
+    }
+
+    private GeneratedFlashcardCandidate candidate(String frontText, String backText, String sourceExcerpt) {
+        return new GeneratedFlashcardCandidate(frontText, backText, "Generated from pasted text.", sourceExcerpt);
     }
 
     private FlashcardStagingBatch stagingBatch(FlashcardSet flashcardSet) {

@@ -1,11 +1,16 @@
 package com.smartlearnly.backend.flashcard.staging.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 public final class AdminFlashcardStagingDtos {
@@ -17,6 +22,48 @@ public final class AdminFlashcardStagingDtos {
             @Size(max = 500, message = "Question import must not exceed 500 questions")
             List<@NotNull(message = "Question id must not be null") UUID> questionIds
     ) {
+    }
+
+    public record GenerateFromTextRequest(
+            @NotBlank(message = "sourceText is required")
+            @Size(min = 100, max = 20000, message = "sourceText must be between 100 and 20000 characters")
+            String sourceText,
+
+            @Min(value = 1, message = "desiredCount must be at least 1")
+            @Max(value = 30, message = "desiredCount must not exceed 30")
+            Integer desiredCount,
+
+            String language,
+
+            @Pattern(regexp = "(?i)^(easy|medium|hard)$", message = "difficulty must be easy, medium, or hard")
+            String difficulty,
+
+            @Pattern(regexp = "(?i)^(AI|RULE_BASED)$", message = "generationMode must be AI or RULE_BASED")
+            String generationMode
+    ) {
+        public GenerateFromTextRequest {
+            sourceText = normalizeNullable(sourceText);
+            desiredCount = desiredCount == null ? 10 : desiredCount;
+            language = normalizeDefault(language, "en");
+            difficulty = normalizeNullable(difficulty);
+            difficulty = difficulty == null ? null : difficulty.toLowerCase(Locale.ROOT);
+            generationMode = normalizeDefault(generationMode, "AI")
+                    .replace('-', '_')
+                    .toUpperCase(Locale.ROOT);
+        }
+
+        private static String normalizeDefault(String value, String defaultValue) {
+            String normalized = normalizeNullable(value);
+            return normalized == null ? defaultValue : normalized;
+        }
+
+        private static String normalizeNullable(String value) {
+            if (value == null) {
+                return null;
+            }
+            String normalized = value.trim();
+            return normalized.isEmpty() ? null : normalized;
+        }
     }
 
     public record ApproveStagingCardsRequest(

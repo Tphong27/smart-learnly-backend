@@ -3,6 +3,7 @@ package com.smartlearnly.backend.flashcard.staging.controller;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
@@ -62,6 +63,17 @@ public class AdminFlashcardStagingController {
             @Valid @RequestBody ImportQuestionBankRequest request
     ) {
         StagingBatchResponse response = adminFlashcardStagingService.importQuestionBank(setId, request);
+        return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
+                .body(ApiResponse.success("Flashcard staging batch created successfully", response));
+    }
+
+    @PostMapping("/flashcard-sets/{setId}/staging/generate-from-text")
+    @Operation(summary = "Generate flashcard staging cards from pasted text")
+    public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromText(
+            @PathVariable UUID setId,
+            @Valid @RequestBody GenerateFromTextRequest request
+    ) {
+        StagingBatchResponse response = adminFlashcardStagingService.generateFromText(setId, request);
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
