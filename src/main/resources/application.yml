@@ -92,6 +92,15 @@ app:
         r2-course-thumbnail-public-url: ${CLOUDFLARE_R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:${R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:}}
         r2-lesson-material-public-url: ${CLOUDFLARE_R2_LESSON_MATERIAL_PUBLIC_BASE_URL:${R2_LESSON_MATERIAL_PUBLIC_BASE_URL:}}
         r2-lesson-resource-public-url: ${CLOUDFLARE_R2_LESSON_RESOURCE_PUBLIC_BASE_URL:${R2_LESSON_RESOURCE_PUBLIC_BASE_URL:}}
+    question-image-import:
+        enabled: ${APP_QUESTION_IMAGE_IMPORT_ENABLED:true}
+        provider: ${APP_QUESTION_IMAGE_IMPORT_PROVIDER:gemini}
+        api-key: ${GEMINI_API_KEY:}
+        api-base-url: ${GEMINI_API_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+        model: ${GEMINI_MODEL:gemini-3.5-flash}
+        timeout: ${APP_QUESTION_IMAGE_IMPORT_TIMEOUT:PT45S}
+        max-file-size: ${APP_QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE:10MB}
+        max-files: ${APP_QUESTION_IMAGE_IMPORT_MAX_FILES:5}
     settings:
         encryption-key: ${SETTINGS_ENCRYPTION_KEY:}
     hls:
