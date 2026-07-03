@@ -21,7 +21,7 @@ public class PublicTrainerProfileService {
     @Transactional(readOnly = true)
     public PublicTrainerProfileResponse getPublicTrainerProfile(UUID trainerId) {
         UserAccount trainer = userRepository
-                .findByIdAndRoleIgnoreCaseAndStatusIgnoreCaseAndDeletedAtIsNull(
+                .findActiveUserByIdAndRole(
                         trainerId,
                         TRAINER_ROLE,
                         ACTIVE_STATUS

@@ -77,7 +77,7 @@ class ClassAdminServiceTest {
         );
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(userRepository.findByIdAndRoleIgnoreCaseAndStatusIgnoreCaseAndDeletedAtIsNull(
+        when(userRepository.findActiveUserByIdAndRole(
                 trainer.getId(),
                 "TRAINER",
                 "active"
@@ -111,7 +111,7 @@ class ClassAdminServiceTest {
                 .thenReturn(Optional.of(classOffering));
         when(classEnrollmentRepository.countByClassIdAndStatus(
                 classOffering.getId(),
-                EnrollmentStatus.ACTIVE
+                "active"
         )).thenReturn(3L);
 
         assertThatThrownBy(() -> service.update(classOffering.getId(), request))

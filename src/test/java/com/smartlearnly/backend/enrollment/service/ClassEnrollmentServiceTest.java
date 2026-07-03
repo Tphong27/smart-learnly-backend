@@ -76,7 +76,7 @@ class ClassEnrollmentServiceTest {
         )).thenReturn(Optional.empty());
         when(classEnrollmentRepository.countByClassIdAndStatus(
                 classOffering.getId(),
-                EnrollmentStatus.ACTIVE
+                "active"
         )).thenReturn(1L);
         when(classEnrollmentRepository.save(any(ClassEnrollment.class)))
                 .thenAnswer(invocation -> {
@@ -144,7 +144,7 @@ class ClassEnrollmentServiceTest {
         )).thenReturn(Optional.empty());
         when(classEnrollmentRepository.countByClassIdAndStatus(
                 classOffering.getId(),
-                EnrollmentStatus.ACTIVE
+                "active"
         )).thenReturn(1L);
 
         assertThatThrownBy(() -> service.grantPaidClassEnrollment(
@@ -183,7 +183,7 @@ class ClassEnrollmentServiceTest {
         )).thenReturn(Optional.of(existing));
         when(classEnrollmentRepository.countByClassIdAndStatus(
                 classOffering.getId(),
-                EnrollmentStatus.ACTIVE
+                "active"
         )).thenReturn(0L);
         when(classEnrollmentRepository.save(existing)).thenReturn(existing);
 

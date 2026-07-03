@@ -70,7 +70,7 @@ public class ClassEnrollmentService {
 
         long activeEnrollmentCount = classEnrollmentRepository.countByClassIdAndStatus(
                 classId,
-                EnrollmentStatus.ACTIVE
+                "active"
         );
         if (activeEnrollmentCount >= classOffering.getMaxStudents()) {
             throw new BusinessException(ErrorCode.CLASS_FULL);

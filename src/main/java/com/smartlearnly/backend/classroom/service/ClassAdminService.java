@@ -14,7 +14,6 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
-import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
@@ -190,7 +189,7 @@ public class ClassAdminService {
         if (trainerId == null) {
             return null;
         }
-        return userRepository.findByIdAndRoleIgnoreCaseAndStatusIgnoreCaseAndDeletedAtIsNull(
+        return userRepository.findActiveUserByIdAndRole(
                 trainerId,
                 "TRAINER",
                 "active")
@@ -253,7 +252,7 @@ public class ClassAdminService {
     }
 
     private long activeEnrollmentCount(UUID classId) {
-        return classEnrollmentRepository.countByClassIdAndStatus(classId, EnrollmentStatus.ACTIVE);
+        return classEnrollmentRepository.countByClassIdAndStatus(classId, "active");
     }
 
     private void validateDates(LocalDate startDate, LocalDate endDate) {

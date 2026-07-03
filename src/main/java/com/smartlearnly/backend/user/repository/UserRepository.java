@@ -14,10 +14,19 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID> {
     Optional<UserAccount> findByGoogleIdAndDeletedAtIsNull(String googleId);
     Optional<UserAccount> findByAuthUserIdAndDeletedAtIsNull(UUID authUserId);
     Optional<UserAccount> findByIdAndDeletedAtIsNull(UUID id);
-    Optional<UserAccount> findByIdAndRoleIgnoreCaseAndStatusIgnoreCaseAndDeletedAtIsNull(
-            UUID id,
-            String role,
-            String status
+    @Query(value = """
+                   SELECT u.*
+                   FROM public.users u
+                   WHERE u.id = :id
+                     AND u.deleted_at IS NULL
+                     AND LOWER(CAST(u.role AS text)) = LOWER(:role)
+                     AND LOWER(CAST(u.status AS text)) = LOWER(:status)
+                   LIMIT 1
+                   """, nativeQuery = true)
+    Optional<UserAccount> findActiveUserByIdAndRole(
+                @Param("id") UUID id,
+                @Param("role") String role,
+                @Param("status") String status
     );
 
     @Query(
