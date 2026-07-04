@@ -147,6 +147,29 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
     @Query(
             value = """
                     SELECT
+                        c.id AS "id",
+                        c.title AS "title",
+                        c.slug AS "slug",
+                        c.description AS "description",
+                        c.price AS "price",
+                        c.discounted_price AS "discountedPrice",
+                        c.thumbnail_url AS "avatarUrl",
+                        c.is_featured AS "featured",
+                        category.id AS "categoryId",
+                        category.name AS "categoryName",
+                        category.slug AS "categorySlug"
+                    FROM public.courses c
+                    JOIN public.categories category ON category.id = c.category_id
+                    WHERE c.id = :id
+                      AND c.status = 'published'::public.course_status
+                      AND c.deleted_at IS NULL
+                    """,
+            nativeQuery = true)
+    Optional<CourseDetailProjection> findPublishedCourseById(@Param("id") UUID id);
+
+    @Query(
+            value = """
+                    SELECT
                         clo.id AS "id",
                         clo.code AS "code",
                         clo.description AS "description"

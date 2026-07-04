@@ -73,12 +73,13 @@ public class CourseQueryService {
 				.map(this::toResponse);
 	}
 
-	public CourseDetailResponse getCourseDetail(String slug) {
-		if (RESERVED_COURSE_SLUGS.contains(slug)) {
+	public CourseDetailResponse getCourseDetail(String slugOrId) {
+		if (RESERVED_COURSE_SLUGS.contains(slugOrId)) {
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Course not found");
 		}
 
-		CourseDetailProjection course = courseRepository.findPublishedCourseBySlug(slug)
+		// Chấp nhận cả UUID lẫn slug để mọi nơi điều hướng tới /courses/{idOrSlug} đều resolve được.
+		CourseDetailProjection course = resolveCourse(slugOrId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Course not found"));
 		List<LearningObjectiveResponse> objectives = courseRepository.findLearningObjectivesByCourseId(course.getId())
 				.stream()
@@ -111,6 +112,22 @@ public class CourseQueryService {
         objectives,
         modules,
         classes);
+	}
+
+	private java.util.Optional<CourseDetailProjection> resolveCourse(String slugOrId) {
+		UUID courseId = tryParseUuid(slugOrId);
+		if (courseId != null) {
+			return courseRepository.findPublishedCourseById(courseId);
+		}
+		return courseRepository.findPublishedCourseBySlug(slugOrId);
+	}
+
+	private UUID tryParseUuid(String value) {
+		try {
+			return UUID.fromString(value);
+		} catch (IllegalArgumentException ex) {
+			return null;
+		}
 	}
 
 	private CourseClassResponse toCourseClassResponse(CoursePublicProjection classOffering) {
