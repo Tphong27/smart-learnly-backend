@@ -119,7 +119,6 @@ public class CourseContentAdminService {
         findSection(sectionId);
         return lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(sectionId)
                 .stream()
-                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
                 .map(CourseDtoMapper::toLessonResponse)
                 .toList();
     }
@@ -169,10 +168,7 @@ public class CourseContentAdminService {
     @Transactional
     public List<LessonResponse> reorderLessons(UUID sectionId, ReorderRequest request) {
         findSection(sectionId);
-        List<Lesson> lessons = lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(sectionId)
-                .stream()
-                .filter(lesson -> lesson.getStatus() != LessonStatus.INACTIVE)
-                .toList();
+        List<Lesson> lessons = lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(sectionId);
         Map<UUID, Lesson> lessonsById = lessons.stream()
                 .collect(LinkedHashMap::new, (map, lesson) -> map.put(lesson.getId(), lesson), LinkedHashMap::putAll);
         assertReorderMatchesAllItems(request.ids(), lessonsById.keySet(), "Lesson");

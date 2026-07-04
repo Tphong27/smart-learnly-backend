@@ -88,6 +88,50 @@ class CourseContentAdminServiceTest {
     }
 
     @Test
+    void listLessonsShouldIncludeInactiveLessonsForAdmin() {
+        Course course = course();
+        CourseSection section = section(course, 0);
+        Lesson draft = lesson(course, section);
+        Lesson inactive = lesson(course, section);
+        inactive.setStatus(LessonStatus.INACTIVE);
+        inactive.setSortOrder(1);
+        when(courseSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(section.getId()))
+                .thenReturn(List.of(draft, inactive));
+
+        List<LessonResponse> response = courseContentAdminService.listLessons(section.getId());
+
+        assertThat(response).hasSize(2);
+        assertThat(response).extracting(LessonResponse::status).containsExactly("draft", "inactive");
+    }
+
+    @Test
+    void reorderLessonsShouldIncludeInactiveLessonsForAdmin() {
+        Course course = course();
+        CourseSection section = section(course, 0);
+        Lesson draft = lesson(course, section);
+        Lesson inactive = lesson(course, section);
+        inactive.setStatus(LessonStatus.INACTIVE);
+        inactive.setSortOrder(1);
+        UserAccount actor = new UserAccount();
+        actor.setEmail("admin@smartlearnly.dev");
+        when(courseSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(section.getId()))
+                .thenReturn(List.of(draft, inactive));
+        when(lessonRepository.saveAll(List.of(draft, inactive))).thenReturn(List.of(draft, inactive));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+        List<LessonResponse> response = courseContentAdminService.reorderLessons(
+                section.getId(),
+                new ReorderRequest(List.of(inactive.getId(), draft.getId()))
+        );
+
+        assertThat(response).extracting(LessonResponse::id).containsExactly(inactive.getId(), draft.getId());
+        assertThat(inactive.getSortOrder()).isZero();
+        assertThat(draft.getSortOrder()).isEqualTo(1);
+    }
+
+    @Test
     void updateLessonShouldAcceptTypeAliasAndReplaceResources() {
         Course course = course();
         CourseSection section = section(course, 0);
