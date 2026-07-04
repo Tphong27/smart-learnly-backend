@@ -1,0 +1,261 @@
+name: HLS Transcode to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Unique processing job UUID
+        required: true
+        type: string
+      lesson_id:
+        description: Lesson UUID
+        required: true
+        type: string
+      source_key:
+        description: Object key of the source video in R2_RAW_BUCKET
+        required: true
+        type: string
+      output_prefix:
+        description: Optional output prefix; defaults to hls/{lesson_id}/{job_id}
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hls-${{ inputs.lesson_id }}
+  cancel-in-progress: false
+
+jobs:
+  transcode:
+    name: Transcode HLS
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.R2_REGION }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_RAW_BUCKET: ${{ vars.R2_RAW_BUCKET }}
+      R2_HLS_BUCKET: ${{ vars.R2_HLS_BUCKET }}
+      HLS_CALLBACK_SECRET: ${{ secrets.HLS_CALLBACK_SECRET }}
+      HLS_BACKEND_BASE_URL: ${{ vars.HLS_BACKEND_BASE_URL }}
+      JOB_ID: ${{ inputs.job_id }}
+      LESSON_ID: ${{ inputs.lesson_id }}
+      SOURCE_KEY: ${{ inputs.source_key }}
+      REQUESTED_OUTPUT_PREFIX: ${{ inputs.output_prefix }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate job and configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          uuid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+          bucket_pattern='^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'
+          object_key_pattern='^[a-zA-Z0-9][a-zA-Z0-9._/-]*$'
+
+          [[ "$JOB_ID" =~ $uuid_pattern ]] || {
+            echo "job_id must be a UUID." >&2
+            exit 64
+          }
+          [[ "$LESSON_ID" =~ $uuid_pattern ]] || {
+            echo "lesson_id must be a UUID." >&2
+            exit 64
+          }
+          [[ "$R2_RAW_BUCKET" =~ $bucket_pattern ]] || {
+            echo "R2_RAW_BUCKET is invalid." >&2
+            exit 78
+          }
+          [[ "$R2_HLS_BUCKET" =~ $bucket_pattern ]] || {
+            echo "R2_HLS_BUCKET is invalid." >&2
+            exit 78
+          }
+          [[ "$R2_ENDPOINT" == https://*.r2.cloudflarestorage.com ]] || {
+            echo "R2_ENDPOINT must be the private R2 S3 API endpoint." >&2
+            exit 78
+          }
+          [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" ]] || {
+            echo "R2 credentials are unavailable." >&2
+            exit 78
+          }
+          [[ "$AWS_DEFAULT_REGION" == "auto" ]] || {
+            echo "R2_REGION must be auto." >&2
+            exit 78
+          }
+          [[ "$SOURCE_KEY" =~ $object_key_pattern ]] &&
+            [[ "$SOURCE_KEY" != /* && "$SOURCE_KEY" != *".."* && "$SOURCE_KEY" != *"//"* ]] || {
+            echo "source_key is unsafe." >&2
+            exit 64
+          }
+
+          output_prefix="$REQUESTED_OUTPUT_PREFIX"
+          if [[ -z "$output_prefix" ]]; then
+            output_prefix="hls/${LESSON_ID}/${JOB_ID}"
+          fi
+          [[ "$output_prefix" =~ $object_key_pattern ]] &&
+            [[ "$output_prefix" != /* && "$output_prefix" != *".."* && "$output_prefix" != *"//"* ]] || {
+            echo "output_prefix is unsafe." >&2
+            exit 64
+          }
+
+          echo "OUTPUT_PREFIX=$output_prefix" >>"$GITHUB_ENV"
+          echo "INPUT_FILE=$RUNNER_TEMP/hls-input/source-video" >>"$GITHUB_ENV"
+          echo "OUTPUT_DIR=$RUNNER_TEMP/hls-output" >>"$GITHUB_ENV"
+          echo "QUALITIES_FILE=$RUNNER_TEMP/hls-qualities.txt" >>"$GITHUB_ENV"
+
+      - name: Install FFmpeg and R2 client dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends awscli ffmpeg jq
+
+      - name: Download source video from R2
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p -- "$(dirname "$INPUT_FILE")"
+          aws \
+            --endpoint-url "$R2_ENDPOINT" \
+            s3 cp \
+            "s3://${R2_RAW_BUCKET}/${SOURCE_KEY}" \
+            "$INPUT_FILE" \
+            --no-progress
+          test -s "$INPUT_FILE"
+
+      - name: Transcode source video to encrypted HLS
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash scripts/hls/transcode.sh \
+            "$INPUT_FILE" \
+            "$OUTPUT_DIR" \
+            10 \
+            "$QUALITIES_FILE"
+
+      - name: Upload HLS output to R2
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s "$OUTPUT_DIR/master.m3u8"
+          test -s "$OUTPUT_DIR/enc.key"
+          aws \
+            --endpoint-url "$R2_ENDPOINT" \
+            s3 sync \
+            "$OUTPUT_DIR" \
+            "s3://${R2_HLS_BUCKET}/${OUTPUT_PREFIX}" \
+            --delete \
+            --no-progress
+
+      - name: Notify backend of success
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "$HLS_BACKEND_BASE_URL" ]]; then
+            echo "HLS_BACKEND_BASE_URL is not configured; callback skipped."
+            exit 0
+          fi
+          [[ "$HLS_BACKEND_BASE_URL" == https://* ]] || {
+            echo "HLS_BACKEND_BASE_URL must use HTTPS." >&2
+            exit 78
+          }
+          if [[ -z "$HLS_CALLBACK_SECRET" ]]; then
+            echo "HLS_CALLBACK_SECRET is not configured." >&2
+            exit 78
+          fi
+
+          qualities_json=$(jq -R -s 'split("\n") | map(select(length > 0))' "$QUALITIES_FILE")
+          body=$(jq -cn \
+            --arg jobId "$JOB_ID" \
+            --arg lessonId "$LESSON_ID" \
+            --arg status "ready" \
+            --arg r2BasePath "$OUTPUT_PREFIX" \
+            --arg masterPlaylistPath "${OUTPUT_PREFIX}/master.m3u8" \
+            --argjson qualities "$qualities_json" \
+            '{
+              jobId: $jobId,
+              lessonId: $lessonId,
+              status: $status,
+              r2BasePath: $r2BasePath,
+              masterPlaylistPath: $masterPlaylistPath,
+              qualities: $qualities
+            }')
+          timestamp=$(date +%s)
+          signature=$(BODY="$body" TIMESTAMP="$timestamp" SECRET="$HLS_CALLBACK_SECRET" python3 - <<'PY'
+          import hashlib
+          import hmac
+          import os
+
+          message = f"{os.environ['TIMESTAMP']}.{os.environ['BODY']}".encode()
+          secret = os.environ["SECRET"].encode()
+          print(hmac.new(secret, message, hashlib.sha256).hexdigest())
+          PY
+          )
+
+          curl \
+            --silent \
+            --show-error \
+            --fail-with-body \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --header "X-HLS-Timestamp: $timestamp" \
+            --header "X-HLS-Signature: $signature" \
+            --data "$body" \
+            "${HLS_BACKEND_BASE_URL%/}/api/v1/internal/hls/jobs/callback"
+
+      - name: Notify backend of failure
+        if: ${{ failure() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "$HLS_BACKEND_BASE_URL" || -z "$HLS_CALLBACK_SECRET" ]]; then
+            echo "Backend callback is not configured; failure callback skipped."
+            exit 0
+          fi
+          [[ "$HLS_BACKEND_BASE_URL" == https://* ]] || {
+            echo "HLS_BACKEND_BASE_URL must use HTTPS." >&2
+            exit 78
+          }
+
+          body=$(jq -cn \
+            --arg jobId "$JOB_ID" \
+            --arg lessonId "$LESSON_ID" \
+            --arg status "failed" \
+            --arg errorMessage "GitHub Actions HLS transcoding failed. Review the workflow run logs." \
+            '{
+              jobId: $jobId,
+              lessonId: $lessonId,
+              status: $status,
+              errorMessage: $errorMessage
+            }')
+          timestamp=$(date +%s)
+          signature=$(BODY="$body" TIMESTAMP="$timestamp" SECRET="$HLS_CALLBACK_SECRET" python3 - <<'PY'
+          import hashlib
+          import hmac
+          import os
+
+          message = f"{os.environ['TIMESTAMP']}.{os.environ['BODY']}".encode()
+          secret = os.environ["SECRET"].encode()
+          print(hmac.new(secret, message, hashlib.sha256).hexdigest())
+          PY
+          )
+
+          curl \
+            --silent \
+            --show-error \
+            --fail-with-body \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --header "X-HLS-Timestamp: $timestamp" \
+            --header "X-HLS-Signature: $signature" \
+            --data "$body" \
+            "${HLS_BACKEND_BASE_URL%/}/api/v1/internal/hls/jobs/callback"
