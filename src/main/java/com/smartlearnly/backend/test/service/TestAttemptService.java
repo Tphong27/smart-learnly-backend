@@ -3,6 +3,8 @@ package com.smartlearnly.backend.test.service;
 import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.test.dto.TestAttemptModel;
 import com.smartlearnly.backend.test.entity.AttemptStatus;
 import com.smartlearnly.backend.test.entity.StudentTestAnswer;
@@ -35,12 +37,18 @@ public class TestAttemptService {
     private final QuestionAnswerRepository questionAnswerRepository;
     private final StudentTestAnswerRepository studentTestAnswerRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final TestService testService;
 
     @Transactional
     public TestAttemptModel.Response startAttempt(TestAttemptModel.StartRequest request) {
         Test test = testRepository.findById(required(request.getTestId(), "testId"))
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
         UUID studentId = required(request.getStudentId(), "studentId");
+        if (!testService.accessCodeMatches(test, request.getAccessCode())) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Invalid or expired flash test access code");
+        }
 
         List<TestAttempt> existingAttempts = repository.findByTestIdAndStudentId(test.getId(), studentId);
         if (!existingAttempts.isEmpty()) {
