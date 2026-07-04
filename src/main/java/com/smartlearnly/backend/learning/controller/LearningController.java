@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.UUID;
 
@@ -23,9 +24,12 @@ public class LearningController {
 
     @GetMapping("/courses/{courseId}")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Get full learning content for an enrolled course")
-    public ApiResponse<LearningContentResponse> getLearningContent(@PathVariable UUID courseId) {
-        return ApiResponse.success("Learning content loaded successfully",
-                learningContentService.getLearningContent(courseId));
+    @Operation(summary = "Get full learning content for an enrolled course and class")
+    public ApiResponse<LearningContentResponse> getLearningContent(
+            @PathVariable UUID courseId,
+            @RequestParam UUID classId) {
+        return ApiResponse.success(
+                "Learning content loaded successfully",
+                learningContentService.getLearningContent(courseId, classId));
     }
 }

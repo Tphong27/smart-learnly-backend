@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/v1/learning/progress")
@@ -31,8 +32,7 @@ public class TraineeProgressController {
     public ApiResponse<TraineeProgressResponse> getMyProgress() {
         return ApiResponse.success(
                 "Trainee progress loaded successfully",
-                traineeProgressService.getMyProgress()
-        );
+                traineeProgressService.getMyProgress());
     }
 
     @PatchMapping("/lessons/{lessonId}")
@@ -40,11 +40,10 @@ public class TraineeProgressController {
     @Operation(summary = "Mark lesson, quiz, or flashcard as completed/incomplete")
     public ApiResponse<LessonProgressResponse> updateLessonProgress(
             @PathVariable UUID lessonId,
-            @Valid @RequestBody UpdateLessonProgressRequest request
-    ) {
+            @RequestParam UUID classId,
+            @Valid @RequestBody UpdateLessonProgressRequest request) {
         return ApiResponse.success(
                 "Lesson progress updated successfully",
-                traineeProgressService.updateLessonProgress(lessonId, request.completed())
-        );
+                traineeProgressService.updateLessonProgress(lessonId, classId, request.completed()));
     }
 }
