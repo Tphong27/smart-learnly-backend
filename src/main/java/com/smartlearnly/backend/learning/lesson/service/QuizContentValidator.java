@@ -5,13 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
  * Validate nội dung quiz (JSON string lưu trong lesson.content) phía server.
- * Hỗ trợ cả định dạng cũ (question/correctIndex) lẫn định dạng mới.
+ * Hỗ trợ cả định dạng cũ (question/correctIndex) lẫn định dạng mới có media.
  */
 @Component
 public class QuizContentValidator {
@@ -21,6 +20,7 @@ public class QuizContentValidator {
     private static final String FILL_IN_THE_BLANK = "fill_in_the_blank";
     private static final Set<String> VALID_TYPES =
             Set.of(SINGLE_CHOICE, MULTIPLE_CHOICE, FILL_IN_THE_BLANK);
+    private static final Set<String> VALID_MEDIA_TYPES = Set.of("image", "video");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -64,8 +64,9 @@ public class QuizContentValidator {
             return;
         }
 
-        if (!hasText(question, "title")) {
-            throw invalid("Question " + qNum + ": title is required.");
+        validateMedia(question.get("media"), "Question " + qNum + ": media");
+        if (!hasText(question, "title") && !hasValidMedia(question.get("media"))) {
+            throw invalid("Question " + qNum + ": title or media is required.");
         }
 
         String type = question.path("type").asText(null);
@@ -89,13 +90,16 @@ public class QuizContentValidator {
         }
     }
 
-    private void validateChoice(
-            JsonNode question, JsonNode correctAnswers, int qNum, boolean single) {
+    private void validateChoice(JsonNode question, JsonNode correctAnswers, int qNum, boolean single) {
         JsonNode options = question.get("options");
-        if (options == null || !options.isArray() || options.isEmpty()) {
-            throw invalid("Question " + qNum + ": options is required.");
+        if (options == null || !options.isArray() || options.size() < 2) {
+            throw invalid("Question " + qNum + ": at least two options are required.");
         }
         int optionCount = options.size();
+
+        for (int i = 0; i < options.size(); i++) {
+            validateOption(options.get(i), qNum, i + 1);
+        }
 
         JsonNode numberOfOptions = question.get("number_of_options");
         if (numberOfOptions != null && numberOfOptions.isNumber()
@@ -106,19 +110,16 @@ public class QuizContentValidator {
         }
 
         if (single && correctAnswers.size() != 1) {
-            throw invalid(
-                    "Question " + qNum + ": single_choice must have exactly one correct answer.");
+            throw invalid("Question " + qNum + ": single_choice must have exactly one correct answer.");
         }
         if (!single && correctAnswers.isEmpty()) {
-            throw invalid(
-                    "Question " + qNum + ": multiple_choice must have at least one correct answer.");
+            throw invalid("Question " + qNum + ": multiple_choice must have at least one correct answer.");
         }
 
         Set<Integer> seen = new HashSet<>();
         for (JsonNode answer : correctAnswers) {
             if (!answer.isInt()) {
-                throw invalid(
-                        "Question " + qNum + ": correct_answers must contain integers.");
+                throw invalid("Question " + qNum + ": correct_answers must contain integers.");
             }
             int idx = answer.asInt();
             if (idx < 1 || idx > optionCount) {
@@ -131,6 +132,27 @@ public class QuizContentValidator {
                         "Question " + qNum
                                 + ": correct_answers contains duplicate option index " + idx + ".");
             }
+        }
+    }
+
+    private void validateOption(JsonNode option, int qNum, int optionNum) {
+        if (option == null || option.isNull()) {
+            throw invalid("Question " + qNum + ": option " + optionNum + " must have text or media.");
+        }
+        if (option.isTextual()) {
+            if (option.asText().isBlank()) {
+                throw invalid("Question " + qNum + ": option " + optionNum + " must have text or media.");
+            }
+            return;
+        }
+        if (!option.isObject()) {
+            throw invalid("Question " + qNum + ": option " + optionNum + " must be text or an object.");
+        }
+
+        JsonNode media = option.get("media");
+        validateMedia(media, "Question " + qNum + ": option " + optionNum + " media");
+        if (!hasText(option, "text") && !hasValidMedia(media)) {
+            throw invalid("Question " + qNum + ": option " + optionNum + " must have text or media.");
         }
     }
 
@@ -147,6 +169,30 @@ public class QuizContentValidator {
                                 + ": fill_in_the_blank correct_answers must be non-empty strings.");
             }
         }
+    }
+
+    private void validateMedia(JsonNode media, String label) {
+        if (media == null || media.isNull()) {
+            return;
+        }
+        if (!media.isObject()) {
+            throw invalid(label + " must be an object.");
+        }
+        String type = media.path("type").asText(null);
+        if (type == null || !VALID_MEDIA_TYPES.contains(type)) {
+            throw invalid(label + " type must be image or video.");
+        }
+        if (!hasText(media, "url")) {
+            throw invalid(label + " url is required.");
+        }
+    }
+
+    private boolean hasValidMedia(JsonNode media) {
+        if (media == null || media.isNull() || !media.isObject()) {
+            return false;
+        }
+        String type = media.path("type").asText(null);
+        return VALID_MEDIA_TYPES.contains(type) && hasText(media, "url");
     }
 
     private boolean isLegacyQuestion(JsonNode question) {
