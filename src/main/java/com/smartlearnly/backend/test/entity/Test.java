@@ -75,6 +75,12 @@ public class Test {
     @Column(name = "is_flashtest", nullable = false)
     private Boolean isFlashtest;
 
+    @Column(name = "access_code")
+    private String accessCode;
+
+    @Column(name = "access_code_expires_at")
+    private Instant accessCodeExpiresAt;
+
     @Column(name = "created_by")
     private UUID createdBy;
 

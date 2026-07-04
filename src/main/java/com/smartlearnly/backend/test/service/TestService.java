@@ -11,6 +11,9 @@ import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
 import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import jakarta.persistence.EntityNotFoundException;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class TestService {
+
+    private static final Duration ACCESS_CODE_TTL = Duration.ofMinutes(5);
+    private static final SecureRandom ACCESS_CODE_RANDOM = new SecureRandom();
 
     private final TestRepository testRepository;
     private final CurrentUserService currentUserService;
@@ -52,6 +58,7 @@ public class TestService {
                 request.getShowAnswersAfter());
         test.setIsFlashtest(
                 request.getIsFlashtest());
+        ensureAccessCode(test);
         test.setCreatedBy(
                 currentUserService.requireAuthenticatedUser().getId());
 
@@ -69,7 +76,24 @@ public class TestService {
                 new ArrayList<>();
 
         for (Test test : tests) {
-            responses.add(mapToResponse(test));
+            responses.add(mapToResponse(ensureAccessCode(test)));
+        }
+
+        return responses;
+    }
+
+    public List<TestModel.Response> getMyTests() {
+
+        UUID currentUserId =
+                currentUserService.requireAuthenticatedUser().getId();
+        List<Test> tests =
+                testRepository.findByCreatedBy(currentUserId);
+
+        List<TestModel.Response> responses =
+                new ArrayList<>();
+
+        for (Test test : tests) {
+            responses.add(mapToResponse(ensureAccessCode(test)));
         }
 
         return responses;
@@ -82,7 +106,24 @@ public class TestService {
                         new EntityNotFoundException(
                                 "Test not found"));
 
-        return mapToResponse(test);
+        return mapToResponse(ensureAccessCode(test));
+    }
+
+    public TestModel.AccessCodeVerifyResponse verifyAccessCode(
+            UUID id,
+            TestModel.AccessCodeVerifyRequest request) {
+
+        Test test = testRepository.findById(id)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(
+                                "Test not found"));
+        test = ensureAccessCode(test);
+
+        TestModel.AccessCodeVerifyResponse response =
+                new TestModel.AccessCodeVerifyResponse();
+        response.setValid(accessCodeMatches(test, request.getAccessCode()));
+        response.setExpiresAt(test.getAccessCodeExpiresAt());
+        return response;
     }
 
     @Transactional
@@ -121,6 +162,7 @@ public class TestService {
         if (request.getIsPublished() != null) test.setIsPublished(request.getIsPublished());
         if (request.getIsArchived() != null) test.setIsArchived(request.getIsArchived());
         if (request.getIsFlashtest() != null) test.setIsFlashtest(request.getIsFlashtest());
+        ensureAccessCode(test);
 
         Test updated = testRepository.save(test);
         if (isFlashTest) {
@@ -193,8 +235,39 @@ public class TestService {
                 test.getCreatedAt());
         response.setUpdatedAt(
                 test.getUpdatedAt());
+        response.setAccessCode(test.getAccessCode());
+        response.setAccessCodeExpiresAt(test.getAccessCodeExpiresAt());
 
         return response;
+    }
+
+    private Test ensureAccessCode(Test test) {
+        if (!Boolean.TRUE.equals(test.getIsFlashtest())) {
+            return test;
+        }
+        Instant now = Instant.now();
+        if (test.getAccessCode() == null ||
+                test.getAccessCodeExpiresAt() == null ||
+                !test.getAccessCodeExpiresAt().isAfter(now)) {
+            test.setAccessCode(generateAccessCode());
+            test.setAccessCodeExpiresAt(now.plus(ACCESS_CODE_TTL));
+            return test.getId() == null ? test : testRepository.save(test);
+        }
+        return test;
+    }
+
+    public boolean accessCodeMatches(Test test, String accessCode) {
+        if (!Boolean.TRUE.equals(test.getIsFlashtest())) {
+            return true;
+        }
+        Test current = ensureAccessCode(test);
+        String expected = current.getAccessCode();
+        return expected != null &&
+                expected.equals(String.valueOf(accessCode == null ? "" : accessCode).trim());
+    }
+
+    private String generateAccessCode() {
+        return String.format("%06d", ACCESS_CODE_RANDOM.nextInt(1_000_000));
     }
 }
 

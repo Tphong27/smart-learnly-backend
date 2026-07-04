@@ -37,12 +37,28 @@ public class TestController {
                 testService.getAllTests());
     }
 
+    @GetMapping("/mine")
+    public ResponseEntity<List<TestModel.Response>> getMine() {
+
+        return ResponseEntity.ok(
+                testService.getMyTests());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<TestModel.Response> getById(
             @PathVariable UUID id) {
 
         return ResponseEntity.ok(
                 testService.getTestById(id));
+    }
+
+    @PostMapping("/{id}/access-code/verify")
+    public ResponseEntity<TestModel.AccessCodeVerifyResponse> verifyAccessCode(
+            @PathVariable UUID id,
+            @RequestBody TestModel.AccessCodeVerifyRequest request) {
+
+        return ResponseEntity.ok(
+                testService.verifyAccessCode(id, request));
     }
 
     @PutMapping("/{id}")

@@ -20,6 +20,7 @@ public class TestAttemptModel {
         private UUID studentId;
         private String studentName;
         private UUID assignmentId;
+        private String accessCode;
     }
 
     // Sinh viên nộp bài / Hoặc hết giờ tự thu bài (Update)

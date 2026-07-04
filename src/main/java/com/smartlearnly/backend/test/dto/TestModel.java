@@ -74,5 +74,22 @@ public class TestModel {
         private UUID createdBy;
         private Instant createdAt;
         private Instant updatedAt;
+        private String accessCode;
+        private Instant accessCodeExpiresAt;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class AccessCodeVerifyRequest {
+        private String accessCode;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class AccessCodeVerifyResponse {
+        private Boolean valid;
+        private Instant expiresAt;
     }
 }
