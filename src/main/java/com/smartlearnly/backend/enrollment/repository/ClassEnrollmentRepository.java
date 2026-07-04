@@ -1,7 +1,6 @@
 package com.smartlearnly.backend.enrollment.repository;
 
 import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
-import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.persistence.LockModeType;

@@ -19,6 +19,7 @@ public record MyCourseResponse(
         Instant enrollmentDate,
         String courseStatus,
         boolean accessAllowed,
-        String accessBlockedReason
+        String accessBlockedReason,
+        MyCourseClassResponse enrolledClass
 ) {
 }
