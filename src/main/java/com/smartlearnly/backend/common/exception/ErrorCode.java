@@ -33,6 +33,7 @@ public enum ErrorCode {
     COURSE_ACCESS_BLOCKED(HttpStatus.LOCKED, "Course access has been blocked"),
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Payload exceeds the allowed size"),
     BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_CONTENT, "Business rule violation"),
+    IMAGE_IMPORT_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Image import is unavailable"),
     EXTERNAL_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "External service unavailable"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
