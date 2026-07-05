@@ -11,6 +11,8 @@ public interface QuestionAnswerRepository extends JpaRepository<QuestionAnswer, 
 
     List<QuestionAnswer> findByQuestionIdOrderByOrderIndexAsc(UUID questionId);
 
+    List<QuestionAnswer> findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List<UUID> questionIds);
+
     long countByQuestionId(UUID questionId);
 
     void deleteByQuestionId(UUID questionId);
