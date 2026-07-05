@@ -24,6 +24,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -164,6 +165,55 @@ public class CloudflareR2StorageClient implements FileStorageService {
     }
 
     // ==================== HLS Support Methods ====================
+
+    /**
+     * Streams an object to a private R2 bucket without requiring or returning a
+     * public URL. The caller retains ownership of the input stream.
+     */
+    public void putPrivateObject(
+            String bucket,
+            String key,
+            String contentType,
+            InputStream content,
+            long contentLength
+    ) {
+        validateConfiguration();
+        if (bucket == null || bucket.isBlank() || key == null || key.isBlank()
+                || content == null || contentLength <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Private R2 upload request is invalid");
+        }
+
+        try {
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .contentType(contentType == null || contentType.isBlank()
+                            ? "application/octet-stream"
+                            : contentType)
+                    .contentLength(contentLength)
+                    .build();
+
+            PutObjectResponse response = getS3Client().putObject(
+                    request,
+                    RequestBody.fromInputStream(content, contentLength)
+            );
+            log.info("Private R2 upload successful: bucket={}, key={}, etag={}",
+                    bucket, key, response.eTag());
+        } catch (S3Exception exception) {
+            log.warn("Private R2 upload failed for bucket={} key={} status={}",
+                    bucket, key, exception.statusCode(), exception);
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Private video storage is unavailable"
+            );
+        } catch (SdkException exception) {
+            log.warn("Private R2 upload failed for bucket={} key={}", bucket, key, exception);
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Private video storage is unreachable"
+            );
+        }
+    }
 
     /**
      * Gets an object from R2 (server-to-server, no presigning).

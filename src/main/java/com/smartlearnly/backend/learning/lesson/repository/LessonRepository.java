@@ -4,11 +4,17 @@ import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface LessonRepository extends JpaRepository<Lesson, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select lesson from Lesson lesson where lesson.id = :lessonId")
+    Optional<Lesson> findByIdForUpdate(@Param("lessonId") UUID lessonId);
+
     List<Lesson> findBySectionIdOrderBySortOrderAscCreatedAtAsc(UUID sectionId);
 
     Optional<Lesson> findByIdAndSectionId(UUID id, UUID sectionId);

@@ -55,6 +55,22 @@ $env:APP_STORAGE_LESSON_MATERIAL_BUCKET = "lesson-materials"
 $env:APP_STORAGE_LESSON_RESOURCE_BUCKET = "lesson-resources"
 $env:APP_STORAGE_AVATAR_BUCKET = "avatar"
 
+# External HLS processing. The raw and output bucket may be the same private R2
+# bucket because each type uses a separate raw/ or hls/ prefix.
+$env:APP_HLS_ENABLED = "true"
+$env:APP_HLS_PROCESSING_PROVIDER = "github-actions"
+$env:APP_HLS_RAW_BUCKET = "private-video-bucket"
+$env:APP_HLS_OUTPUT_BUCKET = "private-video-bucket"
+$env:HLS_GITHUB_OWNER = "your-github-owner"
+$env:HLS_GITHUB_REPOSITORY = "smart-learnly-backend"
+$env:HLS_GITHUB_WORKFLOW_FILE = "hls-transcode.yml"
+$env:HLS_GITHUB_REF = "main"
+
+# Set these two secrets in the process environment; do not paste real values in
+# this file:
+#   HLS_GITHUB_TOKEN  Fine-grained PAT with Actions: Read and write
+#   HLS_CALLBACK_SECRET  Same high-entropy value as the GitHub Actions secret
+
 # Set RESEND_API_KEY in your local environment to send real emails through Resend SMTP.
 # Without it, email delivery is skipped. Set APP_AUTH_DEBUG_LOG_TOKENS=true only for trusted local testing.
 # Set GOOGLE_CLIENT_ID to enable Google Identity Services login.
@@ -62,6 +78,7 @@ $env:APP_STORAGE_AVATAR_BUCKET = "avatar"
 # Set APP_SEED_CATEGORIES_ENABLED=true to seed three development course categories.
 # Set CLOUDFLARE_R2_ACCESS_KEY_ID and CLOUDFLARE_R2_SECRET_ACCESS_KEY to enable file uploads through Cloudflare R2.
 # Set APP_STORAGE_PROVIDER=r2 to use Cloudflare R2 instead of Supabase Storage.
+# Set APP_HLS_PROCESSING_PROVIDER=github-actions to move FFmpeg off this backend.
 
 $projectRoot = $PSScriptRoot
 $launchRoot = "C:\tmp\smart-learnly-backend"

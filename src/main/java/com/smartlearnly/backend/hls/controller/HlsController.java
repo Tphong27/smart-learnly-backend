@@ -404,7 +404,10 @@ public class HlsController {
     }
 
     private String hlsBucket() {
-        return storageProperties.getLessonMaterialBucket();
+        String configuredBucket = hlsProperties.getOutputBucket();
+        return configuredBucket == null || configuredBucket.isBlank()
+                ? storageProperties.getLessonMaterialBucket()
+                : configuredBucket;
     }
 
     private String getClientIpAddress(HttpServletRequest request) {

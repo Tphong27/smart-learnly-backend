@@ -37,6 +37,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/sepay").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/internal/hls/jobs/callback").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categories",
                                 "/api/v1/courses",
@@ -84,6 +85,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/sepay").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/internal/hls/jobs/callback").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categories",
                                 "/api/v1/courses",
@@ -131,10 +133,6 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
                         .requestMatchers("/api/v1/admin/question-imports/**", "/api/v1/admin/question-answers/**")
                         .hasAnyRole("ADMIN", "SME")
-                        .requestMatchers("/api/v1/admin/classes/**")
-                        .hasAnyRole("ADMIN", "TMO", "TRAINER")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/users", "/api/v1/admin/users/**")
-                        .hasAnyRole("ADMIN", "TMO")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/courses", "/api/v1/admin/courses/**")
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
