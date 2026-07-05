@@ -105,14 +105,27 @@ app:
         encryption-key: ${SETTINGS_ENCRYPTION_KEY:}
     hls:
         enabled: ${APP_HLS_ENABLED:true}
+        processing-provider: ${APP_HLS_PROCESSING_PROVIDER:local}
         token-secret: ${HLS_TOKEN_SECRET:${APP_HLS_TOKEN_SECRET:change-me-in-production}}
         r2-secret: ${HLS_R2_SECRET:${APP_HLS_R2_SECRET:}}
         r2-base-path: ${APP_HLS_R2_BASE_PATH:hls}
+        raw-bucket: ${APP_HLS_RAW_BUCKET:${R2_RAW_BUCKET:}}
+        output-bucket: ${APP_HLS_OUTPUT_BUCKET:${R2_HLS_BUCKET:}}
+        callback-secret: ${HLS_CALLBACK_SECRET:}
+        callback-timestamp-tolerance-seconds: ${APP_HLS_CALLBACK_TIMESTAMP_TOLERANCE_SECONDS:300}
         segment-duration: ${APP_HLS_SEGMENT_DURATION:10}
         qualities: ${APP_HLS_QUALITIES:480p,720p,1080p}
         master-token-ttl-seconds: ${APP_HLS_MASTER_TOKEN_TTL:900}
         r2-token-ttl-seconds: ${APP_HLS_R2_TOKEN_TTL:7200}
         segment-token-ttl-seconds: ${APP_HLS_SEGMENT_TOKEN_TTL:7200}
+        github-actions:
+            api-base-url: ${HLS_GITHUB_API_BASE_URL:https://api.github.com}
+            api-version: ${HLS_GITHUB_API_VERSION:2026-03-10}
+            owner: ${HLS_GITHUB_OWNER:}
+            repository: ${HLS_GITHUB_REPOSITORY:}
+            workflow-file: ${HLS_GITHUB_WORKFLOW_FILE:hls-transcode.yml}
+            ref: ${HLS_GITHUB_REF:main}
+            token: ${HLS_GITHUB_TOKEN:}
 
 springdoc:
     api-docs:
