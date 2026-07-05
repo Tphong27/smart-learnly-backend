@@ -22,6 +22,7 @@ public class UpdateClassRequest {
 
     @Positive
     private Integer maxStudents;
+    private String status;
 
     private boolean courseIdProvided;
     private boolean classNameProvided;
@@ -30,6 +31,7 @@ public class UpdateClassRequest {
     private boolean startDateProvided;
     private boolean endDateProvided;
     private boolean maxStudentsProvided;
+    private boolean statusProvided;
 
     public UUID getCourseId() {
         return courseId;
@@ -94,6 +96,15 @@ public class UpdateClassRequest {
         this.maxStudentsProvided = true;
     }
 
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+        this.statusProvided = true;
+    }
+
     public boolean isCourseIdProvided() {
         return courseIdProvided;
     }
@@ -122,10 +133,14 @@ public class UpdateClassRequest {
         return maxStudentsProvided;
     }
 
+    public boolean isStatusProvided() {
+        return statusProvided;
+    }
+
     @JsonIgnore
     public boolean hasAnyField() {
         return courseIdProvided || classNameProvided || trainerIdProvided
                 || scheduleDescriptionProvided || startDateProvided
-                || endDateProvided || maxStudentsProvided;
+                || endDateProvided || maxStudentsProvided || statusProvided;
     }
 }
