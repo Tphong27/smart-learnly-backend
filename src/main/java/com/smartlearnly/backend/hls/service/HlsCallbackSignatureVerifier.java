@@ -8,11 +8,13 @@ import java.time.Clock;
 import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 @Component
 public class HlsCallbackSignatureVerifier {
     private final HlsProperties properties;
     private final Clock clock;
+    @Autowired
     public HlsCallbackSignatureVerifier(HlsProperties properties) { this(properties, Clock.systemUTC()); }
     HlsCallbackSignatureVerifier(HlsProperties properties, Clock clock) {
         this.properties = properties; this.clock = clock;

@@ -10,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 @Slf4j @Service
 public class GithubActionsHlsWorkflowDispatcher implements HlsWorkflowDispatcher {
@@ -38,7 +39,29 @@ public class GithubActionsHlsWorkflowDispatcher implements HlsWorkflowDispatcher
                     .header(HttpHeaders.USER_AGENT, "smart-learnly-backend")
                     .body(body).retrieve().toBodilessEntity();
             log.info("Dispatched HLS workflow job={} lesson={}", request.jobId(), request.lessonId());
+        } catch (RestClientResponseException exception) {
+            String requestId = exception.getResponseHeaders() == null
+                    ? null
+                    : exception.getResponseHeaders().getFirst("X-GitHub-Request-Id");
+            log.warn(
+                    "GitHub HLS dispatch rejected: job={}, lesson={}, status={}, requestId={}",
+                    request.jobId(),
+                    request.lessonId(),
+                    exception.getStatusCode().value(),
+                    requestId
+            );
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "HLS processing workflow could not be started (GitHub status "
+                            + exception.getStatusCode().value() + ")"
+            );
         } catch (RestClientException exception) {
+            log.warn(
+                    "GitHub HLS dispatch failed before receiving a response: job={}, lesson={}",
+                    request.jobId(),
+                    request.lessonId(),
+                    exception
+            );
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
                     "HLS processing workflow could not be started");
         }
