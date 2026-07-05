@@ -60,6 +60,9 @@ public class Question {
     @Column(name = "is_ai_generated", nullable = false)
     private Boolean isAiGenerated;
 
+    @Column(name = "import_source", length = 50)
+    private String importSource;
+
     @Convert(converter = QuestionStatusConverter.class)
     @Column(nullable = false, columnDefinition = "question_status")
     @ColumnTransformer(write = "?::question_status")
