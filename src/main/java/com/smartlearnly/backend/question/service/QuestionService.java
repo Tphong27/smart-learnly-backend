@@ -16,9 +16,6 @@ import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
-import jakarta.persistence.criteria.Subquery;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -29,8 +26,6 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,8 +43,23 @@ public class QuestionService {
 
     @Transactional(readOnly = true)
     public PageResponse<QuestionModel.Response> list(UUID bankId, UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
-        Specification<Question> specification = buildSpecification(bankId, courseId, moduleId, search, type, status, difficulty);
-        Page<Question> questionPage = questionRepository.findAll(specification, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt")));
+        String normalizedSearch = normalizeNullable(search);
+        String normalizedType = type == null || type.isBlank()
+                ? null
+                : parseSupportedQuestionType(type).name().toLowerCase(Locale.ROOT);
+        String normalizedStatus = status == null || status.isBlank()
+                ? null
+                : parseQuestionStatus(status, null).name().toLowerCase(Locale.ROOT);
+        Page<Question> questionPage = questionRepository.searchForAdmin(
+                bankId,
+                courseId,
+                moduleId,
+                normalizedSearch,
+                normalizedType,
+                normalizedStatus,
+                difficulty,
+                PageRequest.of(page, size)
+        );
         return new PageResponse<>(questionPage.getContent().stream().map(this::toResponse).toList(), questionPage.getNumber(), questionPage.getSize(), questionPage.getTotalElements(), questionPage.getTotalPages());
     }
 
@@ -134,30 +144,6 @@ public class QuestionService {
         question.setReviewedBy(actor.getId());
         question.setReviewedAt(Instant.now());
         return toResponse(questionRepository.save(question));
-    }
-
-    private Specification<Question> buildSpecification(UUID bankId, UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty) {
-        return (root, query, criteriaBuilder) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (bankId != null) predicates.add(criteriaBuilder.equal(root.get("questionBankId"), bankId));
-            if (courseId != null) {
-                Subquery<UUID> courseBankIds = query.subquery(UUID.class);
-                Root<QuestionBank> bankRoot = courseBankIds.from(QuestionBank.class);
-                courseBankIds.select(bankRoot.get("id"))
-                        .where(criteriaBuilder.equal(bankRoot.get("courseId"), courseId));
-                predicates.add(criteriaBuilder.or(
-                        criteriaBuilder.equal(root.get("courseId"), courseId),
-                        root.get("questionBankId").in(courseBankIds)
-                ));
-            }
-            if (moduleId != null) predicates.add(criteriaBuilder.equal(root.get("moduleId"), moduleId));
-            String normalizedSearch = normalizeNullable(search);
-            if (normalizedSearch != null) predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("questionText")), "%" + normalizedSearch.toLowerCase(Locale.ROOT) + "%"));
-            if (type != null && !type.isBlank()) predicates.add(criteriaBuilder.equal(root.get("questionType"), parseSupportedQuestionType(type)));
-            if (status != null && !status.isBlank()) predicates.add(criteriaBuilder.equal(root.get("status"), parseQuestionStatus(status, null)));
-            if (difficulty != null) predicates.add(criteriaBuilder.equal(root.get("difficulty"), difficulty));
-            return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
-        };
     }
 
     private QuestionBank resolveBank(UUID bankId, UUID requestCourseId) {
