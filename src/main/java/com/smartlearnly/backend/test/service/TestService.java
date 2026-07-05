@@ -242,9 +242,6 @@ public class TestService {
     }
 
     private Test ensureAccessCode(Test test) {
-        if (!Boolean.TRUE.equals(test.getIsFlashtest())) {
-            return test;
-        }
         Instant now = Instant.now();
         if (test.getAccessCode() == null ||
                 test.getAccessCodeExpiresAt() == null ||
@@ -257,9 +254,6 @@ public class TestService {
     }
 
     public boolean accessCodeMatches(Test test, String accessCode) {
-        if (!Boolean.TRUE.equals(test.getIsFlashtest())) {
-            return true;
-        }
         Test current = ensureAccessCode(test);
         String expected = current.getAccessCode();
         return expected != null &&
