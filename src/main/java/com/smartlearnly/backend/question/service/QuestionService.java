@@ -176,10 +176,22 @@ public class QuestionService {
 
     @Transactional
     public QuestionImportDtos.ImportBatchResponse importBatch(QuestionImportDtos.ImportBatchRequest request) {
-        QuestionBank bank = questionBankService.findActiveBankEntity(request.bankId());
+        List<Question> savedQuestions = importReviewedRows(request.bankId(), request.rows(), false, null);
+        List<UUID> createdIds = savedQuestions.stream().map(Question::getId).toList();
+        return new QuestionImportDtos.ImportBatchResponse(request.rows().size(), createdIds.size(), createdIds, List.of());
+    }
 
+    @Transactional
+    public List<Question> importReviewedRows(UUID bankId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource) {
+        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        List<QuestionImportDtos.ImportRow> rows = request.rows();
+        return importReviewedRows(bank, rows, actor, aiGenerated, importSource);
+    }
+
+    private List<Question> importReviewedRows(QuestionBank bank, List<QuestionImportDtos.ImportRow> rows, UserAccount actor, boolean aiGenerated, String importSource) {
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one question row is required");
+        }
 
         List<QuestionImportDtos.ImportRowError> errors = new ArrayList<>();
         Set<Integer> duplicateRowNumbers = new HashSet<>();
@@ -205,19 +217,17 @@ public class QuestionService {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, buildImportErrorSummary(errors));
         }
 
-        List<UUID> createdIds = new ArrayList<>();
+        List<Question> savedQuestions = new ArrayList<>();
         for (QuestionImportDtos.ImportRow row : validatedRows) {
             if (duplicateRowNumbers.contains(row.rowNumber())) {
                 continue;
             }
-            Question saved = persistImportedQuestion(bank, row, actor);
-            createdIds.add(saved.getId());
+            savedQuestions.add(persistImportedQuestion(bank, row, actor, aiGenerated, importSource));
         }
-
-        return new QuestionImportDtos.ImportBatchResponse(rows.size(), createdIds.size(), createdIds, List.of());
+        return savedQuestions;
     }
 
-    private Question persistImportedQuestion(QuestionBank bank, QuestionImportDtos.ImportRow row, UserAccount actor) {
+    private Question persistImportedQuestion(QuestionBank bank, QuestionImportDtos.ImportRow row, UserAccount actor, boolean aiGenerated, String importSource) {
         QuestionType questionType = parseSupportedQuestionType(row.questionType());
         Question question = new Question();
         question.setQuestionBankId(bank.getId());
@@ -228,7 +238,8 @@ public class QuestionService {
         question.setBloomLevel(parseBloomLevel(row.bloomLevel()));
         question.setDifficulty(row.difficulty());
         question.setExplanation(normalizeNullable(row.explanation()));
-        question.setIsAiGenerated(false);
+        question.setIsAiGenerated(aiGenerated);
+        question.setImportSource(normalizeNullable(importSource));
         question.setStatus(QuestionStatus.DRAFT);
         question.setCreatedBy(actor.getId());
         Question saved = questionRepository.save(question);
@@ -449,7 +460,7 @@ public class QuestionService {
 
     private QuestionModel.Response toResponse(Question question) {
         List<QuestionModel.AnswerResponse> answers = answerRepository.findByQuestionIdOrderByOrderIndexAsc(question.getId()).stream().map(answer -> new QuestionModel.AnswerResponse(answer.getId(), answer.getId(), answer.getAnswerText(), Boolean.TRUE.equals(answer.getIsCorrect()), Boolean.TRUE.equals(answer.getIsCorrect()), answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(), answer.getOrderIndex() == null ? 0 : answer.getOrderIndex())).toList();
-        return new QuestionModel.Response(question.getId(), question.getId(), question.getQuestionBankId(), question.getQuestionBankId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), Boolean.TRUE.equals(question.getIsAiGenerated()), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
+        return new QuestionModel.Response(question.getId(), question.getId(), question.getQuestionBankId(), question.getQuestionBankId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), Boolean.TRUE.equals(question.getIsAiGenerated()), question.getImportSource(), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
     }
 
     private QuestionType parseSupportedQuestionType(String value) {
