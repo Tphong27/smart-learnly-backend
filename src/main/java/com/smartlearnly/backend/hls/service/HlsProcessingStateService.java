@@ -1,4 +1,5 @@
 package com.smartlearnly.backend.hls.service;
+
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.hls.config.HlsProperties;
@@ -13,13 +14,18 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-@Service @RequiredArgsConstructor
+
+@Service
+@RequiredArgsConstructor
 public class HlsProcessingStateService {
     private final HlsLessonRepository hlsRepository;
     private final LessonRepository lessonRepository;
     private final HlsProperties properties;
+
     public record ProcessingReservation(boolean started, UUID jobId, String sourceKey,
-            String outputPrefix, String status, String activePath, String message) {}
+            String outputPrefix, String status, String activePath, String message) {
+    }
+
     @Transactional
     public ProcessingReservation reserveGithubJob(UUID lessonId, boolean replace, String extension) {
         lockLesson(lessonId);
@@ -34,69 +40,106 @@ public class HlsProcessingStateService {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "HLS output prefix is invalid");
         String source = "raw/" + lessonId + "/" + job + "/source." + extension;
         String output = base.replaceAll("/+$", "") + "/" + lessonId + "/" + job;
-        if (hls == null) { hls = new HlsLesson(); hls.setLessonId(lessonId); }
-        hls.setHlsStatus("processing"); hls.setProcessingJobId(job); hls.setSourceObjectKey(source);
-        hls.setProcessingOutputPrefix(output); hls.setProcessingProvider("github-actions");
-        hls.setProgressPercent(5); hls.setCurrentStep("Uploading source video to private R2");
-        hls.setErrorMessage(null); hls.setWorkflowDispatchedAt(null); hls.setProcessingCompletedAt(null);
+        if (hls == null) {
+            hls = new HlsLesson();
+            hls.setLessonId(lessonId);
+        }
+        hls.setHlsStatus("processing");
+        hls.setProcessingJobId(job);
+        hls.setSourceObjectKey(source);
+        hls.setProcessingOutputPrefix(output);
+        hls.setProcessingProvider("github-actions");
+        hls.setProgressPercent(5);
+        hls.setCurrentStep("Uploading source video to private R2");
+        hls.setErrorMessage(null);
+        hls.setWorkflowDispatchedAt(null);
+        hls.setProcessingCompletedAt(null);
         hlsRepository.save(hls);
         return new ProcessingReservation(true, job, source, output, "processing", hls.getR2BasePath(), "Reserved");
     }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markWorkflowDispatched(UUID lessonId, UUID jobId) {
-        lockLesson(lessonId); HlsLesson hls = current(lessonId, jobId);
-        if (terminal(hls)) return;
-        hls.setWorkflowDispatchedAt(Instant.now()); hls.setProgressPercent(20);
-        hls.setCurrentStep("GitHub Actions is transcoding the video"); hlsRepository.save(hls);
+        lockLesson(lessonId);
+        HlsLesson hls = current(lessonId, jobId);
+        if (terminal(hls))
+            return;
+        hls.setWorkflowDispatchedAt(Instant.now());
+        hls.setProgressPercent(20);
+        hls.setCurrentStep("GitHub Actions is transcoding the video");
+        hlsRepository.save(hls);
     }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markJobFailed(UUID lessonId, UUID jobId, String error) {
-        lockLesson(lessonId); HlsLesson hls = hlsRepository.findByLessonId(lessonId).orElse(null);
-        if (hls == null || !jobId.equals(hls.getProcessingJobId()) || terminal(hls)) return;
+        lockLesson(lessonId);
+        HlsLesson hls = hlsRepository.findByLessonId(lessonId).orElse(null);
+        if (hls == null || !jobId.equals(hls.getProcessingJobId()) || terminal(hls))
+            return;
         fail(hls, error);
     }
+
     @Transactional
     public void applyCallback(HlsProcessingCallbackRequest request) {
-        Lesson lesson = lockLesson(request.lessonId()); HlsLesson hls = current(request.lessonId(), request.jobId());
+        Lesson lesson = lockLesson(request.lessonId());
+        HlsLesson hls = current(request.lessonId(), request.jobId());
         if (!request.isReady()) {
-            if ("failed".equals(hls.getHlsStatus())) return;
-            if ("ready".equals(hls.getHlsStatus())) throw new BusinessException(ErrorCode.CONFLICT, "Job completed");
-            fail(hls, request.errorMessage()); return;
+            if ("failed".equals(hls.getHlsStatus()))
+                return;
+            if ("ready".equals(hls.getHlsStatus()))
+                throw new BusinessException(ErrorCode.CONFLICT, "Job completed");
+            fail(hls, request.errorMessage());
+            return;
         }
         String prefix = hls.getProcessingOutputPrefix();
         if (prefix == null || !prefix.equals(request.r2BasePath())
                 || !(prefix + "/master.m3u8").equals(request.masterPlaylistPath())
                 || request.qualities() == null || request.qualities().isEmpty())
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Callback output does not match reserved job");
-        if ("ready".equals(hls.getHlsStatus()) && prefix.equals(hls.getR2BasePath())) return;
-        if (terminal(hls)) throw new BusinessException(ErrorCode.CONFLICT, "Job already terminated");
-        hls.setR2BasePath(prefix); hls.setEncryptionKeyPath(prefix + "/enc.key");
-        hls.setQualities(String.join(",", request.qualities())); hls.setHlsStatus("ready");
-        hls.setProgressPercent(100); hls.setCurrentStep("Complete"); hls.setErrorMessage(null);
-        hls.setProcessingCompletedAt(Instant.now()); hlsRepository.save(hls);
-        lesson.setVideoUrl(prefix + "/master.m3u8"); lessonRepository.save(lesson);
+        if ("ready".equals(hls.getHlsStatus()) && prefix.equals(hls.getR2BasePath()))
+            return;
+        if (terminal(hls))
+            throw new BusinessException(ErrorCode.CONFLICT, "Job already terminated");
+        hls.setR2BasePath(prefix);
+        hls.setEncryptionKeyPath(prefix + "/enc.key");
+        hls.setQualities(String.join(",", request.qualities()));
+        hls.setHlsStatus("ready");
+        hls.setProgressPercent(100);
+        hls.setCurrentStep("Complete");
+        hls.setErrorMessage(null);
+        hls.setProcessingCompletedAt(Instant.now());
+        hlsRepository.save(hls);
+        lesson.setVideoUrl(prefix + "/master.m3u8");
+        lessonRepository.save(lesson);
     }
+
     private void fail(HlsLesson hls, String error) {
         String value = error == null || error.isBlank() ? "External HLS processing failed" : error.strip();
-        hls.setHlsStatus("failed"); hls.setCurrentStep("Processing failed");
+        hls.setHlsStatus("failed");
+        hls.setCurrentStep("Processing failed");
         hls.setErrorMessage(value.substring(0, Math.min(1000, value.length())));
-        hls.setProcessingCompletedAt(Instant.now()); hlsRepository.save(hls);
+        hls.setProcessingCompletedAt(Instant.now());
+        hlsRepository.save(hls);
     }
+
     private ProcessingReservation existing(HlsLesson h, String message) {
         return new ProcessingReservation(false, h.getProcessingJobId(), h.getSourceObjectKey(),
                 h.getProcessingOutputPrefix(), h.getHlsStatus(), h.getR2BasePath(), message);
     }
+
     private Lesson lockLesson(UUID id) {
-        return lessonRepository.findByIdForUpdate(id).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson not found: " + id));
+        return lessonRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson not found: " + id));
     }
+
     private HlsLesson current(UUID lesson, UUID job) {
-        HlsLesson h = hlsRepository.findByLessonId(lesson).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "HLS job not found"));
+        HlsLesson h = hlsRepository.findByLessonId(lesson)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "HLS job not found"));
         if (!job.equals(h.getProcessingJobId()))
             throw new BusinessException(ErrorCode.CONFLICT, "Stale HLS processing job");
         return h;
     }
+
     private boolean terminal(HlsLesson h) {
         return "ready".equals(h.getHlsStatus()) || "failed".equals(h.getHlsStatus());
     }
