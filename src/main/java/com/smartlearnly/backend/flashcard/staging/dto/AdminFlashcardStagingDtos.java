@@ -148,6 +148,7 @@ public final class AdminFlashcardStagingDtos {
             String questionType,
             Short difficulty,
             String status,
+            boolean imported,
             String explanation,
             List<SourceQuestionAnswerResponse> answers,
             List<String> correctAnswers

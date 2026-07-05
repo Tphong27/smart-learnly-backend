@@ -23,4 +23,17 @@ public interface FlashcardStagingCardRepository extends JpaRepository<FlashcardS
             order by card.batch.createdAt desc, card.sortOrder asc, card.createdAt asc
             """)
     List<FlashcardStagingCard> findDraftBySetId(@Param("setId") UUID setId);
+
+    @Query("""
+            select distinct card.sourceQuestionId
+            from FlashcardStagingCard card
+            where card.batch.flashcardSet.id = :setId
+              and card.sourceQuestionId in :sourceQuestionIds
+              and card.status in :statuses
+            """)
+    List<UUID> findImportedSourceQuestionIds(
+            @Param("setId") UUID setId,
+            @Param("sourceQuestionIds") Collection<UUID> sourceQuestionIds,
+            @Param("statuses") Collection<String> statuses
+    );
 }

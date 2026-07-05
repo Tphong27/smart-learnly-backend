@@ -74,6 +74,7 @@ public class AdminFlashcardStagingService {
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_APPROVED = "approved";
     private static final String STATUS_REJECTED = "rejected";
+    private static final Set<String> IMPORTED_SOURCE_STATUSES = Set.of(STATUS_DRAFT, STATUS_APPROVED);
     private static final long MAX_GENERATION_FILE_SIZE_BYTES = 10L * 1024L * 1024L;
     private static final long MAX_TRANSCRIPT_FILE_SIZE_BYTES = 5L * 1024L * 1024L;
     private static final int DEFAULT_DESIRED_COUNT = 10;
@@ -127,12 +128,17 @@ public class AdminFlashcardStagingService {
                 .toList();
         Map<UUID, List<QuestionAnswer>> answersByQuestionId = answersByQuestionId(questions);
         Map<UUID, String> bankNames = bankNames(questions.stream().map(Question::getQuestionBankId).collect(Collectors.toSet()));
+        Set<UUID> importedQuestionIds = importedSourceQuestionIds(
+                setId,
+                questions.stream().map(Question::getId).toList()
+        );
 
         return questions.stream()
                 .map(question -> toSourceQuestionResponse(
                         question,
                         bankNames.get(question.getQuestionBankId()),
-                        answersByQuestionId.getOrDefault(question.getId(), List.of())
+                        answersByQuestionId.getOrDefault(question.getId(), List.of()),
+                        importedQuestionIds.contains(question.getId())
                 ))
                 .toList();
     }
@@ -148,6 +154,10 @@ public class AdminFlashcardStagingService {
         List<Question> questions = loadQuestionsInRequestOrder(request.questionIds());
         if (questions.size() != request.questionIds().size()) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "One or more questions were not found");
+        }
+        Set<UUID> importedQuestionIds = importedSourceQuestionIds(setId, request.questionIds());
+        if (!importedQuestionIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "One or more selected questions were already imported");
         }
         for (Question question : questions) {
             if (!context.course().getId().equals(question.getCourseId())) {
@@ -938,6 +948,17 @@ public class AdminFlashcardStagingService {
         }
     }
 
+    private Set<UUID> importedSourceQuestionIds(UUID setId, List<UUID> sourceQuestionIds) {
+        if (sourceQuestionIds == null || sourceQuestionIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(stagingCardRepository.findImportedSourceQuestionIds(
+                setId,
+                sourceQuestionIds,
+                IMPORTED_SOURCE_STATUSES
+        ));
+    }
+
     private QuestionStatus parseQuestionStatus(String status) {
         if (status == null || status.isBlank()) {
             return null;
@@ -951,7 +972,12 @@ public class AdminFlashcardStagingService {
         }
     }
 
-    private SourceQuestionResponse toSourceQuestionResponse(Question question, String bankName, List<QuestionAnswer> answers) {
+    private SourceQuestionResponse toSourceQuestionResponse(
+            Question question,
+            String bankName,
+            List<QuestionAnswer> answers,
+            boolean imported
+    ) {
         List<SourceQuestionAnswerResponse> answerResponses = answers.stream()
                 .sorted(Comparator.comparing(answer -> answer.getOrderIndex() == null ? 0 : answer.getOrderIndex()))
                 .map(this::toSourceAnswerResponse)
@@ -971,6 +997,7 @@ public class AdminFlashcardStagingService {
                 toApiValue(question.getQuestionType()),
                 question.getDifficulty(),
                 toApiValue(question.getStatus()),
+                imported,
                 question.getExplanation(),
                 answerResponses,
                 correctAnswers

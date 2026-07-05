@@ -744,6 +744,31 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void importRejectsAlreadyImportedQuestionBankQuestion() {
+        FlashcardSet flashcardSet = flashcardSet();
+        Question question = question(
+                flashcardSet.getLesson().getCourse().getId(),
+                UUID.randomUUID(),
+                "Already imported"
+        );
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(questionRepository.findAllById(List.of(question.getId()))).thenReturn(List.of(question));
+        when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
+                .thenReturn(List.of(question.getId()));
+
+        assertThatThrownBy(() -> service.importQuestionBank(
+                flashcardSet.getId(),
+                new ImportQuestionBankRequest(List.of(question.getId()))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(stagingBatchRepository, never()).save(any());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void updateStagingCardValidatesFrontAndBack() {
         FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet()), "draft", 0);
         when(stagingCardRepository.findById(card.getId())).thenReturn(Optional.of(card));
@@ -903,6 +928,61 @@ class AdminFlashcardStagingServiceTest {
         assertThat(response.get(0).questionId()).isEqualTo(sameCourseQuestion.getId());
         assertThat(response.get(0).questionBankName()).isEqualTo("Bank A");
         assertThat(response.get(0).correctAnswers()).containsExactly("Correct");
+        assertThat(response.get(0).imported()).isFalse();
+    }
+
+    @Test
+    void sourceQuestionsMarkDraftAndApprovedStagingSourcesAsImported() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UUID bankId = UUID.randomUUID();
+        Question draftImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Draft import");
+        Question approvedImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Approved import");
+        Question notImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Not imported");
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(questionRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(draftImportedQuestion, approvedImportedQuestion, notImportedQuestion));
+        when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(anyList()))
+                .thenReturn(List.of());
+        when(questionBankRepository.findAllById(any())).thenReturn(List.of());
+        when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
+                .thenReturn(List.of(draftImportedQuestion.getId(), approvedImportedQuestion.getId()));
+
+        List<SourceQuestionResponse> response = service.listSourceQuestions(
+                flashcardSet.getId(),
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(response).extracting(SourceQuestionResponse::imported)
+                .containsExactly(true, true, false);
+    }
+
+    @Test
+    void sourceQuestionsDoNotMarkRejectedStagingSourcesAsImported() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UUID bankId = UUID.randomUUID();
+        Question rejectedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Rejected import");
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(questionRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(rejectedQuestion));
+        when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(rejectedQuestion.getId())))
+                .thenReturn(List.of());
+        when(questionBankRepository.findAllById(any())).thenReturn(List.of());
+        when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
+                .thenReturn(List.of());
+
+        List<SourceQuestionResponse> response = service.listSourceQuestions(
+                flashcardSet.getId(),
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).imported()).isFalse();
     }
 
     private FlashcardSet flashcardSet() {
