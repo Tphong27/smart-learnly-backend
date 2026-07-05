@@ -43,9 +43,9 @@ public class HlsUploadController {
                     .body(ApiResponse.error("HLS processing is disabled"));
         }
 
-        if (!videoProcessingService.isFfmpegAvailable()) {
+        if (!hlsUploadService.isProcessingProviderAvailable()) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(ApiResponse.error("FFmpeg is not available on the server"));
+                    .body(ApiResponse.error("HLS processing provider is not available"));
         }
 
         HlsUploadService.UploadResponse response = hlsUploadService.initiateUpload(
@@ -89,22 +89,25 @@ public class HlsUploadController {
     @GetMapping("/health")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
     public ResponseEntity<ApiResponse<HealthCheckResponse>> healthCheck() {
-        boolean ffmpegAvailable = videoProcessingService.isFfmpegAvailable();
+        boolean ffmpegAvailable = hlsProperties.usesLocalProcessing()
+                && videoProcessingService.isFfmpegAvailable();
         boolean hlsEnabled = hlsProperties.isEnabled();
+        boolean providerAvailable = hlsUploadService.isProcessingProviderAvailable();
 
         String status;
-        if (hlsEnabled && ffmpegAvailable) {
+        if (hlsEnabled && providerAvailable) {
             status = "healthy";
         } else if (!hlsEnabled) {
             status = "disabled";
         } else {
-            status = "ffmpeg_unavailable";
+            status = "provider_unavailable";
         }
 
         HealthCheckResponse response = new HealthCheckResponse(
                 hlsEnabled,
                 ffmpegAvailable,
-                status
+                status,
+                hlsProperties.getProcessingProvider()
         );
 
         return ResponseEntity.ok(ApiResponse.success(response));
@@ -113,6 +116,7 @@ public class HlsUploadController {
     public record HealthCheckResponse(
             boolean hlsEnabled,
             boolean ffmpegAvailable,
-            String status
+            String status,
+            String processingProvider
     ) {}
 }

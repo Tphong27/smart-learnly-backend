@@ -2,6 +2,7 @@ package com.smartlearnly.backend.hls.service;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.file.service.CloudflareR2StorageClient;
 import com.smartlearnly.backend.hls.config.HlsProperties;
 import com.smartlearnly.backend.hls.entity.HlsLesson;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
@@ -13,13 +14,13 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.UUID;
 
 @Slf4j
@@ -32,6 +33,9 @@ public class HlsUploadService {
     private final LessonRepository lessonRepository;
     private final HlsProperties hlsProperties;
     private final ApplicationEventPublisher eventPublisher;
+    private final CloudflareR2StorageClient r2StorageClient;
+    private final HlsWorkflowDispatcher workflowDispatcher;
+    private final HlsProcessingStateService processingStateService;
 
     private static final long MAX_VIDEO_SIZE = 500L * 1024 * 1024; // 500MB
 
@@ -51,7 +55,8 @@ public class HlsUploadService {
             UUID lessonId,
             String status,
             String message,
-            String hlsPath
+            String hlsPath,
+            UUID jobId
     ) {}
 
     /**
@@ -64,7 +69,9 @@ public class HlsUploadService {
             String qualities,
             String message,
             Integer progressPercent,
-            String currentStep
+            String currentStep,
+            UUID jobId,
+            String processingProvider
     ) {}
 
     /**
@@ -82,7 +89,6 @@ public class HlsUploadService {
      * Initiates video upload and HLS processing.
      * The processing runs asynchronously.
      */
-    @Transactional
     public UploadResponse initiateUpload(UploadRequest request) {
         UUID lessonId = request.lessonId();
         MultipartFile videoFile = request.videoFile();
@@ -94,6 +100,23 @@ public class HlsUploadService {
         // Validate file
         validateVideoFile(videoFile);
 
+        if (hlsProperties.usesGithubActions()) {
+            return initiateGithubActionsUpload(request);
+        }
+        if (!hlsProperties.usesLocalProcessing()) {
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Unsupported HLS processing provider"
+            );
+        }
+
+        return initiateLocalUpload(request);
+    }
+
+    private UploadResponse initiateLocalUpload(UploadRequest request) {
+        UUID lessonId = request.lessonId();
+        MultipartFile videoFile = request.videoFile();
+
         // Check if already processing or ready
         var existingHls = hlsLessonRepository.findByLessonId(lessonId);
         if (existingHls.isPresent()) {
@@ -103,7 +126,8 @@ public class HlsUploadService {
                         lessonId,
                         "processing",
                         "Video is already being processed",
-                        null
+                        null,
+                        existingHls.get().getProcessingJobId()
                 );
             }
             if (!request.replaceExisting() && !"pending".equals(status)) {
@@ -111,7 +135,8 @@ public class HlsUploadService {
                         lessonId,
                         status,
                         "HLS already exists. Set replaceExisting=true to replace.",
-                        existingHls.get().getR2BasePath()
+                        existingHls.get().getR2BasePath(),
+                        existingHls.get().getProcessingJobId()
                 );
             }
         }
@@ -142,7 +167,55 @@ public class HlsUploadService {
                 lessonId,
                 "processing",
                 "Video uploaded successfully. Processing started.",
-                hlsLesson.getR2BasePath()
+                hlsLesson.getR2BasePath(),
+                null
+        );
+    }
+
+    private UploadResponse initiateGithubActionsUpload(UploadRequest request) {
+        validateGithubActionsConfiguration();
+        String extension = extractVideoExtension(request.videoFile().getOriginalFilename());
+        HlsProcessingStateService.ProcessingReservation reservation =
+                processingStateService.reserveGithubJob(
+                        request.lessonId(),
+                        request.replaceExisting(),
+                        extension
+                );
+
+        if (!reservation.started()) {
+            return new UploadResponse(
+                    request.lessonId(),
+                    reservation.status(),
+                    reservation.message(),
+                    reservation.activePath(),
+                    reservation.jobId()
+            );
+        }
+
+        try {
+            uploadRawVideo(request.videoFile(), reservation.sourceKey());
+            workflowDispatcher.dispatch(new HlsWorkflowDispatcher.DispatchRequest(
+                    reservation.jobId(),
+                    request.lessonId(),
+                    reservation.sourceKey(),
+                    reservation.outputPrefix()
+            ));
+            processingStateService.markWorkflowDispatched(request.lessonId(), reservation.jobId());
+        } catch (RuntimeException exception) {
+            processingStateService.markJobFailed(
+                    request.lessonId(),
+                    reservation.jobId(),
+                    exception.getMessage()
+            );
+            throw exception;
+        }
+
+        return new UploadResponse(
+                request.lessonId(),
+                "processing",
+                "Video uploaded to private R2. GitHub Actions processing started.",
+                reservation.outputPrefix(),
+                reservation.jobId()
         );
     }
 
@@ -150,7 +223,7 @@ public class HlsUploadService {
      * Async method to process video in background.
      */
     @Async("videoProcessingExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void processVideoAsync(HlsProcessingRequestedEvent event) {
         UUID lessonId = event.lessonId();
         log.info("Starting async HLS processing for lesson {}", lessonId);
@@ -245,7 +318,9 @@ public class HlsUploadService {
                         hls.getQualities(),
                         getStatusMessage(hls.getHlsStatus()),
                         hls.getProgressPercent() != null ? hls.getProgressPercent() : 0,
-                        hls.getCurrentStep() != null ? hls.getCurrentStep() : getStatusMessage(hls.getHlsStatus())
+                        hls.getCurrentStep() != null ? hls.getCurrentStep() : getStatusMessage(hls.getHlsStatus()),
+                        hls.getProcessingJobId(),
+                        hls.getProcessingProvider()
                 ))
                 .orElse(new ProcessingStatus(
                         lessonId,
@@ -254,7 +329,9 @@ public class HlsUploadService {
                         null,
                         "No HLS video found for this lesson",
                         0,
-                        "Not found"
+                        "Not found",
+                        null,
+                        null
                 ));
     }
 
@@ -295,7 +372,8 @@ public class HlsUploadService {
         }
 
         boolean isVideo = contentType != null && contentType.startsWith("video/");
-        boolean hasVideoExtension = fileName.matches(".*\\.(mp4|mov|avi|mkv|webm|m4v|mpg|mpeg)$");
+        boolean hasVideoExtension = fileName.toLowerCase(Locale.ROOT)
+                .matches(".*\\.(mp4|mov|avi|mkv|webm|m4v|mpg|mpeg)$");
 
         if (!isVideo && !hasVideoExtension) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
@@ -319,6 +397,55 @@ public class HlsUploadService {
             }
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Could not stage the uploaded video");
         }
+    }
+
+    public boolean isProcessingProviderAvailable() {
+        if (hlsProperties.usesLocalProcessing()) {
+            return videoProcessingService.isFfmpegAvailable();
+        }
+        if (hlsProperties.usesGithubActions()) {
+            return githubBucketsConfigured() && workflowDispatcher.isConfigured();
+        }
+        return false;
+    }
+
+    private void validateGithubActionsConfiguration() {
+        if (!githubBucketsConfigured() || !workflowDispatcher.isConfigured()) {
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "GitHub Actions HLS processing is not configured"
+            );
+        }
+    }
+
+    private boolean githubBucketsConfigured() {
+        return hlsProperties.getRawBucket() != null
+                && !hlsProperties.getRawBucket().isBlank()
+                && hlsProperties.getOutputBucket() != null
+                && !hlsProperties.getOutputBucket().isBlank();
+    }
+
+    private void uploadRawVideo(MultipartFile videoFile, String sourceKey) {
+        try (InputStream input = videoFile.getInputStream()) {
+            r2StorageClient.putPrivateObject(
+                    hlsProperties.getRawBucket(),
+                    sourceKey,
+                    videoFile.getContentType(),
+                    input,
+                    videoFile.getSize()
+            );
+        } catch (IOException exception) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Could not read the uploaded video");
+        }
+    }
+
+    private String extractVideoExtension(String fileName) {
+        String normalized = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        int dot = normalized.lastIndexOf('.');
+        if (dot < 0 || dot == normalized.length() - 1) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Video file extension is required");
+        }
+        return normalized.substring(dot + 1);
     }
 
     private String getStatusMessage(String status) {
