@@ -127,6 +127,7 @@ public final class QuestionModel {
             Short difficulty,
             String explanation,
             boolean aiGenerated,
+            String importSource,
             String status,
             long answerCount,
             List<AnswerResponse> answers,
