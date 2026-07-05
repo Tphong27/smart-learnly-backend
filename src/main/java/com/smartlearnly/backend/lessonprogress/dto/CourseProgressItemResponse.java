@@ -6,6 +6,11 @@ public record CourseProgressItemResponse(
         UUID id,
         UUID courseId,
         UUID enrollmentId,
+
+        UUID classId,
+        UUID classEnrollmentId,
+        String className,
+
         String title,
         String categoryName,
         String enrollmentStatus,

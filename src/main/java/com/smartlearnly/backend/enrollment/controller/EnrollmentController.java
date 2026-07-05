@@ -34,13 +34,13 @@ public class EnrollmentController {
 
     @PostMapping("/free")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Enroll in a published free course")
+    @Operation(summary = "Enroll in a published free course and selected class")
     public ApiResponse<EnrollmentResponse> enrollFree(@Valid @RequestBody FreeEnrollmentRequest request) {
         return ApiResponse.success(
-                "Course enrollment completed",
-                courseEnrollmentService.enrollFree(request.courseId())
+            "Course and class enrollment completed",
+            courseEnrollmentService.enrollFree(request.courseId(), request.classId())
         );
-    }
+   }
 
     @GetMapping("/my-courses")
     @PreAuthorize("hasRole('TRAINEE')")

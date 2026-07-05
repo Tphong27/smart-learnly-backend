@@ -16,6 +16,7 @@ import com.smartlearnly.backend.enrollment.dto.EnrollmentHistoryResponse;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentResponse;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentStatusHistoryResponse;
 import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
+import com.smartlearnly.backend.enrollment.dto.MyCourseClassResponse;
 import com.smartlearnly.backend.enrollment.entity.CourseEnrollment;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatusHistory;
@@ -24,6 +25,11 @@ import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository
 import com.smartlearnly.backend.enrollment.repository.EnrollmentHistoryProjection;
 import com.smartlearnly.backend.enrollment.repository.EnrollmentStatusHistoryRepository;
 import com.smartlearnly.backend.enrollment.repository.MyCourseProjection;
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.classroom.entity.ClassStatus;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
+import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.payment.repository.SuccessfulPaymentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
@@ -38,305 +44,449 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class CourseEnrollmentService {
-    private static final int MAX_PAGE_SIZE = 100;
+        private static final int MAX_PAGE_SIZE = 100;
 
-    private final CourseRepository courseRepository;
-    private final CourseEnrollmentRepository courseEnrollmentRepository;
-    private final EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
-    private final SuccessfulPaymentRepository successfulPaymentRepository;
-    private final CurrentUserService currentUserService;
-    private final AuditLogService auditLogService;
+        private final CourseRepository courseRepository;
+        private final ClassOfferingRepository classOfferingRepository;
+        private final ClassEnrollmentRepository classEnrollmentRepository;
+        private final CourseEnrollmentRepository courseEnrollmentRepository;
+        private final EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
+        private final SuccessfulPaymentRepository successfulPaymentRepository;
+        private final CurrentUserService currentUserService;
+        private final AuditLogService auditLogService;
 
-    @Transactional
-    public EnrollmentResponse enrollFree(UUID courseId) {
-        UserAccount student = currentUserService.requireAuthenticatedUser();
-        CourseEnrollment existing = courseEnrollmentRepository
-                .findByCourseIdAndStudentIdForUpdate(courseId, student.getId())
-                .orElse(null);
+        @Transactional
+        public EnrollmentResponse enrollFree(UUID courseId, UUID classId) {
+                UserAccount student = currentUserService.requireAuthenticatedUser();
 
-        if (hasAccess(existing)) {
-            return toEnrollmentResponse(existing, true, false);
+                Course course = requirePublishedCourse(courseId);
+                if (!isFree(course)) {
+                        throw new BusinessException(ErrorCode.COURSE_NOT_FREE);
+                }
+
+                ClassOffering classOffering = requireAvailableClassForCourse(courseId, classId);
+
+                CourseEnrollment existingCourseEnrollment = courseEnrollmentRepository
+                                .findByCourseIdAndStudentIdForUpdate(courseId, student.getId())
+                                .orElse(null);
+
+                boolean alreadyHadCourseAccess = hasAccess(existingCourseEnrollment);
+                boolean courseReactivated = false;
+
+                CourseEnrollment savedCourseEnrollment;
+
+                if (alreadyHadCourseAccess) {
+                        savedCourseEnrollment = existingCourseEnrollment;
+                } else if (existingCourseEnrollment == null) {
+                        CourseEnrollment created = new CourseEnrollment();
+                        created.setCourseId(courseId);
+                        created.setStudentId(student.getId());
+                        created.setStatus(EnrollmentStatus.ACTIVE);
+
+                        savedCourseEnrollment = courseEnrollmentRepository.save(created);
+
+                        recordCourseTransition(
+                                        savedCourseEnrollment,
+                                        null,
+                                        EnrollmentStatus.ACTIVE,
+                                        EnrollmentTransitionSource.FREE_ENROLLMENT,
+                                        null,
+                                        "Initial free course enrollment");
+
+                        auditLogService.recordUser(
+                                        student,
+                                        AuditAction.ENROLLMENT_CREATED,
+                                        AuditDomain.ENROLLMENT,
+                                        AuditResult.SUCCESS,
+                                        "COURSE_ENROLLMENT",
+                                        savedCourseEnrollment.getId().toString(),
+                                        "Free course enrollment was created",
+                                        null,
+                                        java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
+                                        java.util.Map.of("courseId", courseId, "classId", classId));
+                } else {
+                        ensureReactivatable(existingCourseEnrollment.getStatus());
+
+                        EnrollmentStatus fromStatus = existingCourseEnrollment.getStatus();
+                        existingCourseEnrollment.setStatus(EnrollmentStatus.ACTIVE);
+
+                        savedCourseEnrollment = courseEnrollmentRepository.save(existingCourseEnrollment);
+                        courseReactivated = true;
+
+                        recordCourseTransition(
+                                        savedCourseEnrollment,
+                                        fromStatus,
+                                        EnrollmentStatus.ACTIVE,
+                                        EnrollmentTransitionSource.FREE_ENROLLMENT,
+                                        null,
+                                        "Free course enrollment reactivation");
+
+                        auditLogService.recordUser(
+                                        student,
+                                        AuditAction.ENROLLMENT_REACTIVATED,
+                                        AuditDomain.ENROLLMENT,
+                                        AuditResult.SUCCESS,
+                                        "COURSE_ENROLLMENT",
+                                        savedCourseEnrollment.getId().toString(),
+                                        "Course enrollment was reactivated",
+                                        java.util.Map.of("status", fromStatus.name()),
+                                        java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
+                                        java.util.Map.of("courseId", courseId, "classId", classId));
+                }
+
+                ClassEnrollment existingClassEnrollment = classEnrollmentRepository
+                                .findByClassIdAndStudentIdForUpdate(classId, student.getId())
+                                .orElse(null);
+
+                boolean alreadyHadClassAccess = hasClassAccess(existingClassEnrollment);
+                boolean classReactivated = false;
+
+                if (!alreadyHadClassAccess) {
+                        if (existingClassEnrollment != null) {
+                                ensureReactivatable(existingClassEnrollment.getStatus());
+                        }
+
+                        long activeEnrollmentCount = classEnrollmentRepository.countByClassIdAndStatus(
+                                        classId,
+                                        "active");
+
+                        if (activeEnrollmentCount >= classOffering.getMaxStudents()) {
+                                throw new BusinessException(ErrorCode.CLASS_FULL);
+                        }
+
+                        ClassEnrollment classEnrollment;
+                        EnrollmentStatus fromClassStatus;
+
+                        if (existingClassEnrollment == null) {
+                                classEnrollment = new ClassEnrollment();
+                                classEnrollment.setClassId(classId);
+                                classEnrollment.setStudentId(student.getId());
+                                fromClassStatus = null;
+                        } else {
+                                classEnrollment = existingClassEnrollment;
+                                fromClassStatus = existingClassEnrollment.getStatus();
+                                classReactivated = true;
+                        }
+
+                        classEnrollment.setPrice(BigDecimal.ZERO);
+                        classEnrollment.setStatus(EnrollmentStatus.ACTIVE);
+
+                        ClassEnrollment savedClassEnrollment = classEnrollmentRepository.save(classEnrollment);
+
+                        recordClassTransition(
+                                        savedClassEnrollment,
+                                        fromClassStatus,
+                                        EnrollmentTransitionSource.FREE_ENROLLMENT,
+                                        null,
+                                        fromClassStatus == null
+                                                        ? "Initial free class enrollment"
+                                                        : "Free class enrollment reactivation");
+
+                        auditLogService.recordUser(
+                                        student,
+                                        fromClassStatus == null
+                                                        ? AuditAction.ENROLLMENT_CREATED
+                                                        : AuditAction.ENROLLMENT_REACTIVATED,
+                                        AuditDomain.ENROLLMENT,
+                                        AuditResult.SUCCESS,
+                                        "CLASS_ENROLLMENT",
+                                        savedClassEnrollment.getId().toString(),
+                                        "Free class enrollment was granted",
+                                        fromClassStatus == null
+                                                        ? null
+                                                        : java.util.Map.of("status", fromClassStatus.name()),
+                                        java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
+                                        java.util.Map.of("courseId", courseId, "classId", classId));
+                }
+
+                return toEnrollmentResponse(
+                                savedCourseEnrollment,
+                                alreadyHadCourseAccess && alreadyHadClassAccess,
+                                courseReactivated || classReactivated);
         }
 
-        Course course = requirePublishedCourse(courseId);
-        if (!isFree(course)) {
-            throw new BusinessException(ErrorCode.COURSE_NOT_FREE);
+        @Transactional
+        public EnrollmentResponse grantPaidCourseEnrollment(
+                        UUID studentId,
+                        UUID courseId,
+                        UUID transactionId) {
+                requireSuccessfulCoursePayment(transactionId, studentId, courseId);
+                CourseEnrollment existing = courseEnrollmentRepository
+                                .findByCourseIdAndStudentIdForUpdate(courseId, studentId)
+                                .orElse(null);
+
+                if (hasAccess(existing)) {
+                        return toEnrollmentResponse(existing, true, false);
+                }
+
+                requireExistingCourse(courseId);
+                if (existing == null) {
+                        CourseEnrollment created = new CourseEnrollment();
+                        created.setCourseId(courseId);
+                        created.setStudentId(studentId);
+                        created.setStatus(EnrollmentStatus.ACTIVE);
+                        CourseEnrollment saved = courseEnrollmentRepository.save(created);
+                        recordCourseTransition(
+                                        saved,
+                                        null,
+                                        EnrollmentStatus.ACTIVE,
+                                        EnrollmentTransitionSource.PAYMENT_SUCCESS,
+                                        transactionId,
+                                        "Initial paid course enrollment");
+                        auditLogService.recordSystem(
+                                        "payment-processing", AuditAction.ENROLLMENT_CREATED, AuditDomain.ENROLLMENT,
+                                        AuditResult.SUCCESS,
+                                        "COURSE_ENROLLMENT", saved.getId().toString(),
+                                        "Paid course enrollment was created",
+                                        java.util.Map.of("courseId", courseId, "studentId", studentId, "transactionId",
+                                                        transactionId),
+                                        "transaction:" + transactionId, null);
+                        return toEnrollmentResponse(saved, false, false);
+                }
+
+                ensureReactivatable(existing.getStatus());
+                EnrollmentStatus fromStatus = existing.getStatus();
+                existing.setStatus(EnrollmentStatus.ACTIVE);
+                CourseEnrollment saved = courseEnrollmentRepository.save(existing);
+                recordCourseTransition(
+                                saved,
+                                fromStatus,
+                                EnrollmentStatus.ACTIVE,
+                                EnrollmentTransitionSource.PAYMENT_SUCCESS,
+                                transactionId,
+                                "Paid course enrollment reactivation");
+                auditLogService.recordSystem(
+                                "payment-processing", AuditAction.ENROLLMENT_REACTIVATED, AuditDomain.ENROLLMENT,
+                                AuditResult.SUCCESS,
+                                "COURSE_ENROLLMENT", saved.getId().toString(), "Paid course enrollment was reactivated",
+                                java.util.Map.of("courseId", courseId, "studentId", studentId, "transactionId",
+                                                transactionId),
+                                "transaction:" + transactionId, null);
+                return toEnrollmentResponse(saved, false, true);
         }
 
-        if (existing == null) {
-            CourseEnrollment created = new CourseEnrollment();
-            created.setCourseId(courseId);
-            created.setStudentId(student.getId());
-            created.setStatus(EnrollmentStatus.ACTIVE);
-            CourseEnrollment saved = courseEnrollmentRepository.save(created);
-            recordCourseTransition(
-                    saved,
-                    null,
-                    EnrollmentStatus.ACTIVE,
-                    EnrollmentTransitionSource.FREE_ENROLLMENT,
-                    null,
-                    "Initial free course enrollment"
-            );
-            auditLogService.recordUser(
-                    student, AuditAction.ENROLLMENT_CREATED, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
-                    "COURSE_ENROLLMENT", saved.getId().toString(), "Free course enrollment was created",
-                    null, java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
-                    java.util.Map.of("courseId", courseId)
-            );
-            return toEnrollmentResponse(saved, false, false);
+        @Transactional(readOnly = true)
+        public List<MyCourseResponse> getMyCourses() {
+                UUID studentId = currentUserService.requireAuthenticatedUser().getId();
+                return courseEnrollmentRepository.findActiveMyCourses(studentId)
+                                .stream()
+                                .map(this::toMyCourseResponse)
+                                .toList();
         }
 
-        ensureReactivatable(existing.getStatus());
-        EnrollmentStatus fromStatus = existing.getStatus();
-        existing.setStatus(EnrollmentStatus.ACTIVE);
-        CourseEnrollment saved = courseEnrollmentRepository.save(existing);
-        recordCourseTransition(
-                saved,
-                fromStatus,
-                EnrollmentStatus.ACTIVE,
-                EnrollmentTransitionSource.FREE_ENROLLMENT,
-                null,
-                "Free enrollment reactivation"
-        );
-        auditLogService.recordUser(
-                student, AuditAction.ENROLLMENT_REACTIVATED, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
-                "COURSE_ENROLLMENT", saved.getId().toString(), "Course enrollment was reactivated",
-                java.util.Map.of("status", fromStatus.name()),
-                java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
-                java.util.Map.of("courseId", courseId)
-        );
-        return toEnrollmentResponse(saved, false, true);
-    }
-
-    @Transactional
-    public EnrollmentResponse grantPaidCourseEnrollment(
-            UUID studentId,
-            UUID courseId,
-            UUID transactionId
-    ) {
-        requireSuccessfulCoursePayment(transactionId, studentId, courseId);
-        CourseEnrollment existing = courseEnrollmentRepository
-                .findByCourseIdAndStudentIdForUpdate(courseId, studentId)
-                .orElse(null);
-
-        if (hasAccess(existing)) {
-            return toEnrollmentResponse(existing, true, false);
+        @Transactional(readOnly = true)
+        public PageResponse<EnrollmentHistoryResponse> getHistory(int page, int size) {
+                UUID studentId = currentUserService.requireAuthenticatedUser().getId();
+                Page<EnrollmentHistoryProjection> history = courseEnrollmentRepository.findHistory(
+                                studentId,
+                                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
+                return new PageResponse<>(
+                                history.stream().map(this::toHistoryResponse).toList(),
+                                history.getNumber(),
+                                history.getSize(),
+                                history.getTotalElements(),
+                                history.getTotalPages());
         }
 
-        requireExistingCourse(courseId);
-        if (existing == null) {
-            CourseEnrollment created = new CourseEnrollment();
-            created.setCourseId(courseId);
-            created.setStudentId(studentId);
-            created.setStatus(EnrollmentStatus.ACTIVE);
-            CourseEnrollment saved = courseEnrollmentRepository.save(created);
-            recordCourseTransition(
-                    saved,
-                    null,
-                    EnrollmentStatus.ACTIVE,
-                    EnrollmentTransitionSource.PAYMENT_SUCCESS,
-                    transactionId,
-                    "Initial paid course enrollment"
-            );
-            auditLogService.recordSystem(
-                    "payment-processing", AuditAction.ENROLLMENT_CREATED, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
-                    "COURSE_ENROLLMENT", saved.getId().toString(), "Paid course enrollment was created",
-                    java.util.Map.of("courseId", courseId, "studentId", studentId, "transactionId", transactionId),
-                    "transaction:" + transactionId, null
-            );
-            return toEnrollmentResponse(saved, false, false);
+        @Transactional(readOnly = true)
+        public List<EnrollmentStatusHistoryResponse> getStatusHistory(UUID enrollmentId) {
+                UserAccount actor = currentUserService.requireAuthenticatedUser();
+                if (!isAdminOrTmo(actor)) {
+                        courseEnrollmentRepository.findByIdAndStudentId(enrollmentId, actor.getId())
+                                        .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                                                        "Enrollment was not found"));
+                } else if (!courseEnrollmentRepository.existsById(enrollmentId)) {
+                        throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Enrollment was not found");
+                }
+
+                return enrollmentStatusHistoryRepository.findCourseHistory(enrollmentId)
+                                .stream()
+                                .map(this::toStatusHistoryResponse)
+                                .toList();
         }
 
-        ensureReactivatable(existing.getStatus());
-        EnrollmentStatus fromStatus = existing.getStatus();
-        existing.setStatus(EnrollmentStatus.ACTIVE);
-        CourseEnrollment saved = courseEnrollmentRepository.save(existing);
-        recordCourseTransition(
-                saved,
-                fromStatus,
-                EnrollmentStatus.ACTIVE,
-                EnrollmentTransitionSource.PAYMENT_SUCCESS,
-                transactionId,
-                "Paid course enrollment reactivation"
-        );
-        auditLogService.recordSystem(
-                "payment-processing", AuditAction.ENROLLMENT_REACTIVATED, AuditDomain.ENROLLMENT, AuditResult.SUCCESS,
-                "COURSE_ENROLLMENT", saved.getId().toString(), "Paid course enrollment was reactivated",
-                java.util.Map.of("courseId", courseId, "studentId", studentId, "transactionId", transactionId),
-                "transaction:" + transactionId, null
-        );
-        return toEnrollmentResponse(saved, false, true);
-    }
+        private ClassOffering requireAvailableClassForCourse(UUID courseId, UUID classId) {
+                ClassOffering classOffering = classOfferingRepository.findByIdForUpdate(classId)
+                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Class not found"));
 
-    @Transactional(readOnly = true)
-    public List<MyCourseResponse> getMyCourses() {
-        UUID studentId = currentUserService.requireAuthenticatedUser().getId();
-        return courseEnrollmentRepository.findActiveMyCourses(studentId)
-                .stream()
-                .map(this::toMyCourseResponse)
-                .toList();
-    }
+                if (!courseId.equals(classOffering.getCourseId())) {
+                        throw new BusinessException(
+                                        ErrorCode.INVALID_REQUEST,
+                                        "Class must belong to the selected course");
+                }
 
-    @Transactional(readOnly = true)
-    public PageResponse<EnrollmentHistoryResponse> getHistory(int page, int size) {
-        UUID studentId = currentUserService.requireAuthenticatedUser().getId();
-        Page<EnrollmentHistoryProjection> history = courseEnrollmentRepository.findHistory(
-                studentId,
-                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE))
-        );
-        return new PageResponse<>(
-                history.stream().map(this::toHistoryResponse).toList(),
-                history.getNumber(),
-                history.getSize(),
-                history.getTotalElements(),
-                history.getTotalPages()
-        );
-    }
+                if (classOffering.getStatus() == ClassStatus.CANCELLED
+                                || classOffering.getStatus() == ClassStatus.COMPLETED) {
+                        throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
+                }
 
-    @Transactional(readOnly = true)
-    public List<EnrollmentStatusHistoryResponse> getStatusHistory(UUID enrollmentId) {
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        if (!isAdminOrTmo(actor)) {
-            courseEnrollmentRepository.findByIdAndStudentId(enrollmentId, actor.getId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Enrollment was not found"));
-        }
-        else if (!courseEnrollmentRepository.existsById(enrollmentId)) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Enrollment was not found");
+                return classOffering;
         }
 
-        return enrollmentStatusHistoryRepository.findCourseHistory(enrollmentId)
-                .stream()
-                .map(this::toStatusHistoryResponse)
-                .toList();
-    }
-
-    private Course requirePublishedCourse(UUID courseId) {
-        Course course = courseRepository.findByIdAndDeletedAtIsNullForUpdate(courseId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course not found"));
-        if (course.getStatus() != CourseStatus.PUBLISHED) {
-            throw new BusinessException(ErrorCode.COURSE_NOT_ENROLLABLE);
+        private boolean hasClassAccess(ClassEnrollment enrollment) {
+                return enrollment != null
+                                && (enrollment.getStatus() == EnrollmentStatus.ACTIVE
+                                                || enrollment.getStatus() == EnrollmentStatus.COMPLETED);
         }
-        return course;
-    }
 
-    private Course requireExistingCourse(UUID courseId) {
-        return courseRepository.findByIdAndDeletedAtIsNullForUpdate(courseId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course not found"));
-    }
+        private void recordClassTransition(
+                        ClassEnrollment enrollment,
+                        EnrollmentStatus fromStatus,
+                        EnrollmentTransitionSource source,
+                        UUID transactionId,
+                        String reason) {
+                EnrollmentStatusHistory history = new EnrollmentStatusHistory();
+                history.setClassEnrollmentId(enrollment.getId());
+                history.setStudentId(enrollment.getStudentId());
+                history.setFromStatus(fromStatus);
+                history.setToStatus(EnrollmentStatus.ACTIVE);
+                history.setSource(source);
+                history.setTransactionId(transactionId);
+                history.setReason(reason);
 
-    private void requireSuccessfulCoursePayment(UUID transactionId, UUID studentId, UUID courseId) {
-        if (transactionId == null
-                || !successfulPaymentRepository.existsForCourse(transactionId, studentId, courseId)) {
-            throw new BusinessException(
-                    ErrorCode.PAYMENT_NOT_SUCCESSFUL,
-                    "A successful payment transaction is required"
-            );
+                enrollmentStatusHistoryRepository.save(history);
         }
-    }
 
-    private boolean isFree(Course course) {
-        BigDecimal price = course.getPrice() == null ? BigDecimal.ZERO : course.getPrice();
-        return Boolean.TRUE.equals(course.getFree()) || price.compareTo(BigDecimal.ZERO) == 0;
-    }
-
-    private boolean hasAccess(CourseEnrollment enrollment) {
-        return enrollment != null
-                && (enrollment.getStatus() == EnrollmentStatus.ACTIVE
-                || enrollment.getStatus() == EnrollmentStatus.COMPLETED);
-    }
-
-    private void ensureReactivatable(EnrollmentStatus status) {
-        if (status != EnrollmentStatus.CANCELLED && status != EnrollmentStatus.REFUNDED) {
-            throw new BusinessException(
-                    ErrorCode.ENROLLMENT_TRANSITION_INVALID,
-                    "Only cancelled or refunded enrollments can be reactivated"
-            );
+        private Course requirePublishedCourse(UUID courseId) {
+                Course course = courseRepository.findByIdAndDeletedAtIsNullForUpdate(courseId)
+                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Course not found"));
+                if (course.getStatus() != CourseStatus.PUBLISHED) {
+                        throw new BusinessException(ErrorCode.COURSE_NOT_ENROLLABLE);
+                }
+                return course;
         }
-    }
 
-    private void recordCourseTransition(
-            CourseEnrollment enrollment,
-            EnrollmentStatus fromStatus,
-            EnrollmentStatus toStatus,
-            EnrollmentTransitionSource source,
-            UUID transactionId,
-            String reason
-    ) {
-        EnrollmentStatusHistory history = new EnrollmentStatusHistory();
-        history.setCourseEnrollmentId(enrollment.getId());
-        history.setStudentId(enrollment.getStudentId());
-        history.setFromStatus(fromStatus);
-        history.setToStatus(toStatus);
-        history.setSource(source);
-        history.setTransactionId(transactionId);
-        history.setReason(reason);
-        enrollmentStatusHistoryRepository.save(history);
-    }
+        private Course requireExistingCourse(UUID courseId) {
+                return courseRepository.findByIdAndDeletedAtIsNullForUpdate(courseId)
+                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Course not found"));
+        }
 
-    private EnrollmentResponse toEnrollmentResponse(
-            CourseEnrollment enrollment,
-            boolean alreadyEnrolled,
-            boolean reactivated
-    ) {
-        return new EnrollmentResponse(
-                enrollment.getId(),
-                enrollment.getCourseId(),
-                enrollment.getStatus().name(),
-                enrollment.getEnrollmentDate(),
-                alreadyEnrolled,
-                reactivated
-        );
-    }
+        private void requireSuccessfulCoursePayment(UUID transactionId, UUID studentId, UUID courseId) {
+                if (transactionId == null
+                                || !successfulPaymentRepository.existsForCourse(transactionId, studentId, courseId)) {
+                        throw new BusinessException(
+                                        ErrorCode.PAYMENT_NOT_SUCCESSFUL,
+                                        "A successful payment transaction is required");
+                }
+        }
 
-    private MyCourseResponse toMyCourseResponse(MyCourseProjection course) {
-        return new MyCourseResponse(
-                course.getId(),
-                course.getTitle(),
-                course.getSlug(),
-                course.getDescription(),
-                course.getPrice(),
-                course.getAvatarUrl(),
-                Boolean.TRUE.equals(course.getFeatured()),
-                new CategorySummaryResponse(
-                        course.getCategoryId(),
-                        course.getCategoryName(),
-                        course.getCategorySlug()
-                ),
-                course.getEnrollmentId(),
-                course.getEnrollmentStatus(),
-                course.getEnrollmentDate(),
-                course.getCourseStatus(),
-                course.getAccessBlockedAt() == null,
-                course.getAccessBlockReason()
-        );
-    }
+        private boolean isFree(Course course) {
+                BigDecimal price = course.getPrice() == null ? BigDecimal.ZERO : course.getPrice();
+                return Boolean.TRUE.equals(course.getFree()) || price.compareTo(BigDecimal.ZERO) == 0;
+        }
 
-    private EnrollmentHistoryResponse toHistoryResponse(EnrollmentHistoryProjection enrollment) {
-        return new EnrollmentHistoryResponse(
-                enrollment.getEnrollmentId(),
-                enrollment.getCourseId(),
-                enrollment.getCourseTitle(),
-                enrollment.getCourseSlug(),
-                enrollment.getStatus(),
-                enrollment.getEnrollmentDate(),
-                enrollment.getUpdatedAt()
-        );
-    }
+        private boolean hasAccess(CourseEnrollment enrollment) {
+                return enrollment != null
+                                && (enrollment.getStatus() == EnrollmentStatus.ACTIVE
+                                                || enrollment.getStatus() == EnrollmentStatus.COMPLETED);
+        }
 
-    private EnrollmentStatusHistoryResponse toStatusHistoryResponse(EnrollmentStatusHistory history) {
-        return new EnrollmentStatusHistoryResponse(
-                history.getId(),
-                history.getFromStatus() == null ? null : history.getFromStatus().name(),
-                history.getToStatus().name(),
-                history.getSource().name(),
-                history.getReason(),
-                history.getTransactionId(),
-                history.getChangedBy(),
-                history.getCreatedAt()
-        );
-    }
+        private void ensureReactivatable(EnrollmentStatus status) {
+                if (status != EnrollmentStatus.CANCELLED && status != EnrollmentStatus.REFUNDED) {
+                        throw new BusinessException(
+                                        ErrorCode.ENROLLMENT_TRANSITION_INVALID,
+                                        "Only cancelled or refunded enrollments can be reactivated");
+                }
+        }
 
-    private boolean isAdminOrTmo(UserAccount user) {
-        return "ADMIN".equalsIgnoreCase(user.getRole()) || "TMO".equalsIgnoreCase(user.getRole());
-    }
+        private void recordCourseTransition(
+                        CourseEnrollment enrollment,
+                        EnrollmentStatus fromStatus,
+                        EnrollmentStatus toStatus,
+                        EnrollmentTransitionSource source,
+                        UUID transactionId,
+                        String reason) {
+                EnrollmentStatusHistory history = new EnrollmentStatusHistory();
+                history.setCourseEnrollmentId(enrollment.getId());
+                history.setStudentId(enrollment.getStudentId());
+                history.setFromStatus(fromStatus);
+                history.setToStatus(toStatus);
+                history.setSource(source);
+                history.setTransactionId(transactionId);
+                history.setReason(reason);
+                enrollmentStatusHistoryRepository.save(history);
+        }
+
+        private EnrollmentResponse toEnrollmentResponse(
+                        CourseEnrollment enrollment,
+                        boolean alreadyEnrolled,
+                        boolean reactivated) {
+                return new EnrollmentResponse(
+                                enrollment.getId(),
+                                enrollment.getCourseId(),
+                                enrollment.getStatus().name(),
+                                enrollment.getEnrollmentDate(),
+                                alreadyEnrolled,
+                                reactivated);
+        }
+
+        private MyCourseClassResponse toMyCourseClassResponse(MyCourseProjection course) {
+                if (course.getClassId() == null) {
+                        return null;
+                }
+
+                return new MyCourseClassResponse(
+                                course.getClassId(),
+                                course.getClassName(),
+                                course.getClassStatus(),
+                                course.getClassTrainerName(),
+                                course.getClassScheduleDescription(),
+                                course.getClassStartDate(),
+                                course.getClassEndDate(),
+                                course.getClassMaxStudents(),
+                                course.getClassActiveEnrollmentCount(),
+                                course.getClassEnrollmentId());
+        }
+
+        private MyCourseResponse toMyCourseResponse(MyCourseProjection course) {
+                return new MyCourseResponse(
+                                course.getId(),
+                                course.getTitle(),
+                                course.getSlug(),
+                                course.getDescription(),
+                                course.getPrice(),
+                                course.getAvatarUrl(),
+                                Boolean.TRUE.equals(course.getFeatured()),
+                                new CategorySummaryResponse(
+                                                course.getCategoryId(),
+                                                course.getCategoryName(),
+                                                course.getCategorySlug()),
+                                course.getEnrollmentId(),
+                                course.getEnrollmentStatus(),
+                                course.getEnrollmentDate(),
+                                course.getCourseStatus(),
+                                course.getAccessBlockedAt() == null,
+                                course.getAccessBlockReason(),
+                                toMyCourseClassResponse(course));
+        }
+
+        private EnrollmentHistoryResponse toHistoryResponse(EnrollmentHistoryProjection enrollment) {
+                return new EnrollmentHistoryResponse(
+                                enrollment.getEnrollmentId(),
+                                enrollment.getCourseId(),
+                                enrollment.getCourseTitle(),
+                                enrollment.getCourseSlug(),
+                                enrollment.getStatus(),
+                                enrollment.getEnrollmentDate(),
+                                enrollment.getUpdatedAt());
+        }
+
+        private EnrollmentStatusHistoryResponse toStatusHistoryResponse(EnrollmentStatusHistory history) {
+                return new EnrollmentStatusHistoryResponse(
+                                history.getId(),
+                                history.getFromStatus() == null ? null : history.getFromStatus().name(),
+                                history.getToStatus().name(),
+                                history.getSource().name(),
+                                history.getReason(),
+                                history.getTransactionId(),
+                                history.getChangedBy(),
+                                history.getCreatedAt());
+        }
+
+        private boolean isAdminOrTmo(UserAccount user) {
+                return "ADMIN".equalsIgnoreCase(user.getRole()) || "TMO".equalsIgnoreCase(user.getRole());
+        }
 }
