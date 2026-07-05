@@ -7,6 +7,7 @@ import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.entity.ClassStatus;
 import com.smartlearnly.backend.classroom.repository.ClassAdminProjection;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.classroom.dto.ClassStatusOptionResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
@@ -20,6 +21,7 @@ import com.smartlearnly.backend.user.repository.UserRepository;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Locale;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -38,6 +40,16 @@ public class ClassAdminService {
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
+
+    @Transactional(readOnly = true)
+    public List<ClassStatusOptionResponse> listStatusOptions() {
+        return classOfferingRepository.findClassStatusOptions()
+                .stream()
+                .map(status -> new ClassStatusOptionResponse(
+                        status.getValue(),
+                        status.getLabel()))
+                .toList();
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<ClassResponse> list(
@@ -98,7 +110,7 @@ public class ClassAdminService {
         }
 
         ClassOffering classOffering = findClassForUpdate(classId);
-        if (classOffering.getStatus() == ClassStatus.CANCELLED) {
+        if (classOffering.getStatus() == ClassStatus.CANCELLED && !request.isStatusProvided()) {
             throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE, "Cancelled classes cannot be updated");
         }
 
@@ -141,6 +153,9 @@ public class ClassAdminService {
                         "Maximum students cannot be lower than the active enrollment count");
             }
             classOffering.setMaxStudents(request.getMaxStudents());
+        }
+        if (request.isStatusProvided()) {
+            classOffering.setStatus(normalizeClassStatus(request.getStatus()));
         }
         validateDates(classOffering.getStartDate(), classOffering.getEndDate());
 
@@ -270,6 +285,22 @@ public class ClassAdminService {
             return ClassStatus.valueOf(normalized.toUpperCase(Locale.ROOT))
                     .name()
                     .toLowerCase(Locale.ROOT);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Class status must be upcoming, ongoing, completed, or cancelled");
+        }
+    }
+
+    private ClassStatus normalizeClassStatus(String status) {
+        String normalized = normalizeNullable(status);
+
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Class status is required");
+        }
+
+        try {
+            return ClassStatus.valueOf(normalized.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,

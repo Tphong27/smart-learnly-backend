@@ -4,6 +4,7 @@ import com.smartlearnly.backend.classroom.dto.ClassResponse;
 import com.smartlearnly.backend.classroom.dto.CreateClassRequest;
 import com.smartlearnly.backend.classroom.dto.UpdateClassRequest;
 import com.smartlearnly.backend.classroom.service.ClassAdminService;
+import com.smartlearnly.backend.classroom.dto.ClassStatusOptionResponse;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +15,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.net.URI;
 import java.util.UUID;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,6 +40,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminClassController {
     private final ClassAdminService classAdminService;
 
+    @GetMapping("/statuses")
+    @Operation(summary = "List class status options")
+    public ApiResponse<List<ClassStatusOptionResponse>> listStatusOptions() {
+        return ApiResponse.success(
+                "Class statuses loaded successfully",
+                classAdminService.listStatusOptions());
+    }
+
     @GetMapping
     @Operation(summary = "List classes with filters")
     public ApiResponse<PageResponse<ClassResponse>> list(
@@ -46,12 +56,10 @@ public class AdminClassController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
-    ) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ApiResponse.success(
                 "Classes loaded successfully",
-                classAdminService.list(courseId, trainerId, status, keyword, page, size)
-        );
+                classAdminService.list(courseId, trainerId, status, keyword, page, size));
     }
 
     @GetMapping("/{classId}")
@@ -63,8 +71,7 @@ public class AdminClassController {
     @PostMapping
     @Operation(summary = "Create a class")
     public ResponseEntity<ApiResponse<ClassResponse>> create(
-            @Valid @RequestBody CreateClassRequest request
-    ) {
+            @Valid @RequestBody CreateClassRequest request) {
         ClassResponse created = classAdminService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/classes/" + created.id()))
                 .body(ApiResponse.success("Class created successfully", created));
@@ -74,8 +81,7 @@ public class AdminClassController {
     @Operation(summary = "Update selected class fields")
     public ApiResponse<ClassResponse> update(
             @PathVariable UUID classId,
-            @Valid @RequestBody UpdateClassRequest request
-    ) {
+            @Valid @RequestBody UpdateClassRequest request) {
         return ApiResponse.success("Class updated successfully", classAdminService.update(classId, request));
     }
 
