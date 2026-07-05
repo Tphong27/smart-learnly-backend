@@ -47,7 +47,7 @@ public class TestAttemptService {
         if (!testService.accessCodeMatches(test, request.getAccessCode())) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "Invalid or expired flash test access code");
+                    "Invalid or expired test access code");
         }
 
         List<TestAttempt> existingAttempts = repository.findByTestIdAndStudentId(test.getId(), studentId);
