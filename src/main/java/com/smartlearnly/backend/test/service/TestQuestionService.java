@@ -165,6 +165,7 @@ public class TestQuestionService {
             Question question) {
 
         response.setQuestionText(question.getQuestionText());
+        response.setImageUrl(question.getImageUrl());
         response.setQuestionType(question.getQuestionType() == null
                 ? null
                 : question.getQuestionType().name().toLowerCase());
@@ -187,6 +188,7 @@ public class TestQuestionService {
             Question question) {
 
         response.setQuestionText(question.getQuestionText());
+        response.setImageUrl(question.getImageUrl());
         response.setQuestionType(question.getQuestionType() == null
                 ? null
                 : question.getQuestionType().name().toLowerCase());

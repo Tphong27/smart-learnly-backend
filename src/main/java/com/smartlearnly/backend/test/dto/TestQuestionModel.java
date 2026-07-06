@@ -37,6 +37,7 @@ public class TestQuestionModel {
         private Integer orderIndex;
         private BigDecimal marks;
         private String questionText;
+        private String imageUrl;
         private String questionType;
         private List<QuestionModel.AnswerResponse> answers;
     }
@@ -50,6 +51,7 @@ public class TestQuestionModel {
         private Integer orderIndex;
         private BigDecimal marks;
         private String questionText;
+        private String imageUrl;
         private String questionType;
         private List<LearnerAnswerResponse> answers;
     }
