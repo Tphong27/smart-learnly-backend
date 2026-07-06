@@ -38,6 +38,7 @@ public class TestQuestionModel {
         private BigDecimal marks;
         private String questionText;
         private String imageUrl;
+        private String audioUrl;
         private String questionType;
         private List<QuestionModel.AnswerResponse> answers;
     }
@@ -52,6 +53,7 @@ public class TestQuestionModel {
         private BigDecimal marks;
         private String questionText;
         private String imageUrl;
+        private String audioUrl;
         private String questionType;
         private List<LearnerAnswerResponse> answers;
     }
