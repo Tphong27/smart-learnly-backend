@@ -63,6 +63,12 @@ public class Question {
     @Column(name = "image_object_key", columnDefinition = "TEXT")
     private String imageObjectKey;
 
+    @Column(name = "audio_url", columnDefinition = "TEXT")
+    private String audioUrl;
+
+    @Column(name = "audio_object_key", columnDefinition = "TEXT")
+    private String audioObjectKey;
+
     @Column(name = "is_ai_generated", nullable = false)
     private Boolean isAiGenerated;
 
