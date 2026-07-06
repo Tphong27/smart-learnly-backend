@@ -127,6 +127,7 @@ public final class QuestionModel {
             Short difficulty,
             String explanation,
             String imageUrl,
+            String audioUrl,
             boolean aiGenerated,
             String importSource,
             String status,
