@@ -52,6 +52,9 @@ public class TestAttempt {
     @Column(name = "assignment_id")
     private UUID assignmentId;
 
+    @Column(name = "retake_allowed", nullable = false)
+    private Boolean retakeAllowed = false;
+
     @PrePersist
     void prePersist() {
         if (startTime == null) {
@@ -59,6 +62,9 @@ public class TestAttempt {
         }
         if (createdAt == null) {
             createdAt = Instant.now();
+        }
+        if (retakeAllowed == null) {
+            retakeAllowed = false;
         }
     }
 }

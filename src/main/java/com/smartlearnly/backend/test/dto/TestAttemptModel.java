@@ -38,6 +38,7 @@ public class TestAttemptModel {
         private UUID id;
         private UUID testId;
         private UUID studentId;
+        private String studentName;
         private Instant startTime;
         private Instant endTime;
         private BigDecimal score;
@@ -45,5 +46,6 @@ public class TestAttemptModel {
         private AttemptStatus status;
         private Instant createdAt;
         private UUID assignmentId;
+        private Boolean retakeAllowed;
     }
 }
