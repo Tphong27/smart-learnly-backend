@@ -5,6 +5,8 @@ public record DashboardContentResponse(
         long lessons,
         long publishedLessons,
         long draftLessons,
-        long inactiveLessons
+        long inactiveLessons,
+        long newSectionsInRange,
+        long newLessonsInRange
 ) {
 }

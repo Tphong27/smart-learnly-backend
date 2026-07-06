@@ -69,8 +69,8 @@ class AdminDashboardControllerSecurityTest {
                 new DashboardUsersResponse(10, 8, 1, 1, 0, 2),
                 new DashboardCoursesResponse(5, 3, 1, 1, 1),
                 new DashboardClassesResponse(4, 1, 1, 1, 1, 1),
-                new DashboardContentResponse(6, 12, 8, 3, 1),
-                new DashboardQuestionBanksResponse(3, 1, 1, 1, 20, 15, 2, 1, 1, 1),
+                new DashboardContentResponse(6, 12, 8, 3, 1, 2, 4),
+                new DashboardQuestionBanksResponse(3, 1, 1, 1, 20, 15, 2, 1, 1, 1, 1, 6, 5, 7, 13),
                 List.of(),
                 to
         );

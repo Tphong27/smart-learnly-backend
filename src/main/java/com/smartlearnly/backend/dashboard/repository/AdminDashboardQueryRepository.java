@@ -99,7 +99,7 @@ public class AdminDashboardQueryRepository {
         ));
     }
 
-    public DashboardContentResponse countContent() {
+    public DashboardContentResponse countContent(Instant from, Instant to) {
         String sql = """
                 SELECT
                     (
@@ -108,24 +108,34 @@ public class AdminDashboardQueryRepository {
                         JOIN public.courses course ON course.id = section.course_id
                         WHERE course.deleted_at IS NULL
                     ) AS sections,
+                    (
+                        SELECT COUNT(*)
+                        FROM public.course_sections section
+                        JOIN public.courses course ON course.id = section.course_id
+                        WHERE course.deleted_at IS NULL
+                          AND section.created_at BETWEEN :from AND :to
+                    ) AS new_sections_in_range,
                     COUNT(*) AS lessons,
                     COUNT(*) FILTER (WHERE lesson.status = 'published') AS published_lessons,
                     COUNT(*) FILTER (WHERE lesson.status = 'draft') AS draft_lessons,
-                    COUNT(*) FILTER (WHERE lesson.status = 'inactive') AS inactive_lessons
+                    COUNT(*) FILTER (WHERE lesson.status = 'inactive') AS inactive_lessons,
+                    COUNT(*) FILTER (WHERE lesson.created_at BETWEEN :from AND :to) AS new_lessons_in_range
                 FROM public.lessons lesson
                 JOIN public.courses course ON course.id = lesson.course_id
                 WHERE course.deleted_at IS NULL
                 """;
-        return jdbcTemplate.queryForObject(sql, Map.of(), (rs, rowNum) -> new DashboardContentResponse(
+        return jdbcTemplate.queryForObject(sql, params(from, to), (rs, rowNum) -> new DashboardContentResponse(
                 rs.getLong("sections"),
                 rs.getLong("lessons"),
                 rs.getLong("published_lessons"),
                 rs.getLong("draft_lessons"),
-                rs.getLong("inactive_lessons")
+                rs.getLong("inactive_lessons"),
+                rs.getLong("new_sections_in_range"),
+                rs.getLong("new_lessons_in_range")
         ));
     }
 
-    public DashboardQuestionBanksResponse countQuestionBanks() {
+    public DashboardQuestionBanksResponse countQuestionBanks(Instant from, Instant to) {
         String sql = """
                 SELECT
                     (
@@ -152,17 +162,28 @@ public class AdminDashboardQueryRepository {
                         JOIN public.courses course ON course.id = bank.course_id
                         WHERE course.deleted_at IS NULL AND bank.status = 'archived'
                     ) AS archived,
+                    (
+                        SELECT COUNT(*)
+                        FROM public.question_banks bank
+                        JOIN public.courses course ON course.id = bank.course_id
+                        WHERE course.deleted_at IS NULL
+                          AND bank.created_at BETWEEN :from AND :to
+                    ) AS new_banks_in_range,
                     COUNT(*) AS questions,
                     COUNT(*) FILTER (WHERE question.status = 'approved') AS approved_questions,
                     COUNT(*) FILTER (WHERE question.status = 'pending_review') AS pending_review_questions,
                     COUNT(*) FILTER (WHERE question.status = 'draft') AS draft_questions,
                     COUNT(*) FILTER (WHERE question.status = 'rejected') AS rejected_questions,
-                    COUNT(*) FILTER (WHERE question.status = 'archived') AS archived_questions
+                    COUNT(*) FILTER (WHERE question.status = 'archived') AS archived_questions,
+                    COUNT(*) FILTER (WHERE question.created_at BETWEEN :from AND :to) AS new_questions_in_range,
+                    COUNT(*) FILTER (WHERE question.reviewed_at BETWEEN :from AND :to) AS reviewed_questions_in_range,
+                    COUNT(*) FILTER (WHERE question.is_ai_generated IS TRUE) AS ai_generated_questions,
+                    COUNT(*) FILTER (WHERE question.is_ai_generated IS NOT TRUE) AS manual_questions
                 FROM public.questions question
                 JOIN public.courses course ON course.id = question.course_id
                 WHERE course.deleted_at IS NULL
                 """;
-        return jdbcTemplate.queryForObject(sql, Map.of(), (rs, rowNum) -> new DashboardQuestionBanksResponse(
+        return jdbcTemplate.queryForObject(sql, params(from, to), (rs, rowNum) -> new DashboardQuestionBanksResponse(
                 rs.getLong("total"),
                 rs.getLong("approved"),
                 rs.getLong("draft"),
@@ -172,7 +193,12 @@ public class AdminDashboardQueryRepository {
                 rs.getLong("pending_review_questions"),
                 rs.getLong("draft_questions"),
                 rs.getLong("rejected_questions"),
-                rs.getLong("archived_questions")
+                rs.getLong("archived_questions"),
+                rs.getLong("new_banks_in_range"),
+                rs.getLong("new_questions_in_range"),
+                rs.getLong("reviewed_questions_in_range"),
+                rs.getLong("ai_generated_questions"),
+                rs.getLong("manual_questions")
         ));
     }
 

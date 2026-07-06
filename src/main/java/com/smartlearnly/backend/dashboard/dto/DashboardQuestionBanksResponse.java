@@ -10,6 +10,11 @@ public record DashboardQuestionBanksResponse(
         long pendingReviewQuestions,
         long draftQuestions,
         long rejectedQuestions,
-        long archivedQuestions
+        long archivedQuestions,
+        long newBanksInRange,
+        long newQuestionsInRange,
+        long reviewedQuestionsInRange,
+        long aiGeneratedQuestions,
+        long manualQuestions
 ) {
 }
