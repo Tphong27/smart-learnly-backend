@@ -5,7 +5,11 @@ import com.smartlearnly.backend.assignment.dto.AssignmentModel;
 import com.smartlearnly.backend.assignment.entity.Assignment;
 import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
 import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.classroom.repository.ClassAdminProjection;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
 import java.util.UUID;
@@ -18,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AssignmentService {
 
     private final AssignmentRepository assignmentRepository;
+    private final ClassOfferingRepository classOfferingRepository;
     private final CurrentUserService currentUserService;
     private final AssignmentSubmissionRepository assignmentSubmissionRepository;
 
@@ -49,6 +54,31 @@ public class AssignmentService {
         return assignmentRepository.findAll()
                 .stream()
                 .map(this::mapToResponse)
+                .toList();
+    }
+
+    public List<AssignmentModel.Response> getMyAssignments(UUID courseId, Boolean isFlashtest) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        return assignmentRepository.findStaffAssignments(actor.getId(), courseId, isFlashtest)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId, Boolean isFlashtest) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        return assignmentRepository.findAvailableForStudent(actor.getId(), courseId, isFlashtest)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    public List<AssignmentModel.ClassOptionResponse> getAssignableClasses(UUID courseId) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        UUID trainerId = isAdminOrTmoOrSme(actor) ? null : actor.getId();
+        return classOfferingRepository.findAssignableClasses(courseId, trainerId)
+                .stream()
+                .map(this::mapToClassOptionResponse)
                 .toList();
     }
 
@@ -108,6 +138,7 @@ public class AssignmentService {
 
         response.setId(assignment.getId());
         response.setClassId(assignment.getClassId());
+        response.setCourseId(resolveCourseId(assignment.getClassId()));
         response.setTitle(assignment.getTitle());
         response.setDescription(assignment.getDescription());
         response.setInstructionFileUrl(
@@ -127,6 +158,36 @@ public class AssignmentService {
         response.setTestId(assignment.getTestId());
 
         return response;
+    }
+
+    private UUID resolveCourseId(UUID classId) {
+        if (classId == null) {
+            return null;
+        }
+        return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
+                .map(ClassOffering::getCourseId)
+                .orElse(null);
+    }
+
+    private AssignmentModel.ClassOptionResponse mapToClassOptionResponse(ClassAdminProjection projection) {
+        AssignmentModel.ClassOptionResponse response = new AssignmentModel.ClassOptionResponse();
+        response.setId(projection.getId());
+        response.setCourseId(projection.getCourseId());
+        response.setCourseTitle(projection.getCourseTitle());
+        response.setClassName(projection.getClassName());
+        response.setTrainerId(projection.getTrainerId());
+        response.setTrainerName(projection.getTrainerName());
+        response.setStatus(projection.getStatus());
+        response.setActiveEnrollmentCount(projection.getActiveEnrollmentCount());
+        response.setMaxStudents(projection.getMaxStudents());
+        return response;
+    }
+
+    private boolean isAdminOrTmoOrSme(UserAccount user) {
+        String role = user.getRole();
+        return "ADMIN".equalsIgnoreCase(role)
+                || "TMO".equalsIgnoreCase(role)
+                || "SME".equalsIgnoreCase(role);
     }
 }
 

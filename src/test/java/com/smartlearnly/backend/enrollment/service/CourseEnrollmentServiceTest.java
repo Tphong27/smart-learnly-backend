@@ -79,21 +79,29 @@ class CourseEnrollmentServiceTest {
     void freeCourseShouldCreateActiveEnrollmentAndAudit() {
         UUID studentId = UUID.randomUUID();
         Course course = publishedCourse(BigDecimal.ZERO, false);
-        UUID classId = UUID.randomUUID();
+        ClassOffering classOffering = classOffering(course.getId());
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user(studentId));
+        when(courseRepository.findByIdAndDeletedAtIsNullForUpdate(course.getId())).thenReturn(Optional.of(course));
+        when(classOfferingRepository.findByIdForUpdate(classOffering.getId())).thenReturn(Optional.of(classOffering));
         when(courseEnrollmentRepository.findByCourseIdAndStudentIdForUpdate(course.getId(), studentId))
                 .thenReturn(Optional.empty());
-        when(courseRepository.findByIdAndDeletedAtIsNullForUpdate(course.getId())).thenReturn(Optional.of(course));
-        stubAvailableClass(course.getId(), classId);
-        stubNewClassEnrollment(classId, studentId);
+        when(classEnrollmentRepository.findByClassIdAndStudentIdForUpdate(classOffering.getId(), studentId))
+                .thenReturn(Optional.empty());
+        when(classEnrollmentRepository.countByClassIdAndStatus(classOffering.getId(), "active")).thenReturn(0L);
         when(courseEnrollmentRepository.save(any(CourseEnrollment.class))).thenAnswer(invocation -> {
             CourseEnrollment enrollment = invocation.getArgument(0);
             enrollment.setId(UUID.randomUUID());
             enrollment.setEnrollmentDate(Instant.now());
             return enrollment;
         });
+        when(classEnrollmentRepository.save(any(ClassEnrollment.class))).thenAnswer(invocation -> {
+            ClassEnrollment enrollment = invocation.getArgument(0);
+            enrollment.setId(UUID.randomUUID());
+            enrollment.setEnrollmentDate(Instant.now());
+            return enrollment;
+        });
 
-        EnrollmentResponse response = service.enrollFree(course.getId(), classId);
+        EnrollmentResponse response = service.enrollFree(course.getId(), classOffering.getId());
 
         assertThat(response.status()).isEqualTo("ACTIVE");
         assertThat(response.alreadyEnrolled()).isFalse();
@@ -101,7 +109,8 @@ class CourseEnrollmentServiceTest {
         ArgumentCaptor<EnrollmentStatusHistory> historyCaptor =
                 ArgumentCaptor.forClass(EnrollmentStatusHistory.class);
         verify(enrollmentStatusHistoryRepository, times(2)).save(historyCaptor.capture());
-        EnrollmentStatusHistory courseHistory = historyCaptor.getAllValues().stream()
+        EnrollmentStatusHistory courseHistory = historyCaptor.getAllValues()
+                .stream()
                 .filter(history -> history.getCourseEnrollmentId() != null)
                 .findFirst()
                 .orElseThrow();
@@ -113,20 +122,19 @@ class CourseEnrollmentServiceTest {
     @Test
     void activeCourseAndClassEnrollmentShouldBeIdempotent() {
         UUID studentId = UUID.randomUUID();
-        Course course = publishedCourse(BigDecimal.ZERO, true);
-        UUID courseId = course.getId();
-        UUID classId = UUID.randomUUID();
-        CourseEnrollment existing = enrollment(studentId, courseId, EnrollmentStatus.ACTIVE);
-        ClassEnrollment existingClass = classEnrollment(studentId, classId, EnrollmentStatus.ACTIVE);
+        Course course = publishedCourse(BigDecimal.ZERO, false);
+        ClassOffering classOffering = classOffering(course.getId());
+        CourseEnrollment existing = enrollment(studentId, course.getId(), EnrollmentStatus.ACTIVE);
+        ClassEnrollment existingClassEnrollment = classEnrollment(studentId, classOffering.getId(), EnrollmentStatus.ACTIVE);
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user(studentId));
-        when(courseRepository.findByIdAndDeletedAtIsNullForUpdate(courseId)).thenReturn(Optional.of(course));
-        stubAvailableClass(courseId, classId);
-        when(courseEnrollmentRepository.findByCourseIdAndStudentIdForUpdate(courseId, studentId))
+        when(courseRepository.findByIdAndDeletedAtIsNullForUpdate(course.getId())).thenReturn(Optional.of(course));
+        when(classOfferingRepository.findByIdForUpdate(classOffering.getId())).thenReturn(Optional.of(classOffering));
+        when(courseEnrollmentRepository.findByCourseIdAndStudentIdForUpdate(course.getId(), studentId))
                 .thenReturn(Optional.of(existing));
-        when(classEnrollmentRepository.findByClassIdAndStudentIdForUpdate(classId, studentId))
-                .thenReturn(Optional.of(existingClass));
+        when(classEnrollmentRepository.findByClassIdAndStudentIdForUpdate(classOffering.getId(), studentId))
+                .thenReturn(Optional.of(existingClassEnrollment));
 
-        EnrollmentResponse response = service.enrollFree(courseId, classId);
+        EnrollmentResponse response = service.enrollFree(course.getId(), classOffering.getId());
 
         assertThat(response.alreadyEnrolled()).isTrue();
         verify(courseEnrollmentRepository, never()).save(any());
@@ -138,24 +146,33 @@ class CourseEnrollmentServiceTest {
     void cancelledFreeEnrollmentShouldReactivateWithAudit() {
         UUID studentId = UUID.randomUUID();
         Course course = publishedCourse(BigDecimal.ZERO, true);
-        UUID classId = UUID.randomUUID();
+        ClassOffering classOffering = classOffering(course.getId());
         CourseEnrollment existing = enrollment(studentId, course.getId(), EnrollmentStatus.CANCELLED);
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user(studentId));
+        when(courseRepository.findByIdAndDeletedAtIsNullForUpdate(course.getId())).thenReturn(Optional.of(course));
+        when(classOfferingRepository.findByIdForUpdate(classOffering.getId())).thenReturn(Optional.of(classOffering));
         when(courseEnrollmentRepository.findByCourseIdAndStudentIdForUpdate(course.getId(), studentId))
                 .thenReturn(Optional.of(existing));
-        when(courseRepository.findByIdAndDeletedAtIsNullForUpdate(course.getId())).thenReturn(Optional.of(course));
+        when(classEnrollmentRepository.findByClassIdAndStudentIdForUpdate(classOffering.getId(), studentId))
+                .thenReturn(Optional.empty());
+        when(classEnrollmentRepository.countByClassIdAndStatus(classOffering.getId(), "active")).thenReturn(0L);
         when(courseEnrollmentRepository.save(existing)).thenReturn(existing);
-        stubAvailableClass(course.getId(), classId);
-        stubNewClassEnrollment(classId, studentId);
+        when(classEnrollmentRepository.save(any(ClassEnrollment.class))).thenAnswer(invocation -> {
+            ClassEnrollment enrollment = invocation.getArgument(0);
+            enrollment.setId(UUID.randomUUID());
+            enrollment.setEnrollmentDate(Instant.now());
+            return enrollment;
+        });
 
-        EnrollmentResponse response = service.enrollFree(course.getId(), classId);
+        EnrollmentResponse response = service.enrollFree(course.getId(), classOffering.getId());
 
         assertThat(response.reactivated()).isTrue();
         assertThat(existing.getStatus()).isEqualTo(EnrollmentStatus.ACTIVE);
         ArgumentCaptor<EnrollmentStatusHistory> historyCaptor =
                 ArgumentCaptor.forClass(EnrollmentStatusHistory.class);
         verify(enrollmentStatusHistoryRepository, times(2)).save(historyCaptor.capture());
-        EnrollmentStatusHistory courseHistory = historyCaptor.getAllValues().stream()
+        EnrollmentStatusHistory courseHistory = historyCaptor.getAllValues()
+                .stream()
                 .filter(history -> history.getCourseEnrollmentId() != null)
                 .findFirst()
                 .orElseThrow();
@@ -236,6 +253,16 @@ class CourseEnrollmentServiceTest {
         return user;
     }
 
+    private ClassOffering classOffering(UUID courseId) {
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(UUID.randomUUID());
+        classOffering.setCourseId(courseId);
+        classOffering.setClassName("Class A");
+        classOffering.setMaxStudents(30);
+        classOffering.setStatus(ClassStatus.UPCOMING);
+        return classOffering;
+    }
+
     private CourseEnrollment enrollment(UUID studentId, UUID courseId, EnrollmentStatus status) {
         CourseEnrollment enrollment = new CourseEnrollment();
         enrollment.setId(UUID.randomUUID());
@@ -244,27 +271,6 @@ class CourseEnrollmentServiceTest {
         enrollment.setStatus(status);
         enrollment.setEnrollmentDate(Instant.now());
         return enrollment;
-    }
-
-    private void stubAvailableClass(UUID courseId, UUID classId) {
-        ClassOffering classOffering = new ClassOffering();
-        classOffering.setId(classId);
-        classOffering.setCourseId(courseId);
-        classOffering.setStatus(ClassStatus.UPCOMING);
-        classOffering.setMaxStudents(30);
-        when(classOfferingRepository.findByIdForUpdate(classId)).thenReturn(Optional.of(classOffering));
-    }
-
-    private void stubNewClassEnrollment(UUID classId, UUID studentId) {
-        when(classEnrollmentRepository.findByClassIdAndStudentIdForUpdate(classId, studentId))
-                .thenReturn(Optional.empty());
-        when(classEnrollmentRepository.countByClassIdAndStatus(classId, "active")).thenReturn(0L);
-        when(classEnrollmentRepository.save(any(ClassEnrollment.class))).thenAnswer(invocation -> {
-            ClassEnrollment enrollment = invocation.getArgument(0);
-            enrollment.setId(UUID.randomUUID());
-            enrollment.setEnrollmentDate(Instant.now());
-            return enrollment;
-        });
     }
 
     private ClassEnrollment classEnrollment(UUID studentId, UUID classId, EnrollmentStatus status) {

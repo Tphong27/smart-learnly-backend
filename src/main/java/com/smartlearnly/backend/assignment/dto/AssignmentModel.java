@@ -53,6 +53,7 @@ public class AssignmentModel {
     public static class Response {
         private UUID id;
         private UUID classId;
+        private UUID courseId;
         private String title;
         private String description;
         private String instructionFileUrl;
@@ -67,5 +68,20 @@ public class AssignmentModel {
         private Instant createdAt;
         private Instant updatedAt;
         private UUID testId;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class ClassOptionResponse {
+        private UUID id;
+        private UUID courseId;
+        private String courseTitle;
+        private String className;
+        private UUID trainerId;
+        private String trainerName;
+        private String status;
+        private Long activeEnrollmentCount;
+        private Integer maxStudents;
     }
 }

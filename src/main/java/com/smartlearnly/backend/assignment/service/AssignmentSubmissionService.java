@@ -10,6 +10,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
 import jakarta.persistence.EntityNotFoundException;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -37,7 +38,8 @@ public class AssignmentSubmissionService {
                         request.getAssignmentId(),
                         required(request.getStudentId(), "studentId"))
                 .orElseGet(AssignmentSubmission::new);
-        if (isFinalStatus(submission.getStatus())) {
+        if (isFinalStatus(submission.getStatus())
+                && !canReopenExpiredSubmission(submission, assignment)) {
             return mapToResponse(submission);
         }
         assertAssignmentOpen(assignment);
@@ -46,6 +48,7 @@ public class AssignmentSubmissionService {
         if (submission.getStartTime() == null) {
             submission.setStartTime(Instant.now());
         }
+        submission.setIsLate(false);
         submission.setStatus(SubmissionStatus.DOING);
 
         AssignmentSubmission saved = repository.save(submission);
@@ -58,9 +61,15 @@ public class AssignmentSubmissionService {
     public AssignmentSubmissionModel.Response submitAssignment(
             AssignmentSubmissionModel.CreateRequest request) {
         Assignment assignment = loadAssignment(required(request.getAssignmentId(), "assignmentId"));
+        AssignmentSubmission submission = repository
+                .findByAssignmentIdAndStudentId(request.getAssignmentId(), request.getStudentId())
+                .orElseGet(AssignmentSubmission::new);
         boolean expired = assignment.getDueDate() != null
                 && Instant.now().isAfter(assignment.getDueDate());
         if (expired && !Boolean.TRUE.equals(assignment.getAllowLateSubmission())) {
+            if (hasSubmittedWork(submission.getStatus())) {
+                return mapToResponse(submission);
+            }
             AssignmentSubmission expiredSubmission = repository
                     .findByAssignmentIdAndStudentId(
                             request.getAssignmentId(),
@@ -77,10 +86,8 @@ public class AssignmentSubmissionService {
                     "Assignment due date has passed");
         }
 
-        AssignmentSubmission submission = repository
-                .findByAssignmentIdAndStudentId(request.getAssignmentId(), request.getStudentId())
-                .orElseGet(AssignmentSubmission::new);
-        if (isFinalStatus(submission.getStatus())) {
+        if (isFinalStatus(submission.getStatus())
+                && !canResubmitFinalSubmission(submission, assignment)) {
             return mapToResponse(submission);
         }
         submission.setAssignmentId(request.getAssignmentId());
@@ -91,6 +98,11 @@ public class AssignmentSubmissionService {
         submission.setSubmittedAt(Instant.now());
         submission.setIsLate(expired);
         submission.setStatus(expired ? SubmissionStatus.EXPIRED : SubmissionStatus.SUBMITTED);
+        submission.setScore(null);
+        submission.setAiFeedback(null);
+        submission.setTrainerFeedback(null);
+        submission.setGradedBy(null);
+        submission.setGradedAt(null);
 
         AssignmentSubmission saved = repository.save(submission);
         AssignmentSubmissionModel.Response response = mapToResponse(saved);
@@ -122,6 +134,14 @@ public class AssignmentSubmissionService {
             AssignmentSubmissionModel.GradeRequest request) {
         AssignmentSubmission submission = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Submission not found"));
+
+        if (request.getScore() != null
+                && (request.getScore().compareTo(BigDecimal.ZERO) < 0
+                || request.getScore().compareTo(BigDecimal.TEN) > 0)) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "Score must be between 0 and 10");
+        }
 
         submission.setScore(request.getScore());
         submission.setAiFeedback(request.getAiFeedback());
@@ -160,6 +180,28 @@ public class AssignmentSubmissionService {
                     ErrorCode.BUSINESS_RULE_VIOLATION,
                     "Assignment due date has passed");
         }
+    }
+
+    private boolean canReopenExpiredSubmission(
+            AssignmentSubmission submission,
+            Assignment assignment) {
+        return submission.getStatus() == SubmissionStatus.EXPIRED
+                && assignment.getDueDate() != null
+                && Instant.now().isBefore(assignment.getDueDate());
+    }
+
+    private boolean canResubmitFinalSubmission(
+            AssignmentSubmission submission,
+            Assignment assignment) {
+        return isFinalStatus(submission.getStatus())
+                && (assignment.getDueDate() == null
+                || Instant.now().isBefore(assignment.getDueDate()));
+    }
+
+    private boolean hasSubmittedWork(SubmissionStatus status) {
+        return status == SubmissionStatus.SUBMITTED
+                || status == SubmissionStatus.GRADED
+                || status == SubmissionStatus.LATE;
     }
 
     private boolean isFinalStatus(SubmissionStatus status) {

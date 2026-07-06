@@ -32,6 +32,26 @@ public class AssignmentController {
         return ResponseEntity.ok(responses);
     }
 
+    @GetMapping("/mine")
+    public ResponseEntity<List<AssignmentModel.Response>> getMine(
+            @RequestParam(required = false) UUID courseId,
+            @RequestParam(required = false) Boolean isFlashtest) {
+        return ResponseEntity.ok(assignmentService.getMyAssignments(courseId, isFlashtest));
+    }
+
+    @GetMapping("/available")
+    public ResponseEntity<List<AssignmentModel.Response>> getAvailable(
+            @RequestParam(required = false) UUID courseId,
+            @RequestParam(required = false) Boolean isFlashtest) {
+        return ResponseEntity.ok(assignmentService.getAvailableAssignments(courseId, isFlashtest));
+    }
+
+    @GetMapping("/classes")
+    public ResponseEntity<List<AssignmentModel.ClassOptionResponse>> getAssignableClasses(
+            @RequestParam(required = false) UUID courseId) {
+        return ResponseEntity.ok(assignmentService.getAssignableClasses(courseId));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<AssignmentModel.Response> getById(@PathVariable UUID id) {
         AssignmentModel.Response response = assignmentService.getAssignmentById(id);
