@@ -12,12 +12,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class GeminiVisionQuestionImportProvider implements ImageQuestionImportProvider {
@@ -40,17 +43,60 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
                     .body(String.class);
             return parseResponse(response);
         }
-        catch (RestClientException | IOException | IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Image import provider is unavailable or returned an invalid response");
+        catch (RestClientResponseException exception) {
+            log.warn(
+                    "Gemini image import HTTP error: status={} model={} endpoint={} responseBody={}",
+                    exception.getStatusCode().value(),
+                    properties.getModel(),
+                    sanitizeEndpoint(properties.getApiBaseUrl()),
+                    truncateForLog(exception.getResponseBodyAsString(), 1600),
+                    exception
+            );
+            throw new BusinessException(
+                    ErrorCode.IMAGE_IMPORT_UNAVAILABLE,
+                    "Gemini image import provider returned HTTP " + exception.getStatusCode().value()
+            );
+        }
+        catch (IOException | IllegalArgumentException exception) {
+            log.warn(
+                    "Gemini image import response parse error: model={} endpoint={} reason={}",
+                    properties.getModel(),
+                    sanitizeEndpoint(properties.getApiBaseUrl()),
+                    exception.getMessage(),
+                    exception
+            );
+            throw new BusinessException(
+                    ErrorCode.IMAGE_IMPORT_UNAVAILABLE,
+                    "Gemini image import provider returned an invalid response"
+            );
+        }
+        catch (RestClientException exception) {
+            log.warn(
+                    "Gemini image import request error: model={} endpoint={} reason={}",
+                    properties.getModel(),
+                    sanitizeEndpoint(properties.getApiBaseUrl()),
+                    exception.getMessage(),
+                    exception
+            );
+            throw new BusinessException(
+                    ErrorCode.IMAGE_IMPORT_UNAVAILABLE,
+                    "Gemini image import provider request failed"
+            );
         }
     }
 
     private void ensureAvailable() {
-        if (!properties.isEnabled()
-                || !PROVIDER_NAME.equalsIgnoreCase(properties.getProvider())
-                || properties.getApiKey() == null
-                || properties.getApiKey().isBlank()) {
-            throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "IMAGE_IMPORT_UNAVAILABLE");
+        if (!properties.isEnabled()) {
+            log.warn("Gemini image import is disabled by configuration");
+            throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Image import is disabled");
+        }
+        if (!PROVIDER_NAME.equalsIgnoreCase(properties.getProvider())) {
+            log.warn("Gemini image import provider mismatch: configuredProvider={}", properties.getProvider());
+            throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Gemini image import provider is not configured");
+        }
+        if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
+            log.warn("Gemini image import API key is missing");
+            throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Gemini API key is not configured");
         }
     }
 
@@ -191,6 +237,24 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
             }
         }
         return trimmed;
+    }
+
+    private String sanitizeEndpoint(String value) {
+        if (value == null || value.isBlank()) {
+            return "<blank>";
+        }
+        return value.replaceAll("(?i)(key=)[^&]+", "$1<redacted>");
+    }
+
+    private String truncateForLog(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return "<empty>";
+        }
+        String normalized = value.replace('\r', ' ').replace('\n', ' ').trim();
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength) + "...<truncated>";
     }
 
     private record GeminiPayload(
