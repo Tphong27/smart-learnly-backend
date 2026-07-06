@@ -83,6 +83,8 @@ app:
         lesson-material-max-size: ${APP_STORAGE_LESSON_MATERIAL_MAX_SIZE:50MB}
         lesson-resource-bucket: ${APP_STORAGE_LESSON_RESOURCE_BUCKET:lesson-resources}
         lesson-resource-max-size: ${APP_STORAGE_LESSON_RESOURCE_MAX_SIZE:20MB}
+        question-image-bucket: ${APP_STORAGE_QUESTION_IMAGE_BUCKET:question-images}
+        question-image-max-size: ${APP_STORAGE_QUESTION_IMAGE_MAX_SIZE:5MB}
         r2-account-id: ${CLOUDFLARE_R2_ACCOUNT_ID:${R2_ACCOUNT_ID:}}
         r2-endpoint: ${CLOUDFLARE_R2_ENDPOINT:${R2_ENDPOINT:}}
         r2-region: ${CLOUDFLARE_R2_REGION:${R2_REGION:auto}}
@@ -92,6 +94,7 @@ app:
         r2-course-thumbnail-public-url: ${CLOUDFLARE_R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:${R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:}}
         r2-lesson-material-public-url: ${CLOUDFLARE_R2_LESSON_MATERIAL_PUBLIC_BASE_URL:${R2_LESSON_MATERIAL_PUBLIC_BASE_URL:}}
         r2-lesson-resource-public-url: ${CLOUDFLARE_R2_LESSON_RESOURCE_PUBLIC_BASE_URL:${R2_LESSON_RESOURCE_PUBLIC_BASE_URL:}}
+        r2-question-image-public-url: ${CLOUDFLARE_R2_QUESTION_IMAGE_PUBLIC_BASE_URL:${R2_QUESTION_IMAGE_PUBLIC_BASE_URL:}}
     question-image-import:
         enabled: ${APP_QUESTION_IMAGE_IMPORT_ENABLED:true}
         provider: ${APP_QUESTION_IMAGE_IMPORT_PROVIDER:gemini}

@@ -57,6 +57,12 @@ public class Question {
     @Column(columnDefinition = "TEXT")
     private String explanation;
 
+    @Column(name = "image_url", columnDefinition = "TEXT")
+    private String imageUrl;
+
+    @Column(name = "image_object_key", columnDefinition = "TEXT")
+    private String imageObjectKey;
+
     @Column(name = "is_ai_generated", nullable = false)
     private Boolean isAiGenerated;
 

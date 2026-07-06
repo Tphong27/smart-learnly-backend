@@ -126,6 +126,7 @@ public final class QuestionModel {
             String bloomLevel,
             Short difficulty,
             String explanation,
+            String imageUrl,
             boolean aiGenerated,
             String importSource,
             String status,
