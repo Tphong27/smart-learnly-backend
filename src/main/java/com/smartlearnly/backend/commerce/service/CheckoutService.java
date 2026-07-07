@@ -4,8 +4,6 @@ import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.entity.ClassStatus;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.commerce.dto.CheckoutResponse;
-import com.smartlearnly.backend.commerce.entity.Cart;
-import com.smartlearnly.backend.commerce.entity.CartItem;
 import com.smartlearnly.backend.commerce.entity.OrderItem;
 import com.smartlearnly.backend.commerce.entity.OrderStatus;
 import com.smartlearnly.backend.commerce.entity.PaymentGateway;
@@ -14,8 +12,6 @@ import com.smartlearnly.backend.commerce.entity.PurchaseOrder;
 import com.smartlearnly.backend.commerce.entity.SePayOrder;
 import com.smartlearnly.backend.commerce.entity.SePayOrderStatus;
 import com.smartlearnly.backend.commerce.entity.TransactionStatus;
-import com.smartlearnly.backend.commerce.repository.CartItemRepository;
-import com.smartlearnly.backend.commerce.repository.CartRepository;
 import com.smartlearnly.backend.commerce.repository.OrderItemRepository;
 import com.smartlearnly.backend.commerce.repository.OrderRepository;
 import com.smartlearnly.backend.commerce.repository.PaymentTransactionRepository;
@@ -46,9 +42,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -63,8 +59,6 @@ public class CheckoutService {
     private static final DateTimeFormatter ORDER_DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
     private static final String CURRENCY = "VND";
 
-    private final CartRepository cartRepository;
-    private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
@@ -81,76 +75,17 @@ public class CheckoutService {
     private Duration checkoutExpiration;
 
     @Transactional
-    public CheckoutResponse checkout(UUID cartId) {
-        UserAccount user = currentUserService.requireAuthenticatedUser();
-        Cart cart = cartRepository.findByIdAndUserId(cartId, user.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Cart was not found"));
-        List<CartItem> cartItems = cartItemRepository.findByCartIdOrderByAddedAtAsc(cart.getId());
-        if (cartItems.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Cart is empty");
-        }
-
-        List<OrderItemSnapshot> snapshots = new ArrayList<>();
-        for (CartItem cartItem : cartItems) {
-            snapshots.add(toSnapshot(user.getId(), cartItem));
-        }
-
-        BigDecimal totalAmount = snapshots.stream()
-                .map(OrderItemSnapshot::finalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (totalAmount.signum() <= 0) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Checkout amount must be greater than 0");
-        }
-
-        Instant expiresAt = Instant.now().plus(checkoutExpiration);
-        PurchaseOrder order = createOrder(user.getId(), totalAmount, expiresAt);
-        List<OrderItem> orderItems = snapshots.stream()
-                .map(snapshot -> createOrderItem(order.getId(), snapshot))
-                .toList();
-        orderItemRepository.saveAll(orderItems);
-
-        PaymentTransaction transaction = createPendingTransaction(user.getId(), order.getId(), totalAmount, expiresAt);
-        SePayPaymentInstruction instruction = createPaymentInstruction(order, transaction, totalAmount, expiresAt);
-        SePayOrder sePayOrder = createSePayOrder(order.getId(), transaction.getId(), instruction, totalAmount,
-                expiresAt);
-        cartItemRepository.deleteByCartId(cart.getId());
-        auditLogService.recordUser(
-                user, AuditAction.ORDER_CREATED, AuditDomain.ORDER, AuditResult.SUCCESS,
-                "ORDER", order.getId().toString(), "Order was created",
-                null, null, java.util.Map.of("amount", totalAmount, "currency", CURRENCY));
-        auditLogService.recordUser(
-                user, AuditAction.PAYMENT_CREATED, AuditDomain.PAYMENT, AuditResult.SUCCESS,
-                "PAYMENT_TRANSACTION", transaction.getId().toString(), "Payment transaction was created",
-                null, null, java.util.Map.of("orderId", order.getId(), "gateway", PaymentGateway.SEPAY.name()));
-        return new CheckoutResponse(
-                order.getId(),
-                order.getOrderCode(),
-                transaction.getId(),
-                PaymentGateway.SEPAY.name(),
-                sePayOrder.getPaymentCode(),
-                sePayOrder.getAmount(),
-                order.getCurrency(),
-                sePayOrder.getBankAccountNumber(),
-                sePayOrder.getBankName(),
-                sePayOrder.getAccountName(),
-                sePayOrder.getQrUrl(),
-                order.getStatus().name(),
-                order.getExpiresAt());
-    }
-
-    @Transactional
-    public CheckoutResponse buyNowCheckout(UUID courseId, UUID classId) {
+    public CheckoutResponse checkout(UUID courseId, UUID classId) {
         UserAccount user = currentUserService.requireAuthenticatedUser();
 
-        CartItem directItem = new CartItem();
-        directItem.setCourseId(courseId);
-        directItem.setClassId(classId);
-
-        OrderItemSnapshot snapshot = toSnapshot(user.getId(), directItem);
+        OrderItemSnapshot snapshot = toSnapshot(user.getId(), courseId, classId);
 
         BigDecimal totalAmount = snapshot.finalAmount();
         if (totalAmount.signum() <= 0) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Checkout amount must be greater than 0");
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Checkout amount must be greater than 0"
+            );
         }
 
         Instant expiresAt = Instant.now().plus(checkoutExpiration);
@@ -164,20 +99,23 @@ public class CheckoutService {
                 user.getId(),
                 order.getId(),
                 totalAmount,
-                expiresAt);
+                expiresAt
+        );
 
         SePayPaymentInstruction instruction = createPaymentInstruction(
                 order,
                 transaction,
                 totalAmount,
-                expiresAt);
+                expiresAt
+        );
 
         SePayOrder sePayOrder = createSePayOrder(
                 order.getId(),
                 transaction.getId(),
                 instruction,
                 totalAmount,
-                expiresAt);
+                expiresAt
+        );
 
         auditLogService.recordUser(
                 user,
@@ -186,14 +124,16 @@ public class CheckoutService {
                 AuditResult.SUCCESS,
                 "ORDER",
                 order.getId().toString(),
-                "Order was created by Buy Now",
+                "Order was created",
                 null,
                 null,
-                java.util.Map.of(
+                Map.of(
                         "amount", totalAmount,
                         "currency", CURRENCY,
                         "courseId", courseId,
-                        "classId", classId));
+                        "classId", classId
+                )
+        );
 
         auditLogService.recordUser(
                 user,
@@ -202,12 +142,14 @@ public class CheckoutService {
                 AuditResult.SUCCESS,
                 "PAYMENT_TRANSACTION",
                 transaction.getId().toString(),
-                "Payment transaction was created by Buy Now",
+                "Payment transaction was created",
                 null,
                 null,
-                java.util.Map.of(
+                Map.of(
                         "orderId", order.getId(),
-                        "gateway", PaymentGateway.SEPAY.name()));
+                        "gateway", PaymentGateway.SEPAY.name()
+                )
+        );
 
         return new CheckoutResponse(
                 order.getId(),
@@ -222,22 +164,22 @@ public class CheckoutService {
                 sePayOrder.getAccountName(),
                 sePayOrder.getQrUrl(),
                 order.getStatus().name(),
-                order.getExpiresAt());
+                order.getExpiresAt()
+        );
     }
 
-    private OrderItemSnapshot toSnapshot(UUID studentId, CartItem cartItem) {
-        Course course = requirePublishedCourse(cartItem.getCourseId());
+    private OrderItemSnapshot toSnapshot(UUID studentId, UUID courseId, UUID classId) {
+        Course course = requirePublishedCourse(courseId);
         requirePaidCourse(course);
 
-        if (cartItem.getClassId() == null) {
+        if (classId == null) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    "Please select a class before checkout");
+                    "Please select a class before checkout"
+            );
         }
 
-        ClassOffering classOffering = requireSellableClass(
-                cartItem.getClassId(),
-                course.getId());
+        ClassOffering classOffering = requireSellableClass(classId, course.getId());
 
         rejectExistingCourseAccess(studentId, course.getId());
         rejectExistingClassAccess(studentId, classOffering.getId());
@@ -254,7 +196,8 @@ public class CheckoutService {
                 title,
                 unitPrice,
                 discountAmount,
-                finalAmount);
+                finalAmount
+        );
     }
 
     private PurchaseOrder createOrder(UUID userId, BigDecimal totalAmount, Instant expiresAt) {
@@ -284,7 +227,8 @@ public class CheckoutService {
             UUID userId,
             UUID orderId,
             BigDecimal totalAmount,
-            Instant expiresAt) {
+            Instant expiresAt
+    ) {
         PaymentTransaction transaction = new PaymentTransaction();
         transaction.setUserId(userId);
         transaction.setOrderId(orderId);
@@ -301,20 +245,25 @@ public class CheckoutService {
             PurchaseOrder order,
             PaymentTransaction transaction,
             BigDecimal totalAmount,
-            Instant expiresAt) {
+            Instant expiresAt
+    ) {
         SePayPaymentInstructionService instructionService = sePayInstructionServices.getIfAvailable();
+
         if (instructionService == null) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "SePay payment instruction service is not configured");
+                    "SePay payment instruction service is not configured"
+            );
         }
+
         return instructionService.createInstruction(new SePayPaymentInstructionRequest(
                 order.getId(),
                 order.getOrderCode(),
                 transaction.getId(),
                 totalAmount,
                 order.getCurrency(),
-                expiresAt));
+                expiresAt
+        ));
     }
 
     private SePayOrder createSePayOrder(
@@ -322,17 +271,25 @@ public class CheckoutService {
             UUID transactionId,
             SePayPaymentInstruction instruction,
             BigDecimal expectedAmount,
-            Instant expectedExpiresAt) {
+            Instant expectedExpiresAt
+    ) {
         if (instruction == null
                 || isBlank(instruction.paymentCode())
                 || isBlank(instruction.bankAccountNumber())
                 || isBlank(instruction.bankName())
                 || isBlank(instruction.accountName())
                 || isBlank(instruction.qrUrl())) {
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "SePay payment instruction is invalid");
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "SePay payment instruction is invalid"
+            );
         }
+
         if (instruction.amount() == null || instruction.amount().compareTo(expectedAmount) != 0) {
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "SePay instruction amount mismatch");
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "SePay instruction amount mismatch"
+            );
         }
 
         SePayOrder sePayOrder = new SePayOrder();
@@ -345,16 +302,24 @@ public class CheckoutService {
         sePayOrder.setAmount(instruction.amount());
         sePayOrder.setQrUrl(instruction.qrUrl());
         sePayOrder.setStatus(SePayOrderStatus.WAITING_PAYMENT);
-        sePayOrder.setExpiresAt(instruction.expiresAt() == null ? expectedExpiresAt : instruction.expiresAt());
+        sePayOrder.setExpiresAt(
+                instruction.expiresAt() == null ? expectedExpiresAt : instruction.expiresAt()
+        );
+
         return sePayOrderRepository.save(sePayOrder);
     }
 
     private Course requirePublishedCourse(UUID courseId) {
         Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "Course was not found"
+                ));
+
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessException(ErrorCode.COURSE_NOT_ENROLLABLE);
         }
+
         return course;
     }
 
@@ -362,20 +327,30 @@ public class CheckoutService {
         if (isFree(course)) {
             throw new BusinessException(
                     ErrorCode.COURSE_NOT_ENROLLABLE,
-                    "Free courses must use the free enrollment flow");
+                    "Free courses must use the free enrollment flow"
+            );
         }
     }
 
     private ClassOffering requireSellableClass(UUID classId, UUID courseId) {
         ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "Class was not found"
+                ));
+
         if (!courseId.equals(classOffering.getCourseId())) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Class must belong to the selected course");
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Class must belong to the selected course"
+            );
         }
+
         if (classOffering.getStatus() == ClassStatus.CANCELLED
                 || classOffering.getStatus() == ClassStatus.COMPLETED) {
             throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
         }
+
         return classOffering;
     }
 
@@ -383,8 +358,12 @@ public class CheckoutService {
         CourseEnrollment enrollment = courseEnrollmentRepository
                 .findByCourseIdAndStudentId(courseId, studentId)
                 .orElse(null);
+
         if (hasAccess(enrollment == null ? null : enrollment.getStatus())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Learner already has access to this course");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "Learner already has access to this course"
+            );
         }
     }
 
@@ -392,8 +371,12 @@ public class CheckoutService {
         ClassEnrollment enrollment = classEnrollmentRepository
                 .findByClassIdAndStudentId(classId, studentId)
                 .orElse(null);
+
         if (hasAccess(enrollment == null ? null : enrollment.getStatus())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Learner already has access to this class");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "Learner already has access to this class"
+            );
         }
     }
 
@@ -404,13 +387,20 @@ public class CheckoutService {
     private BigDecimal resolveFinalAmount(Course course) {
         BigDecimal unitPrice = money(course.getPrice());
         BigDecimal discountedPrice = course.getDiscountedPrice();
+
         if (discountedPrice == null) {
             return unitPrice;
         }
+
         BigDecimal finalAmount = money(discountedPrice);
+
         if (finalAmount.compareTo(unitPrice) > 0) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Discounted price cannot exceed course price");
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Discounted price cannot exceed course price"
+            );
         }
+
         return finalAmount;
     }
 
@@ -425,20 +415,24 @@ public class CheckoutService {
 
     private String generateOrderCode() {
         String code;
+
         do {
             code = "SLP-ORDER-"
                     + ORDER_DATE_FORMAT.format(LocalDate.now(ZoneOffset.UTC))
                     + "-"
                     + randomBase36(6);
         } while (orderRepository.existsByOrderCode(code));
+
         return code;
     }
 
     private String randomBase36(int length) {
         StringBuilder builder = new StringBuilder(length);
+
         for (int index = 0; index < length; index++) {
             builder.append(Character.forDigit(RANDOM.nextInt(36), 36));
         }
+
         return builder.toString().toUpperCase(Locale.ROOT);
     }
 
@@ -452,6 +446,7 @@ public class CheckoutService {
             String itemTitle,
             BigDecimal unitPrice,
             BigDecimal discountAmount,
-            BigDecimal finalAmount) {
+            BigDecimal finalAmount
+    ) {
     }
 }

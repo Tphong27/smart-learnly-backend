@@ -1,6 +1,5 @@
 package com.smartlearnly.backend.commerce.controller;
 
-import com.smartlearnly.backend.commerce.dto.CheckoutRequest;
 import com.smartlearnly.backend.commerce.dto.CheckoutResponse;
 import com.smartlearnly.backend.commerce.dto.OrderResponse;
 import com.smartlearnly.backend.commerce.service.CheckoutService;
@@ -19,7 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import com.smartlearnly.backend.commerce.dto.BuyNowCheckoutRequest;
+import com.smartlearnly.backend.commerce.dto.CheckoutRequest;
 
 @RestController
 @RequiredArgsConstructor
@@ -32,20 +31,13 @@ public class OrderController {
 
     @PostMapping("/checkout")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Checkout an authenticated trainee cart")
-    public ApiResponse<CheckoutResponse> checkout(@Valid @RequestBody CheckoutRequest request) {
-        return ApiResponse.success("Checkout created successfully", checkoutService.checkout(request.cartId()));
-    }
-
-    @PostMapping("/checkout/buy-now")
-    @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Checkout one course and class directly without cart")
-    public ApiResponse<CheckoutResponse> buyNowCheckout(
-            @Valid @RequestBody BuyNowCheckoutRequest request
+    @Operation(summary = "Checkout one course and class directly")
+    public ApiResponse<CheckoutResponse> checkout(
+            @Valid @RequestBody CheckoutRequest request
     ) {
         return ApiResponse.success(
                 "Checkout created successfully",
-                checkoutService.buyNowCheckout(request.courseId(), request.classId())
+                checkoutService.checkout(request.courseId(), request.classId())
         );
     }
 

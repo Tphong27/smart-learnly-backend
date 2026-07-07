@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public record CheckoutRequest(
-        @NotNull UUID cartId
+        @NotNull UUID courseId,
+        @NotNull UUID classId
 ) {
 }
