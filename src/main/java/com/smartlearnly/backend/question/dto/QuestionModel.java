@@ -128,6 +128,7 @@ public final class QuestionModel {
             String explanation,
             String imageUrl,
             String audioUrl,
+            List<QuestionMediaAttachmentResponse> mediaAttachments,
             boolean aiGenerated,
             String importSource,
             String status,
