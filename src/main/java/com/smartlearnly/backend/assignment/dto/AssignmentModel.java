@@ -16,6 +16,7 @@ public class AssignmentModel {
     @NoArgsConstructor
     public static class CreateRequest {
         private UUID classId;
+        private UUID lessonId;
         private String title;
         private String description;
         private String instructionFileUrl;
@@ -34,6 +35,7 @@ public class AssignmentModel {
     @NoArgsConstructor
     public static class UpdateRequest {
         private String title;
+        private UUID lessonId;
         private String description;
         private String instructionFileUrl;
         private String instructionFileName;
@@ -54,6 +56,7 @@ public class AssignmentModel {
         private UUID id;
         private UUID classId;
         private UUID courseId;
+        private UUID lessonId;
         private String title;
         private String description;
         private String instructionFileUrl;

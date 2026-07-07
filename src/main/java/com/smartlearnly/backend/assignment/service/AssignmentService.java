@@ -32,6 +32,7 @@ public class AssignmentService {
         Assignment assignment = new Assignment();
 
         assignment.setClassId(request.getClassId());
+        assignment.setLessonId(request.getLessonId());
         assignment.setTitle(request.getTitle());
         assignment.setDescription(request.getDescription());
         assignment.setInstructionFileUrl(request.getInstructionFileUrl());
@@ -91,6 +92,15 @@ public class AssignmentService {
         return mapToResponse(assignment);
     }
 
+    public AssignmentModel.Response getAssignmentByLessonId(UUID lessonId) {
+
+        Assignment assignment = assignmentRepository.findByLessonId(lessonId)
+                .orElseThrow(() ->
+                        new EntityNotFoundException("Assignment not found"));
+
+        return mapToResponse(assignment);
+    }
+
     @Transactional
     public AssignmentModel.Response updateAssignment(
             UUID id,
@@ -101,6 +111,7 @@ public class AssignmentService {
                         new EntityNotFoundException("Assignment not found"));
 
         if (request.getTitle() != null) assignment.setTitle(request.getTitle());
+        if (request.getLessonId() != null) assignment.setLessonId(request.getLessonId());
         if (request.getDescription() != null) assignment.setDescription(request.getDescription());
         assignment.setInstructionFileUrl(request.getInstructionFileUrl());
         assignment.setInstructionFileName(request.getInstructionFileName());
@@ -139,6 +150,7 @@ public class AssignmentService {
         response.setId(assignment.getId());
         response.setClassId(assignment.getClassId());
         response.setCourseId(resolveCourseId(assignment.getClassId()));
+        response.setLessonId(assignment.getLessonId());
         response.setTitle(assignment.getTitle());
         response.setDescription(assignment.getDescription());
         response.setInstructionFileUrl(

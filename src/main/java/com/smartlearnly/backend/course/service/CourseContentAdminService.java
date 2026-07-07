@@ -257,7 +257,7 @@ public class CourseContentAdminService {
         catch (IllegalArgumentException exception) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    "Lesson type must be video, pdf, document, rich_text, or quiz"
+                    "Lesson type must be video, pdf, document, rich_text, quiz, flashcard, assignment, or essay"
             );
         }
     }

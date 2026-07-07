@@ -58,6 +58,12 @@ public class AssignmentController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/lesson/{lessonId}")
+    public ResponseEntity<AssignmentModel.Response> getByLessonId(@PathVariable UUID lessonId) {
+        AssignmentModel.Response response = assignmentService.getAssignmentByLessonId(lessonId);
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<AssignmentModel.Response> update(
             @PathVariable UUID id, 

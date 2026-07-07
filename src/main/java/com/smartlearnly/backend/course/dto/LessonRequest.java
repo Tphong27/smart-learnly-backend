@@ -14,14 +14,14 @@ public record LessonRequest(
         String title,
 
         @Pattern(
-                regexp = "(?i)video|pdf|rich_text|quiz",
-                message = "Lesson type must be video, pdf, rich_text, or quiz"
+                regexp = "(?i)video|pdf|rich_text|quiz|flashcard|assignment|essay",
+                message = "Lesson type must be video, pdf, rich_text, quiz, flashcard, assignment, or essay"
         )
         String lessonType,
 
         @Pattern(
-                regexp = "(?i)video|pdf|rich_text|quiz",
-                message = "Lesson type must be video, pdf, rich_text, or quiz"
+                regexp = "(?i)video|pdf|rich_text|quiz|flashcard|assignment|essay",
+                message = "Lesson type must be video, pdf, rich_text, quiz, flashcard, assignment, or essay"
         )
         String type,
 

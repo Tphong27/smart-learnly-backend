@@ -2,6 +2,7 @@ package com.smartlearnly.backend.assignment.repository;
 
 import com.smartlearnly.backend.assignment.entity.Assignment;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -42,4 +43,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
             @Param("studentId") UUID studentId,
             @Param("courseId") UUID courseId,
             @Param("isFlashtest") Boolean isFlashtest);
+
+    Optional<Assignment> findByLessonId(UUID lessonId);
+
 }
