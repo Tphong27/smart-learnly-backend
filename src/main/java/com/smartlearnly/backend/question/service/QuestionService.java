@@ -6,14 +6,18 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
+import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.entity.BloomLevel;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.entity.QuestionBank;
+import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
+import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
+import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
@@ -37,6 +41,7 @@ public class QuestionService {
 
     private final QuestionRepository questionRepository;
     private final QuestionAnswerRepository answerRepository;
+    private final QuestionMediaAttachmentRepository mediaAttachmentRepository;
     private final QuestionBankService questionBankService;
     private final CourseSectionRepository courseSectionRepository;
     private final CurrentUserService currentUserService;
@@ -446,9 +451,34 @@ public class QuestionService {
 
     private QuestionModel.Response toResponse(Question question) {
         List<QuestionModel.AnswerResponse> answers = answerRepository.findByQuestionIdOrderByOrderIndexAsc(question.getId()).stream().map(answer -> new QuestionModel.AnswerResponse(answer.getId(), answer.getId(), answer.getAnswerText(), Boolean.TRUE.equals(answer.getIsCorrect()), Boolean.TRUE.equals(answer.getIsCorrect()), answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(), answer.getOrderIndex() == null ? 0 : answer.getOrderIndex())).toList();
-        return new QuestionModel.Response(question.getId(), question.getId(), question.getQuestionBankId(), question.getQuestionBankId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), question.getImageUrl(), question.getAudioUrl(), Boolean.TRUE.equals(question.getIsAiGenerated()), question.getImportSource(), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
+        List<QuestionMediaAttachment> imageAttachments = mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), QuestionMediaType.IMAGE);
+        List<QuestionMediaAttachment> audioAttachments = mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), QuestionMediaType.AUDIO);
+        List<QuestionMediaAttachmentResponse> mediaAttachments = new ArrayList<>();
+        mediaAttachments.addAll(imageAttachments.stream().map(this::toMediaResponse).toList());
+        mediaAttachments.addAll(audioAttachments.stream().map(this::toMediaResponse).toList());
+        String imageUrl = imageAttachments.isEmpty() ? question.getImageUrl() : imageAttachments.get(0).getMediaUrl();
+        String audioUrl = audioAttachments.isEmpty() ? question.getAudioUrl() : audioAttachments.get(0).getMediaUrl();
+        return new QuestionModel.Response(question.getId(), question.getId(), question.getQuestionBankId(), question.getQuestionBankId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), imageUrl, audioUrl, mediaAttachments, Boolean.TRUE.equals(question.getIsAiGenerated()), question.getImportSource(), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
     }
 
+    private QuestionMediaAttachmentResponse toMediaResponse(QuestionMediaAttachment attachment) {
+        return new QuestionMediaAttachmentResponse(
+                attachment.getId(),
+                attachment.getId(),
+                attachment.getQuestionId(),
+                toApiValue(attachment.getMediaType()),
+                attachment.getMediaUrl(),
+                attachment.getObjectKey(),
+                attachment.getBucket(),
+                attachment.getContentType(),
+                attachment.getFileSize() == null ? 0 : attachment.getFileSize(),
+                attachment.getOriginalFileName(),
+                attachment.getDisplayOrder() == null ? 0 : attachment.getDisplayOrder(),
+                attachment.getImportSource(),
+                attachment.getCreatedAt(),
+                attachment.getUpdatedAt()
+        );
+    }
     private QuestionType parseSupportedQuestionType(String value) {
         QuestionType type = parseEnum(value, QuestionType.class, "Question type must be multiple_choice or true_false");
         if (type != QuestionType.MULTIPLE_CHOICE && type != QuestionType.TRUE_FALSE) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question type must be multiple_choice or true_false");
@@ -492,3 +522,4 @@ public class QuestionService {
         return normalized.isEmpty() ? null : normalized;
     }
 }
+

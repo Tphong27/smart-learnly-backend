@@ -29,6 +29,7 @@ public class StorageProperties {
     private String r2LessonResourcePublicUrl;
     private String r2QuestionImagePublicUrl;
     private String r2QuestionAudioPublicUrl;
+    private String r2QuestionMediaPublicUrl;
 
     private String courseThumbnailBucket = "course-thumbnails";
     private DataSize courseThumbnailMaxSize = DataSize.ofMegabytes(5);
@@ -36,8 +37,10 @@ public class StorageProperties {
     private DataSize lessonMaterialMaxSize = DataSize.ofMegabytes(500);
     private String lessonResourceBucket = "lesson-resources";
     private DataSize lessonResourceMaxSize = DataSize.ofMegabytes(20);
+    private String questionMediaBucket = "question-media";
     private String questionImageBucket = "question-images";
     private DataSize questionImageMaxSize = DataSize.ofMegabytes(5);
     private String questionAudioBucket = "question-audios";
     private DataSize questionAudioMaxSize = DataSize.ofMegabytes(20);
 }
+

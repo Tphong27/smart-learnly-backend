@@ -2,7 +2,10 @@ package com.smartlearnly.backend.test.service;
 
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.entity.Question;
+import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
+import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
+import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.test.dto.TestQuestionModel;
 import com.smartlearnly.backend.test.entity.TestQuestion;
@@ -22,6 +25,7 @@ public class TestQuestionService {
     private final TestQuestionRepository repository;
     private final QuestionRepository questionRepository;
     private final QuestionAnswerRepository answerRepository;
+    private final QuestionMediaAttachmentRepository mediaAttachmentRepository;
 
     public TestQuestionModel.Response addQuestionToTest(
             TestQuestionModel.AddRequest request) {
@@ -165,8 +169,8 @@ public class TestQuestionService {
             Question question) {
 
         response.setQuestionText(question.getQuestionText());
-        response.setImageUrl(question.getImageUrl());
-        response.setAudioUrl(question.getAudioUrl());
+        response.setImageUrl(primaryMediaUrl(question, QuestionMediaType.IMAGE, question.getImageUrl()));
+        response.setAudioUrl(primaryMediaUrl(question, QuestionMediaType.AUDIO, question.getAudioUrl()));
         response.setQuestionType(question.getQuestionType() == null
                 ? null
                 : question.getQuestionType().name().toLowerCase());
@@ -184,13 +188,18 @@ public class TestQuestionService {
                 .toList());
     }
 
+    private String primaryMediaUrl(Question question, QuestionMediaType mediaType, String legacyUrl) {
+        return mediaAttachmentRepository.findFirstByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), mediaType)
+                .map(QuestionMediaAttachment::getMediaUrl)
+                .orElse(legacyUrl);
+    }
     private void appendLearnerQuestionDetails(
             TestQuestionModel.LearnerResponse response,
             Question question) {
 
         response.setQuestionText(question.getQuestionText());
-        response.setImageUrl(question.getImageUrl());
-        response.setAudioUrl(question.getAudioUrl());
+        response.setImageUrl(primaryMediaUrl(question, QuestionMediaType.IMAGE, question.getImageUrl()));
+        response.setAudioUrl(primaryMediaUrl(question, QuestionMediaType.AUDIO, question.getAudioUrl()));
         response.setQuestionType(question.getQuestionType() == null
                 ? null
                 : question.getQuestionType().name().toLowerCase());
@@ -211,3 +220,4 @@ public class TestQuestionService {
                 .toList());
     }
 }
+

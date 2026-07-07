@@ -154,6 +154,9 @@ public class CloudflareR2StorageClient implements FileStorageService {
         if (bucket.equals(storageProperties.getLessonResourceBucket())) {
             return firstConfigured(storageProperties.getR2LessonResourcePublicUrl(), storageProperties.getR2PublicUrl());
         }
+        if (bucket.equals(storageProperties.getQuestionMediaBucket())) {
+            return firstConfigured(storageProperties.getR2QuestionMediaPublicUrl(), storageProperties.getR2PublicUrl());
+        }
         if (bucket.equals(storageProperties.getQuestionImageBucket())) {
             return firstConfigured(storageProperties.getR2QuestionImagePublicUrl(), storageProperties.getR2PublicUrl());
         }
@@ -424,3 +427,4 @@ public class CloudflareR2StorageClient implements FileStorageService {
         return storageProperties.getLessonMaterialBucket();
     }
 }
+
