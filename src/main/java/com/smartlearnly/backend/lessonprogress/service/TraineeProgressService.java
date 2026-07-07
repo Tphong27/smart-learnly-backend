@@ -266,7 +266,8 @@ public class TraineeProgressService {
                         case LESSON -> type == LessonType.VIDEO
                                         || type == LessonType.PDF
                                         || type == LessonType.RICH_TEXT
-                                        || type == LessonType.ASSIGNMENT;
+                                        || type == LessonType.ASSIGNMENT
+                                        || type == LessonType.ESSAY;
                         case QUIZ -> type == LessonType.QUIZ;
                         case FLASHCARD -> type == LessonType.FLASHCARD;
                 };

@@ -29,6 +29,9 @@ public class Assignment {
     @Column(name = "class_id", nullable = true)
     private UUID classId;
 
+    @Column(name = "lesson_id")
+    private UUID lessonId;
+
     @Column(nullable = false)
     private String title;
 
