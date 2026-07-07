@@ -83,6 +83,7 @@ app:
         lesson-material-max-size: ${APP_STORAGE_LESSON_MATERIAL_MAX_SIZE:50MB}
         lesson-resource-bucket: ${APP_STORAGE_LESSON_RESOURCE_BUCKET:lesson-resources}
         lesson-resource-max-size: ${APP_STORAGE_LESSON_RESOURCE_MAX_SIZE:20MB}
+        question-media-bucket: ${APP_STORAGE_QUESTION_MEDIA_BUCKET:question-media}
         question-image-bucket: ${APP_STORAGE_QUESTION_IMAGE_BUCKET:question-images}
         question-image-max-size: ${APP_STORAGE_QUESTION_IMAGE_MAX_SIZE:5MB}
         question-audio-bucket: ${APP_STORAGE_QUESTION_AUDIO_BUCKET:question-audios}
@@ -98,6 +99,7 @@ app:
         r2-lesson-resource-public-url: ${CLOUDFLARE_R2_LESSON_RESOURCE_PUBLIC_BASE_URL:${R2_LESSON_RESOURCE_PUBLIC_BASE_URL:}}
         r2-question-image-public-url: ${CLOUDFLARE_R2_QUESTION_IMAGE_PUBLIC_BASE_URL:${R2_QUESTION_IMAGE_PUBLIC_BASE_URL:}}
         r2-question-audio-public-url: ${CLOUDFLARE_R2_QUESTION_AUDIO_PUBLIC_BASE_URL:${R2_QUESTION_AUDIO_PUBLIC_BASE_URL:}}
+        r2-question-media-public-url: ${CLOUDFLARE_R2_QUESTION_MEDIA_PUBLIC_BASE_URL:${R2_QUESTION_MEDIA_PUBLIC_BASE_URL:}}
     question-image-import:
         enabled: ${APP_QUESTION_IMAGE_IMPORT_ENABLED:true}
         provider: ${APP_QUESTION_IMAGE_IMPORT_PROVIDER:gemini}
@@ -140,3 +142,4 @@ springdoc:
         path: /swagger-ui.html
         display-request-duration: true
         try-it-out-enabled: true
+
