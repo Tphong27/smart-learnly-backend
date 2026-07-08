@@ -21,5 +21,6 @@ public class QuestionImageImportProperties {
     private Duration timeout = Duration.ofSeconds(45);
     private DataSize maxFileSize = DataSize.ofMegabytes(10);
     private int maxFiles = 5;
+    private int previewConcurrency = 3;
     private List<String> allowedContentTypes = List.of("image/png", "image/jpeg", "image/webp");
 }

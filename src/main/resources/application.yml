@@ -84,9 +84,7 @@ app:
         lesson-resource-bucket: ${APP_STORAGE_LESSON_RESOURCE_BUCKET:lesson-resources}
         lesson-resource-max-size: ${APP_STORAGE_LESSON_RESOURCE_MAX_SIZE:20MB}
         question-media-bucket: ${APP_STORAGE_QUESTION_MEDIA_BUCKET:question-media}
-        question-image-bucket: ${APP_STORAGE_QUESTION_IMAGE_BUCKET:question-images}
         question-image-max-size: ${APP_STORAGE_QUESTION_IMAGE_MAX_SIZE:5MB}
-        question-audio-bucket: ${APP_STORAGE_QUESTION_AUDIO_BUCKET:question-audios}
         question-audio-max-size: ${APP_STORAGE_QUESTION_AUDIO_MAX_SIZE:20MB}
         r2-account-id: ${CLOUDFLARE_R2_ACCOUNT_ID:${R2_ACCOUNT_ID:}}
         r2-endpoint: ${CLOUDFLARE_R2_ENDPOINT:${R2_ENDPOINT:}}
@@ -97,8 +95,6 @@ app:
         r2-course-thumbnail-public-url: ${CLOUDFLARE_R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:${R2_COURSE_THUMBNAIL_PUBLIC_BASE_URL:}}
         r2-lesson-material-public-url: ${CLOUDFLARE_R2_LESSON_MATERIAL_PUBLIC_BASE_URL:${R2_LESSON_MATERIAL_PUBLIC_BASE_URL:}}
         r2-lesson-resource-public-url: ${CLOUDFLARE_R2_LESSON_RESOURCE_PUBLIC_BASE_URL:${R2_LESSON_RESOURCE_PUBLIC_BASE_URL:}}
-        r2-question-image-public-url: ${CLOUDFLARE_R2_QUESTION_IMAGE_PUBLIC_BASE_URL:${R2_QUESTION_IMAGE_PUBLIC_BASE_URL:}}
-        r2-question-audio-public-url: ${CLOUDFLARE_R2_QUESTION_AUDIO_PUBLIC_BASE_URL:${R2_QUESTION_AUDIO_PUBLIC_BASE_URL:}}
         r2-question-media-public-url: ${CLOUDFLARE_R2_QUESTION_MEDIA_PUBLIC_BASE_URL:${R2_QUESTION_MEDIA_PUBLIC_BASE_URL:}}
     question-image-import:
         enabled: ${APP_QUESTION_IMAGE_IMPORT_ENABLED:true}
@@ -109,6 +105,8 @@ app:
         timeout: ${APP_QUESTION_IMAGE_IMPORT_TIMEOUT:PT45S}
         max-file-size: ${APP_QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE:10MB}
         max-files: ${APP_QUESTION_IMAGE_IMPORT_MAX_FILES:5}
+        
+        preview-concurrency: ${APP_QUESTION_IMAGE_IMPORT_PREVIEW_CONCURRENCY:3}
     flashcard-document-generation:
         enabled: ${APP_FLASHCARD_DOCUMENT_GENERATION_ENABLED:true}
         provider: ${APP_FLASHCARD_DOCUMENT_GENERATION_PROVIDER:gemini}
@@ -118,6 +116,7 @@ app:
         timeout: ${APP_FLASHCARD_DOCUMENT_GENERATION_TIMEOUT:PT60S}
         max-embedded-images: ${APP_FLASHCARD_DOCUMENT_GENERATION_MAX_EMBEDDED_IMAGES:5}
         max-embedded-image-size: ${APP_FLASHCARD_DOCUMENT_GENERATION_MAX_EMBEDDED_IMAGE_SIZE:10MB}
+
     settings:
         encryption-key: ${SETTINGS_ENCRYPTION_KEY:}
     hls:
@@ -131,7 +130,8 @@ app:
         callback-secret: ${HLS_CALLBACK_SECRET:}
         callback-timestamp-tolerance-seconds: ${APP_HLS_CALLBACK_TIMESTAMP_TOLERANCE_SECONDS:300}
         segment-duration: ${APP_HLS_SEGMENT_DURATION:10}
-        qualities: ${APP_HLS_QUALITIES:480p,720p,1080p}
+        qualities: ${APP_HLS_QUALITIES:480p,720p}
+        ffmpeg-preset: ${APP_HLS_FFMPEG_PRESET:veryfast}
         master-token-ttl-seconds: ${APP_HLS_MASTER_TOKEN_TTL:900}
         r2-token-ttl-seconds: ${APP_HLS_R2_TOKEN_TTL:7200}
         segment-token-ttl-seconds: ${APP_HLS_SEGMENT_TOKEN_TTL:7200}

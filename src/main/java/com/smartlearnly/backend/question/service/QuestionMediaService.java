@@ -59,6 +59,31 @@ public class QuestionMediaService {
     }
 
     @Transactional
+    public List<QuestionMediaAttachmentResponse> attachImportedFiles(Question question, QuestionMediaType mediaType, List<MultipartFile> files, String importSource) {
+        if (question == null || question.getId() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question is required for media import");
+        }
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media for an archived question");
+        }
+        if (files == null || files.isEmpty()) {
+            return List.of();
+        }
+        long existingCount = mediaAttachmentRepository.countByQuestionIdAndMediaType(question.getId(), mediaType);
+        int maxCount = maxCount(mediaType);
+        if (existingCount + files.size() > maxCount) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, maxCountMessage(mediaType));
+        }
+
+        List<QuestionMediaAttachment> saved = new ArrayList<>();
+        int nextOrder = (int) existingCount + 1;
+        for (MultipartFile file : files) {
+            saved.add(storeAsAttachment(question, mediaType, file, nextOrder, importSource, null));
+            nextOrder += 1;
+        }
+        return saved.stream().map(this::toResponse).toList();
+    }
+    @Transactional
     public QuestionMediaDtos.UploadResponse upload(UUID questionId, String mediaType, List<MultipartFile> files) {
         QuestionMediaType resolvedType = parseMediaType(mediaType);
         Question question = findEditableQuestion(questionId);
@@ -80,26 +105,6 @@ public class QuestionMediaService {
         return new QuestionMediaDtos.UploadResponse(question.getId(), saved.stream().map(this::toResponse).toList());
     }
 
-    @Transactional
-    public QuestionMediaAttachmentResponse replacePrimary(UUID questionId, QuestionMediaType mediaType, MultipartFile file) {
-        Question question = findEditableQuestion(questionId);
-        QuestionMediaAttachment primary = mediaAttachmentRepository
-                .findFirstByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), mediaType)
-                .orElse(null);
-        return toResponse(storeAsAttachment(question, mediaType, file, 1, "manual", primary));
-    }
-
-    @Transactional
-    public QuestionMediaAttachmentResponse removePrimary(UUID questionId, QuestionMediaType mediaType) {
-        Question question = findEditableQuestion(questionId);
-        mediaAttachmentRepository.findFirstByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), mediaType)
-                .ifPresent(mediaAttachmentRepository::delete);
-        mediaAttachmentRepository.flush();
-        normalizeDisplayOrder(question.getId(), mediaType);
-        return mediaAttachmentRepository.findFirstByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), mediaType)
-                .map(this::toResponse)
-                .orElse(null);
-    }
 
     @Transactional
     public void delete(UUID questionId, UUID attachmentId) {

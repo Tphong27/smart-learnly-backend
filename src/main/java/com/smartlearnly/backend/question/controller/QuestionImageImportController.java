@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,11 +41,21 @@ public class QuestionImageImportController {
         return ApiResponse.success("Image import preview generated successfully", questionImageImportService.preview(bankId, files, language));
     }
 
-    @PostMapping("/confirm")
+    @PostMapping(value = "/confirm", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Confirm reviewed image-imported questions")
     public ApiResponse<QuestionImageImportDtos.ConfirmResponse> confirm(
             @Valid @RequestBody QuestionImageImportDtos.ConfirmRequest request
     ) {
         return ApiResponse.success("Image-imported questions created successfully", questionImageImportService.confirm(request));
+    }
+
+    @PostMapping(value = "/confirm", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Confirm reviewed image-imported questions with uploaded media attachments")
+    public ApiResponse<QuestionImageImportDtos.ConfirmResponse> confirmWithMediaFiles(
+            @Valid @RequestPart("request") QuestionImageImportDtos.ConfirmRequest request,
+            @RequestPart(value = "imageFiles", required = false) List<MultipartFile> imageFiles,
+            @RequestPart(value = "audioFiles", required = false) List<MultipartFile> audioFiles
+    ) {
+        return ApiResponse.success("Image-imported questions created successfully", questionImageImportService.confirm(request, imageFiles, audioFiles));
     }
 }

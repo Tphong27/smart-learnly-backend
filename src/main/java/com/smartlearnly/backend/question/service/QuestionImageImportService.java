@@ -6,6 +6,7 @@ import com.smartlearnly.backend.question.dto.QuestionImageImportDtos;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionBank;
+import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.image.ImageImportFile;
 import com.smartlearnly.backend.question.image.ImageImportParseResult;
 import com.smartlearnly.backend.question.image.ImageImportRequest;
@@ -13,8 +14,14 @@ import com.smartlearnly.backend.question.image.ImageQuestionImportProvider;
 import com.smartlearnly.backend.question.image.QuestionImageImportProperties;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.apache.tika.Tika;
@@ -32,6 +39,7 @@ public class QuestionImageImportService {
 
     private final QuestionBankService questionBankService;
     private final QuestionService questionService;
+    private final QuestionMediaService questionMediaService;
     private final ImageQuestionImportProvider provider;
     private final QuestionImageImportProperties properties;
     private final Tika tika = new Tika();
@@ -40,7 +48,7 @@ public class QuestionImageImportService {
     public QuestionImageImportDtos.PreviewResponse preview(UUID bankId, List<MultipartFile> files, String language) {
         questionBankService.findActiveBankEntity(bankId);
         List<ImageImportFile> imageFiles = readAndValidateFiles(files);
-        ImageImportParseResult parseResult = provider.parse(new ImageImportRequest(imageFiles, language));
+        ImageImportParseResult parseResult = parseImages(imageFiles, language);
 
         List<String> batchWarnings = normalizeMessages(parseResult.warnings());
         List<QuestionImageImportDtos.PreviewQuestion> questions = new ArrayList<>();
@@ -63,6 +71,28 @@ public class QuestionImageImportService {
 
     @Transactional
     public QuestionImageImportDtos.ConfirmResponse confirm(QuestionImageImportDtos.ConfirmRequest request) {
+        return confirm(request, List.of(), List.of());
+    }
+
+    @Transactional
+    public QuestionImageImportDtos.ConfirmResponse confirm(
+            QuestionImageImportDtos.ConfirmRequest request,
+            List<MultipartFile> imageFiles,
+            List<MultipartFile> audioFiles
+    ) {
+        List<MultipartFile> normalizedImageFiles = imageFiles == null ? List.of() : imageFiles;
+        List<MultipartFile> normalizedAudioFiles = audioFiles == null ? List.of() : audioFiles;
+        List<List<Integer>> imageFileMappings = validateMediaFileMappings(
+                request.questions(),
+                normalizedImageFiles.size(),
+                QuestionMediaType.IMAGE
+        );
+        List<List<Integer>> audioFileMappings = validateMediaFileMappings(
+                request.questions(),
+                normalizedAudioFiles.size(),
+                QuestionMediaType.AUDIO
+        );
+
         List<QuestionImportDtos.ImportRow> rows = new ArrayList<>();
         for (int index = 0; index < request.questions().size(); index += 1) {
             rows.add(toImportRow(index + 1, request.questions().get(index)));
@@ -74,6 +104,9 @@ public class QuestionImageImportService {
                 true,
                 IMPORT_SOURCE_IMAGE
         );
+        attachMappedMedia(savedQuestions, imageFileMappings, normalizedImageFiles, QuestionMediaType.IMAGE);
+        attachMappedMedia(savedQuestions, audioFileMappings, normalizedAudioFiles, QuestionMediaType.AUDIO);
+
         List<QuestionImageImportDtos.ConfirmItem> items = savedQuestions.stream()
                 .map(question -> new QuestionImageImportDtos.ConfirmItem(
                         question.getId(),
@@ -82,6 +115,107 @@ public class QuestionImageImportService {
                 ))
                 .toList();
         return new QuestionImageImportDtos.ConfirmResponse(items.size(), 0, items, List.of());
+    }
+
+    private ImageImportParseResult parseImages(List<ImageImportFile> imageFiles, String language) {
+        if (imageFiles.size() <= 1) {
+            return provider.parse(new ImageImportRequest(imageFiles, language));
+        }
+
+        int concurrency = Math.max(1, Math.min(properties.getPreviewConcurrency(), imageFiles.size()));
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        try {
+            List<CompletableFuture<ImageImportParseResult>> futures = new ArrayList<>();
+            for (ImageImportFile imageFile : imageFiles) {
+                futures.add(CompletableFuture.supplyAsync(
+                        () -> provider.parse(new ImageImportRequest(List.of(imageFile), language)),
+                        executor
+                ));
+            }
+
+            StringBuilder ocrText = new StringBuilder();
+            List<QuestionImageImportDtos.PreviewQuestion> questions = new ArrayList<>();
+            List<String> warnings = new ArrayList<>();
+            for (CompletableFuture<ImageImportParseResult> future : futures) {
+                ImageImportParseResult result = future.join();
+                if (result.ocrText() != null && !result.ocrText().isBlank()) {
+                    if (!ocrText.isEmpty()) {
+                        ocrText.append("\n\n");
+                    }
+                    ocrText.append(result.ocrText().trim());
+                }
+                if (result.questions() != null) {
+                    questions.addAll(result.questions());
+                }
+                if (result.warnings() != null) {
+                    warnings.addAll(result.warnings());
+                }
+            }
+            return new ImageImportParseResult(ocrText.toString(), questions, warnings);
+        } catch (CompletionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Image import provider request failed");
+        } finally {
+            executor.shutdown();
+        }
+    }
+    private void attachMappedMedia(
+            List<Question> savedQuestions,
+            List<List<Integer>> mediaFileMappings,
+            List<MultipartFile> mediaFiles,
+            QuestionMediaType mediaType
+    ) {
+        for (int questionIndex = 0; questionIndex < savedQuestions.size(); questionIndex += 1) {
+            List<Integer> mappedIndexes = mediaFileMappings.get(questionIndex);
+            if (mappedIndexes.isEmpty()) {
+                continue;
+            }
+            List<MultipartFile> mappedFiles = mappedIndexes.stream()
+                    .map(mediaFiles::get)
+                    .toList();
+            questionMediaService.attachImportedFiles(savedQuestions.get(questionIndex), mediaType, mappedFiles, IMPORT_SOURCE_IMAGE);
+        }
+    }
+
+    private List<List<Integer>> validateMediaFileMappings(
+            List<QuestionImageImportDtos.ConfirmQuestion> questions,
+            int mediaFileCount,
+            QuestionMediaType mediaType
+    ) {
+        List<List<Integer>> mappings = new ArrayList<>();
+        int maxCount = mediaType == QuestionMediaType.IMAGE
+                ? QuestionMediaService.MAX_IMAGES_PER_QUESTION
+                : QuestionMediaService.MAX_AUDIOS_PER_QUESTION;
+        String mediaLabel = mediaType == QuestionMediaType.IMAGE ? "image" : "audio";
+        for (int questionIndex = 0; questionIndex < questions.size(); questionIndex += 1) {
+            List<Integer> indexes = mediaType == QuestionMediaType.IMAGE
+                    ? questions.get(questionIndex).imageFileIndexes()
+                    : questions.get(questionIndex).audioFileIndexes();
+            indexes = indexes == null ? List.of() : indexes;
+            if (indexes.size() > maxCount) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "A question can attach at most " + maxCount + " " + mediaLabel + " files");
+            }
+            if (!indexes.isEmpty() && mediaFileCount == 0) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Mapped " + mediaLabel + " files must be submitted with the confirm request");
+            }
+            Set<Integer> seenIndexes = new HashSet<>();
+            for (Integer mediaIndex : indexes) {
+                if (mediaIndex == null) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Media file index is required");
+                }
+                if (!seenIndexes.add(mediaIndex)) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Media file indexes must be unique per question");
+                }
+                if (mediaIndex < 0 || mediaIndex >= mediaFileCount) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Media file index is out of range");
+                }
+            }
+            mappings.add(List.copyOf(indexes));
+        }
+        return mappings;
     }
 
     private List<ImageImportFile> readAndValidateFiles(List<MultipartFile> files) {
@@ -221,7 +355,9 @@ public class QuestionImageImportService {
                 question.explanation(),
                 question.difficulty(),
                 question.bloomLevel(),
-                question.moduleId()
+                question.moduleId(),
+                List.of(),
+                List.of()
         );
     }
 

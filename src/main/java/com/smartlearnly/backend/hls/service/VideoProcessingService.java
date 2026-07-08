@@ -133,7 +133,7 @@ public class VideoProcessingService {
             masterPlaylist.append("#EXTM3U\n");
             masterPlaylist.append("#EXT-X-VERSION:3\n");
 
-            List<QualityVariant> variants = QualityVariant.fromConfig(hlsProperties.getQualities());
+            List<QualityVariant> variants = QualityVariant.fromConfig(hlsProperties.normalizedQualities());
             int variantCount = variants.size();
             int baseProgress = 10;
             int progressPerVariant = 60 / Math.max(variantCount, 1);
@@ -239,12 +239,12 @@ public class VideoProcessingService {
                     "-y",
                     "-i", inputFile.toString(),
                     "-c:v", "libx264",
-                    "-preset", "fast",
+                    "-preset", hlsProperties.normalizedFfmpegPreset(),
                     "-crf", "23",
                     "-c:a", "aac",
                     "-b:a", variant.audioBitrate() + "k",
                     "-vf", "scale=" + variant.width() + ":" + variant.height(),
-                    "-hls_time", String.valueOf(hlsProperties.getSegmentDuration()),
+                    "-hls_time", String.valueOf(hlsProperties.normalizedSegmentDuration()),
                     "-hls_playlist_type", "vod",
                     "-hls_segment_filename", outputDir.resolve("segment_%03d.ts").toString(),
                     "-f", "hls",

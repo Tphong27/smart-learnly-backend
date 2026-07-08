@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-if [[ $# -lt 2 || $# -gt 4 ]]; then
-    echo "Usage: $0 <input-file> <output-dir> [segment-duration] [qualities-file]" >&2
+if [[ $# -lt 2 || $# -gt 6 ]]; then
+    echo "Usage: $0 <input-file> <output-dir> [segment-duration] [qualities-file] [qualities] [ffmpeg-preset]" >&2
     exit 64
 fi
 
@@ -10,6 +10,8 @@ input_file=$1
 output_dir=$2
 segment_duration=${3:-10}
 qualities_file=${4:-"${output_dir}.qualities"}
+requested_qualities=${5:-"480p,720p"}
+ffmpeg_preset=${6:-"veryfast"}
 
 if [[ -z "$output_dir" ||
     "$output_dir" != /* ||
@@ -29,6 +31,14 @@ if [[ ! "$segment_duration" =~ ^[0-9]+$ ]] ||
     echo "Segment duration must be an integer between 2 and 30 seconds." >&2
     exit 65
 fi
+
+case "$ffmpeg_preset" in
+    ultrafast | superfast | veryfast | faster | fast | medium) ;;
+    *)
+        echo "FFmpeg preset is invalid." >&2
+        exit 65
+        ;;
+esac
 
 for command_name in ffmpeg ffprobe openssl; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -80,12 +90,42 @@ printf '%s\n%s\n' "../enc.key" "$key_file_for_ffmpeg" >"$key_info_file"
 master_playlist="${output_dir}/master.m3u8"
 printf '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-INDEPENDENT-SEGMENTS\n' >"$master_playlist"
 
-quality_names=("480p" "720p" "1080p")
-quality_widths=(854 1280 1920)
-quality_heights=(480 720 1080)
-video_bitrates=(1500 3000 5000)
-audio_bitrates=(96 128 192)
 generated_qualities=()
+selected_qualities=()
+
+IFS=',' read -r -a requested_quality_parts <<<"$requested_qualities"
+for requested_quality in "${requested_quality_parts[@]}"; do
+    requested_quality=${requested_quality//[[:space:]]/}
+    case "$requested_quality" in
+        480p | 720p | 1080p) ;;
+        "")
+            continue
+            ;;
+        *)
+            echo "Unsupported HLS quality: $requested_quality" >&2
+            exit 65
+            ;;
+    esac
+
+    already_selected=false
+    for selected_quality in "${selected_qualities[@]}"; do
+        if [[ "$selected_quality" == "$requested_quality" ]]; then
+            already_selected=true
+            break
+        fi
+    done
+    if [[ "$already_selected" == "false" ]]; then
+        selected_qualities+=("$requested_quality")
+    fi
+done
+
+if ((${#selected_qualities[@]} == 0)); then
+    selected_qualities=("720p")
+fi
+
+echo "Requested qualities: ${selected_qualities[*]}"
+echo "Segment duration: ${segment_duration}s"
+echo "FFmpeg preset: ${ffmpeg_preset}"
 
 encode_variant() {
     local quality_name=$1
@@ -108,7 +148,7 @@ encode_variant() {
         -map '0:a:0?' \
         -vf "$video_filter" \
         -c:v libx264 \
-        -preset fast \
+        -preset "$ffmpeg_preset" \
         -profile:v main \
         -pix_fmt yuv420p \
         -b:v "${video_bitrate}k" \
@@ -142,12 +182,30 @@ encode_variant() {
     generated_qualities+=("$quality_name")
 }
 
-for index in "${!quality_names[@]}"; do
-    quality_name=${quality_names[$index]}
-    target_width=${quality_widths[$index]}
-    target_height=${quality_heights[$index]}
+for quality_name in "${selected_qualities[@]}"; do
+    case "$quality_name" in
+        480p)
+            target_width=854
+            target_height=480
+            video_bitrate=1500
+            audio_bitrate=96
+            ;;
+        720p)
+            target_width=1280
+            target_height=720
+            video_bitrate=3000
+            audio_bitrate=128
+            ;;
+        1080p)
+            target_width=1920
+            target_height=1080
+            video_bitrate=5000
+            audio_bitrate=192
+            ;;
+    esac
 
     if ((source_height < target_height)); then
+        echo "Skipping ${quality_name}: source height ${source_height}px is lower than ${target_height}px."
         continue
     fi
 
@@ -158,8 +216,8 @@ for index in "${!quality_names[@]}"; do
         "$quality_name" \
         "$target_width" \
         "$target_height" \
-        "${video_bitrates[$index]}" \
-        "${audio_bitrates[$index]}" \
+        "$video_bitrate" \
+        "$audio_bitrate" \
         "$filter"
 done
 

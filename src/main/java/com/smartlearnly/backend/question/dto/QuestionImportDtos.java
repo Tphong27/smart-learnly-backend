@@ -43,7 +43,13 @@ public final class QuestionImportDtos {
 
             String bloomLevel,
 
-            UUID moduleId
+            UUID moduleId,
+
+            @Size(max = 5, message = "A question can have at most 5 image URLs")
+            List<@Size(max = 2048, message = "Image URL must not exceed 2048 characters") String> imageFiles,
+
+            @Size(max = 3, message = "A question can have at most 3 audio URLs")
+            List<@Size(max = 2048, message = "Audio URL must not exceed 2048 characters") String> audioFiles
     ) {
     }
 
@@ -54,7 +60,9 @@ public final class QuestionImportDtos {
             @NotNull(message = "Rows are required")
             @Size(min = 1, max = 1000, message = "Batch size must be between 1 and 1000 rows")
             @Valid
-            List<ImportRow> rows
+            List<ImportRow> rows,
+
+            String importSource
     ) {
     }
 

@@ -79,7 +79,7 @@ public class HlsLesson {
             hlsStatus = "pending";
         }
         if (qualities == null) {
-            qualities = "480p,720p,1080p";
+            qualities = "480p,720p";
         }
         if (progressPercent == null) {
             progressPercent = 0;
