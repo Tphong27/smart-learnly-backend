@@ -105,26 +105,6 @@ public class QuestionMediaService {
         return new QuestionMediaDtos.UploadResponse(question.getId(), saved.stream().map(this::toResponse).toList());
     }
 
-    @Transactional
-    public QuestionMediaAttachmentResponse replacePrimary(UUID questionId, QuestionMediaType mediaType, MultipartFile file) {
-        Question question = findEditableQuestion(questionId);
-        QuestionMediaAttachment primary = mediaAttachmentRepository
-                .findFirstByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), mediaType)
-                .orElse(null);
-        return toResponse(storeAsAttachment(question, mediaType, file, 1, "manual", primary));
-    }
-
-    @Transactional
-    public QuestionMediaAttachmentResponse removePrimary(UUID questionId, QuestionMediaType mediaType) {
-        Question question = findEditableQuestion(questionId);
-        mediaAttachmentRepository.findFirstByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), mediaType)
-                .ifPresent(mediaAttachmentRepository::delete);
-        mediaAttachmentRepository.flush();
-        normalizeDisplayOrder(question.getId(), mediaType);
-        return mediaAttachmentRepository.findFirstByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), mediaType)
-                .map(this::toResponse)
-                .orElse(null);
-    }
 
     @Transactional
     public void delete(UUID questionId, UUID attachmentId) {

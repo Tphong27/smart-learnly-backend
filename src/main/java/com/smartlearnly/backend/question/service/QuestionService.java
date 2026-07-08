@@ -477,8 +477,8 @@ public class QuestionService {
         List<QuestionMediaAttachmentResponse> mediaAttachments = new ArrayList<>();
         mediaAttachments.addAll(imageAttachments.stream().map(this::toMediaResponse).toList());
         mediaAttachments.addAll(audioAttachments.stream().map(this::toMediaResponse).toList());
-        String imageUrl = imageAttachments.isEmpty() ? question.getImageUrl() : imageAttachments.get(0).getMediaUrl();
-        String audioUrl = audioAttachments.isEmpty() ? question.getAudioUrl() : audioAttachments.get(0).getMediaUrl();
+        String imageUrl = imageAttachments.isEmpty() ? null : imageAttachments.get(0).getMediaUrl();
+        String audioUrl = audioAttachments.isEmpty() ? null : audioAttachments.get(0).getMediaUrl();
         return new QuestionModel.Response(question.getId(), question.getId(), question.getQuestionBankId(), question.getQuestionBankId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), imageUrl, audioUrl, mediaAttachments, Boolean.TRUE.equals(question.getIsAiGenerated()), question.getImportSource(), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
     }
 

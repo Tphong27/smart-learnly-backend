@@ -169,8 +169,8 @@ public class TestQuestionService {
             Question question) {
 
         response.setQuestionText(question.getQuestionText());
-        response.setImageUrl(primaryMediaUrl(question, QuestionMediaType.IMAGE, question.getImageUrl()));
-        response.setAudioUrl(primaryMediaUrl(question, QuestionMediaType.AUDIO, question.getAudioUrl()));
+        response.setImageUrl(primaryMediaUrl(question, QuestionMediaType.IMAGE));
+        response.setAudioUrl(primaryMediaUrl(question, QuestionMediaType.AUDIO));
         response.setQuestionType(question.getQuestionType() == null
                 ? null
                 : question.getQuestionType().name().toLowerCase());
@@ -188,18 +188,18 @@ public class TestQuestionService {
                 .toList());
     }
 
-    private String primaryMediaUrl(Question question, QuestionMediaType mediaType, String legacyUrl) {
+    private String primaryMediaUrl(Question question, QuestionMediaType mediaType) {
         return mediaAttachmentRepository.findFirstByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), mediaType)
                 .map(QuestionMediaAttachment::getMediaUrl)
-                .orElse(legacyUrl);
+                .orElse(null);
     }
     private void appendLearnerQuestionDetails(
             TestQuestionModel.LearnerResponse response,
             Question question) {
 
         response.setQuestionText(question.getQuestionText());
-        response.setImageUrl(primaryMediaUrl(question, QuestionMediaType.IMAGE, question.getImageUrl()));
-        response.setAudioUrl(primaryMediaUrl(question, QuestionMediaType.AUDIO, question.getAudioUrl()));
+        response.setImageUrl(primaryMediaUrl(question, QuestionMediaType.IMAGE));
+        response.setAudioUrl(primaryMediaUrl(question, QuestionMediaType.AUDIO));
         response.setQuestionType(question.getQuestionType() == null
                 ? null
                 : question.getQuestionType().name().toLowerCase());
