@@ -28,6 +28,7 @@ import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingBatchRepository;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationService.DocumentGenerationRequest;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
@@ -79,6 +80,8 @@ class AdminFlashcardStagingServiceTest {
     @Mock
     private FlashcardTextGenerationService flashcardTextGenerationService;
     @Mock
+    private FlashcardDocumentGenerationService flashcardDocumentGenerationService;
+    @Mock
     private FlashcardDocumentTextExtractionService documentTextExtractionService;
     @Mock
     private FlashcardTranscriptTextExtractionService transcriptTextExtractionService;
@@ -97,6 +100,7 @@ class AdminFlashcardStagingServiceTest {
                 questionBankRepository,
                 currentUserService,
                 flashcardTextGenerationService,
+                flashcardDocumentGenerationService,
                 documentTextExtractionService,
                 transcriptTextExtractionService
         );
@@ -344,9 +348,15 @@ class AdminFlashcardStagingServiceTest {
                 "lesson.pdf",
                 longSourceText()
         ));
-        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+        when(flashcardDocumentGenerationService.generate(any())).thenReturn(new GenerationResult(
                 "TEXT",
-                List.of(candidate("PDF front", "PDF back", "PDF excerpt"))
+                List.of(new GeneratedFlashcardCandidate(
+                        "PDF front",
+                        "PDF back",
+                        "PDF hint",
+                        "Generated from pasted text.",
+                        "PDF excerpt"
+                ))
         ));
         when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
             FlashcardStagingBatch batch = invocation.getArgument(0);
@@ -373,10 +383,19 @@ class AdminFlashcardStagingServiceTest {
         assertThat(response.cards()).hasSize(1);
         assertThat(response.cards().get(0).sourceQuestionId()).isNull();
         assertThat(response.cards().get(0).frontText()).isEqualTo("PDF front");
+        assertThat(response.cards().get(0).hint()).isEqualTo("PDF hint");
         ArgumentCaptor<FlashcardStagingBatch> batchCaptor = ArgumentCaptor.forClass(FlashcardStagingBatch.class);
         verify(stagingBatchRepository).save(batchCaptor.capture());
         assertThat(batchCaptor.getValue().getSourceType()).isEqualTo("PDF");
         assertThat(batchCaptor.getValue().getCreatedBy()).isSameAs(actor);
+        ArgumentCaptor<DocumentGenerationRequest> requestCaptor = ArgumentCaptor.forClass(DocumentGenerationRequest.class);
+        verify(flashcardDocumentGenerationService).generate(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().documentText()).isEqualTo(longSourceText());
+        assertThat(requestCaptor.getValue().language()).isEqualTo("auto");
+        assertThat(requestCaptor.getValue().difficulty()).isEqualTo("hard");
+        assertThat(requestCaptor.getValue().sourceType()).isEqualTo("PDF");
+        assertThat(requestCaptor.getValue().sourceName()).isEqualTo("lesson.pdf");
+        verify(flashcardTextGenerationService, never()).generate(any());
         verify(flashcardCardRepository, never()).saveAll(anyList());
     }
 
@@ -391,7 +410,7 @@ class AdminFlashcardStagingServiceTest {
                 "lesson.docx",
                 longSourceText()
         ));
-        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+        when(flashcardDocumentGenerationService.generate(any())).thenReturn(new GenerationResult(
                 "TEXT",
                 List.of(candidate("DOCX front", "DOCX back", "DOCX excerpt"))
         ));
@@ -414,6 +433,8 @@ class AdminFlashcardStagingServiceTest {
         assertThat(response.sourceType()).isEqualTo("DOCX");
         assertThat(response.sourceName()).isEqualTo("lesson.docx");
         assertThat(response.cards()).hasSize(1);
+        verify(flashcardDocumentGenerationService).generate(any());
+        verify(flashcardTextGenerationService, never()).generate(any());
         verify(flashcardCardRepository, never()).saveAll(anyList());
     }
 
@@ -469,7 +490,7 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
-    void generateFromFileRejectsExtractedTextShorterThanMinimum() {
+    void generateFromFileRejectsWhenDocumentGenerationFindsNoUsableContent() {
         FlashcardSet flashcardSet = flashcardSet();
         MockMultipartFile file = pdfFile();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
@@ -478,6 +499,10 @@ class AdminFlashcardStagingServiceTest {
                 "PDF",
                 "lesson.pdf",
                 "Too short."
+        ));
+        when(flashcardDocumentGenerationService.generate(any())).thenThrow(new BusinessException(
+                ErrorCode.INVALID_REQUEST,
+                "Uploaded PDF does not contain enough readable text to create flashcards. Scanned PDFs are not supported yet."
         ));
 
         assertThatThrownBy(() -> service.generateFromFile(
@@ -491,6 +516,7 @@ class AdminFlashcardStagingServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
 
+        verify(flashcardDocumentGenerationService).generate(any());
         verify(flashcardTextGenerationService, never()).generate(any());
         verify(stagingBatchRepository, never()).save(any());
     }

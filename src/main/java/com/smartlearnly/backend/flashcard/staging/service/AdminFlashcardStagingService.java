@@ -22,6 +22,7 @@ import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingBatchRepository;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationService.DocumentGenerationRequest;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationRequest;
@@ -80,6 +81,11 @@ public class AdminFlashcardStagingService {
     private static final int DEFAULT_DESIRED_COUNT = 10;
     private static final int MIN_SOURCE_TEXT_LENGTH = 100;
     private static final int MAX_SOURCE_TEXT_LENGTH = 20000;
+    private static final int MAX_GENERATED_FRONT_TEXT_LENGTH = 2000;
+    private static final int MAX_GENERATED_BACK_TEXT_LENGTH = 4000;
+    private static final int MAX_GENERATED_HINT_LENGTH = 1000;
+    private static final int MAX_GENERATED_EXPLANATION_LENGTH = 6000;
+    private static final int MAX_GENERATED_SOURCE_EXCERPT_LENGTH = 1000;
     private static final int MIN_DESIRED_COUNT = 1;
     private static final int MAX_DESIRED_COUNT = 30;
     private static final Set<String> ALLOWED_DIFFICULTIES = Set.of("easy", "medium", "hard");
@@ -104,6 +110,7 @@ public class AdminFlashcardStagingService {
     private final QuestionBankRepository questionBankRepository;
     private final CurrentUserService currentUserService;
     private final FlashcardTextGenerationService flashcardTextGenerationService;
+    private final FlashcardDocumentGenerationService flashcardDocumentGenerationService;
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final FlashcardTranscriptTextExtractionService transcriptTextExtractionService;
 
@@ -240,27 +247,28 @@ public class AdminFlashcardStagingService {
                 desiredCount,
                 language,
                 difficulty,
-                generationMode
+                SOURCE_TYPE_AI
         );
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         DocumentTextExtractionResult extraction = documentTextExtractionService.extract(file);
-        String extractedText = validateExtractedText(extraction == null ? null : extraction.text());
-
-        GenerationResult result = flashcardTextGenerationService.generate(new GenerationRequest(
-                extractedText,
+        String sourceType = resolveDocumentSourceType(extraction, fileInput.extension());
+        String sourceName = resolveDocumentSourceName(extraction, sourceType);
+        GenerationResult result = flashcardDocumentGenerationService.generate(new DocumentGenerationRequest(
+                extraction == null ? null : extraction.text(),
+                extraction == null ? List.of() : extraction.images(),
                 options.desiredCount(),
                 options.language(),
                 options.difficulty(),
-                options.generationMode()
+                sourceType,
+                sourceName
         ));
-        String sourceType = resolveDocumentSourceType(extraction, fileInput.extension());
         return createGeneratedStagingBatch(
                 context,
                 actor,
                 result,
                 options.desiredCount(),
                 sourceType,
-                resolveDocumentSourceName(extraction, sourceType),
+                sourceName,
                 "Uploaded file did not produce any flashcard candidates"
         );
     }
@@ -575,15 +583,16 @@ public class AdminFlashcardStagingService {
 
         String language = normalizeNullable(languageValue);
         if (language == null) {
-            language = "en";
+            language = "auto";
         }
 
         String difficulty = normalizeNullable(difficultyValue);
-        if (difficulty != null) {
-            difficulty = difficulty.toLowerCase(Locale.ROOT);
-            if (!ALLOWED_DIFFICULTIES.contains(difficulty)) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "difficulty must be easy, medium, or hard");
-            }
+        if (difficulty == null) {
+            difficulty = "medium";
+        }
+        difficulty = difficulty.toLowerCase(Locale.ROOT);
+        if (!ALLOWED_DIFFICULTIES.contains(difficulty)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "difficulty must be easy, medium, or hard");
         }
 
         String generationMode = normalizeNullable(generationModeValue);
@@ -596,13 +605,6 @@ public class AdminFlashcardStagingService {
         }
 
         return new GenerationOptions(desiredCount, language, difficulty, generationMode);
-    }
-
-    private String validateExtractedText(String value) {
-        return validateCleanedGenerationText(
-                value,
-                "Uploaded file did not contain enough text to generate flashcards"
-        );
     }
 
     private String validateCleanedGenerationText(String value, String message) {
@@ -647,6 +649,7 @@ public class AdminFlashcardStagingService {
             card.setBatch(savedBatch);
             card.setFrontText(normalizeRequired(candidate.frontText(), "Generated flashcard front text is required"));
             card.setBackText(normalizeRequired(candidate.backText(), "Generated flashcard back text is required"));
+            card.setHint(normalizeNullable(candidate.hint()));
             card.setExplanation(normalizeNullable(candidate.explanation()));
             card.setSourceExcerpt(normalizeNullable(candidate.sourceExcerpt()));
             card.setStatus(STATUS_DRAFT);
@@ -677,6 +680,9 @@ public class AdminFlashcardStagingService {
             if (frontText == null || backText == null) {
                 continue;
             }
+            if (frontText.length() > MAX_GENERATED_FRONT_TEXT_LENGTH || backText.length() > MAX_GENERATED_BACK_TEXT_LENGTH) {
+                continue;
+            }
             String duplicateKey = duplicateKey(frontText, backText);
             if (!seen.add(duplicateKey)) {
                 continue;
@@ -684,8 +690,9 @@ public class AdminFlashcardStagingService {
             valid.add(new GeneratedFlashcardCandidate(
                     frontText,
                     backText,
-                    normalizeNullable(candidate.explanation()),
-                    normalizeNullable(candidate.sourceExcerpt())
+                    normalizeOptionalMax(candidate.hint(), MAX_GENERATED_HINT_LENGTH),
+                    normalizeOptionalMax(candidate.explanation(), MAX_GENERATED_EXPLANATION_LENGTH),
+                    normalizeOptionalMax(candidate.sourceExcerpt(), MAX_GENERATED_SOURCE_EXCERPT_LENGTH)
             ));
             if (valid.size() >= desiredCount) {
                 break;
@@ -1102,6 +1109,18 @@ public class AdminFlashcardStagingService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeOptionalMax(String value, int maxLength) {
+        String normalized = normalizeNullable(value);
+        if (normalized == null || normalized.length() <= maxLength) {
+            return normalized;
+        }
+        int end = normalized.lastIndexOf(' ', maxLength);
+        if (end < 1) {
+            end = maxLength;
+        }
+        return normalized.substring(0, end).trim();
     }
 
     private boolean hasText(String value) {
