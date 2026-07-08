@@ -67,13 +67,28 @@ public class QuestionImageImportService {
 
     @Transactional
     public QuestionImageImportDtos.ConfirmResponse confirm(QuestionImageImportDtos.ConfirmRequest request) {
-        return confirm(request, List.of());
+        return confirm(request, List.of(), List.of());
     }
 
     @Transactional
-    public QuestionImageImportDtos.ConfirmResponse confirm(QuestionImageImportDtos.ConfirmRequest request, List<MultipartFile> sourceImages) {
-        List<MultipartFile> normalizedSourceImages = sourceImages == null ? List.of() : sourceImages;
-        List<List<Integer>> sourceImageMappings = validateSourceImageMappings(request.questions(), normalizedSourceImages.size());
+    public QuestionImageImportDtos.ConfirmResponse confirm(
+            QuestionImageImportDtos.ConfirmRequest request,
+            List<MultipartFile> imageFiles,
+            List<MultipartFile> audioFiles
+    ) {
+        List<MultipartFile> normalizedImageFiles = imageFiles == null ? List.of() : imageFiles;
+        List<MultipartFile> normalizedAudioFiles = audioFiles == null ? List.of() : audioFiles;
+        List<List<Integer>> imageFileMappings = validateMediaFileMappings(
+                request.questions(),
+                normalizedImageFiles.size(),
+                QuestionMediaType.IMAGE
+        );
+        List<List<Integer>> audioFileMappings = validateMediaFileMappings(
+                request.questions(),
+                normalizedAudioFiles.size(),
+                QuestionMediaType.AUDIO
+        );
+
         List<QuestionImportDtos.ImportRow> rows = new ArrayList<>();
         for (int index = 0; index < request.questions().size(); index += 1) {
             rows.add(toImportRow(index + 1, request.questions().get(index)));
@@ -85,7 +100,8 @@ public class QuestionImageImportService {
                 true,
                 IMPORT_SOURCE_IMAGE
         );
-        attachMappedSourceImages(savedQuestions, sourceImageMappings, normalizedSourceImages);
+        attachMappedMedia(savedQuestions, imageFileMappings, normalizedImageFiles, QuestionMediaType.IMAGE);
+        attachMappedMedia(savedQuestions, audioFileMappings, normalizedAudioFiles, QuestionMediaType.AUDIO);
 
         List<QuestionImageImportDtos.ConfirmItem> items = savedQuestions.stream()
                 .map(question -> new QuestionImageImportDtos.ConfirmItem(
@@ -97,41 +113,55 @@ public class QuestionImageImportService {
         return new QuestionImageImportDtos.ConfirmResponse(items.size(), 0, items, List.of());
     }
 
-    private void attachMappedSourceImages(List<Question> savedQuestions, List<List<Integer>> sourceImageMappings, List<MultipartFile> sourceImages) {
+    private void attachMappedMedia(
+            List<Question> savedQuestions,
+            List<List<Integer>> mediaFileMappings,
+            List<MultipartFile> mediaFiles,
+            QuestionMediaType mediaType
+    ) {
         for (int questionIndex = 0; questionIndex < savedQuestions.size(); questionIndex += 1) {
-            List<Integer> mappedIndexes = sourceImageMappings.get(questionIndex);
+            List<Integer> mappedIndexes = mediaFileMappings.get(questionIndex);
             if (mappedIndexes.isEmpty()) {
                 continue;
             }
             List<MultipartFile> mappedFiles = mappedIndexes.stream()
-                    .map(sourceImages::get)
+                    .map(mediaFiles::get)
                     .toList();
-            questionMediaService.attachImportedFiles(savedQuestions.get(questionIndex), QuestionMediaType.IMAGE, mappedFiles, IMPORT_SOURCE_IMAGE);
+            questionMediaService.attachImportedFiles(savedQuestions.get(questionIndex), mediaType, mappedFiles, IMPORT_SOURCE_IMAGE);
         }
     }
 
-    private List<List<Integer>> validateSourceImageMappings(List<QuestionImageImportDtos.ConfirmQuestion> questions, int sourceImageCount) {
+    private List<List<Integer>> validateMediaFileMappings(
+            List<QuestionImageImportDtos.ConfirmQuestion> questions,
+            int mediaFileCount,
+            QuestionMediaType mediaType
+    ) {
         List<List<Integer>> mappings = new ArrayList<>();
+        int maxCount = mediaType == QuestionMediaType.IMAGE
+                ? QuestionMediaService.MAX_IMAGES_PER_QUESTION
+                : QuestionMediaService.MAX_AUDIOS_PER_QUESTION;
+        String mediaLabel = mediaType == QuestionMediaType.IMAGE ? "image" : "audio";
         for (int questionIndex = 0; questionIndex < questions.size(); questionIndex += 1) {
-            List<Integer> indexes = questions.get(questionIndex).sourceImageIndexes() == null
-                    ? List.of()
-                    : questions.get(questionIndex).sourceImageIndexes();
-            if (indexes.size() > QuestionMediaService.MAX_IMAGES_PER_QUESTION) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "A question can attach at most 5 source images");
+            List<Integer> indexes = mediaType == QuestionMediaType.IMAGE
+                    ? questions.get(questionIndex).imageFileIndexes()
+                    : questions.get(questionIndex).audioFileIndexes();
+            indexes = indexes == null ? List.of() : indexes;
+            if (indexes.size() > maxCount) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "A question can attach at most " + maxCount + " " + mediaLabel + " files");
             }
-            if (!indexes.isEmpty() && sourceImageCount == 0) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Mapped source images must be submitted with the confirm request");
+            if (!indexes.isEmpty() && mediaFileCount == 0) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Mapped " + mediaLabel + " files must be submitted with the confirm request");
             }
             Set<Integer> seenIndexes = new HashSet<>();
-            for (Integer sourceIndex : indexes) {
-                if (sourceIndex == null) {
-                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Source image index is required");
+            for (Integer mediaIndex : indexes) {
+                if (mediaIndex == null) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Media file index is required");
                 }
-                if (!seenIndexes.add(sourceIndex)) {
-                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Source image indexes must be unique per question");
+                if (!seenIndexes.add(mediaIndex)) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Media file indexes must be unique per question");
                 }
-                if (sourceIndex < 0 || sourceIndex >= sourceImageCount) {
-                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Source image index is out of range");
+                if (mediaIndex < 0 || mediaIndex >= mediaFileCount) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Media file index is out of range");
                 }
             }
             mappings.add(List.copyOf(indexes));
