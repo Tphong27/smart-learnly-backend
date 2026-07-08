@@ -50,11 +50,12 @@ public class QuestionImageImportController {
     }
 
     @PostMapping(value = "/confirm", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Confirm reviewed image-imported questions with mapped source images")
-    public ApiResponse<QuestionImageImportDtos.ConfirmResponse> confirmWithSourceImages(
+    @Operation(summary = "Confirm reviewed image-imported questions with uploaded media attachments")
+    public ApiResponse<QuestionImageImportDtos.ConfirmResponse> confirmWithMediaFiles(
             @Valid @RequestPart("request") QuestionImageImportDtos.ConfirmRequest request,
-            @RequestPart(value = "sourceImages", required = false) List<MultipartFile> sourceImages
+            @RequestPart(value = "imageFiles", required = false) List<MultipartFile> imageFiles,
+            @RequestPart(value = "audioFiles", required = false) List<MultipartFile> audioFiles
     ) {
-        return ApiResponse.success("Image-imported questions created successfully", questionImageImportService.confirm(request, sourceImages));
+        return ApiResponse.success("Image-imported questions created successfully", questionImageImportService.confirm(request, imageFiles, audioFiles));
     }
 }

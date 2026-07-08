@@ -72,8 +72,11 @@ public final class QuestionImageImportDtos {
             String bloomLevel,
             UUID moduleId,
 
-            @Size(max = 5, message = "A question can attach at most 5 source images")
-            List<Integer> sourceImageIndexes
+            @Size(max = 5, message = "A question can attach at most 5 image files")
+            List<Integer> imageFileIndexes,
+
+            @Size(max = 3, message = "A question can attach at most 3 audio files")
+            List<Integer> audioFileIndexes
     ) {
     }
 
