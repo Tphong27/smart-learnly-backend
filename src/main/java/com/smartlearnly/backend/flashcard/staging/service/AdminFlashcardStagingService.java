@@ -33,11 +33,11 @@ import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
+import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
-import jakarta.persistence.criteria.Predicate;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -52,8 +52,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -74,6 +73,7 @@ public class AdminFlashcardStagingService {
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_APPROVED = "approved";
     private static final String STATUS_REJECTED = "rejected";
+    private static final List<String> VISIBLE_STAGING_STATUSES = List.of(STATUS_DRAFT, STATUS_APPROVED);
     private static final Set<String> IMPORTED_SOURCE_STATUSES = Set.of(STATUS_DRAFT, STATUS_APPROVED);
     private static final long MAX_GENERATION_FILE_SIZE_BYTES = 10L * 1024L * 1024L;
     private static final long MAX_TRANSCRIPT_FILE_SIZE_BYTES = 5L * 1024L * 1024L;
@@ -116,14 +116,17 @@ public class AdminFlashcardStagingService {
             String status
     ) {
         SetContext context = resolveSetContext(setId);
-        Specification<Question> specification = sourceQuestionSpecification(
-                context.course().getId(),
+        QuestionStatus parsedStatus = parseQuestionStatus(status);
+        List<Question> questions = questionRepository.searchForAdmin(
                 questionBankId,
+                context.course().getId(),
+                null,
                 keyword,
+                null,
+                parsedStatus == null ? null : toApiValue(parsedStatus),
                 difficulty,
-                parseQuestionStatus(status)
-        );
-        List<Question> questions = questionRepository.findAll(specification, Sort.by(Sort.Direction.DESC, "updatedAt")).stream()
+                Pageable.unpaged()
+        ).stream()
                 .filter(question -> context.course().getId().equals(question.getCourseId()))
                 .toList();
         Map<UUID, List<QuestionAnswer>> answersByQuestionId = answersByQuestionId(questions);
@@ -184,8 +187,8 @@ public class AdminFlashcardStagingService {
             FlashcardStagingCard card = new FlashcardStagingCard();
             card.setBatch(savedBatch);
             card.setSourceQuestionId(question.getId());
-            card.setFrontText(normalizeRequired(question.getQuestionText(), "Question text is required"));
-            card.setBackText(buildBackText(question, answers));
+            card.setFrontText(buildFrontText(question, answers));
+            card.setBackText(buildBackText(answers));
             card.setExplanation(normalizeNullable(question.getExplanation()));
             card.setSourceExcerpt(normalizeNullable(question.getQuestionText()));
             card.setStatus(STATUS_DRAFT);
@@ -347,7 +350,8 @@ public class AdminFlashcardStagingService {
     @Transactional(readOnly = true)
     public List<StagingBatchResponse> listStaging(UUID setId) {
         resolveSetContext(setId);
-        List<FlashcardStagingBatch> batches = stagingBatchRepository.findByFlashcardSetIdAndStatusOrderByCreatedAtDesc(setId, STATUS_DRAFT);
+        List<FlashcardStagingBatch> batches = stagingBatchRepository
+                .findByFlashcardSetIdAndStatusInOrderByCreatedAtDesc(setId, VISIBLE_STAGING_STATUSES);
         if (batches.isEmpty()) {
             return List.of();
         }
@@ -772,36 +776,6 @@ public class AdminFlashcardStagingService {
         return value.substring(0, end).trim();
     }
 
-    private Specification<Question> sourceQuestionSpecification(
-            UUID courseId,
-            UUID questionBankId,
-            String keyword,
-            Short difficulty,
-            QuestionStatus status
-    ) {
-        return (root, query, criteriaBuilder) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(criteriaBuilder.equal(root.get("courseId"), courseId));
-            if (questionBankId != null) {
-                predicates.add(criteriaBuilder.equal(root.get("questionBankId"), questionBankId));
-            }
-            String normalizedKeyword = normalizeNullable(keyword);
-            if (normalizedKeyword != null) {
-                predicates.add(criteriaBuilder.like(
-                        criteriaBuilder.lower(root.get("questionText")),
-                        "%" + normalizedKeyword.toLowerCase(Locale.ROOT) + "%"
-                ));
-            }
-            if (difficulty != null) {
-                predicates.add(criteriaBuilder.equal(root.get("difficulty"), difficulty));
-            }
-            if (status != null) {
-                predicates.add(criteriaBuilder.equal(root.get("status"), status));
-            }
-            return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
-        };
-    }
-
     private SetContext resolveSetContext(UUID setId) {
         FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
@@ -866,38 +840,56 @@ public class AdminFlashcardStagingService {
         return "Question Bank Import";
     }
 
-    private String buildBackText(Question question, List<QuestionAnswer> answers) {
-        List<String> correctAnswers = answers.stream()
+    private String buildFrontText(Question question, List<QuestionAnswer> answers) {
+        String questionText = normalizeRequired(question.getQuestionText(), "Question text is required");
+        if (!hasOptions(question, answers)) {
+            return questionText;
+        }
+        List<String> options = orderedAnswers(answers).stream()
+                .map(QuestionAnswer::getAnswerText)
+                .map(this::normalizeNullable)
+                .filter(value -> value != null)
+                .toList();
+        if (options.isEmpty()) {
+            return questionText;
+        }
+        StringBuilder builder = new StringBuilder(questionText).append("\n\nOptions:");
+        for (int index = 0; index < options.size(); index += 1) {
+            builder.append("\n").append(index + 1).append(". ").append(options.get(index));
+        }
+        return builder.toString();
+    }
+
+    private boolean hasOptions(Question question, List<QuestionAnswer> answers) {
+        if (answers == null || answers.isEmpty()) {
+            return false;
+        }
+        QuestionType type = question.getQuestionType();
+        return type == QuestionType.SINGLE_CHOICE
+                || type == QuestionType.MULTIPLE_CHOICE
+                || type == QuestionType.TRUE_FALSE;
+    }
+
+    private List<QuestionAnswer> orderedAnswers(List<QuestionAnswer> answers) {
+        if (answers == null || answers.isEmpty()) {
+            return List.of();
+        }
+        return answers.stream()
+                .sorted(Comparator.comparing(answer -> answer.getOrderIndex() == null ? 0 : answer.getOrderIndex()))
+                .toList();
+    }
+
+    private String buildBackText(List<QuestionAnswer> answers) {
+        List<String> correctAnswers = orderedAnswers(answers).stream()
                 .filter(answer -> Boolean.TRUE.equals(answer.getIsCorrect()))
                 .map(QuestionAnswer::getAnswerText)
                 .map(this::normalizeNullable)
                 .filter(value -> value != null)
                 .toList();
-        List<String> fallbackAnswers = answers.stream()
-                .map(QuestionAnswer::getAnswerText)
-                .map(this::normalizeNullable)
-                .filter(value -> value != null)
-                .toList();
-
-        StringBuilder builder = new StringBuilder();
-        if (!correctAnswers.isEmpty()) {
-            builder.append("Correct answer(s):\n").append(String.join("\n", correctAnswers));
-        } else if (!fallbackAnswers.isEmpty()) {
-            builder.append("Available answer(s):\n").append(String.join("\n", fallbackAnswers));
+        if (correctAnswers.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question must have at least one correct answer");
         }
-
-        String explanation = normalizeNullable(question.getExplanation());
-        if (explanation != null) {
-            if (!builder.isEmpty()) {
-                builder.append("\n\n");
-            }
-            builder.append("Explanation:\n").append(explanation);
-        }
-
-        if (builder.isEmpty()) {
-            builder.append(normalizeRequired(question.getQuestionText(), "Question text is required"));
-        }
-        return builder.toString();
+        return String.join("\n", correctAnswers);
     }
 
     private void applyUpdate(FlashcardStagingCard card, UpdateStagingCardRequest request) {
