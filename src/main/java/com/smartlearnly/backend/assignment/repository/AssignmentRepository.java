@@ -17,8 +17,16 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
             from Assignment assignment
             join ClassOffering classOffering on classOffering.id = assignment.classId
             where (:courseId is null or classOffering.courseId = :courseId)
-              and (:createdBy is null or assignment.createdBy = :createdBy)
-              and (:isFlashtest is null or assignment.isFlashtest = :isFlashtest)
+              and (
+                  :createdBy is null
+                  or assignment.createdBy = :createdBy
+                  or classOffering.trainerId = :createdBy
+              )
+              and (
+                  :isFlashtest is null
+                  or (:isFlashtest = true and assignment.isFlashtest = true)
+                  or (:isFlashtest = false and (assignment.isFlashtest = false or assignment.isFlashtest is null))
+              )
               and assignment.isArchived = false
             order by assignment.createdAt desc
             """)
@@ -35,7 +43,11 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
             where classEnrollment.studentId = :studentId
               and classEnrollment.status = com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE
               and (:courseId is null or classOffering.courseId = :courseId)
-              and (:isFlashtest is null or assignment.isFlashtest = :isFlashtest)
+              and (
+                  :isFlashtest is null
+                  or (:isFlashtest = true and assignment.isFlashtest = true)
+                  or (:isFlashtest = false and (assignment.isFlashtest = false or assignment.isFlashtest is null))
+              )
               and assignment.isArchived = false
             order by assignment.createdAt desc
             """)
