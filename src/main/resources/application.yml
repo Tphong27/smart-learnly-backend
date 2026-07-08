@@ -122,7 +122,8 @@ app:
         callback-secret: ${HLS_CALLBACK_SECRET:}
         callback-timestamp-tolerance-seconds: ${APP_HLS_CALLBACK_TIMESTAMP_TOLERANCE_SECONDS:300}
         segment-duration: ${APP_HLS_SEGMENT_DURATION:10}
-        qualities: ${APP_HLS_QUALITIES:480p,720p,1080p}
+        qualities: ${APP_HLS_QUALITIES:480p,720p}
+        ffmpeg-preset: ${APP_HLS_FFMPEG_PRESET:veryfast}
         master-token-ttl-seconds: ${APP_HLS_MASTER_TOKEN_TTL:900}
         r2-token-ttl-seconds: ${APP_HLS_R2_TOKEN_TTL:7200}
         segment-token-ttl-seconds: ${APP_HLS_SEGMENT_TOKEN_TTL:7200}

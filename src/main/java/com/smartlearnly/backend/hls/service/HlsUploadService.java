@@ -148,7 +148,7 @@ public class HlsUploadService {
         });
         hlsLesson.setHlsStatus("processing");
         hlsLesson.setR2BasePath(hlsProperties.getR2BasePath() + "/" + lessonId);
-        hlsLesson.setQualities(hlsProperties.getQualities());
+        hlsLesson.setQualities(hlsProperties.normalizedQualities());
         hlsLesson.setProgressPercent(0);
         hlsLesson.setCurrentStep("Initializing...");
         hlsLesson.setErrorMessage(null);
@@ -198,7 +198,10 @@ public class HlsUploadService {
                     reservation.jobId(),
                     request.lessonId(),
                     reservation.sourceKey(),
-                    reservation.outputPrefix()
+                    reservation.outputPrefix(),
+                    hlsProperties.normalizedQualities(),
+                    hlsProperties.normalizedSegmentDuration(),
+                    hlsProperties.normalizedFfmpegPreset()
             ));
             processingStateService.markWorkflowDispatched(request.lessonId(), reservation.jobId());
         } catch (RuntimeException exception) {

@@ -30,7 +30,10 @@ public class GithubActionsHlsWorkflowDispatcher implements HlsWorkflowDispatcher
                 .build().encode().toUri();
         Map<String, Object> body = Map.of("ref", properties.getRef(), "inputs", Map.of(
                 "job_id", request.jobId().toString(), "lesson_id", request.lessonId().toString(),
-                "source_key", request.sourceKey(), "output_prefix", request.outputPrefix()));
+                "source_key", request.sourceKey(), "output_prefix", request.outputPrefix(),
+                "qualities", request.qualities(),
+                "segment_duration", Integer.toString(request.segmentDuration()),
+                "ffmpeg_preset", request.ffmpegPreset()));
         try {
             client.post().uri(uri)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getToken())
