@@ -144,7 +144,6 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
                 Language hint: %s.
                 Return strict JSON only, no markdown, with this shape:
                 {
-                  "ocrText": "full OCR text joined by upload order",
                   "questions": [
                     {
                       "questionText": "...",
@@ -158,9 +157,10 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
                   ],
                   "warnings": []
                 }
+                Do not include full OCR text by default. Only return parsed questions and warnings.
                 Rules:
                 - Do not create questions that are not present in the images.
-                - Preserve question order across uploaded files.
+                - Preserve question order in the uploaded file.
                 - Only mark an answer correct if the image explicitly provides the answer key.
                 - If the answer key is missing or ambiguous, include the question with no correct answer and add an error.
                 - If explanation/rationale is clearly present in the image, copy it into explanation.

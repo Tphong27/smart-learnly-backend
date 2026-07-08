@@ -105,6 +105,7 @@ app:
         timeout: ${APP_QUESTION_IMAGE_IMPORT_TIMEOUT:PT45S}
         max-file-size: ${APP_QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE:10MB}
         max-files: ${APP_QUESTION_IMAGE_IMPORT_MAX_FILES:5}
+        preview-concurrency: ${APP_QUESTION_IMAGE_IMPORT_PREVIEW_CONCURRENCY:3}
     settings:
         encryption-key: ${SETTINGS_ENCRYPTION_KEY:}
     hls:

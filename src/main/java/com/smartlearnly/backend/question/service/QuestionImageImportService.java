@@ -14,6 +14,10 @@ import com.smartlearnly.backend.question.image.ImageQuestionImportProvider;
 import com.smartlearnly.backend.question.image.QuestionImageImportProperties;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -44,7 +48,7 @@ public class QuestionImageImportService {
     public QuestionImageImportDtos.PreviewResponse preview(UUID bankId, List<MultipartFile> files, String language) {
         questionBankService.findActiveBankEntity(bankId);
         List<ImageImportFile> imageFiles = readAndValidateFiles(files);
-        ImageImportParseResult parseResult = provider.parse(new ImageImportRequest(imageFiles, language));
+        ImageImportParseResult parseResult = parseImages(imageFiles, language);
 
         List<String> batchWarnings = normalizeMessages(parseResult.warnings());
         List<QuestionImageImportDtos.PreviewQuestion> questions = new ArrayList<>();
@@ -113,6 +117,51 @@ public class QuestionImageImportService {
         return new QuestionImageImportDtos.ConfirmResponse(items.size(), 0, items, List.of());
     }
 
+    private ImageImportParseResult parseImages(List<ImageImportFile> imageFiles, String language) {
+        if (imageFiles.size() <= 1) {
+            return provider.parse(new ImageImportRequest(imageFiles, language));
+        }
+
+        int concurrency = Math.max(1, Math.min(properties.getPreviewConcurrency(), imageFiles.size()));
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        try {
+            List<CompletableFuture<ImageImportParseResult>> futures = new ArrayList<>();
+            for (ImageImportFile imageFile : imageFiles) {
+                futures.add(CompletableFuture.supplyAsync(
+                        () -> provider.parse(new ImageImportRequest(List.of(imageFile), language)),
+                        executor
+                ));
+            }
+
+            StringBuilder ocrText = new StringBuilder();
+            List<QuestionImageImportDtos.PreviewQuestion> questions = new ArrayList<>();
+            List<String> warnings = new ArrayList<>();
+            for (CompletableFuture<ImageImportParseResult> future : futures) {
+                ImageImportParseResult result = future.join();
+                if (result.ocrText() != null && !result.ocrText().isBlank()) {
+                    if (!ocrText.isEmpty()) {
+                        ocrText.append("\n\n");
+                    }
+                    ocrText.append(result.ocrText().trim());
+                }
+                if (result.questions() != null) {
+                    questions.addAll(result.questions());
+                }
+                if (result.warnings() != null) {
+                    warnings.addAll(result.warnings());
+                }
+            }
+            return new ImageImportParseResult(ocrText.toString(), questions, warnings);
+        } catch (CompletionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Image import provider request failed");
+        } finally {
+            executor.shutdown();
+        }
+    }
     private void attachMappedMedia(
             List<Question> savedQuestions,
             List<List<Integer>> mediaFileMappings,
