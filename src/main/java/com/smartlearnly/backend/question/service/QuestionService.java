@@ -45,6 +45,7 @@ public class QuestionService {
     private final QuestionBankService questionBankService;
     private final CourseSectionRepository courseSectionRepository;
     private final CurrentUserService currentUserService;
+    private final QuestionMediaImportService questionMediaImportService;
 
     @Transactional(readOnly = true)
     public PageResponse<QuestionModel.Response> list(UUID bankId, UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
@@ -167,19 +168,26 @@ public class QuestionService {
 
     @Transactional
     public QuestionImportDtos.ImportBatchResponse importBatch(QuestionImportDtos.ImportBatchRequest request) {
-        List<Question> savedQuestions = importReviewedRows(request.bankId(), request.rows(), false, null);
+        List<Question> savedQuestions = importReviewedRows(request.bankId(), request.rows(), false, null, normalizeImportMediaSource(request.importSource()));
         List<UUID> createdIds = savedQuestions.stream().map(Question::getId).toList();
         return new QuestionImportDtos.ImportBatchResponse(request.rows().size(), createdIds.size(), createdIds, List.of());
     }
 
     @Transactional
     public List<Question> importReviewedRows(UUID bankId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource) {
-        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        return importReviewedRows(bank, rows, actor, aiGenerated, importSource);
+        return importReviewedRows(bankId, rows, aiGenerated, importSource, importSource == null ? null : importSource);
     }
 
-    private List<Question> importReviewedRows(QuestionBank bank, List<QuestionImportDtos.ImportRow> rows, UserAccount actor, boolean aiGenerated, String importSource) {
+    private List<Question> importReviewedRows(UUID bankId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource, String mediaImportSource) {
+        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        return importReviewedRows(bank, rows, actor, aiGenerated, importSource, mediaImportSource);
+    }
+
+    private List<Question> importReviewedRows(
+            QuestionBank bank, List<QuestionImportDtos.ImportRow> rows, UserAccount actor,
+            boolean aiGenerated, String importSource, String mediaImportSource
+    ) {
         if (rows == null || rows.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one question row is required");
         }
@@ -213,7 +221,9 @@ public class QuestionService {
             if (duplicateRowNumbers.contains(row.rowNumber())) {
                 continue;
             }
-            savedQuestions.add(persistImportedQuestion(bank, row, actor, aiGenerated, importSource));
+            Question savedQuestion = persistImportedQuestion(bank, row, actor, aiGenerated, importSource);
+            questionMediaImportService.attachImportedMedia(savedQuestion, row.imageFiles(), row.audioFiles(), mediaImportSource);
+            savedQuestions.add(savedQuestion);
         }
         return savedQuestions;
     }
@@ -394,9 +404,20 @@ public class QuestionService {
             rowErrors.add("Explanation must not exceed 10000 characters");
         }
 
+        rowErrors.addAll(questionMediaImportService.validateMediaReferences(row.imageFiles(), row.audioFiles()));
+
         return rowErrors;
     }
 
+    private String normalizeImportMediaSource(String value) {
+        String normalized = normalizeNullable(value);
+        if (normalized == null) return "excel_import";
+        String apiValue = normalized.trim().replace('-', '_').toLowerCase(Locale.ROOT);
+        return switch (apiValue) {
+            case "excel_import", "json_import", "image_import" -> apiValue;
+            default -> "excel_import";
+        };
+    }
     private String buildImportErrorSummary(List<QuestionImportDtos.ImportRowError> errors) {
         StringBuilder builder = new StringBuilder("Import validation failed:");
         int limit = Math.min(errors.size(), 5);
@@ -522,4 +543,3 @@ public class QuestionService {
         return normalized.isEmpty() ? null : normalized;
     }
 }
-
