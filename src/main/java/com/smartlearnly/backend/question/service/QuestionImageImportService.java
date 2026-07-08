@@ -6,6 +6,7 @@ import com.smartlearnly.backend.question.dto.QuestionImageImportDtos;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionBank;
+import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.image.ImageImportFile;
 import com.smartlearnly.backend.question.image.ImageImportParseResult;
 import com.smartlearnly.backend.question.image.ImageImportRequest;
@@ -13,8 +14,10 @@ import com.smartlearnly.backend.question.image.ImageQuestionImportProvider;
 import com.smartlearnly.backend.question.image.QuestionImageImportProperties;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.apache.tika.Tika;
@@ -32,6 +35,7 @@ public class QuestionImageImportService {
 
     private final QuestionBankService questionBankService;
     private final QuestionService questionService;
+    private final QuestionMediaService questionMediaService;
     private final ImageQuestionImportProvider provider;
     private final QuestionImageImportProperties properties;
     private final Tika tika = new Tika();
@@ -63,6 +67,13 @@ public class QuestionImageImportService {
 
     @Transactional
     public QuestionImageImportDtos.ConfirmResponse confirm(QuestionImageImportDtos.ConfirmRequest request) {
+        return confirm(request, List.of());
+    }
+
+    @Transactional
+    public QuestionImageImportDtos.ConfirmResponse confirm(QuestionImageImportDtos.ConfirmRequest request, List<MultipartFile> sourceImages) {
+        List<MultipartFile> normalizedSourceImages = sourceImages == null ? List.of() : sourceImages;
+        List<List<Integer>> sourceImageMappings = validateSourceImageMappings(request.questions(), normalizedSourceImages.size());
         List<QuestionImportDtos.ImportRow> rows = new ArrayList<>();
         for (int index = 0; index < request.questions().size(); index += 1) {
             rows.add(toImportRow(index + 1, request.questions().get(index)));
@@ -74,6 +85,8 @@ public class QuestionImageImportService {
                 true,
                 IMPORT_SOURCE_IMAGE
         );
+        attachMappedSourceImages(savedQuestions, sourceImageMappings, normalizedSourceImages);
+
         List<QuestionImageImportDtos.ConfirmItem> items = savedQuestions.stream()
                 .map(question -> new QuestionImageImportDtos.ConfirmItem(
                         question.getId(),
@@ -82,6 +95,48 @@ public class QuestionImageImportService {
                 ))
                 .toList();
         return new QuestionImageImportDtos.ConfirmResponse(items.size(), 0, items, List.of());
+    }
+
+    private void attachMappedSourceImages(List<Question> savedQuestions, List<List<Integer>> sourceImageMappings, List<MultipartFile> sourceImages) {
+        for (int questionIndex = 0; questionIndex < savedQuestions.size(); questionIndex += 1) {
+            List<Integer> mappedIndexes = sourceImageMappings.get(questionIndex);
+            if (mappedIndexes.isEmpty()) {
+                continue;
+            }
+            List<MultipartFile> mappedFiles = mappedIndexes.stream()
+                    .map(sourceImages::get)
+                    .toList();
+            questionMediaService.attachImportedFiles(savedQuestions.get(questionIndex), QuestionMediaType.IMAGE, mappedFiles, IMPORT_SOURCE_IMAGE);
+        }
+    }
+
+    private List<List<Integer>> validateSourceImageMappings(List<QuestionImageImportDtos.ConfirmQuestion> questions, int sourceImageCount) {
+        List<List<Integer>> mappings = new ArrayList<>();
+        for (int questionIndex = 0; questionIndex < questions.size(); questionIndex += 1) {
+            List<Integer> indexes = questions.get(questionIndex).sourceImageIndexes() == null
+                    ? List.of()
+                    : questions.get(questionIndex).sourceImageIndexes();
+            if (indexes.size() > QuestionMediaService.MAX_IMAGES_PER_QUESTION) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "A question can attach at most 5 source images");
+            }
+            if (!indexes.isEmpty() && sourceImageCount == 0) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Mapped source images must be submitted with the confirm request");
+            }
+            Set<Integer> seenIndexes = new HashSet<>();
+            for (Integer sourceIndex : indexes) {
+                if (sourceIndex == null) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Source image index is required");
+                }
+                if (!seenIndexes.add(sourceIndex)) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Source image indexes must be unique per question");
+                }
+                if (sourceIndex < 0 || sourceIndex >= sourceImageCount) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "Source image index is out of range");
+                }
+            }
+            mappings.add(List.copyOf(indexes));
+        }
+        return mappings;
     }
 
     private List<ImageImportFile> readAndValidateFiles(List<MultipartFile> files) {
@@ -221,7 +276,9 @@ public class QuestionImageImportService {
                 question.explanation(),
                 question.difficulty(),
                 question.bloomLevel(),
-                question.moduleId()
+                question.moduleId(),
+                List.of(),
+                List.of()
         );
     }
 
