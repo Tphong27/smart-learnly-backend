@@ -49,6 +49,7 @@ public class HlsProcessingStateService {
         hls.setSourceObjectKey(source);
         hls.setProcessingOutputPrefix(output);
         hls.setProcessingProvider("github-actions");
+        hls.setQualities(properties.normalizedQualities());
         hls.setProgressPercent(5);
         hls.setCurrentStep("Uploading source video to private R2");
         hls.setErrorMessage(null);

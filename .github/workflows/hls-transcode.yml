@@ -19,6 +19,21 @@ on:
         description: Optional output prefix; defaults to hls/{lesson_id}/{job_id}
         required: false
         type: string
+      qualities:
+        description: Comma-separated HLS qualities to generate
+        required: false
+        default: 480p,720p
+        type: string
+      segment_duration:
+        description: HLS segment duration in seconds
+        required: false
+        default: "10"
+        type: string
+      ffmpeg_preset:
+        description: FFmpeg x264 preset
+        required: false
+        default: veryfast
+        type: string
 
 permissions:
   contents: read
@@ -45,6 +60,9 @@ jobs:
       LESSON_ID: ${{ inputs.lesson_id }}
       SOURCE_KEY: ${{ inputs.source_key }}
       REQUESTED_OUTPUT_PREFIX: ${{ inputs.output_prefix }}
+      REQUESTED_QUALITIES: ${{ inputs.qualities }}
+      REQUESTED_SEGMENT_DURATION: ${{ inputs.segment_duration }}
+      REQUESTED_FFMPEG_PRESET: ${{ inputs.ffmpeg_preset }}
 
     steps:
       - name: Check out repository
@@ -58,6 +76,8 @@ jobs:
           uuid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
           bucket_pattern='^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'
           object_key_pattern='^[a-zA-Z0-9][a-zA-Z0-9._/-]*$'
+          qualities_pattern='^(480p|720p|1080p)(,(480p|720p|1080p))*$'
+          preset_pattern='^(ultrafast|superfast|veryfast|faster|fast|medium)$'
 
           [[ "$JOB_ID" =~ $uuid_pattern ]] || {
             echo "job_id must be a UUID." >&2
@@ -103,10 +123,41 @@ jobs:
             exit 64
           }
 
+          qualities="$REQUESTED_QUALITIES"
+          if [[ -z "$qualities" ]]; then
+            qualities="480p,720p"
+          fi
+          [[ "$qualities" =~ $qualities_pattern ]] || {
+            echo "qualities must be a comma-separated subset of 480p,720p,1080p." >&2
+            exit 64
+          }
+
+          segment_duration="$REQUESTED_SEGMENT_DURATION"
+          if [[ -z "$segment_duration" ]]; then
+            segment_duration="10"
+          fi
+          [[ "$segment_duration" =~ ^[0-9]+$ ]] &&
+            ((segment_duration >= 2 && segment_duration <= 30)) || {
+            echo "segment_duration must be an integer between 2 and 30." >&2
+            exit 64
+          }
+
+          ffmpeg_preset="$REQUESTED_FFMPEG_PRESET"
+          if [[ -z "$ffmpeg_preset" ]]; then
+            ffmpeg_preset="veryfast"
+          fi
+          [[ "$ffmpeg_preset" =~ $preset_pattern ]] || {
+            echo "ffmpeg_preset is invalid." >&2
+            exit 64
+          }
+
           echo "OUTPUT_PREFIX=$output_prefix" >>"$GITHUB_ENV"
           echo "INPUT_FILE=$RUNNER_TEMP/hls-input/source-video" >>"$GITHUB_ENV"
           echo "OUTPUT_DIR=$RUNNER_TEMP/hls-output" >>"$GITHUB_ENV"
           echo "QUALITIES_FILE=$RUNNER_TEMP/hls-qualities.txt" >>"$GITHUB_ENV"
+          echo "HLS_QUALITIES=$qualities" >>"$GITHUB_ENV"
+          echo "SEGMENT_DURATION=$segment_duration" >>"$GITHUB_ENV"
+          echo "FFMPEG_PRESET=$ffmpeg_preset" >>"$GITHUB_ENV"
 
       - name: Install FFmpeg and R2 client dependencies
         shell: bash
@@ -118,8 +169,13 @@ jobs:
           }
           aws --version
 
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg jq
+          missing_packages=()
+          command -v ffmpeg >/dev/null 2>&1 || missing_packages+=(ffmpeg)
+          command -v jq >/dev/null 2>&1 || missing_packages+=(jq)
+          if ((${#missing_packages[@]} > 0)); then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends "${missing_packages[@]}"
+          fi
           ffmpeg -version | sed -n '1p'
           jq --version
 
@@ -128,7 +184,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           mkdir -p -- "$(dirname "$INPUT_FILE")"
-          aws \
+          time aws \
             --endpoint-url "$R2_ENDPOINT" \
             s3 cp \
             "s3://${R2_RAW_BUCKET}/${SOURCE_KEY}" \
@@ -140,11 +196,13 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          bash scripts/hls/transcode.sh \
+          time bash scripts/hls/transcode.sh \
             "$INPUT_FILE" \
             "$OUTPUT_DIR" \
-            10 \
-            "$QUALITIES_FILE"
+            "$SEGMENT_DURATION" \
+            "$QUALITIES_FILE" \
+            "$HLS_QUALITIES" \
+            "$FFMPEG_PRESET"
 
       - name: Upload HLS output to R2
         shell: bash
@@ -152,7 +210,7 @@ jobs:
           set -Eeuo pipefail
           test -s "$OUTPUT_DIR/master.m3u8"
           test -s "$OUTPUT_DIR/enc.key"
-          aws \
+          time aws \
             --endpoint-url "$R2_ENDPOINT" \
             s3 sync \
             "$OUTPUT_DIR" \
