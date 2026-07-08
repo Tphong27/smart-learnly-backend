@@ -23,8 +23,17 @@ public interface FlashcardTextGenerationService {
     record GeneratedFlashcardCandidate(
             String frontText,
             String backText,
+            String hint,
             String explanation,
             String sourceExcerpt
     ) {
+        public GeneratedFlashcardCandidate(
+                String frontText,
+                String backText,
+                String explanation,
+                String sourceExcerpt
+        ) {
+            this(frontText, backText, null, explanation, sourceExcerpt);
+        }
     }
 }

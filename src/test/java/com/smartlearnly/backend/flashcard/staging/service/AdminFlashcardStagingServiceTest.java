@@ -28,6 +28,7 @@ import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingBatchRepository;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationService.DocumentGenerationRequest;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
@@ -55,8 +56,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
@@ -80,6 +80,8 @@ class AdminFlashcardStagingServiceTest {
     @Mock
     private FlashcardTextGenerationService flashcardTextGenerationService;
     @Mock
+    private FlashcardDocumentGenerationService flashcardDocumentGenerationService;
+    @Mock
     private FlashcardDocumentTextExtractionService documentTextExtractionService;
     @Mock
     private FlashcardTranscriptTextExtractionService transcriptTextExtractionService;
@@ -98,6 +100,7 @@ class AdminFlashcardStagingServiceTest {
                 questionBankRepository,
                 currentUserService,
                 flashcardTextGenerationService,
+                flashcardDocumentGenerationService,
                 documentTextExtractionService,
                 transcriptTextExtractionService
         );
@@ -110,14 +113,16 @@ class AdminFlashcardStagingServiceTest {
         QuestionBank bank = bank(flashcardSet.getLesson().getCourse().getId(), "Bank A");
         Question firstQuestion = question(flashcardSet.getLesson().getCourse().getId(), bank.getId(), "Question 1");
         Question secondQuestion = question(flashcardSet.getLesson().getCourse().getId(), bank.getId(), "Question 2");
-        QuestionAnswer firstAnswer = answer(firstQuestion.getId(), "Correct 1", true, 0);
+        firstQuestion.setExplanation("Explanation 1");
+        QuestionAnswer firstDistractor = answer(firstQuestion.getId(), "Distractor 1", false, 0);
+        QuestionAnswer firstAnswer = answer(firstQuestion.getId(), "Correct 1", true, 1);
         QuestionAnswer secondAnswer = answer(secondQuestion.getId(), "Correct 2", true, 0);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(questionRepository.findAllById(List.of(firstQuestion.getId(), secondQuestion.getId())))
                 .thenReturn(List.of(firstQuestion, secondQuestion));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(firstQuestion.getId(), secondQuestion.getId())))
-                .thenReturn(List.of(firstAnswer, secondAnswer));
+                .thenReturn(List.of(firstDistractor, firstAnswer, secondAnswer));
         when(questionBankRepository.findAllById(any())).thenReturn(List.of(bank));
         when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
             FlashcardStagingBatch batch = invocation.getArgument(0);
@@ -139,13 +144,41 @@ class AdminFlashcardStagingServiceTest {
         assertThat(response.status()).isEqualTo("draft");
         assertThat(response.sourceName()).isEqualTo("Bank A");
         assertThat(response.cards()).hasSize(2);
-        assertThat(response.cards()).extracting(card -> card.frontText()).containsExactly("Question 1", "Question 2");
-        assertThat(response.cards()).extracting(card -> card.backText())
-                .containsExactly("Correct answer(s):\nCorrect 1", "Correct answer(s):\nCorrect 2");
+        assertThat(response.cards()).extracting(card -> card.frontText())
+                .containsExactly(
+                        "Question 1\n\nOptions:\n1. Distractor 1\n2. Correct 1",
+                        "Question 2\n\nOptions:\n1. Correct 2"
+                );
+        assertThat(response.cards()).extracting(card -> card.backText()).containsExactly("Correct 1", "Correct 2");
+        assertThat(response.cards()).extracting(card -> card.explanation()).containsExactly("Explanation 1", null);
         ArgumentCaptor<FlashcardStagingBatch> batchCaptor = ArgumentCaptor.forClass(FlashcardStagingBatch.class);
         verify(stagingBatchRepository).save(batchCaptor.capture());
         assertThat(batchCaptor.getValue().getCreatedBy()).isSameAs(actor);
         assertThat(batchCaptor.getValue().getFlashcardSet()).isSameAs(flashcardSet);
+    }
+
+    @Test
+    void importQuestionBankRejectsQuestionsWithoutCorrectAnswer() {
+        FlashcardSet flashcardSet = flashcardSet();
+        QuestionBank bank = bank(flashcardSet.getLesson().getCourse().getId(), "Bank A");
+        Question question = question(flashcardSet.getLesson().getCourse().getId(), bank.getId(), "Question without correct answer");
+        QuestionAnswer answer = answer(question.getId(), "Only option", false, 0);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(questionRepository.findAllById(List.of(question.getId()))).thenReturn(List.of(question));
+        when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(question.getId())))
+                .thenReturn(List.of(answer));
+        when(questionBankRepository.findAllById(any())).thenReturn(List.of(bank));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> service.importQuestionBank(
+                flashcardSet.getId(),
+                new ImportQuestionBankRequest(List.of(question.getId()))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(stagingCardRepository, never()).saveAll(anyList());
     }
 
     @Test
@@ -315,9 +348,15 @@ class AdminFlashcardStagingServiceTest {
                 "lesson.pdf",
                 longSourceText()
         ));
-        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+        when(flashcardDocumentGenerationService.generate(any())).thenReturn(new GenerationResult(
                 "TEXT",
-                List.of(candidate("PDF front", "PDF back", "PDF excerpt"))
+                List.of(new GeneratedFlashcardCandidate(
+                        "PDF front",
+                        "PDF back",
+                        "PDF hint",
+                        "Generated from pasted text.",
+                        "PDF excerpt"
+                ))
         ));
         when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
             FlashcardStagingBatch batch = invocation.getArgument(0);
@@ -344,10 +383,19 @@ class AdminFlashcardStagingServiceTest {
         assertThat(response.cards()).hasSize(1);
         assertThat(response.cards().get(0).sourceQuestionId()).isNull();
         assertThat(response.cards().get(0).frontText()).isEqualTo("PDF front");
+        assertThat(response.cards().get(0).hint()).isEqualTo("PDF hint");
         ArgumentCaptor<FlashcardStagingBatch> batchCaptor = ArgumentCaptor.forClass(FlashcardStagingBatch.class);
         verify(stagingBatchRepository).save(batchCaptor.capture());
         assertThat(batchCaptor.getValue().getSourceType()).isEqualTo("PDF");
         assertThat(batchCaptor.getValue().getCreatedBy()).isSameAs(actor);
+        ArgumentCaptor<DocumentGenerationRequest> requestCaptor = ArgumentCaptor.forClass(DocumentGenerationRequest.class);
+        verify(flashcardDocumentGenerationService).generate(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().documentText()).isEqualTo(longSourceText());
+        assertThat(requestCaptor.getValue().language()).isEqualTo("auto");
+        assertThat(requestCaptor.getValue().difficulty()).isEqualTo("hard");
+        assertThat(requestCaptor.getValue().sourceType()).isEqualTo("PDF");
+        assertThat(requestCaptor.getValue().sourceName()).isEqualTo("lesson.pdf");
+        verify(flashcardTextGenerationService, never()).generate(any());
         verify(flashcardCardRepository, never()).saveAll(anyList());
     }
 
@@ -362,7 +410,7 @@ class AdminFlashcardStagingServiceTest {
                 "lesson.docx",
                 longSourceText()
         ));
-        when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult(
+        when(flashcardDocumentGenerationService.generate(any())).thenReturn(new GenerationResult(
                 "TEXT",
                 List.of(candidate("DOCX front", "DOCX back", "DOCX excerpt"))
         ));
@@ -385,6 +433,8 @@ class AdminFlashcardStagingServiceTest {
         assertThat(response.sourceType()).isEqualTo("DOCX");
         assertThat(response.sourceName()).isEqualTo("lesson.docx");
         assertThat(response.cards()).hasSize(1);
+        verify(flashcardDocumentGenerationService).generate(any());
+        verify(flashcardTextGenerationService, never()).generate(any());
         verify(flashcardCardRepository, never()).saveAll(anyList());
     }
 
@@ -440,7 +490,7 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
-    void generateFromFileRejectsExtractedTextShorterThanMinimum() {
+    void generateFromFileRejectsWhenDocumentGenerationFindsNoUsableContent() {
         FlashcardSet flashcardSet = flashcardSet();
         MockMultipartFile file = pdfFile();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
@@ -449,6 +499,10 @@ class AdminFlashcardStagingServiceTest {
                 "PDF",
                 "lesson.pdf",
                 "Too short."
+        ));
+        when(flashcardDocumentGenerationService.generate(any())).thenThrow(new BusinessException(
+                ErrorCode.INVALID_REQUEST,
+                "Uploaded PDF does not contain enough readable text to create flashcards. Scanned PDFs are not supported yet."
         ));
 
         assertThatThrownBy(() -> service.generateFromFile(
@@ -462,6 +516,7 @@ class AdminFlashcardStagingServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
 
+        verify(flashcardDocumentGenerationService).generate(any());
         verify(flashcardTextGenerationService, never()).generate(any());
         verify(stagingBatchRepository, never()).save(any());
     }
@@ -864,6 +919,81 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void approveRejectsStagingCardThatDuplicatesCurrentFlashcard() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet), "draft", 0);
+        FlashcardCard currentCard = flashcardCard(flashcardSet, " front   0 ", "BACK 0");
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(stagingCardRepository.findByIdIn(List.of(card.getId()))).thenReturn(List.of(card));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(currentCard));
+
+        assertThatThrownBy(() -> service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(List.of(card.getId()))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+                    assertThat(exception.getMessage()).contains("Duplicate staging card");
+                });
+
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void approveRejectsDuplicateStagingCardsInSameRequest() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingBatch batch = stagingBatch(flashcardSet);
+        FlashcardStagingCard first = stagingCard(batch, "draft", 0);
+        FlashcardStagingCard second = stagingCard(batch, "draft", 1);
+        second.setFrontText(" front   0 ");
+        second.setBackText("BACK 0");
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(stagingCardRepository.findByIdIn(List.of(first.getId(), second.getId()))).thenReturn(List.of(second, first));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(List.of(first.getId(), second.getId()))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+                    assertThat(exception.getMessage()).contains("Duplicate staging cards");
+                });
+
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void listStagingReturnsDraftAndApprovedBatchesForCurrentSet() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingBatch draftBatch = stagingBatch(flashcardSet);
+        FlashcardStagingBatch approvedBatch = stagingBatch(flashcardSet);
+        approvedBatch.setStatus("approved");
+        FlashcardStagingCard draftCard = stagingCard(draftBatch, "draft", 0);
+        FlashcardStagingCard approvedCard = stagingCard(approvedBatch, "approved", 0);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(stagingBatchRepository.findByFlashcardSetIdAndStatusInOrderByCreatedAtDesc(
+                flashcardSet.getId(),
+                List.of("draft", "approved")
+        )).thenReturn(List.of(draftBatch, approvedBatch));
+        when(stagingCardRepository.findByBatchIdInOrderBySortOrderAscCreatedAtAsc(List.of(draftBatch.getId(), approvedBatch.getId())))
+                .thenReturn(List.of(draftCard, approvedCard));
+
+        List<StagingBatchResponse> response = service.listStaging(flashcardSet.getId());
+
+        assertThat(response).hasSize(2);
+        assertThat(response).extracting(StagingBatchResponse::status).containsExactly("draft", "approved");
+        assertThat(response.get(0).cards()).extracting(card -> card.status()).containsExactly("draft");
+        assertThat(response.get(1).cards()).extracting(card -> card.status()).containsExactly("approved");
+    }
+
+    @Test
     void approveCannotDuplicateAlreadyApprovedStagingCards() {
         FlashcardSet flashcardSet = flashcardSet();
         FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet), "approved", 0);
@@ -910,8 +1040,8 @@ class AdminFlashcardStagingServiceTest {
         QuestionBank bank = bank(flashcardSet.getLesson().getCourse().getId(), "Bank A");
         bank.setId(bankId);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.findAll(any(Specification.class), any(Sort.class)))
-                .thenReturn(List.of(sameCourseQuestion, otherCourseQuestion));
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(sameCourseQuestion, otherCourseQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(sameCourseQuestion.getId())))
                 .thenReturn(List.of(answer));
         when(questionBankRepository.findAllById(any())).thenReturn(List.of(bank));
@@ -939,8 +1069,8 @@ class AdminFlashcardStagingServiceTest {
         Question approvedImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Approved import");
         Question notImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Not imported");
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.findAll(any(Specification.class), any(Sort.class)))
-                .thenReturn(List.of(draftImportedQuestion, approvedImportedQuestion, notImportedQuestion));
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(draftImportedQuestion, approvedImportedQuestion, notImportedQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(anyList()))
                 .thenReturn(List.of());
         when(questionBankRepository.findAllById(any())).thenReturn(List.of());
@@ -960,13 +1090,45 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void sourceQuestionsUseNativeSearchForStatusAndDifficultyFilters() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        List<SourceQuestionResponse> response = service.listSourceQuestions(
+                flashcardSet.getId(),
+                null,
+                null,
+                (short) 1,
+                "Approved"
+        );
+
+        assertThat(response).isEmpty();
+        ArgumentCaptor<String> statusCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Short> difficultyCaptor = ArgumentCaptor.forClass(Short.class);
+        verify(questionRepository).searchForAdmin(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                statusCaptor.capture(),
+                difficultyCaptor.capture(),
+                any()
+        );
+        assertThat(statusCaptor.getValue()).isEqualTo("approved");
+        assertThat(difficultyCaptor.getValue()).isEqualTo((short) 1);
+    }
+
+    @Test
     void sourceQuestionsDoNotMarkRejectedStagingSourcesAsImported() {
         FlashcardSet flashcardSet = flashcardSet();
         UUID bankId = UUID.randomUUID();
         Question rejectedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Rejected import");
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.findAll(any(Specification.class), any(Sort.class)))
-                .thenReturn(List.of(rejectedQuestion));
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(rejectedQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(rejectedQuestion.getId())))
                 .thenReturn(List.of());
         when(questionBankRepository.findAllById(any())).thenReturn(List.of());
@@ -1064,6 +1226,18 @@ class AdminFlashcardStagingServiceTest {
         card.setBackText("Back " + sortOrder);
         card.setStatus(status);
         card.setSortOrder(sortOrder);
+        card.setCreatedAt(Instant.now());
+        card.setUpdatedAt(Instant.now());
+        return card;
+    }
+
+    private FlashcardCard flashcardCard(FlashcardSet flashcardSet, String frontText, String backText) {
+        FlashcardCard card = new FlashcardCard();
+        card.setId(UUID.randomUUID());
+        card.setFlashcardSet(flashcardSet);
+        card.setFrontText(frontText);
+        card.setBackText(backText);
+        card.setOrderIndex(0);
         card.setCreatedAt(Instant.now());
         card.setUpdatedAt(Instant.now());
         return card;
