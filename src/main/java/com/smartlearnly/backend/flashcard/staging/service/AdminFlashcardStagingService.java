@@ -391,6 +391,7 @@ public class AdminFlashcardStagingService {
         }
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         List<FlashcardStagingCard> cards = resolveCardsForApproval(setId, request.stagingCardIds());
+        assertNoDuplicateApproval(setId, cards);
 
         int nextOrderIndex = flashcardCardRepository.findMaxOrderIndexBySetId(setId) + 1;
         List<FlashcardCard> flashcards = new ArrayList<>();
@@ -437,6 +438,34 @@ public class AdminFlashcardStagingService {
             cards.add(card);
         }
         return cards;
+    }
+
+    private void assertNoDuplicateApproval(UUID setId, List<FlashcardStagingCard> cards) {
+        List<FlashcardCard> existingCards = flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(setId);
+        Set<String> existingKeys = (existingCards == null ? List.<FlashcardCard>of() : existingCards)
+                .stream()
+                .map(card -> duplicateKey(card.getFrontText(), card.getBackText()))
+                .filter(this::hasDuplicateKey)
+                .collect(Collectors.toSet());
+        Set<String> approvalKeys = new HashSet<>();
+        for (FlashcardStagingCard card : cards) {
+            String duplicateKey = duplicateKey(card.getFrontText(), card.getBackText());
+            if (!hasDuplicateKey(duplicateKey)) {
+                continue;
+            }
+            if (existingKeys.contains(duplicateKey)) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Duplicate staging card matches an existing Current Flashcard"
+                );
+            }
+            if (!approvalKeys.add(duplicateKey)) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Duplicate staging cards cannot be approved together"
+                );
+            }
+        }
     }
 
     private void markFullyApprovedBatches(List<FlashcardStagingCard> cards, UserAccount actor) {
@@ -713,7 +742,14 @@ public class AdminFlashcardStagingService {
         return normalizeForDuplicate(frontText) + "\n" + normalizeForDuplicate(backText);
     }
 
+    private boolean hasDuplicateKey(String duplicateKey) {
+        return duplicateKey != null && !duplicateKey.trim().isEmpty();
+    }
+
     private String normalizeForDuplicate(String value) {
+        if (value == null) {
+            return "";
+        }
         return value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 

@@ -893,6 +893,57 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void approveRejectsStagingCardThatDuplicatesCurrentFlashcard() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet), "draft", 0);
+        FlashcardCard currentCard = flashcardCard(flashcardSet, " front   0 ", "BACK 0");
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(stagingCardRepository.findByIdIn(List.of(card.getId()))).thenReturn(List.of(card));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(currentCard));
+
+        assertThatThrownBy(() -> service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(List.of(card.getId()))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+                    assertThat(exception.getMessage()).contains("Duplicate staging card");
+                });
+
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void approveRejectsDuplicateStagingCardsInSameRequest() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingBatch batch = stagingBatch(flashcardSet);
+        FlashcardStagingCard first = stagingCard(batch, "draft", 0);
+        FlashcardStagingCard second = stagingCard(batch, "draft", 1);
+        second.setFrontText(" front   0 ");
+        second.setBackText("BACK 0");
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(stagingCardRepository.findByIdIn(List.of(first.getId(), second.getId()))).thenReturn(List.of(second, first));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(List.of(first.getId(), second.getId()))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+                    assertThat(exception.getMessage()).contains("Duplicate staging cards");
+                });
+
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void listStagingReturnsDraftAndApprovedBatchesForCurrentSet() {
         FlashcardSet flashcardSet = flashcardSet();
         FlashcardStagingBatch draftBatch = stagingBatch(flashcardSet);
@@ -1149,6 +1200,18 @@ class AdminFlashcardStagingServiceTest {
         card.setBackText("Back " + sortOrder);
         card.setStatus(status);
         card.setSortOrder(sortOrder);
+        card.setCreatedAt(Instant.now());
+        card.setUpdatedAt(Instant.now());
+        return card;
+    }
+
+    private FlashcardCard flashcardCard(FlashcardSet flashcardSet, String frontText, String backText) {
+        FlashcardCard card = new FlashcardCard();
+        card.setId(UUID.randomUUID());
+        card.setFlashcardSet(flashcardSet);
+        card.setFrontText(frontText);
+        card.setBackText(backText);
+        card.setOrderIndex(0);
         card.setCreatedAt(Instant.now());
         card.setUpdatedAt(Instant.now());
         return card;
