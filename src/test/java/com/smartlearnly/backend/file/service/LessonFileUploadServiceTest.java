@@ -91,4 +91,40 @@ class LessonFileUploadServiceTest {
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
         verify(fileStorageService, never()).store(any(), any(), any(), any());
     }
+
+    @Test
+    void uploadMaterialShouldAcceptAudioFiles() {
+        when(fileStorageService.store(eq("lesson-materials"), any(), any(), eq(CONTENT)))
+                .thenAnswer(invocation -> storedFile(invocation.getArgument(1), invocation.getArgument(2)));
+
+        LessonFileUploadResponse response = lessonFileUploadService.uploadMaterial(
+                new MockMultipartFile("file", "listening.m4a", "audio/mp4", CONTENT)
+        );
+
+        assertThat(response.objectPath()).matches("\\d{4}/\\d{2}/[0-9a-f-]+-listening\\.m4a");
+        assertThat(response.fileName()).isEqualTo("listening.m4a");
+    }
+
+    @Test
+    void uploadResourceShouldAcceptAudioFiles() {
+        when(fileStorageService.store(eq("lesson-resources"), any(), any(), eq(CONTENT)))
+                .thenAnswer(invocation -> storedFile(invocation.getArgument(1), invocation.getArgument(2)));
+
+        LessonFileUploadResponse response = lessonFileUploadService.uploadResource(
+                new MockMultipartFile("file", "listening.wav", "audio/wav", CONTENT)
+        );
+
+        assertThat(response.objectPath()).matches("\\d{4}/\\d{2}/[0-9a-f-]+-listening\\.wav");
+        assertThat(response.fileName()).isEqualTo("listening.wav");
+    }
+
+    private FileStorageService.StoredFile storedFile(String path, String contentType) {
+        return new FileStorageService.StoredFile(
+                "https://example.test/" + path,
+                path,
+                path.substring(path.lastIndexOf('/') + 1),
+                contentType,
+                CONTENT.length
+        );
+    }
 }

@@ -2,11 +2,11 @@ package com.smartlearnly.backend.hls.service;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.hls.config.HlsProperties;
 import com.smartlearnly.backend.hls.dto.HlsProcessingCallbackRequest;
 import com.smartlearnly.backend.hls.entity.HlsLesson;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
-import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import java.time.Instant;
 import java.util.UUID;
@@ -20,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class HlsProcessingStateService {
     private final HlsLessonRepository hlsRepository;
     private final LessonRepository lessonRepository;
+    // Hỗ trợ curriculum-versioned lesson: HLS pipeline có thể được kích hoạt từ trainer edit
+    // trên `curriculum_lessons`, nên phải lookup + update ở cả 2 bảng.
+    private final CurriculumLessonRepository curriculumLessonRepository;
     private final HlsProperties properties;
 
     public record ProcessingReservation(boolean started, UUID jobId, String sourceKey,
@@ -82,7 +85,7 @@ public class HlsProcessingStateService {
 
     @Transactional
     public void applyCallback(HlsProcessingCallbackRequest request) {
-        Lesson lesson = lockLesson(request.lessonId());
+        assertLessonExists(request.lessonId());
         HlsLesson hls = current(request.lessonId(), request.jobId());
         if (!request.isReady()) {
             if ("failed".equals(hls.getHlsStatus()))
@@ -110,8 +113,16 @@ public class HlsProcessingStateService {
         hls.setErrorMessage(null);
         hls.setProcessingCompletedAt(Instant.now());
         hlsRepository.save(hls);
-        lesson.setVideoUrl(prefix + "/master.m3u8");
-        lessonRepository.save(lesson);
+        String masterPlaylist = prefix + "/master.m3u8";
+        // Ghi videoUrl vào bảng thực chứa lesson (legacy hoặc curriculum).
+        lessonRepository.findByIdForUpdate(request.lessonId()).ifPresent(l -> {
+            l.setVideoUrl(masterPlaylist);
+            lessonRepository.save(l);
+        });
+        curriculumLessonRepository.findById(request.lessonId()).ifPresent(l -> {
+            l.setVideoUrl(masterPlaylist);
+            curriculumLessonRepository.save(l);
+        });
     }
 
     private void fail(HlsLesson hls, String error) {
@@ -128,9 +139,18 @@ public class HlsProcessingStateService {
                 h.getProcessingOutputPrefix(), h.getHlsStatus(), h.getR2BasePath(), message);
     }
 
-    private Lesson lockLesson(UUID id) {
-        return lessonRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson not found: " + id));
+    // Với 3 caller khác của lockLesson (reserveGithubJob / reserveLocalJob / reserveExistingJob),
+    // ta chỉ cần lesson tồn tại — không cần entity. Đổi sang assertion tren cả 2 bảng.
+    private void assertLessonExists(UUID id) {
+        if (lessonRepository.findById(id).isEmpty()
+                && curriculumLessonRepository.findById(id).isEmpty()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson not found: " + id);
+        }
+    }
+
+    // Giữ tên cũ cho 3 callsite: reserveGithubJob / reserveLocalJob / reserveExistingJob.
+    private void lockLesson(UUID id) {
+        assertLessonExists(id);
     }
 
     private HlsLesson current(UUID lesson, UUID job) {

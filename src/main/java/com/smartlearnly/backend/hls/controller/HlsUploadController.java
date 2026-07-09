@@ -32,7 +32,7 @@ public class HlsUploadController {
      * Body: multipart/form-data with 'video' file and 'lessonId' field
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<HlsUploadService.UploadResponse>> uploadVideo(
             @RequestParam("lessonId") UUID lessonId,
             @RequestParam(value = "video", required = false) MultipartFile videoFile,
@@ -61,7 +61,7 @@ public class HlsUploadController {
      * GET /api/v1/hls/upload/{lessonId}/status
      */
     @GetMapping("/{lessonId}/status")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<HlsUploadService.ProcessingStatus>> getStatus(
             @PathVariable UUID lessonId
     ) {
@@ -75,7 +75,7 @@ public class HlsUploadController {
      * DELETE /api/v1/hls/upload/{lessonId}
      */
     @DeleteMapping("/{lessonId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<Void>> deleteVideo(@PathVariable UUID lessonId) {
         hlsUploadService.deleteHlsVideo(lessonId);
         return ResponseEntity.ok(ApiResponse.success("HLS video deleted successfully", null));
@@ -87,7 +87,7 @@ public class HlsUploadController {
      * GET /api/v1/hls/upload/health
      */
     @GetMapping("/health")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<HealthCheckResponse>> healthCheck() {
         boolean ffmpegAvailable = hlsProperties.usesLocalProcessing()
                 && videoProcessingService.isFfmpegAvailable();

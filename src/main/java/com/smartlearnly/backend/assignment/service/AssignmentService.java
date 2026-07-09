@@ -8,7 +8,12 @@ import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionReposi
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassAdminProjection;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
@@ -25,9 +30,13 @@ public class AssignmentService {
     private final ClassOfferingRepository classOfferingRepository;
     private final CurrentUserService currentUserService;
     private final AssignmentSubmissionRepository assignmentSubmissionRepository;
+    private final CurriculumResolutionService curriculumResolutionService;
+    private final CurriculumLessonRepository curriculumLessonRepository;
 
     public AssignmentModel.Response createAssignment(
             AssignmentModel.CreateRequest request) {
+
+        validateLessonForClass(request.getClassId(), request.getLessonId());
 
         Assignment assignment = new Assignment();
 
@@ -111,7 +120,10 @@ public class AssignmentService {
                         new EntityNotFoundException("Assignment not found"));
 
         if (request.getTitle() != null) assignment.setTitle(request.getTitle());
-        if (request.getLessonId() != null) assignment.setLessonId(request.getLessonId());
+        if (request.getLessonId() != null) {
+            validateLessonForClass(assignment.getClassId(), request.getLessonId());
+            assignment.setLessonId(request.getLessonId());
+        }
         if (request.getDescription() != null) assignment.setDescription(request.getDescription());
         assignment.setInstructionFileUrl(request.getInstructionFileUrl());
         assignment.setInstructionFileName(request.getInstructionFileName());
@@ -170,6 +182,26 @@ public class AssignmentService {
         response.setTestId(assignment.getTestId());
 
         return response;
+    }
+
+    private void validateLessonForClass(UUID classId, UUID lessonId) {
+        if (classId == null || lessonId == null) {
+            return;
+        }
+
+        ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
+        CurriculumResolution resolution = curriculumResolutionService.resolveClassEffectivePublished(
+                classOffering.getCourseId(),
+                classId);
+        boolean lessonBelongsToClass = curriculumLessonRepository
+                .findEffectiveLessonReference(resolution.version().getId(), lessonId)
+                .isPresent();
+        if (!lessonBelongsToClass) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Assignment lesson must belong to this class curriculum");
+        }
     }
 
     private UUID resolveCourseId(UUID classId) {

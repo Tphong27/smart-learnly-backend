@@ -3,6 +3,9 @@ package com.smartlearnly.backend.hls.service;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.enrollment.entity.CourseEnrollment;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
@@ -26,8 +29,14 @@ public class HlsAccessService {
     private static final String ROLE_ADMIN = "ADMIN";
 
     private final LessonRepository lessonRepository;
+    // Trainee xem video HLS thuộc CurriculumLesson (class draft/published) — cần lookup ở bảng này.
+    private final CurriculumLessonRepository curriculumLessonRepository;
+    private final CourseRepository courseRepository;
     private final CourseEnrollmentRepository courseEnrollmentRepository;
     private final UserRepository userRepository;
+
+    /** View gọn cho lesson bất kể nguồn (legacy `lessons` hoặc `curriculum_lessons`). */
+    private record LessonAccessInfo(UUID courseId, boolean preview) {}
 
     /**
      * Checks if a user has access to view a lesson's video.
@@ -44,48 +53,65 @@ public class HlsAccessService {
             return checkPreviewAccess(lessonId);
         }
 
-        // Get user and lesson
-        Optional<UserAccount> userOpt = userRepository.findByIdAndDeletedAtIsNull(userId);
-        Optional<Lesson> lessonOpt = lessonRepository.findById(lessonId);
-
+        Optional<LessonAccessInfo> lessonOpt = resolveLessonAccess(lessonId);
         if (lessonOpt.isEmpty()) {
             log.debug("Lesson not found");
             return false;
         }
+        LessonAccessInfo lesson = lessonOpt.get();
 
-        Lesson lesson = lessonOpt.get();
+        Optional<UserAccount> userOpt = userRepository.findByIdAndDeletedAtIsNull(userId);
         if (userOpt.isEmpty()) {
-            return Boolean.TRUE.equals(lesson.getPreview());
+            return lesson.preview();
         }
 
         UserAccount user = userOpt.get();
 
-        // Check admin access
+        // Admin bỏ qua mọi check.
         if (ROLE_ADMIN.equalsIgnoreCase(user.getRole())) {
             log.debug("Admin access granted for user={}, lesson={}", userId, lessonId);
             return true;
         }
 
-        // Check instructor access (via course)
-        if (checkInstructorAccess(user, lesson.getCourse())) {
+        Course course = courseRepository.findByIdAndDeletedAtIsNull(lesson.courseId()).orElse(null);
+        if (course != null && checkInstructorAccess(user, course)) {
             log.debug("Instructor access granted for user={}, lesson={}", userId, lessonId);
             return true;
         }
 
-        // Check enrollment
-        if (checkEnrollment(userId, lesson.getCourse().getId())) {
+        if (checkEnrollment(userId, lesson.courseId())) {
             log.debug("Enrollment access granted for user={}, lesson={}", userId, lessonId);
             return true;
         }
 
-        // Check preview access
-        if (Boolean.TRUE.equals(lesson.getPreview())) {
+        if (lesson.preview()) {
             log.debug("Preview access granted for user={}, lesson={}", userId, lessonId);
             return true;
         }
 
         log.debug("Access denied for user={}, lesson={}", userId, lessonId);
         return false;
+    }
+
+    /**
+     * Tra lesson từ cả 2 bảng — trả về info tối thiểu cần cho access check.
+     */
+    private Optional<LessonAccessInfo> resolveLessonAccess(UUID lessonId) {
+        Optional<Lesson> legacy = lessonRepository.findById(lessonId);
+        if (legacy.isPresent()) {
+            Lesson l = legacy.get();
+            UUID courseId = l.getCourse() != null ? l.getCourse().getId() : null;
+            return Optional.of(new LessonAccessInfo(courseId, Boolean.TRUE.equals(l.getPreview())));
+        }
+        Optional<CurriculumLesson> versioned = curriculumLessonRepository.findById(lessonId);
+        if (versioned.isPresent()) {
+            CurriculumLesson l = versioned.get();
+            UUID courseId = l.getSection() != null && l.getSection().getCurriculumVersion() != null
+                    ? l.getSection().getCurriculumVersion().getCourseId()
+                    : null;
+            return Optional.of(new LessonAccessInfo(courseId, Boolean.TRUE.equals(l.getPreview())));
+        }
+        return Optional.empty();
     }
 
     /**
@@ -103,11 +129,7 @@ public class HlsAccessService {
      */
     @Transactional(readOnly = true)
     public boolean checkPreviewAccess(UUID lessonId) {
-        Optional<Lesson> lessonOpt = lessonRepository.findById(lessonId);
-        if (lessonOpt.isEmpty()) {
-            return false;
-        }
-        return Boolean.TRUE.equals(lessonOpt.get().getPreview());
+        return resolveLessonAccess(lessonId).map(LessonAccessInfo::preview).orElse(false);
     }
 
     /**
@@ -143,8 +165,15 @@ public class HlsAccessService {
      */
     @Transactional(readOnly = true)
     public Optional<Course> getCourseForLesson(UUID lessonId) {
-        return lessonRepository.findById(lessonId)
-                .map(Lesson::getCourse);
+        Optional<Course> legacyCourse = lessonRepository.findById(lessonId).map(Lesson::getCourse);
+        if (legacyCourse.isPresent()) {
+            return legacyCourse;
+        }
+        return curriculumLessonRepository.findById(lessonId)
+                .map(l -> l.getSection() != null && l.getSection().getCurriculumVersion() != null
+                        ? l.getSection().getCurriculumVersion().getCourseId()
+                        : null)
+                .flatMap(id -> id == null ? Optional.empty() : courseRepository.findByIdAndDeletedAtIsNull(id));
     }
 
 }
