@@ -30,15 +30,21 @@ public class TransactionQueryService {
         UUID userId = currentUserService.requireAuthenticatedUser().getId();
         Page<PaymentTransaction> transactions = paymentTransactionRepository.findByUserIdOrderByCreatedAtDesc(
                 userId,
-                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE))
-        );
-        return new PageResponse<>(
-                transactions.stream().map(this::toTransactionResponse).toList(),
-                transactions.getNumber(),
-                transactions.getSize(),
-                transactions.getTotalElements(),
-                transactions.getTotalPages()
-        );
+                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
+                
+        return toPageResponse(transactions);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<TransactionResponse> listAllTransactions(int page, int size) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        if (!isAdminOrTmo(actor)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "Only Admin or TMO can view all transactions");
+        }
+        Page<PaymentTransaction> transactions = paymentTransactionRepository.findAllByOrderByCreatedAtDesc(
+                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
+
+        return toPageResponse(transactions);
     }
 
     @Transactional(readOnly = true)
@@ -60,8 +66,16 @@ public class TransactionQueryService {
                 transaction.getAmount(),
                 transaction.getCurrency(),
                 transaction.getStatus().name(),
-                transaction.getPaidAt()
-        );
+                transaction.getPaidAt());
+    }
+
+    private PageResponse<TransactionResponse> toPageResponse(Page<PaymentTransaction> transactions) {
+        return new PageResponse<>(
+                transactions.stream().map(this::toTransactionResponse).toList(),
+                transactions.getNumber(),
+                transactions.getSize(),
+                transactions.getTotalElements(),
+                transactions.getTotalPages());
     }
 
     private TransactionResponse toTransactionResponse(PaymentTransaction transaction) {
@@ -75,8 +89,7 @@ public class TransactionQueryService {
                 transaction.getInvoiceNumber(),
                 transaction.getPaidAt(),
                 transaction.getExpiresAt(),
-                transaction.getCreatedAt()
-        );
+                transaction.getCreatedAt());
     }
 
     private boolean isAdminOrTmo(UserAccount user) {
