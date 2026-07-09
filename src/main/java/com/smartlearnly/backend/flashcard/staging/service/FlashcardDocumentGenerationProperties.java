@@ -19,7 +19,11 @@ public class FlashcardDocumentGenerationProperties {
     private String apiBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
     private String model = "gemini-3.5-flash";
     private Duration timeout = Duration.ofSeconds(60);
-    private int maxEmbeddedImages = 5;
+    private int maxEmbeddedImages = 2;
     private DataSize maxEmbeddedImageSize = DataSize.ofMegabytes(10);
+    private int maxRenderedPdfPages = 3;
+    private float pdfRenderDpi = 120F;
+    private DataSize maxRenderedPageImageSize = DataSize.ofMegabytes(5);
+    private float renderedPageJpegQuality = 0.78F;
     private List<String> allowedImageContentTypes = List.of("image/png", "image/jpeg", "image/webp");
 }
