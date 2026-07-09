@@ -30,22 +30,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Trainer flashcard CRUD scoped to a class-draft lesson. Mirrors admin
- * flashcard endpoints but every call verifies the associated lesson belongs
- * to the trainer's class draft curriculum. Sets are linked via the
- * {@code curriculum_lesson_id} column so master flashcards are untouched.
+ * Trainer flashcard CRUD scoped to a class-draft lesson. Every route is
+ * nested under the lesson so the ownership boundary is enforced end-to-end.
+ * Sets are linked via {@code curriculum_lesson_id} so master flashcards
+ * remain untouched.
  */
 @Validated
 @RestController
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'TMO')")
-@RequestMapping("/api/v1/trainer/classes/{classId}/curriculum")
+@RequestMapping("/api/v1/trainer/classes/{classId}/curriculum/lessons/{lessonId}/flashcards")
 @Tag(name = "Trainer Class Lesson Flashcards", description = "Trainer flashcard authoring APIs for class curriculum drafts")
 @SecurityRequirement(name = "bearerAuth")
 public class TrainerLessonFlashcardController {
     private final TrainerLessonFlashcardService trainerLessonFlashcardService;
 
-    @PostMapping("/lessons/{lessonId}/flashcards")
+    @PostMapping
     @Operation(summary = "Create flashcard set for a class-draft lesson")
     public ResponseEntity<ApiResponse<FlashcardLessonCreatedResponse>> createFlashcardSet(
             @PathVariable UUID classId,
@@ -54,12 +54,13 @@ public class TrainerLessonFlashcardController {
     ) {
         FlashcardLessonCreatedResponse response = trainerLessonFlashcardService.createFlashcardSet(classId, lessonId, request);
         URI location = URI.create("/api/v1/trainer/classes/" + classId
-                + "/curriculum/flashcards/set/" + response.setId());
+                + "/curriculum/lessons/" + lessonId
+                + "/flashcards/set/" + response.setId());
         return ResponseEntity.created(location)
                 .body(ApiResponse.success("Flashcard set created successfully", response));
     }
 
-    @GetMapping("/lessons/{lessonId}/flashcards/set")
+    @GetMapping("/set")
     @Operation(summary = "Get flashcard set attached to a class-draft lesson")
     public ApiResponse<FlashcardSetResponse> getSetByLesson(
             @PathVariable UUID classId,
@@ -71,88 +72,86 @@ public class TrainerLessonFlashcardController {
         );
     }
 
-    @GetMapping("/flashcards/set/{setId}")
-    @Operation(summary = "Get flashcard set")
-    public ApiResponse<FlashcardSetResponse> getSet(
-            @PathVariable UUID classId,
-            @PathVariable UUID setId
-    ) {
-        return ApiResponse.success(
-                "Flashcard set loaded successfully",
-                trainerLessonFlashcardService.getSet(classId, setId)
-        );
-    }
-
-    @PatchMapping("/flashcards/set/{setId}")
+    @PatchMapping("/set/{setId}")
     @Operation(summary = "Update flashcard set metadata")
     public ApiResponse<FlashcardSetResponse> updateSet(
             @PathVariable UUID classId,
+            @PathVariable UUID lessonId,
             @PathVariable UUID setId,
             @Valid @RequestBody UpdateFlashcardSetRequest request
     ) {
         return ApiResponse.success(
                 "Flashcard set updated successfully",
-                trainerLessonFlashcardService.updateSet(classId, setId, request)
+                trainerLessonFlashcardService.updateSet(classId, lessonId, setId, request)
         );
     }
 
-    @DeleteMapping("/flashcards/set/{setId}")
+    @DeleteMapping("/set/{setId}")
     @Operation(summary = "Delete flashcard set")
     public ApiResponse<Void> deleteSet(
             @PathVariable UUID classId,
+            @PathVariable UUID lessonId,
             @PathVariable UUID setId
     ) {
-        trainerLessonFlashcardService.deleteSet(classId, setId);
+        trainerLessonFlashcardService.deleteSet(classId, lessonId, setId);
         return ApiResponse.success("Flashcard set deleted successfully");
     }
 
-    @PostMapping("/flashcards/set/{setId}/cards")
+    @PostMapping("/set/{setId}/cards")
     @Operation(summary = "Add a flashcard card")
     public ResponseEntity<ApiResponse<FlashcardCardResponse>> addCard(
             @PathVariable UUID classId,
+            @PathVariable UUID lessonId,
             @PathVariable UUID setId,
             @Valid @RequestBody CreateFlashcardCardRequest request
     ) {
-        FlashcardCardResponse response = trainerLessonFlashcardService.addCard(classId, setId, request);
+        FlashcardCardResponse response = trainerLessonFlashcardService.addCard(classId, lessonId, setId, request);
         URI location = URI.create("/api/v1/trainer/classes/" + classId
-                + "/curriculum/flashcards/cards/" + response.id());
+                + "/curriculum/lessons/" + lessonId
+                + "/flashcards/set/" + setId
+                + "/cards/" + response.id());
         return ResponseEntity.created(location)
                 .body(ApiResponse.success("Flashcard card created successfully", response));
     }
 
-    @PatchMapping("/flashcards/cards/{cardId}")
+    @PatchMapping("/set/{setId}/cards/{cardId}")
     @Operation(summary = "Update a flashcard card")
     public ApiResponse<FlashcardCardResponse> updateCard(
             @PathVariable UUID classId,
+            @PathVariable UUID lessonId,
+            @PathVariable UUID setId,
             @PathVariable UUID cardId,
             @Valid @RequestBody UpdateFlashcardCardRequest request
     ) {
         return ApiResponse.success(
                 "Flashcard card updated successfully",
-                trainerLessonFlashcardService.updateCard(classId, cardId, request)
+                trainerLessonFlashcardService.updateCard(classId, lessonId, setId, cardId, request)
         );
     }
 
-    @DeleteMapping("/flashcards/cards/{cardId}")
+    @DeleteMapping("/set/{setId}/cards/{cardId}")
     @Operation(summary = "Delete a flashcard card")
     public ApiResponse<Void> deleteCard(
             @PathVariable UUID classId,
+            @PathVariable UUID lessonId,
+            @PathVariable UUID setId,
             @PathVariable UUID cardId
     ) {
-        trainerLessonFlashcardService.deleteCard(classId, cardId);
+        trainerLessonFlashcardService.deleteCard(classId, lessonId, setId, cardId);
         return ApiResponse.success("Flashcard card deleted successfully");
     }
 
-    @PatchMapping("/flashcards/set/{setId}/cards/reorder")
+    @PatchMapping("/set/{setId}/cards/reorder")
     @Operation(summary = "Reorder all flashcard cards")
     public ApiResponse<FlashcardSetResponse> reorderCards(
             @PathVariable UUID classId,
+            @PathVariable UUID lessonId,
             @PathVariable UUID setId,
             @Valid @RequestBody ReorderFlashcardCardsRequest request
     ) {
         return ApiResponse.success(
                 "Flashcard cards reordered successfully",
-                trainerLessonFlashcardService.reorderCards(classId, setId, request)
+                trainerLessonFlashcardService.reorderCards(classId, lessonId, setId, request)
         );
     }
 }

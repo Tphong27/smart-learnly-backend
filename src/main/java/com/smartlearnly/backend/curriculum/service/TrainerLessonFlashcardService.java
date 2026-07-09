@@ -37,9 +37,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Trainer-scoped flashcard authoring for class-draft curriculum lessons.
- * Each operation verifies the associated lesson belongs to the trainer's
- * class draft before touching flashcard rows. Sets are linked via the
- * {@code curriculum_lesson_id} column so master flashcards are unaffected.
+ * Every operation verifies the lesson belongs to the trainer's class draft
+ * AND that the flashcard set / card belongs to that lesson before touching
+ * database rows. Sets are linked via {@code curriculum_lesson_id} so master
+ * flashcards are unaffected.
  */
 @Service
 @RequiredArgsConstructor
@@ -84,19 +85,10 @@ public class TrainerLessonFlashcardService {
         return toSetResponse(lesson, flashcardSet, findActiveCards(flashcardSet.getId()));
     }
 
-    @Transactional(readOnly = true)
-    public FlashcardSetResponse getSet(UUID classId, UUID setId) {
-        FlashcardSet flashcardSet = requireSet(setId);
-        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForRead(
-                classId, flashcardSet.getCurriculumLessonId());
-        return toSetResponse(lesson, flashcardSet, findActiveCards(flashcardSet.getId()));
-    }
-
     @Transactional
-    public FlashcardSetResponse updateSet(UUID classId, UUID setId, UpdateFlashcardSetRequest request) {
-        FlashcardSet flashcardSet = requireSet(setId);
-        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(
-                classId, flashcardSet.getCurriculumLessonId());
+    public FlashcardSetResponse updateSet(UUID classId, UUID lessonId, UUID setId, UpdateFlashcardSetRequest request) {
+        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId);
+        FlashcardSet flashcardSet = requireSetForLesson(lesson.getId(), setId);
         if (request.title() != null) {
             String title = normalizeRequired(request.title(), "Flashcard set title is required");
             flashcardSet.setTitle(title);
@@ -111,9 +103,9 @@ public class TrainerLessonFlashcardService {
     }
 
     @Transactional
-    public void deleteSet(UUID classId, UUID setId) {
-        FlashcardSet flashcardSet = requireSet(setId);
-        trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, flashcardSet.getCurriculumLessonId());
+    public void deleteSet(UUID classId, UUID lessonId, UUID setId) {
+        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId);
+        FlashcardSet flashcardSet = requireSetForLesson(lesson.getId(), setId);
         Instant now = Instant.now();
         flashcardSet.setDeletedAt(now);
         List<FlashcardCard> activeCards = findActiveCards(setId);
@@ -123,9 +115,9 @@ public class TrainerLessonFlashcardService {
     }
 
     @Transactional
-    public FlashcardCardResponse addCard(UUID classId, UUID setId, CreateFlashcardCardRequest request) {
-        FlashcardSet flashcardSet = requireSet(setId);
-        trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, flashcardSet.getCurriculumLessonId());
+    public FlashcardCardResponse addCard(UUID classId, UUID lessonId, UUID setId, CreateFlashcardCardRequest request) {
+        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId);
+        FlashcardSet flashcardSet = requireSetForLesson(lesson.getId(), setId);
         FlashcardCard card = new FlashcardCard();
         card.setFlashcardSet(flashcardSet);
         card.setFrontText(normalizeNullable(request.frontText()));
@@ -142,10 +134,16 @@ public class TrainerLessonFlashcardService {
     }
 
     @Transactional
-    public FlashcardCardResponse updateCard(UUID classId, UUID cardId, UpdateFlashcardCardRequest request) {
-        FlashcardCard card = requireCard(cardId);
-        FlashcardSet flashcardSet = requireActiveSet(card.getFlashcardSet());
-        trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, flashcardSet.getCurriculumLessonId());
+    public FlashcardCardResponse updateCard(
+            UUID classId,
+            UUID lessonId,
+            UUID setId,
+            UUID cardId,
+            UpdateFlashcardCardRequest request
+    ) {
+        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId);
+        requireSetForLesson(lesson.getId(), setId);
+        FlashcardCard card = requireCardForSet(setId, cardId);
         if (request.frontText() != null) {
             card.setFrontText(normalizeNullable(request.frontText()));
         }
@@ -172,19 +170,23 @@ public class TrainerLessonFlashcardService {
     }
 
     @Transactional
-    public void deleteCard(UUID classId, UUID cardId) {
-        FlashcardCard card = requireCard(cardId);
-        FlashcardSet flashcardSet = requireActiveSet(card.getFlashcardSet());
-        trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, flashcardSet.getCurriculumLessonId());
+    public void deleteCard(UUID classId, UUID lessonId, UUID setId, UUID cardId) {
+        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId);
+        requireSetForLesson(lesson.getId(), setId);
+        FlashcardCard card = requireCardForSet(setId, cardId);
         card.setDeletedAt(Instant.now());
         flashcardCardRepository.save(card);
     }
 
     @Transactional
-    public FlashcardSetResponse reorderCards(UUID classId, UUID setId, ReorderFlashcardCardsRequest request) {
-        FlashcardSet flashcardSet = requireSet(setId);
-        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(
-                classId, flashcardSet.getCurriculumLessonId());
+    public FlashcardSetResponse reorderCards(
+            UUID classId,
+            UUID lessonId,
+            UUID setId,
+            ReorderFlashcardCardsRequest request
+    ) {
+        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId);
+        FlashcardSet flashcardSet = requireSetForLesson(lesson.getId(), setId);
         List<FlashcardCard> activeCards = findActiveCards(setId);
         Map<UUID, FlashcardCard> cardsById = activeCards.stream()
                 .collect(LinkedHashMap::new, (map, card) -> map.put(card.getId(), card), LinkedHashMap::putAll);
@@ -210,31 +212,30 @@ public class TrainerLessonFlashcardService {
                 .toList());
     }
 
-    private FlashcardSet requireSet(UUID setId) {
-        FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
-        if (flashcardSet.getCurriculumLessonId() == null) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found");
-        }
-        return flashcardSet;
-    }
-
-    private FlashcardSet requireActiveSet(FlashcardSet flashcardSet) {
-        if (flashcardSet == null || flashcardSet.getDeletedAt() != null
-                || flashcardSet.getCurriculumLessonId() == null) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found");
-        }
-        return flashcardSet;
-    }
-
-    private FlashcardCard requireCard(UUID cardId) {
-        return flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard card was not found"));
-    }
-
     private FlashcardSet requireSetByLesson(UUID curriculumLessonId) {
         return flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
+    }
+
+    private FlashcardSet requireSetForLesson(UUID curriculumLessonId, UUID setId) {
+        FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
+        if (!curriculumLessonId.equals(flashcardSet.getCurriculumLessonId())) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found");
+        }
+        return flashcardSet;
+    }
+
+    private FlashcardCard requireCardForSet(UUID setId, UUID cardId) {
+        FlashcardCard card = flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard card was not found"));
+        FlashcardSet flashcardSet = card.getFlashcardSet();
+        if (flashcardSet == null
+                || flashcardSet.getDeletedAt() != null
+                || !setId.equals(flashcardSet.getId())) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard card was not found");
+        }
+        return card;
     }
 
     private List<FlashcardCard> findActiveCards(UUID setId) {

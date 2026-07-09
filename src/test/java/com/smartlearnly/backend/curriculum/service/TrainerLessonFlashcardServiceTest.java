@@ -122,13 +122,16 @@ class TrainerLessonFlashcardServiceTest {
     @Test
     void addCardShouldRejectWhenBothSidesEmpty() {
         UUID setId = UUID.randomUUID();
+        CurriculumLesson lesson = lesson();
         FlashcardSet flashcardSet = new FlashcardSet();
         flashcardSet.setId(setId);
-        flashcardSet.setCurriculumLessonId(UUID.randomUUID());
+        flashcardSet.setCurriculumLessonId(lesson.getId());
+        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId)).thenReturn(lesson);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)).thenReturn(Optional.of(flashcardSet));
 
         assertThatThrownBy(() -> service.addCard(
                 classId,
+                lessonId,
                 setId,
                 new CreateFlashcardCardRequest(" ", null, " ", null, null, null, null)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -139,13 +142,12 @@ class TrainerLessonFlashcardServiceTest {
     @Test
     void addCardShouldPersistCardWhenOwnershipCheckPasses() {
         UUID setId = UUID.randomUUID();
-        UUID linkedLessonId = UUID.randomUUID();
+        CurriculumLesson lesson = lesson();
         FlashcardSet flashcardSet = new FlashcardSet();
         flashcardSet.setId(setId);
-        flashcardSet.setCurriculumLessonId(linkedLessonId);
+        flashcardSet.setCurriculumLessonId(lesson.getId());
+        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId)).thenReturn(lesson);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)).thenReturn(Optional.of(flashcardSet));
-        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, linkedLessonId))
-                .thenReturn(lesson());
         when(flashcardCardRepository.findMaxOrderIndexBySetId(setId)).thenReturn(-1);
         when(flashcardCardRepository.save(any(FlashcardCard.class))).thenAnswer(invocation -> {
             FlashcardCard card = invocation.getArgument(0);
@@ -157,6 +159,7 @@ class TrainerLessonFlashcardServiceTest {
 
         FlashcardCardResponse response = service.addCard(
                 classId,
+                lessonId,
                 setId,
                 new CreateFlashcardCardRequest("  Front  ", null, "  Back  ", null, null, null, null));
 
@@ -168,41 +171,36 @@ class TrainerLessonFlashcardServiceTest {
     @Test
     void deleteCardShouldSoftDelete() {
         UUID cardId = UUID.randomUUID();
-        UUID linkedLessonId = UUID.randomUUID();
+        UUID setId = UUID.randomUUID();
+        CurriculumLesson lesson = lesson();
         FlashcardSet flashcardSet = new FlashcardSet();
-        flashcardSet.setId(UUID.randomUUID());
-        flashcardSet.setCurriculumLessonId(linkedLessonId);
+        flashcardSet.setId(setId);
+        flashcardSet.setCurriculumLessonId(lesson.getId());
         FlashcardCard card = new FlashcardCard();
         card.setId(cardId);
         card.setFlashcardSet(flashcardSet);
+        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId)).thenReturn(lesson);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)).thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
-        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, linkedLessonId))
-                .thenReturn(lesson());
 
-        service.deleteCard(classId, cardId);
+        service.deleteCard(classId, lessonId, setId, cardId);
 
         assertThat(card.getDeletedAt()).isNotNull();
         verify(flashcardCardRepository).save(card);
     }
 
     @Test
-    void deleteCardShouldRejectSetFromDifferentLesson() {
+    void deleteCardShouldRejectWhenOwnershipFails() {
         UUID cardId = UUID.randomUUID();
-        UUID linkedLessonId = UUID.randomUUID();
-        FlashcardSet flashcardSet = new FlashcardSet();
-        flashcardSet.setId(UUID.randomUUID());
-        flashcardSet.setCurriculumLessonId(linkedLessonId);
-        FlashcardCard card = new FlashcardCard();
-        card.setId(cardId);
-        card.setFlashcardSet(flashcardSet);
-        when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
-        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, linkedLessonId))
+        UUID setId = UUID.randomUUID();
+        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId))
                 .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "Not authorised"));
 
-        assertThatThrownBy(() -> service.deleteCard(classId, cardId))
+        assertThatThrownBy(() -> service.deleteCard(classId, lessonId, setId, cardId))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
         verify(flashcardCardRepository, never()).save(any());
+        verifyNoInteractions(flashcardSetRepository);
     }
 
     @Test
