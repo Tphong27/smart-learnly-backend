@@ -7,8 +7,10 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationService.DocumentGenerationRequest;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClientResponseException;
 
 class GeminiFlashcardDocumentGenerationServiceTest {
     private final GeminiFlashcardDocumentGenerationService service =
@@ -44,7 +46,7 @@ class GeminiFlashcardDocumentGenerationServiceTest {
     void parseGenerationOutputStripsJsonFenceOnlyAsFallback() {
         String fenced = """
                 ```json
-                {"cards":[{"frontText":"API method?","backText":"POST","hint":null,"explanation":null,"sourceExcerpt":null}]}
+                {"cards":[{"frontText":"API method?","backText":"POST","hint":null,"explanation":null,"sourceExcerpt":"The document uses POST."}]}
                 ```
                 """;
 
@@ -59,10 +61,10 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         String json = """
                 {
                   "cards": [
-                    {"frontText":"What is HTTP?","backText":"A protocol.","hint":null,"explanation":null,"sourceExcerpt":null},
-                    {"frontText":" what  is http? ","backText":" a protocol. ","hint":null,"explanation":null,"sourceExcerpt":null},
-                    {"frontText":"What is REST?","backText":"An API architectural style.","hint":null,"explanation":null,"sourceExcerpt":null},
-                    {"frontText":"What is JSON?","backText":"A data format.","hint":null,"explanation":null,"sourceExcerpt":null}
+                    {"frontText":"What is HTTP?","backText":"A protocol.","hint":null,"explanation":null,"sourceExcerpt":"HTTP is a protocol."},
+                    {"frontText":" what  is http? ","backText":" a protocol. ","hint":null,"explanation":null,"sourceExcerpt":"HTTP is a protocol."},
+                    {"frontText":"What is REST?","backText":"An API architectural style.","hint":null,"explanation":null,"sourceExcerpt":"REST is an API architectural style."},
+                    {"frontText":"What is JSON?","backText":"A data format.","hint":null,"explanation":null,"sourceExcerpt":"JSON is a data format."}
                   ]
                 }
                 """;
@@ -72,6 +74,89 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         assertThat(result.candidates()).hasSize(2);
         assertThat(result.candidates()).extracting(candidate -> candidate.frontText())
                 .containsExactly("What is HTTP?", "What is REST?");
+    }
+
+    @Test
+    void parseGenerationOutputAllowsShortfallWhenDocumentOnlySupportsFewerCards() {
+        String json = """
+                {
+                  "cards": [
+                    {
+                      "frontText": "What does staging protect?",
+                      "backText": "It keeps draft flashcards separate until approval.",
+                      "hint": null,
+                      "explanation": null,
+                      "sourceExcerpt": "Draft cards stay separate until an admin approves them."
+                    }
+                  ]
+                }
+                """;
+
+        GenerationResult result = service.parseGenerationOutput(json, 10);
+
+        assertThat(result.candidates()).hasSize(1);
+    }
+
+    @Test
+    void parseGenerationOutputRejectsCardsWithoutClearSourceSupport() {
+        String json = """
+                {
+                  "cards": [
+                    {"frontText":"What is Spring Boot?","backText":"A Java framework.","hint":null,"explanation":null,"sourceExcerpt":null},
+                    {"frontText":"What is Docker?","backText":"A container platform.","hint":null,"explanation":null}
+                  ]
+                }
+                """;
+
+        assertThatThrownBy(() -> service.parseGenerationOutput(json, 10))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+                    assertThat(exception.getMessage()).contains("No usable flashcards");
+                });
+    }
+
+    @Test
+    void parseGenerationOutputClearsEnglishSourceExcerptForVietnameseTarget() {
+        String json = """
+                {
+                  "cards": [
+                    {
+                      "frontText": "Dịch vụ staging bảo vệ điều gì?",
+                      "backText": "Dịch vụ giữ thẻ nháp tách biệt cho đến khi được duyệt.",
+                      "hint": null,
+                      "explanation": null,
+                      "sourceExcerpt": "The staging service keeps draft cards separate from current flashcards."
+                    }
+                  ]
+                }
+                """;
+
+        GenerationResult result = service.parseGenerationOutput(json, 10, "vi");
+
+        assertThat(result.candidates()).hasSize(1);
+        assertThat(result.candidates().get(0).sourceExcerpt()).isNull();
+    }
+
+    @Test
+    void parseGenerationOutputClearsVietnameseSourceExcerptForEnglishTarget() {
+        String json = """
+                {
+                  "cards": [
+                    {
+                      "frontText": "What does staging protect?",
+                      "backText": "It keeps draft cards separate until approval.",
+                      "hint": null,
+                      "explanation": null,
+                      "sourceExcerpt": "Thẻ nháp được giữ riêng cho đến khi quản trị viên duyệt."
+                    }
+                  ]
+                }
+                """;
+
+        GenerationResult result = service.parseGenerationOutput(json, 10, "en");
+
+        assertThat(result.candidates()).hasSize(1);
+        assertThat(result.candidates().get(0).sourceExcerpt()).isNull();
     }
 
     @Test
@@ -97,7 +182,7 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         String json = """
                 {
                   "cards": [
-                    {"frontText":"%s","backText":"Answer","hint":null,"explanation":null,"sourceExcerpt":null}
+                    {"frontText":"%s","backText":"Answer","hint":null,"explanation":null,"sourceExcerpt":"Supported answer"}
                   ]
                 }
                 """.formatted("x".repeat(2001));
@@ -117,10 +202,36 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         assertThat(autoPrompt).contains("For Auto-detect, follow the main document language");
         assertThat(viPrompt).contains("Target language: Vietnamese");
         assertThat(viPrompt).contains("natural Vietnamese");
+        assertThat(viPrompt).contains("sourceExcerpt must also be Vietnamese");
         assertThat(enPrompt).contains("Target language: English");
         assertThat(enPrompt).contains("natural English");
+        assertThat(enPrompt).contains("sourceExcerpt must also be English");
+        assertThat(autoPrompt).contains("Maximum target cards: 10");
+        assertThat(autoPrompt).contains("fewer cards are correct");
+        assertThat(autoPrompt).contains("Every card must be grounded");
+        assertThat(autoPrompt).contains("Do not invent extra cards");
+        assertThat(autoPrompt).contains("Do not use outside knowledge, including Spring Boot knowledge");
+        assertThat(viPrompt).contains("set sourceExcerpt to null rather than mixing languages");
         assertThat(viPrompt).contains("Do not mix Vietnamese and English");
         assertThat(enPrompt).contains("Do not mix Vietnamese and English");
+    }
+
+    @Test
+    void providerLimitHttpErrorsUseFriendlyDocumentMessage() {
+        RestClientResponseException exception = new RestClientResponseException(
+                "Too Many Requests",
+                429,
+                "Too Many Requests",
+                null,
+                "{\"error\":\"too_many_requests\",\"message\":\"quota exceeded\"}".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8
+        );
+
+        BusinessException mapped = service.toProviderHttpException(exception);
+
+        assertThat(mapped.errorCode()).isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
+        assertThat(mapped.getMessage())
+                .isEqualTo("Document image reading is temporarily unavailable. Please try again later or use a text-based document.");
     }
 
     @Test
@@ -138,7 +249,7 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         assertThatThrownBy(() -> service.generate(request))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
                     assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
-                    assertThat(exception.getMessage()).contains("Scanned PDFs are not supported yet");
+                    assertThat(exception.getMessage()).contains("Scanned PDF pages could not be read");
                 });
     }
 

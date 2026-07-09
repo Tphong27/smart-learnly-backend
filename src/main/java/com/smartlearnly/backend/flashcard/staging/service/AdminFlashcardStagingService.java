@@ -256,6 +256,7 @@ public class AdminFlashcardStagingService {
         GenerationResult result = flashcardDocumentGenerationService.generate(new DocumentGenerationRequest(
                 extraction == null ? null : extraction.text(),
                 extraction == null ? List.of() : extraction.images(),
+                extraction == null ? List.of() : extraction.renderedPageImages(),
                 options.desiredCount(),
                 options.language(),
                 options.difficulty(),

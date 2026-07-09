@@ -29,6 +29,7 @@ import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingBatchRepository;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationService.DocumentGenerationRequest;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentImage;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GeneratedFlashcardCandidate;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
@@ -337,16 +338,23 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
-    void generateFromFileWithPdfExtractedTextCreatesDraftBatchAndCards() {
+    void generateFromFileWithPdfExtractedTextCreatesFewerCardsThanRequestedWhenSupportedContentIsLimited() {
         FlashcardSet flashcardSet = flashcardSet();
         UserAccount actor = actor();
         MockMultipartFile file = pdfFile();
+        List<DocumentImage> renderedPages = List.of(new DocumentImage(
+                "pdf-rendered-page-1.jpg",
+                "image/jpeg",
+                new byte[]{1, 2, 3}
+        ));
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(documentTextExtractionService.extract(file)).thenReturn(new DocumentTextExtractionResult(
                 "PDF",
                 "lesson.pdf",
-                longSourceText()
+                longSourceText(),
+                List.of(),
+                renderedPages
         ));
         when(flashcardDocumentGenerationService.generate(any())).thenReturn(new GenerationResult(
                 "TEXT",
@@ -372,7 +380,7 @@ class AdminFlashcardStagingServiceTest {
         StagingBatchResponse response = service.generateFromFile(
                 flashcardSet.getId(),
                 file,
-                1,
+                5,
                 null,
                 "hard",
                 "RULE_BASED"
@@ -391,10 +399,16 @@ class AdminFlashcardStagingServiceTest {
         ArgumentCaptor<DocumentGenerationRequest> requestCaptor = ArgumentCaptor.forClass(DocumentGenerationRequest.class);
         verify(flashcardDocumentGenerationService).generate(requestCaptor.capture());
         assertThat(requestCaptor.getValue().documentText()).isEqualTo(longSourceText());
+        assertThat(requestCaptor.getValue().desiredCount()).isEqualTo(5);
         assertThat(requestCaptor.getValue().language()).isEqualTo("auto");
         assertThat(requestCaptor.getValue().difficulty()).isEqualTo("hard");
         assertThat(requestCaptor.getValue().sourceType()).isEqualTo("PDF");
         assertThat(requestCaptor.getValue().sourceName()).isEqualTo("lesson.pdf");
+        assertThat(requestCaptor.getValue().renderedPageImages()).hasSize(1);
+        ArgumentCaptor<List<FlashcardStagingCard>> cardsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(stagingCardRepository).saveAll(cardsCaptor.capture());
+        assertThat(cardsCaptor.getValue()).hasSize(1);
+        assertThat(cardsCaptor.getValue()).extracting(FlashcardStagingCard::getStatus).containsExactly("draft");
         verify(flashcardTextGenerationService, never()).generate(any());
         verify(flashcardCardRepository, never()).saveAll(anyList());
     }
@@ -502,7 +516,7 @@ class AdminFlashcardStagingServiceTest {
         ));
         when(flashcardDocumentGenerationService.generate(any())).thenThrow(new BusinessException(
                 ErrorCode.INVALID_REQUEST,
-                "Uploaded PDF does not contain enough readable text to create flashcards. Scanned PDFs are not supported yet."
+                "Uploaded PDF does not contain enough readable text to create flashcards. Scanned PDF pages could not be read."
         ));
 
         assertThatThrownBy(() -> service.generateFromFile(
