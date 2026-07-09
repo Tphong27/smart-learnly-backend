@@ -316,8 +316,23 @@ public class TrainerClassCurriculumService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class curriculum draft not found"));
         assertDraftVersionForClass(draft, classOffering.getCourseId(), classId);
 
+        // Archive bản PUBLISHED trước đó (nếu có) để không đụng unique constraint
+        // uq_curriculum_versions_published_class (chỉ cho phép 1 PUBLISHED per class_id).
+        Instant now = Instant.now();
+        if (binding.getPublishedVersionId() != null
+                && !binding.getPublishedVersionId().equals(draft.getId())) {
+            curriculumVersionRepository.findByIdForUpdate(binding.getPublishedVersionId())
+                    .ifPresent(previouslyPublished -> {
+                        previouslyPublished.setStatus(CurriculumStatus.ARCHIVED);
+                        previouslyPublished.setArchivedAt(now);
+                        curriculumVersionRepository.save(previouslyPublished);
+                    });
+            // flush ngay để unique index thấy bản cũ đã rời PUBLISHED trước khi promote draft.
+            curriculumVersionRepository.flush();
+        }
+
         draft.setStatus(CurriculumStatus.PUBLISHED);
-        draft.setPublishedAt(Instant.now());
+        draft.setPublishedAt(now);
         CurriculumVersion published = curriculumVersionRepository.save(draft);
 
         binding.setPublishedVersionId(published.getId());
