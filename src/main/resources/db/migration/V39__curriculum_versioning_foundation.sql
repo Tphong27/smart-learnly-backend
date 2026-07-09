@@ -449,7 +449,7 @@ unambiguous_classes AS (
     SELECT
         student_id,
         course_id,
-        min(class_id) AS class_id,
+        min(class_id::text)::uuid AS class_id,
         count(*) AS class_count
     FROM candidate_classes
     GROUP BY student_id, course_id
