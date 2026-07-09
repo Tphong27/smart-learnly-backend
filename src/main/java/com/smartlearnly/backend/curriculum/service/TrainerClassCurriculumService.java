@@ -263,6 +263,46 @@ public class TrainerClassCurriculumService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public LessonResponse getLesson(UUID classId, UUID lessonId) {
+        CurriculumLesson lesson = requireOwnedClassLessonForRead(classId, lessonId);
+        return mapper.toLessonResponse(lesson);
+    }
+
+    /**
+     * Verify the class is owned by the current trainer (or bypassed by admin) and that
+     * the lesson belongs to the class DRAFT curriculum. Use this for mutating operations
+     * inside a trainer's class curriculum editor.
+     */
+    @Transactional(readOnly = true)
+    public CurriculumLesson requireOwnedClassLessonForWrite(UUID classId, UUID lessonId) {
+        CurriculumVersion draft = requireDraft(classId);
+        return requireDraftLesson(lessonId, draft.getId());
+    }
+
+    /**
+     * Verify the class is owned by the current trainer (or bypassed by admin) and that
+     * the lesson belongs to either the class DRAFT or the class PUBLISHED curriculum
+     * (whichever is active). Use this for read-only lookups.
+     */
+    @Transactional(readOnly = true)
+    public CurriculumLesson requireOwnedClassLessonForRead(UUID classId, UUID lessonId) {
+        UserAccount trainer = currentUserService.requireAuthenticatedUser();
+        ClassOffering classOffering = requireOwnedClass(classId, trainer.getId());
+        CurriculumResolution resolution = resolutionService.resolveTrainerEditing(
+                classOffering.getCourseId(),
+                classId,
+                trainer.getId()
+        );
+        CurriculumVersion active = resolution.version();
+        CurriculumLesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson was not found"));
+        if (!active.getId().equals(lesson.getCurriculumVersionId())) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson was not found");
+        }
+        return lesson;
+    }
+
     @Transactional
     public ClassCurriculumEditorResponse publishDraft(UUID classId) {
         UserAccount trainer = currentUserService.requireAuthenticatedUser();

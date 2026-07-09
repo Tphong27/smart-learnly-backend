@@ -137,6 +137,18 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    @GetMapping("/lessons/{lessonId}")
+    @Operation(summary = "Get draft/published curriculum lesson detail")
+    public ApiResponse<LessonResponse> getLesson(
+            @PathVariable UUID classId,
+            @PathVariable UUID lessonId
+    ) {
+        return ApiResponse.success(
+                "Lesson loaded successfully",
+                trainerClassCurriculumService.getLesson(classId, lessonId)
+        );
+    }
+
     @PutMapping("/lessons/{lessonId}")
     @Operation(summary = "Update draft curriculum lesson")
     public ApiResponse<LessonResponse> updateLesson(
