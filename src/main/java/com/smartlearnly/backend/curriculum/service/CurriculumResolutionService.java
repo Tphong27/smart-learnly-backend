@@ -4,6 +4,7 @@ import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
 import com.smartlearnly.backend.curriculum.entity.ClassCurriculumBinding;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
@@ -31,6 +32,7 @@ public class CurriculumResolutionService {
     private final ClassCurriculumBindingRepository bindingRepository;
     private final ClassOfferingRepository classOfferingRepository;
     private final ClassEnrollmentRepository classEnrollmentRepository;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
 
     @Transactional(readOnly = true)
     public CurriculumResolution resolvePublicMaster(UUID courseId) {
@@ -161,9 +163,18 @@ public class CurriculumResolutionService {
     }
 
     private void requireTrainerOwner(ClassOffering classOffering, UUID trainerId) {
+        if (isAdministrator()) {
+            return;
+        }
         if (trainerId == null || !trainerId.equals(classOffering.getTrainerId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "Trainer is not assigned to this class");
         }
+    }
+
+    private boolean isAdministrator() {
+        return authenticatedUserResolver.resolve()
+                .map(user -> user.hasRole("ADMIN") || user.hasRole("TMO"))
+                .orElse(false);
     }
 
     private void requireClassEnrollment(UUID courseId, UUID classId, UUID studentId) {

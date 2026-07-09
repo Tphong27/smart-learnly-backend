@@ -13,7 +13,6 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.ColumnTransformer;
 
 @Getter
 @Setter
@@ -41,8 +40,7 @@ public class ClassCurriculumBinding {
     private UUID publishedVersionId;
 
     @Convert(converter = CurriculumCustomizationStateConverter.class)
-    @Column(name = "customization_state", nullable = false, columnDefinition = "curriculum_customization_state")
-    @ColumnTransformer(write = "?::curriculum_customization_state")
+    @Column(name = "customization_state", nullable = false, length = 32)
     private CurriculumCustomizationState customizationState;
 
     @Column(name = "created_at", nullable = false, updatable = false)

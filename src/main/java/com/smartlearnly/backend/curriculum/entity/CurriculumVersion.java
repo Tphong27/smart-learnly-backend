@@ -19,7 +19,6 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.ColumnTransformer;
 
 @Getter
 @Setter
@@ -38,13 +37,11 @@ public class CurriculumVersion {
     private UUID classId;
 
     @Convert(converter = CurriculumScopeConverter.class)
-    @Column(nullable = false, columnDefinition = "curriculum_scope")
-    @ColumnTransformer(write = "?::curriculum_scope")
+    @Column(nullable = false, length = 32)
     private CurriculumScope scope;
 
     @Convert(converter = CurriculumStatusConverter.class)
-    @Column(nullable = false, columnDefinition = "curriculum_status")
-    @ColumnTransformer(write = "?::curriculum_status")
+    @Column(nullable = false, length = 32)
     private CurriculumStatus status;
 
     @Column(name = "version_number", nullable = false)

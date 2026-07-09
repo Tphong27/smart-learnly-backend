@@ -8,6 +8,7 @@ import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
 import com.smartlearnly.backend.curriculum.entity.ClassCurriculumBinding;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
@@ -40,6 +41,8 @@ class CurriculumResolutionServiceTest {
     private ClassOfferingRepository classOfferingRepository;
     @Mock
     private ClassEnrollmentRepository classEnrollmentRepository;
+    @Mock
+    private AuthenticatedUserResolver authenticatedUserResolver;
 
     @InjectMocks
     private CurriculumResolutionService curriculumResolutionService;

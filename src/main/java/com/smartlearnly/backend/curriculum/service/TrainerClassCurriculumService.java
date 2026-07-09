@@ -4,6 +4,7 @@ import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.dto.LessonRequest;
 import com.smartlearnly.backend.course.dto.LessonResourceRequest;
@@ -57,6 +58,7 @@ public class TrainerClassCurriculumService {
     private final CurriculumCloningService cloningService;
     private final CurriculumDtoMapper mapper;
     private final CurrentUserService currentUserService;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
     private final QuizContentValidator quizContentValidator;
 
     @Transactional(readOnly = true)
@@ -301,10 +303,19 @@ public class TrainerClassCurriculumService {
     private ClassOffering requireOwnedClass(UUID classId, UUID trainerId) {
         ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class not found"));
+        if (isAdministrator()) {
+            return classOffering;
+        }
         if (trainerId == null || !trainerId.equals(classOffering.getTrainerId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "Trainer is not assigned to this class");
         }
         return classOffering;
+    }
+
+    private boolean isAdministrator() {
+        return authenticatedUserResolver.resolve()
+                .map(user -> user.hasRole("ADMIN") || user.hasRole("TMO"))
+                .orElse(false);
     }
 
     private ClassCurriculumBinding requireBindingForUpdate(UUID classId, UUID courseId) {
