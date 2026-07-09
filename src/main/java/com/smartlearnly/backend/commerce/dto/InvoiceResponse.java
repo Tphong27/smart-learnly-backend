@@ -11,6 +11,9 @@ public record InvoiceResponse(
         BigDecimal amount,
         String currency,
         String status,
-        Instant paidAt
+        Instant paidAt,
+        String traineeName,
+        String traineeEmail,
+        String traineePhoneNumber
 ) {
 }

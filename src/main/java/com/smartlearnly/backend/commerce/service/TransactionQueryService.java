@@ -10,6 +10,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.user.repository.UserRepository;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -24,6 +25,7 @@ public class TransactionQueryService {
 
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final CurrentUserService currentUserService;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<TransactionResponse> listMyTransactions(int page, int size) {
@@ -31,7 +33,7 @@ public class TransactionQueryService {
         Page<PaymentTransaction> transactions = paymentTransactionRepository.findByUserIdOrderByCreatedAtDesc(
                 userId,
                 PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
-                
+
         return toPageResponse(transactions);
     }
 
@@ -50,14 +52,20 @@ public class TransactionQueryService {
     @Transactional(readOnly = true)
     public InvoiceResponse getInvoice(UUID transactionId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
+
         PaymentTransaction transaction = paymentTransactionRepository.findById(transactionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Transaction was not found"));
+
         if (!transaction.getUserId().equals(actor.getId()) && !isAdminOrTmo(actor)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "Invoice access is denied");
         }
+
         if (transaction.getStatus() != TransactionStatus.SUCCESS || transaction.getInvoiceNumber() == null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Invoice is not available yet");
         }
+
+        UserAccount trainee = userRepository.findById(transaction.getUserId())
+                .orElse(null);
 
         return new InvoiceResponse(
                 transaction.getId(),
@@ -66,7 +74,10 @@ public class TransactionQueryService {
                 transaction.getAmount(),
                 transaction.getCurrency(),
                 transaction.getStatus().name(),
-                transaction.getPaidAt());
+                transaction.getPaidAt(),
+                trainee == null ? null : trainee.getFullName(),
+                trainee == null ? null : trainee.getEmail(),
+                trainee == null ? null : trainee.getPhoneNumber());
     }
 
     private PageResponse<TransactionResponse> toPageResponse(Page<PaymentTransaction> transactions) {
