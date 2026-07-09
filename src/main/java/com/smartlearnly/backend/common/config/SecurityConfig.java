@@ -143,6 +143,9 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "TMO")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/users", "/api/v1/admin/users/**")
                         .hasAnyRole("ADMIN", "TMO")
+                        // Uploads: trainer cần upload material/resource/media khi tuỳ biến class curriculum.
+                        .requestMatchers("/api/v1/admin/uploads/**")
+                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
