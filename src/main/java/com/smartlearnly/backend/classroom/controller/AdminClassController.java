@@ -33,7 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+// Class-level: mọi endpoint yêu cầu đăng nhập; role được kiểm tra chi tiết ở từng method.
+@PreAuthorize("isAuthenticated()")
 @RequestMapping("/api/v1/admin/classes")
 @Tag(name = "Admin Classes", description = "Admin and TMO class management APIs")
 @SecurityRequirement(name = "bearerAuth")
@@ -70,6 +71,7 @@ public class AdminClassController {
 
     @PostMapping
     @Operation(summary = "Create a class")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     public ResponseEntity<ApiResponse<ClassResponse>> create(
             @Valid @RequestBody CreateClassRequest request) {
         ClassResponse created = classAdminService.create(request);
@@ -79,6 +81,7 @@ public class AdminClassController {
 
     @PatchMapping("/{classId}")
     @Operation(summary = "Update selected class fields")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     public ApiResponse<ClassResponse> update(
             @PathVariable UUID classId,
             @Valid @RequestBody UpdateClassRequest request) {
@@ -87,12 +90,14 @@ public class AdminClassController {
 
     @PostMapping("/{classId}/cancel")
     @Operation(summary = "Cancel a class without deleting history")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     public ApiResponse<ClassResponse> cancel(@PathVariable UUID classId) {
         return ApiResponse.success("Class cancelled successfully", classAdminService.cancel(classId));
     }
 
     @DeleteMapping("/{classId}")
     @Operation(summary = "Soft delete a class")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     public ApiResponse<Void> delete(@PathVariable UUID classId) {
         classAdminService.softDelete(classId);
         return ApiResponse.success("Class deleted successfully");

@@ -12,7 +12,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinColumns;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
@@ -38,14 +37,14 @@ public class CurriculumLesson {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "curriculum_version_id", nullable = false, insertable = false, updatable = false)
+    // FK composite (curriculum_section_id, curriculum_version_id) → curriculum_sections(id, curriculum_version_id).
+    // Cột version_id được ghi bằng tay trong @PrePersist/@PreUpdate từ section.curriculumVersion để tránh xung đột
+    // giữa Hibernate composite JoinColumn (insertable=false gây null) và NOT NULL constraint của DB.
+    @Column(name = "curriculum_version_id", nullable = false)
     private UUID curriculumVersionId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumns({
-            @JoinColumn(name = "curriculum_section_id", referencedColumnName = "id", nullable = false),
-            @JoinColumn(name = "curriculum_version_id", referencedColumnName = "curriculum_version_id", nullable = false)
-    })
+    @JoinColumn(name = "curriculum_section_id", referencedColumnName = "id", nullable = false)
     private CurriculumSection section;
 
     @Column(name = "lesson_identity_id", nullable = false)
@@ -117,11 +116,19 @@ public class CurriculumLesson {
             createdAt = now;
         }
         updatedAt = now;
+        syncCurriculumVersionId();
     }
 
     @PreUpdate
     void preUpdate() {
         updatedAt = Instant.now();
+        syncCurriculumVersionId();
+    }
+
+    private void syncCurriculumVersionId() {
+        if (section != null && section.getCurriculumVersion() != null) {
+            curriculumVersionId = section.getCurriculumVersion().getId();
+        }
     }
 
     public void addResource(CurriculumLessonResource resource) {
