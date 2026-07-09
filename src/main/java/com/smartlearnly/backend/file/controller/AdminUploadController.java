@@ -20,7 +20,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+// Nới cho TRAINER để trainer có thể upload lesson material / resource / media
+// khi tùy biến curriculum của class draft.
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/uploads")
 @Tag(name = "Admin Uploads", description = "Administrator-managed upload APIs.")
 @SecurityRequirement(name = "bearerAuth")

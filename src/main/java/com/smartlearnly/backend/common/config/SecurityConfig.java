@@ -135,10 +135,17 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "SME")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/courses", "/api/v1/admin/courses/**")
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
+                        // GET class list/detail: mở cho ADMIN/TMO/SME/TRAINER để staff các role có thể duyệt lớp.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/classes", "/api/v1/admin/classes/**")
+                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+                        // Các thao tác write vẫn giữ ADMIN/TMO
                         .requestMatchers("/api/v1/admin/classes/**", "/api/v1/admin/classes")
                         .hasAnyRole("ADMIN", "TMO")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/users", "/api/v1/admin/users/**")
                         .hasAnyRole("ADMIN", "TMO")
+                        // Uploads: trainer cần upload material/resource/media khi tuỳ biến class curriculum.
+                        .requestMatchers("/api/v1/admin/uploads/**")
+                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

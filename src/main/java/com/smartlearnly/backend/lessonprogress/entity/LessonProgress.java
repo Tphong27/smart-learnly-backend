@@ -32,6 +32,12 @@ public class LessonProgress {
     @Column(name = "lesson_id", nullable = false)
     private UUID lessonId;
 
+    @Column(name = "class_id")
+    private UUID classId;
+
+    @Column(name = "lesson_identity_id")
+    private UUID lessonIdentityId;
+
     @Column(nullable = false)
     private boolean completed;
 

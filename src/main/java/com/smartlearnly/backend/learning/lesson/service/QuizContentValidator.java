@@ -20,7 +20,7 @@ public class QuizContentValidator {
     private static final String FILL_IN_THE_BLANK = "fill_in_the_blank";
     private static final Set<String> VALID_TYPES =
             Set.of(SINGLE_CHOICE, MULTIPLE_CHOICE, FILL_IN_THE_BLANK);
-    private static final Set<String> VALID_MEDIA_TYPES = Set.of("image", "video");
+    private static final Set<String> VALID_MEDIA_TYPES = Set.of("image", "video", "audio");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -180,7 +180,7 @@ public class QuizContentValidator {
         }
         String type = media.path("type").asText(null);
         if (type == null || !VALID_MEDIA_TYPES.contains(type)) {
-            throw invalid(label + " type must be image or video.");
+            throw invalid(label + " type must be image, video, or audio.");
         }
         if (!hasText(media, "url")) {
             throw invalid(label + " url is required.");
