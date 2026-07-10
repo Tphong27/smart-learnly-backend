@@ -18,6 +18,7 @@ import com.smartlearnly.backend.course.repository.CategoryRepository;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.course.service.CourseAccessService;
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.time.Instant;
@@ -42,23 +43,32 @@ public class CourseAdminService {
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final StorageProperties storageProperties;
+    private final CourseAccessService courseAccessService;
 
     @Transactional(readOnly = true)
     public PageResponse<CourseResponse> list(int page, int size) {
-        Page<Course> coursePage = courseRepository.findAllByDeletedAtIsNull(
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
-        );
+        Page<Course> coursePage;
+
+        if (courseAccessService.isCurrentUserTrainer()) {
+            UUID trainerId = courseAccessService.getCurrentUserId();
+
+            coursePage = courseRepository.findAllAssignedToTrainer(trainerId, PageRequest.of(page, size));
+        } else {
+            coursePage = courseRepository.findAllByDeletedAtIsNull(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+        }
+
         return new PageResponse<>(
                 coursePage.getContent().stream().map(CourseDtoMapper::toCourseResponse).toList(),
                 coursePage.getNumber(),
                 coursePage.getSize(),
                 coursePage.getTotalElements(),
-                coursePage.getTotalPages()
-        );
+                coursePage.getTotalPages());
     }
 
     @Transactional(readOnly = true)
     public CourseResponse get(UUID courseId) {
+        courseAccessService.requireReadableCourse(courseId);
+
         return CourseDtoMapper.toCourseResponse(findCourse(courseId));
     }
 
@@ -90,6 +100,8 @@ public class CourseAdminService {
 
     @Transactional
     public CourseResponse update(UUID courseId, UpdateCourseRequest request) {
+        courseAccessService.requireUpdatableCourse(courseId);
+
         if (!request.hasAnyField()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one course field must be provided");
         }
@@ -151,18 +163,16 @@ public class CourseAdminService {
             AuditAction action = saved.getStatus() == CourseStatus.PUBLISHED
                     ? AuditAction.COURSE_PUBLISHED
                     : saved.getStatus() == CourseStatus.INACTIVE
-                    ? AuditAction.COURSE_DEACTIVATED
-                    : AuditAction.COURSE_UPDATED;
+                            ? AuditAction.COURSE_DEACTIVATED
+                            : AuditAction.COURSE_UPDATED;
             UserAccount actor = currentUserService.requireAuthenticatedUser();
             auditLogService.recordUser(
                     actor, action, AuditDomain.COURSE, AuditResult.SUCCESS,
                     "COURSE", saved.getId().toString(), "Course status was changed",
                     java.util.Map.of("status", previousStatus.name()),
                     java.util.Map.of("status", saved.getStatus().name()),
-                    java.util.Map.of("courseTitle", saved.getTitle())
-            );
-        }
-        else {
+                    java.util.Map.of("courseTitle", saved.getTitle()));
+        } else {
             audit("COURSE_UPDATED", saved.getId());
         }
         return CourseDtoMapper.toCourseResponse(saved);
@@ -225,9 +235,9 @@ public class CourseAdminService {
         }
         try {
             return CourseStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
-        }
-        catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Course status must be draft, published, or inactive");
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "Course status must be draft, published, or inactive");
         }
     }
 
@@ -243,8 +253,7 @@ public class CourseAdminService {
             if (discountedPrice.signum() < 0 || discountedPrice.compareTo(resolvedPrice) > 0) {
                 throw new BusinessException(
                         ErrorCode.INVALID_REQUEST,
-                        "Discounted price must be between 0 and the course price"
-                );
+                        "Discounted price must be between 0 and the course price");
             }
         }
     }
@@ -281,8 +290,7 @@ public class CourseAdminService {
         if (!url.startsWith(normalizedPrefix)) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    message
-            );
+                    message);
         }
         return url;
     }

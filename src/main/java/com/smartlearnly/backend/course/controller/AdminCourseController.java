@@ -68,7 +68,7 @@ public class AdminCourseController {
     }
 
     @PatchMapping("/{courseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     @Operation(summary = "Update selected course fields")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,

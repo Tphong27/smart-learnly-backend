@@ -20,6 +20,7 @@ import com.smartlearnly.backend.learning.module.repository.CourseSectionReposito
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.course.service.CourseAccessService;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -45,6 +46,7 @@ public class LearningContentService {
         private final HlsLessonRepository hlsLessonRepository;
         private final CurriculumResolutionService curriculumResolutionService;
         private final CurriculumDtoMapper curriculumDtoMapper;
+        private final CourseAccessService courseAccessService;
 
         @Transactional(readOnly = true)
         public LearningContentResponse getLearningContent(UUID courseId, UUID classId) {
@@ -99,9 +101,17 @@ public class LearningContentService {
 
         @Transactional(readOnly = true)
         public LearningContentResponse getAdminPreviewContent(UUID courseId) {
-                Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
-                                .orElseThrow(() -> new RuntimeException("Course not found"));
-                CurriculumResolution resolution = curriculumResolutionService.resolveMasterAuthoring(courseId);
+                courseAccessService.requireReadableCourse(courseId);
+
+                Course course = courseRepository
+                                .findByIdAndDeletedAtIsNull(courseId)
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Course was not found"));
+
+                CurriculumResolution resolution = curriculumResolutionService
+                                .resolveMasterAuthoring(courseId);
+
                 CurriculumMetadataResponse metadata = curriculumDtoMapper.toMetadata(
                                 resolution.version(),
                                 resolution.classId(),
