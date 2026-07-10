@@ -32,9 +32,9 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
-@Tag(name = "Admin Flashcards", description = "Administrator flashcard lesson authoring APIs.")
+@Tag(name = "Admin Flashcards", description = "Staff flashcard lesson authoring APIs.")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminFlashcardController {
     private final AdminFlashcardService adminFlashcardService;
@@ -44,8 +44,7 @@ public class AdminFlashcardController {
     public ResponseEntity<ApiResponse<FlashcardLessonCreatedResponse>> createFlashcardLesson(
             @PathVariable UUID courseId,
             @PathVariable UUID sectionId,
-            @Valid @RequestBody CreateFlashcardLessonRequest request
-    ) {
+            @Valid @RequestBody CreateFlashcardLessonRequest request) {
         FlashcardLessonCreatedResponse response = adminFlashcardService.createFlashcardLesson(courseId, sectionId, request);
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + response.setId()))
                 .body(ApiResponse.success("Flashcard lesson created successfully", response));
@@ -67,8 +66,7 @@ public class AdminFlashcardController {
     @Operation(summary = "Update a flashcard set")
     public ApiResponse<FlashcardSetResponse> updateSet(
             @PathVariable UUID setId,
-            @Valid @RequestBody UpdateFlashcardSetRequest request
-    ) {
+            @Valid @RequestBody UpdateFlashcardSetRequest request) {
         return ApiResponse.success("Flashcard set updated successfully", adminFlashcardService.updateSet(setId, request));
     }
 
@@ -83,8 +81,7 @@ public class AdminFlashcardController {
     @Operation(summary = "Add a flashcard card")
     public ResponseEntity<ApiResponse<FlashcardCardResponse>> addCard(
             @PathVariable UUID setId,
-            @Valid @RequestBody CreateFlashcardCardRequest request
-    ) {
+            @Valid @RequestBody CreateFlashcardCardRequest request) {
         FlashcardCardResponse response = adminFlashcardService.addCard(setId, request);
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-cards/" + response.id()))
                 .body(ApiResponse.success("Flashcard card created successfully", response));
@@ -94,8 +91,7 @@ public class AdminFlashcardController {
     @Operation(summary = "Update a flashcard card")
     public ApiResponse<FlashcardCardResponse> updateCard(
             @PathVariable UUID cardId,
-            @Valid @RequestBody UpdateFlashcardCardRequest request
-    ) {
+            @Valid @RequestBody UpdateFlashcardCardRequest request) {
         return ApiResponse.success("Flashcard card updated successfully", adminFlashcardService.updateCard(cardId, request));
     }
 
@@ -110,8 +106,7 @@ public class AdminFlashcardController {
     @Operation(summary = "Reorder flashcard cards")
     public ApiResponse<FlashcardSetResponse> reorderCards(
             @PathVariable UUID setId,
-            @Valid @RequestBody ReorderFlashcardCardsRequest request
-    ) {
+            @Valid @RequestBody ReorderFlashcardCardsRequest request) {
         return ApiResponse.success("Flashcard cards reordered successfully", adminFlashcardService.reorderCards(setId, request));
     }
 }

@@ -17,6 +17,9 @@ import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
+import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
@@ -33,6 +36,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,13 +50,15 @@ public class AdminFlashcardService {
     private final FlashcardSetRepository flashcardSetRepository;
     private final FlashcardCardRepository flashcardCardRepository;
     private final CurrentUserService currentUserService;
+    private final CurriculumLessonRepository curriculumLessonRepository;
+    private final CourseAccessService courseAccessService;
 
     @Transactional
     public FlashcardLessonCreatedResponse createFlashcardLesson(
             UUID courseId,
             UUID sectionId,
-            CreateFlashcardLessonRequest request
-    ) {
+            CreateFlashcardLessonRequest request) {
+        courseAccessService.requireUpdatableCourse(courseId);
         Course course = findCourse(courseId);
         CourseSection section = courseSectionRepository.findByIdAndCourseId(sectionId, courseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
@@ -87,19 +93,27 @@ public class AdminFlashcardService {
     @Transactional(readOnly = true)
     public FlashcardSetResponse getSet(UUID setId) {
         FlashcardSet flashcardSet = findSet(setId);
-        return toSetResponse(flashcardSet, findActiveCards(flashcardSet.getId()));
+
+        requireReadableAccess(flashcardSet);
+
+        return toSetResponse(
+                flashcardSet,
+                findActiveCards(flashcardSet.getId()));
     }
 
     @Transactional(readOnly = true)
-    public FlashcardSetResponse getSetByLesson(UUID lessonId) {
-        FlashcardSet flashcardSet = flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lessonId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
+    public FlashcardSetResponse getSetByLesson(UUID lessonReferenceId) {
+        FlashcardSet flashcardSet = resolveFlashcardSetByLessonReference(lessonReferenceId);
+
+        requireReadableAccess(flashcardSet);
+
         return toSetResponse(flashcardSet, findActiveCards(flashcardSet.getId()));
     }
 
     @Transactional
     public FlashcardSetResponse updateSet(UUID setId, UpdateFlashcardSetRequest request) {
         FlashcardSet flashcardSet = findSet(setId);
+        requireUpdatableAccess(flashcardSet);
         if (request.title() != null) {
             String title = normalizeRequired(request.title(), "Flashcard set title is required");
             flashcardSet.setTitle(title);
@@ -118,6 +132,7 @@ public class AdminFlashcardService {
     @Transactional
     public void deleteSet(UUID setId) {
         FlashcardSet flashcardSet = findSet(setId);
+        requireUpdatableAccess(flashcardSet);
         Instant now = Instant.now();
         flashcardSet.setDeletedAt(now);
 
@@ -134,6 +149,7 @@ public class AdminFlashcardService {
     @Transactional
     public FlashcardCardResponse addCard(UUID setId, CreateFlashcardCardRequest request) {
         FlashcardSet flashcardSet = findSet(setId);
+        requireUpdatableAccess(flashcardSet);
         FlashcardCard card = new FlashcardCard();
         card.setFlashcardSet(flashcardSet);
         applyCardCreateRequest(card, request);
@@ -147,6 +163,7 @@ public class AdminFlashcardService {
     @Transactional
     public FlashcardCardResponse updateCard(UUID cardId, UpdateFlashcardCardRequest request) {
         FlashcardCard card = findCard(cardId);
+        requireUpdatableAccess(card.getFlashcardSet());
         requireActiveSet(card.getFlashcardSet());
         applyCardUpdateRequest(card, request);
         validateCard(card);
@@ -157,6 +174,7 @@ public class AdminFlashcardService {
     @Transactional
     public void deleteCard(UUID cardId) {
         FlashcardCard card = findCard(cardId);
+        requireUpdatableAccess(card.getFlashcardSet());
         requireActiveSet(card.getFlashcardSet());
         card.setDeletedAt(Instant.now());
         flashcardCardRepository.save(card);
@@ -165,6 +183,7 @@ public class AdminFlashcardService {
     @Transactional
     public FlashcardSetResponse reorderCards(UUID setId, ReorderFlashcardCardsRequest request) {
         FlashcardSet flashcardSet = findSet(setId);
+        requireUpdatableAccess(flashcardSet);
         List<FlashcardCard> activeCards = findActiveCards(setId);
         Map<UUID, FlashcardCard> cardsById = activeCards.stream()
                 .collect(LinkedHashMap::new, (map, card) -> map.put(card.getId(), card), LinkedHashMap::putAll);
@@ -180,6 +199,95 @@ public class AdminFlashcardService {
         return toSetResponse(flashcardSet, activeCards.stream()
                 .sorted(Comparator.comparing(FlashcardCard::getOrderIndex))
                 .toList());
+    }
+
+    private FlashcardSet resolveFlashcardSetByLessonReference(UUID lessonReferenceId) {
+        // Trường hợp 1:
+        // ID frontend gửi là legacy lesson ID.
+        Optional<FlashcardSet> byLegacyLesson = flashcardSetRepository
+                .findByLessonIdAndDeletedAtIsNull(
+                        lessonReferenceId);
+
+        if (byLegacyLesson.isPresent()) {
+            return byLegacyLesson.get();
+        }
+
+        Optional<FlashcardSet> byCurriculumLesson = flashcardSetRepository
+                .findByCurriculumLessonIdAndDeletedAtIsNull(
+                        lessonReferenceId);
+
+        if (byCurriculumLesson.isPresent()) {
+            return byCurriculumLesson.get();
+        }
+        // Trường hợp 2:
+        // ID frontend gửi là curriculum lesson ID, nhưng chưa có flashcard set liên kết
+        // trực tiếp.
+        CurriculumLesson curriculumLesson = curriculumLessonRepository
+                .findById(lessonReferenceId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "Flashcard set was not found"));
+
+        UUID sourceLessonId = curriculumLesson.getSourceLessonId();
+
+        if (sourceLessonId != null) {
+            // Nếu curriculum lesson có source lesson, thì tìm flashcard set liên kết với
+            // source lesson.
+            Optional<FlashcardSet> bySourceLesson = flashcardSetRepository
+                    .findByLessonIdAndDeletedAtIsNull(
+                            sourceLessonId);
+
+            if (bySourceLesson.isPresent()) {
+                return bySourceLesson.get();
+            }
+        }
+
+        // Trường hợp 3:
+        // ID frontend gửi là curriculum lesson ID, nhưng chưa có flashcard set liên kết
+        // trực tiếp.
+        UUID sourceCurriculumLessonId = curriculumLesson.getSourceCurriculumLessonId();
+
+        if (sourceCurriculumLessonId != null) {
+            // Nếu curriculum lesson có source curriculum lesson, thì tìm flashcard set liên
+            // kết với source curriculum lesson.
+            Optional<FlashcardSet> bySourceCurriculumLesson = flashcardSetRepository
+                    .findByCurriculumLessonIdAndDeletedAtIsNull(
+                            sourceCurriculumLessonId);
+
+            if (bySourceCurriculumLesson.isPresent()) {
+                return bySourceCurriculumLesson.get();
+            }
+        }
+
+        throw new BusinessException(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard set was not found");
+    }
+
+    private void requireReadableAccess(FlashcardSet flashcardSet) {
+        Course course = flashcardSet.getCourse();
+
+        if (course == null || course.getDeletedAt() != null) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
+                    "Flashcard set was not found");
+        }
+
+        courseAccessService.requireReadableCourse(
+                course.getId());
+    }
+
+    private void requireUpdatableAccess(FlashcardSet flashcardSet) {
+        Course course = flashcardSet.getCourse();
+
+        if (course == null || course.getDeletedAt() != null) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
+                    "Flashcard set was not found");
+        }
+
+        courseAccessService.requireUpdatableCourse(
+                course.getId());
     }
 
     private Course findCourse(UUID courseId) {
@@ -274,8 +382,7 @@ public class AdminFlashcardService {
         if (!uniqueRequestedIds.equals(existingIds)) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    "Flashcard reorder request must include every active card exactly once"
-            );
+                    "Flashcard reorder request must include every active card exactly once");
         }
     }
 
@@ -285,9 +392,9 @@ public class AdminFlashcardService {
         }
         try {
             return LessonStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
-        }
-        catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Lesson status must be draft, published, or inactive");
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "Lesson status must be draft, published, or inactive");
         }
     }
 
@@ -302,8 +409,7 @@ public class AdminFlashcardService {
                 flashcardSet.getDescription(),
                 cards.stream().map(this::toCardResponse).toList(),
                 flashcardSet.getCreatedAt(),
-                flashcardSet.getUpdatedAt()
-        );
+                flashcardSet.getUpdatedAt());
     }
 
     private FlashcardCardResponse toCardResponse(FlashcardCard card) {
@@ -318,8 +424,7 @@ public class AdminFlashcardService {
                 card.getExplanation(),
                 card.getOrderIndex(),
                 card.getCreatedAt(),
-                card.getUpdatedAt()
-        );
+                card.getUpdatedAt());
     }
 
     private String normalizeRequired(String value, String message) {
