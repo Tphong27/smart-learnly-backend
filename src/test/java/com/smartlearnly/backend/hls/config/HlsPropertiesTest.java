@@ -1,10 +1,13 @@
 package com.smartlearnly.backend.hls.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
 class HlsPropertiesTest {
+
+    private static final String STRONG_SECRET = "0123456789abcdef0123456789abcdef";
 
     @Test
     void normalizedQualitiesShouldDefaultToTwoStepLadder() {
@@ -38,5 +41,56 @@ class HlsPropertiesTest {
 
         properties.setSegmentDuration(40);
         assertThat(properties.normalizedSegmentDuration()).isEqualTo(30);
+    }
+
+    @Test
+    void validateSecurityConfigurationShouldAllowDefaultsWhenHlsIsDisabled() {
+        HlsProperties properties = new HlsProperties();
+
+        properties.validateSecurityConfiguration();
+    }
+
+    @Test
+    void validateSecurityConfigurationShouldRejectDefaultTokenSecretWhenHlsIsEnabled() {
+        HlsProperties properties = new HlsProperties();
+        properties.setEnabled(true);
+
+        assertThatThrownBy(properties::validateSecurityConfiguration)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("app.hls.token-secret");
+    }
+
+    @Test
+    void validateSecurityConfigurationShouldRejectShortTokenSecretWhenHlsIsEnabled() {
+        HlsProperties properties = new HlsProperties();
+        properties.setEnabled(true);
+        properties.setTokenSecret("short-secret");
+
+        assertThatThrownBy(properties::validateSecurityConfiguration)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("app.hls.token-secret");
+    }
+
+    @Test
+    void validateSecurityConfigurationShouldRequireCallbackSecretForGithubActions() {
+        HlsProperties properties = new HlsProperties();
+        properties.setEnabled(true);
+        properties.setProcessingProvider("github-actions");
+        properties.setTokenSecret(STRONG_SECRET);
+
+        assertThatThrownBy(properties::validateSecurityConfiguration)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("app.hls.callback-secret");
+    }
+
+    @Test
+    void validateSecurityConfigurationShouldAcceptStrongSecretsForGithubActions() {
+        HlsProperties properties = new HlsProperties();
+        properties.setEnabled(true);
+        properties.setProcessingProvider("github-actions");
+        properties.setTokenSecret(STRONG_SECRET);
+        properties.setCallbackSecret("fedcba9876543210fedcba9876543210");
+
+        properties.validateSecurityConfiguration();
     }
 }

@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.course.repository;
 
 import com.smartlearnly.backend.course.entity.Course;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +42,130 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
                           AND c.deleted_at IS NULL
                         """, nativeQuery = true)
         Page<CourseListProjection> findPublishedCourses(Pageable pageable);
+
+        @Query(value = """
+                        SELECT
+                            c.id AS "id",
+                            c.title AS "title",
+                            c.slug AS "slug",
+                            c.description AS "description",
+                            c.price AS "price",
+                            c.discounted_price AS "discountedPrice",
+                            c.thumbnail_url AS "avatarUrl",
+                            c.is_featured AS "featured",
+                            category.id AS "categoryId",
+                            category.name AS "categoryName",
+                            category.slug AS "categorySlug"
+                        FROM public.courses c
+                        JOIN public.categories category ON category.id = c.category_id
+                        WHERE c.status = 'published'::public.course_status
+                          AND c.deleted_at IS NULL
+                          AND (
+                              :searchPattern IS NULL
+                              OR c.title ILIKE :searchPattern ESCAPE '\\'
+                              OR COALESCE(c.description, '') ILIKE :searchPattern ESCAPE '\\'
+                          )
+                          AND (:categorySlug IS NULL OR category.slug = :categorySlug)
+                          AND (
+                              :minPrice IS NULL
+                              OR CASE
+                                  WHEN c.discounted_price IS NOT NULL
+                                      AND c.discounted_price > 0
+                                      AND c.discounted_price < c.price
+                                  THEN c.discounted_price
+                                  ELSE c.price
+                              END >= :minPrice
+                          )
+                          AND (
+                              :maxPrice IS NULL
+                              OR CASE
+                                  WHEN c.discounted_price IS NOT NULL
+                                      AND c.discounted_price > 0
+                                      AND c.discounted_price < c.price
+                                  THEN c.discounted_price
+                                  ELSE c.price
+                              END <= :maxPrice
+                          )
+                          AND (
+                              :onSale = FALSE
+                              OR (
+                                  c.price > 0
+                                  AND c.discounted_price IS NOT NULL
+                                  AND c.discounted_price > 0
+                                  AND c.discounted_price < c.price
+                              )
+                          )
+                          AND (:featured IS NULL OR c.is_featured = :featured)
+                        ORDER BY
+                            CASE WHEN :sort = 'PRICE_ASC' THEN CASE
+                                WHEN c.discounted_price IS NOT NULL
+                                    AND c.discounted_price > 0
+                                    AND c.discounted_price < c.price
+                                THEN c.discounted_price
+                                ELSE c.price
+                            END END ASC,
+                            CASE WHEN :sort = 'PRICE_DESC' THEN CASE
+                                WHEN c.discounted_price IS NOT NULL
+                                    AND c.discounted_price > 0
+                                    AND c.discounted_price < c.price
+                                THEN c.discounted_price
+                                ELSE c.price
+                            END END DESC,
+                            CASE WHEN :sort = 'POPULAR' THEN c.is_featured END DESC,
+                            c.created_at DESC,
+                            c.id ASC
+                        """, countQuery = """
+                        SELECT COUNT(*)
+                        FROM public.courses c
+                        JOIN public.categories category ON category.id = c.category_id
+                        WHERE c.status = 'published'::public.course_status
+                          AND c.deleted_at IS NULL
+                          AND (
+                              :searchPattern IS NULL
+                              OR c.title ILIKE :searchPattern ESCAPE '\\'
+                              OR COALESCE(c.description, '') ILIKE :searchPattern ESCAPE '\\'
+                          )
+                          AND (:categorySlug IS NULL OR category.slug = :categorySlug)
+                          AND (
+                              :minPrice IS NULL
+                              OR CASE
+                                  WHEN c.discounted_price IS NOT NULL
+                                      AND c.discounted_price > 0
+                                      AND c.discounted_price < c.price
+                                  THEN c.discounted_price
+                                  ELSE c.price
+                              END >= :minPrice
+                          )
+                          AND (
+                              :maxPrice IS NULL
+                              OR CASE
+                                  WHEN c.discounted_price IS NOT NULL
+                                      AND c.discounted_price > 0
+                                      AND c.discounted_price < c.price
+                                  THEN c.discounted_price
+                                  ELSE c.price
+                              END <= :maxPrice
+                          )
+                          AND (
+                              :onSale = FALSE
+                              OR (
+                                  c.price > 0
+                                  AND c.discounted_price IS NOT NULL
+                                  AND c.discounted_price > 0
+                                  AND c.discounted_price < c.price
+                              )
+                          )
+                          AND (:featured IS NULL OR c.is_featured = :featured)
+                        """, nativeQuery = true)
+        Page<CourseListProjection> findPublishedCoursesByFilters(
+                        @Param("searchPattern") String searchPattern,
+                        @Param("categorySlug") String categorySlug,
+                        @Param("minPrice") BigDecimal minPrice,
+                        @Param("maxPrice") BigDecimal maxPrice,
+                        @Param("onSale") boolean onSale,
+                        @Param("featured") Boolean featured,
+                        @Param("sort") String sort,
+                        Pageable pageable);
 
         @Query(value = """
                         SELECT

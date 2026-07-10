@@ -64,6 +64,8 @@ class CourseContentAdminServiceTest {
     private AuditLogService auditLogService;
     @Mock
     private QuizContentValidator quizContentValidator;
+    @Mock
+    private CourseAccessService courseAccessService;
 
     private final CurriculumDtoMapper curriculumDtoMapper = new CurriculumDtoMapper();
 
@@ -79,7 +81,8 @@ class CourseContentAdminServiceTest {
                 curriculumDtoMapper,
                 currentUserService,
                 auditLogService,
-                quizContentValidator
+                quizContentValidator,
+                courseAccessService
         );
     }
 
