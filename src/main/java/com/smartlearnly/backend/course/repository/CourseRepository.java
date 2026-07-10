@@ -211,22 +211,28 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
         Page<Course> findAllByDeletedAtIsNull(Pageable pageable);
 
         @Query(value = """
-                        SELECT DISTINCT course.*
+                        SELECT course.*
                         FROM public.courses course
-                        JOIN public.classes class_offering
-                            ON class_offering.course_id = course.id
                         WHERE course.deleted_at IS NULL
-                          AND class_offering.deleted_at IS NULL
-                          AND class_offering.trainer_id = :trainerId
+                          AND EXISTS (
+                              SELECT 1
+                              FROM public.classes class_offering
+                              WHERE class_offering.course_id = course.id
+                                AND class_offering.trainer_id = :trainerId
+                                AND class_offering.deleted_at IS NULL
+                          )
                         ORDER BY course.created_at DESC, course.id ASC
                         """, countQuery = """
-                        SELECT COUNT(DISTINCT course.id)
+                        SELECT COUNT(*)
                         FROM public.courses course
-                        JOIN public.classes class_offering
-                            ON class_offering.course_id = course.id
                         WHERE course.deleted_at IS NULL
-                          AND class_offering.deleted_at IS NULL
-                          AND class_offering.trainer_id = :trainerId
+                          AND EXISTS (
+                              SELECT 1
+                              FROM public.classes class_offering
+                              WHERE class_offering.course_id = course.id
+                                AND class_offering.trainer_id = :trainerId
+                                AND class_offering.deleted_at IS NULL
+                          )
                         """, nativeQuery = true)
         Page<Course> findAllAssignedToTrainer(
                         @Param("trainerId") UUID trainerId,

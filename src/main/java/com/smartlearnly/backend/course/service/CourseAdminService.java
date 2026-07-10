@@ -52,13 +52,9 @@ public class CourseAdminService {
         if (courseAccessService.isCurrentUserTrainer()) {
             UUID trainerId = courseAccessService.getCurrentUserId();
 
-            PageRequest trainerPageable = PageRequest.of(page, size);
-
-            coursePage = courseRepository.findAllAssignedToTrainer(trainerId,trainerPageable);
+            coursePage = courseRepository.findAllAssignedToTrainer(trainerId, PageRequest.of(page, size));
         } else {
-            PageRequest adminPageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-
-            coursePage = courseRepository.findAllByDeletedAtIsNull(adminPageable);
+            coursePage = courseRepository.findAllByDeletedAtIsNull(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
         }
 
         return new PageResponse<>(
