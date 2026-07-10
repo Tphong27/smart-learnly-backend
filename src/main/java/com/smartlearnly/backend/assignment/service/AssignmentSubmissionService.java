@@ -9,6 +9,7 @@ import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionReposi
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
+import com.smartlearnly.backend.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -26,6 +27,7 @@ public class AssignmentSubmissionService {
 
     private final AssignmentSubmissionRepository repository;
     private final AssignmentRepository assignmentRepository;
+    private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
@@ -219,7 +221,7 @@ public class AssignmentSubmissionService {
         event.setTargetId(response.getAssignmentId());
         event.setSubmissionId(response.getId());
         event.setStudentId(response.getStudentId());
-        event.setStudentName(studentName);
+        event.setStudentName(studentName == null ? response.getStudentName() : studentName);
         event.setType("essay");
         event.setStatus(response.getStatus() == null ? "DOING" : response.getStatus().name());
         event.setStartTime(response.getStartTime());
@@ -239,6 +241,7 @@ public class AssignmentSubmissionService {
         response.setId(submission.getId());
         response.setAssignmentId(submission.getAssignmentId());
         response.setStudentId(submission.getStudentId());
+        response.setStudentName(resolveStudentName(submission.getStudentId()));
         response.setSubmissionText(submission.getSubmissionText());
         response.setFileUrl(submission.getFileUrl());
         response.setFileName(submission.getFileName());
@@ -254,6 +257,20 @@ public class AssignmentSubmissionService {
         response.setCreatedAt(submission.getCreatedAt());
         response.setUpdatedAt(submission.getUpdatedAt());
         return response;
+    }
+
+    private String resolveStudentName(UUID studentId) {
+        if (studentId == null) {
+            return null;
+        }
+        return userRepository.findByIdAndDeletedAtIsNull(studentId)
+                .map(user -> {
+                    if (user.getFullName() != null && !user.getFullName().isBlank()) {
+                        return user.getFullName();
+                    }
+                    return user.getEmail();
+                })
+                .orElse(null);
     }
 
     private Long remainingSeconds(Instant endTime) {

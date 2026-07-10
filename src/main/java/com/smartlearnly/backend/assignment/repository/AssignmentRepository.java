@@ -15,12 +15,19 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
     @Query("""
             select assignment
             from Assignment assignment
-            join ClassOffering classOffering on classOffering.id = assignment.classId
-            where (:courseId is null or classOffering.courseId = :courseId)
+            left join ClassOffering classOffering on classOffering.id = assignment.classId
+            left join CurriculumLesson curriculumLesson on curriculumLesson.id = assignment.lessonId
+            left join CurriculumVersion curriculumVersion on curriculumVersion.id = curriculumLesson.curriculumVersionId
+            where (
+                  :courseId is null
+                  or classOffering.courseId = :courseId
+                  or curriculumVersion.courseId = :courseId
+              )
               and (
                   :createdBy is null
                   or assignment.createdBy = :createdBy
                   or classOffering.trainerId = :createdBy
+                  or curriculumVersion.createdBy = :createdBy
               )
               and (
                   :isFlashtest is null

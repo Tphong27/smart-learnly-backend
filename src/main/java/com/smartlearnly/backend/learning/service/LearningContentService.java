@@ -52,7 +52,7 @@ public class LearningContentService {
 
                 enrollmentAccessService.requireCourseAccess(courseId);
                 CurriculumResolution resolution = curriculumResolutionService
-                                .resolveTraineeLearning(courseId, classId, student.getId());
+                                .resolveTraineeProgress(courseId, classId, student.getId());
 
                 Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
                                 .orElseThrow(() -> new BusinessException(

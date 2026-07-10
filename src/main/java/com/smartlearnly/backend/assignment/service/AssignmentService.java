@@ -14,6 +14,7 @@ import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
@@ -32,6 +33,7 @@ public class AssignmentService {
     private final AssignmentSubmissionRepository assignmentSubmissionRepository;
     private final CurriculumResolutionService curriculumResolutionService;
     private final CurriculumLessonRepository curriculumLessonRepository;
+    private final CurriculumVersionRepository curriculumVersionRepository;
 
     public AssignmentModel.Response createAssignment(
             AssignmentModel.CreateRequest request) {
@@ -160,8 +162,9 @@ public class AssignmentService {
                 new AssignmentModel.Response();
 
         response.setId(assignment.getId());
-        response.setClassId(assignment.getClassId());
-        response.setCourseId(resolveCourseId(assignment.getClassId()));
+        UUID classId = resolveClassId(assignment);
+        response.setClassId(classId);
+        response.setCourseId(resolveCourseId(classId, assignment));
         response.setLessonId(assignment.getLessonId());
         response.setTitle(assignment.getTitle());
         response.setDescription(assignment.getDescription());
@@ -204,9 +207,28 @@ public class AssignmentService {
         }
     }
 
-    private UUID resolveCourseId(UUID classId) {
-        if (classId == null) {
+    private UUID resolveClassId(Assignment assignment) {
+        if (assignment.getClassId() != null) {
+            return assignment.getClassId();
+        }
+        if (assignment.getLessonId() == null) {
             return null;
+        }
+        return curriculumLessonRepository.findById(assignment.getLessonId())
+                .flatMap(lesson -> curriculumVersionRepository.findById(lesson.getCurriculumVersionId()))
+                .map(version -> version.getClassId())
+                .orElse(null);
+    }
+
+    private UUID resolveCourseId(UUID classId, Assignment assignment) {
+        if (classId == null) {
+            if (assignment.getLessonId() == null) {
+                return null;
+            }
+            return curriculumLessonRepository.findById(assignment.getLessonId())
+                    .flatMap(lesson -> curriculumVersionRepository.findById(lesson.getCurriculumVersionId()))
+                    .map(version -> version.getCourseId())
+                    .orElse(null);
         }
         return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
                 .map(ClassOffering::getCourseId)

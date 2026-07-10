@@ -161,7 +161,7 @@ public class TraineeProgressService {
 
         private ProgressCounts calculateClassCurriculumProgress(UUID studentId, UUID courseId, UUID classId) {
                 CurriculumResolution resolution = curriculumResolutionService
-                                .resolveTraineeLearning(courseId, classId, studentId);
+                                .resolveTraineeProgress(courseId, classId, studentId);
                 List<CurriculumLesson> lessons = orderedCurriculumLessons(resolution.version()).stream()
                                 .filter(this::isVisibleForLearningProgress)
                                 .toList();
