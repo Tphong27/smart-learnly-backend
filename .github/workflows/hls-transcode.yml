@@ -107,6 +107,18 @@ jobs:
             echo "R2_REGION must be auto." >&2
             exit 78
           }
+          [[ -n "$HLS_BACKEND_BASE_URL" ]] || {
+            echo "HLS_BACKEND_BASE_URL is required so the backend can be notified." >&2
+            exit 78
+          }
+          [[ "$HLS_BACKEND_BASE_URL" == https://* ]] || {
+            echo "HLS_BACKEND_BASE_URL must use HTTPS." >&2
+            exit 78
+          }
+          [[ -n "$HLS_CALLBACK_SECRET" && ${#HLS_CALLBACK_SECRET} -ge 32 ]] || {
+            echo "HLS_CALLBACK_SECRET must be configured with at least 32 characters." >&2
+            exit 78
+          }
           [[ "$SOURCE_KEY" =~ $object_key_pattern ]] &&
             [[ "$SOURCE_KEY" != /* && "$SOURCE_KEY" != *".."* && "$SOURCE_KEY" != *"//"* ]] || {
             echo "source_key is unsafe." >&2
@@ -225,15 +237,15 @@ jobs:
           set -Eeuo pipefail
 
           if [[ -z "$HLS_BACKEND_BASE_URL" ]]; then
-            echo "HLS_BACKEND_BASE_URL is not configured; callback skipped."
-            exit 0
+            echo "HLS_BACKEND_BASE_URL is required so the backend can be notified." >&2
+            exit 78
           fi
           [[ "$HLS_BACKEND_BASE_URL" == https://* ]] || {
             echo "HLS_BACKEND_BASE_URL must use HTTPS." >&2
             exit 78
           }
-          if [[ -z "$HLS_CALLBACK_SECRET" ]]; then
-            echo "HLS_CALLBACK_SECRET is not configured." >&2
+          if [[ -z "$HLS_CALLBACK_SECRET" || ${#HLS_CALLBACK_SECRET} -lt 32 ]]; then
+            echo "HLS_CALLBACK_SECRET must be configured with at least 32 characters." >&2
             exit 78
           fi
 

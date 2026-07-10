@@ -5,8 +5,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 import com.smartlearnly.backend.course.dto.CategorySummaryResponse;
+import com.smartlearnly.backend.course.dto.CourseCatalogSort;
 import com.smartlearnly.backend.course.dto.CourseDetailResponse;
 import com.smartlearnly.backend.course.dto.CourseListItemResponse;
 import com.smartlearnly.backend.course.dto.LearningObjectiveResponse;
@@ -60,8 +62,37 @@ public class CourseQueryService {
 				.map(this::toResponse);
 	}
 
+	public Page<CourseListItemResponse> getCourses(
+			String keyword,
+			String categorySlug,
+			BigDecimal minPrice,
+			BigDecimal maxPrice,
+			boolean onSale,
+			Boolean featured,
+			CourseCatalogSort sort,
+			int page,
+			int size) {
+		if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+			throw new ResponseStatusException(
+					HttpStatus.BAD_REQUEST,
+					"Minimum price cannot exceed maximum price");
+		}
+
+		CourseCatalogSort resolvedSort = sort == null ? CourseCatalogSort.POPULAR : sort;
+		return courseRepository.findPublishedCoursesByFilters(
+				toSearchPattern(keyword),
+				normalizeOptional(categorySlug),
+				minPrice,
+				maxPrice,
+				onSale,
+				featured,
+				resolvedSort.name(),
+				pageRequest(page, size))
+				.map(this::toResponse);
+	}
+
 	public Page<CourseListItemResponse> searchCourses(String keyword, int page, int size) {
-		String searchPattern = "%" + escapeLikePattern(keyword.trim()) + "%";
+		String searchPattern = toSearchPattern(keyword);
 		return courseRepository.searchPublishedCourses(searchPattern, pageRequest(page, size))
 				.map(this::toResponse);
 	}
@@ -203,6 +234,22 @@ public class CourseQueryService {
 
 	private int safeOrder(Integer sortOrder) {
 		return sortOrder == null ? 0 : sortOrder;
+	}
+
+	private String toSearchPattern(String keyword) {
+		String normalizedKeyword = normalizeOptional(keyword);
+		return normalizedKeyword == null
+				? null
+				: "%" + escapeLikePattern(normalizedKeyword) + "%";
+	}
+
+	private String normalizeOptional(String value) {
+		if (value == null) {
+			return null;
+		}
+
+		String normalizedValue = value.trim();
+		return normalizedValue.isEmpty() ? null : normalizedValue;
 	}
 
 	private PageRequest pageRequest(int page, int size) {

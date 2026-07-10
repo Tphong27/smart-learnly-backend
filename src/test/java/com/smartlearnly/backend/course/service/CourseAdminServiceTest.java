@@ -41,6 +41,8 @@ class CourseAdminServiceTest {
     private CurrentUserService currentUserService;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private CourseAccessService courseAccessService;
 
     private CourseAdminService courseAdminService;
     private StorageProperties storageProperties;
@@ -55,7 +57,8 @@ class CourseAdminServiceTest {
                 categoryRepository,
                 currentUserService,
                 auditLogService,
-                storageProperties
+                storageProperties,
+                courseAccessService
         );
     }
 

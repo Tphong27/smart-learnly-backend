@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.smartlearnly.backend.course.dto.CategorySummaryResponse;
+import com.smartlearnly.backend.course.dto.CourseCatalogSort;
 import com.smartlearnly.backend.course.dto.CourseDetailResponse;
 import com.smartlearnly.backend.course.dto.CourseListItemResponse;
 import com.smartlearnly.backend.course.dto.LearningObjectiveResponse;
@@ -125,6 +126,62 @@ class CourseQueryServiceTests {
 	}
 
 	@Test
+	void filtersPublishedCoursesWithNormalizedParamsAndSelectedSort() {
+		PageRequest pageable = PageRequest.of(0, 20);
+		when(courseRepository.findPublishedCoursesByFilters(
+				"%java%",
+				"programming",
+				new BigDecimal("10000"),
+				new BigDecimal("500000"),
+				true,
+				true,
+				"PRICE_ASC",
+				pageable))
+				.thenReturn(Page.empty(pageable));
+
+		Page<CourseListItemResponse> result = service().getCourses(
+				" java ",
+				" programming ",
+				new BigDecimal("10000"),
+				new BigDecimal("500000"),
+				true,
+				true,
+				CourseCatalogSort.PRICE_ASC,
+				0,
+				20);
+
+		assertThat(result).isEmpty();
+		verify(courseRepository).findPublishedCoursesByFilters(
+				"%java%",
+				"programming",
+				new BigDecimal("10000"),
+				new BigDecimal("500000"),
+				true,
+				true,
+				"PRICE_ASC",
+				pageable);
+	}
+
+	@Test
+	void rejectsPriceRangeWhenMinimumExceedsMaximum() {
+		assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> service().getCourses(
+				null,
+				null,
+				new BigDecimal("500000"),
+				new BigDecimal("100000"),
+				false,
+				null,
+				CourseCatalogSort.POPULAR,
+				0,
+				20)))
+				.isInstanceOf(ResponseStatusException.class)
+				.satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value())
+						.isEqualTo(400));
+
+		verifyNoInteractions(courseRepository);
+	}
+
+	@Test
 	void searchesWithTrimmedLiteralPatternAndMapsProjection() {
 		PageRequest cappedPageable = PageRequest.of(1, 100);
 		when(courseRepository.searchPublishedCourses(
@@ -154,6 +211,34 @@ class CourseQueryServiceTests {
 		assertThat(query.countQuery())
 				.contains("c.status = 'published'::public.course_status")
 				.contains("c.deleted_at IS NULL");
+	}
+
+	@Test
+	void filteredCatalogQueryUsesOnlyPublishedCoursesAndEffectiveSalePrice() throws Exception {
+		Query query = CourseRepository.class
+				.getMethod(
+						"findPublishedCoursesByFilters",
+						String.class,
+						String.class,
+						BigDecimal.class,
+						BigDecimal.class,
+						boolean.class,
+						Boolean.class,
+						String.class,
+						Pageable.class)
+				.getAnnotation(Query.class);
+
+		assertThat(query.value())
+				.contains("c.status = 'published'::public.course_status")
+				.contains("c.deleted_at IS NULL")
+				.contains("category.slug = :categorySlug")
+				.contains("c.discounted_price < c.price")
+				.contains("CASE WHEN :sort = 'PRICE_ASC'")
+				.contains("CASE WHEN :sort = 'PRICE_DESC'");
+		assertThat(query.countQuery())
+				.contains("c.status = 'published'::public.course_status")
+				.contains("c.deleted_at IS NULL")
+				.contains("c.discounted_price < c.price");
 	}
 
 	@Test
