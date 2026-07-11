@@ -31,6 +31,8 @@ import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.course.service.CourseAccessService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -58,6 +60,11 @@ class AdminFlashcardServiceTest {
     private CurrentUserService currentUserService;
 
     private AdminFlashcardService adminFlashcardService;
+    @Mock
+    private CurriculumLessonRepository curriculumLessonRepository;
+
+    @Mock
+    private CourseAccessService courseAccessService;
 
     @BeforeEach
     void setUp() {
@@ -67,8 +74,9 @@ class AdminFlashcardServiceTest {
                 lessonRepository,
                 flashcardSetRepository,
                 flashcardCardRepository,
-                currentUserService
-        );
+                currentUserService,
+                curriculumLessonRepository,
+                courseAccessService);
     }
 
     @Test
@@ -79,7 +87,8 @@ class AdminFlashcardServiceTest {
         UUID lessonId = UUID.randomUUID();
         UUID setId = UUID.randomUUID();
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(courseSectionRepository.findByIdAndCourseId(section.getId(), course.getId())).thenReturn(Optional.of(section));
+        when(courseSectionRepository.findByIdAndCourseId(section.getId(), course.getId()))
+                .thenReturn(Optional.of(section));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(lessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(4);
         when(lessonRepository.save(any(Lesson.class))).thenAnswer(invocation -> {
@@ -96,8 +105,7 @@ class AdminFlashcardServiceTest {
         FlashcardLessonCreatedResponse response = adminFlashcardService.createFlashcardLesson(
                 course.getId(),
                 section.getId(),
-                new CreateFlashcardLessonRequest("  Terms  ", "Basics", null, true, "published")
-        );
+                new CreateFlashcardLessonRequest("  Terms  ", "Basics", null, true, "published"));
 
         assertThat(response.lessonId()).isEqualTo(lessonId);
         assertThat(response.setId()).isEqualTo(setId);
@@ -119,7 +127,8 @@ class AdminFlashcardServiceTest {
     @Test
     void addCardShouldAcceptTextOnlyCard() {
         FlashcardSet flashcardSet = flashcardSet();
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
         when(flashcardCardRepository.save(any(FlashcardCard.class))).thenAnswer(invocation -> {
             FlashcardCard card = invocation.getArgument(0);
@@ -129,8 +138,7 @@ class AdminFlashcardServiceTest {
 
         FlashcardCardResponse response = adminFlashcardService.addCard(
                 flashcardSet.getId(),
-                new CreateFlashcardCardRequest("  Front  ", null, "  Back  ", null, null, null, null)
-        );
+                new CreateFlashcardCardRequest("  Front  ", null, "  Back  ", null, null, null, null));
 
         assertThat(response.frontText()).isEqualTo("Front");
         assertThat(response.backText()).isEqualTo("Back");
@@ -140,7 +148,8 @@ class AdminFlashcardServiceTest {
     @Test
     void addCardShouldAcceptImageOnlyCard() {
         FlashcardSet flashcardSet = flashcardSet();
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(1);
         when(flashcardCardRepository.save(any(FlashcardCard.class))).thenAnswer(invocation -> {
             FlashcardCard card = invocation.getArgument(0);
@@ -150,8 +159,8 @@ class AdminFlashcardServiceTest {
 
         FlashcardCardResponse response = adminFlashcardService.addCard(
                 flashcardSet.getId(),
-                new CreateFlashcardCardRequest(null, "https://cdn.test/front.png", null, "https://cdn.test/back.png", null, null, null)
-        );
+                new CreateFlashcardCardRequest(null, "https://cdn.test/front.png", null, "https://cdn.test/back.png",
+                        null, null, null));
 
         assertThat(response.frontImageUrl()).isEqualTo("https://cdn.test/front.png");
         assertThat(response.backImageUrl()).isEqualTo("https://cdn.test/back.png");
@@ -161,14 +170,14 @@ class AdminFlashcardServiceTest {
     @Test
     void addCardShouldRejectEmptyFrontSide() {
         FlashcardSet flashcardSet = flashcardSet();
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
 
         assertThatThrownBy(() -> adminFlashcardService.addCard(
                 flashcardSet.getId(),
-                new CreateFlashcardCardRequest(" ", null, "Back", null, null, null, null)
-        ))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+                new CreateFlashcardCardRequest(" ", null, "Back", null, null, null, null)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
 
         verify(flashcardCardRepository, never()).save(any());
     }
@@ -176,14 +185,14 @@ class AdminFlashcardServiceTest {
     @Test
     void addCardShouldRejectEmptyBackSide() {
         FlashcardSet flashcardSet = flashcardSet();
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
 
         assertThatThrownBy(() -> adminFlashcardService.addCard(
                 flashcardSet.getId(),
-                new CreateFlashcardCardRequest("Front", null, " ", null, null, null, null)
-        ))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+                new CreateFlashcardCardRequest("Front", null, " ", null, null, null, null)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
 
         verify(flashcardCardRepository, never()).save(any());
     }
@@ -196,8 +205,7 @@ class AdminFlashcardServiceTest {
 
         FlashcardCardResponse response = adminFlashcardService.updateCard(
                 card.getId(),
-                new UpdateFlashcardCardRequest("  Updated front  ", null, "  Updated back  ", null, " hint ", null, 3)
-        );
+                new UpdateFlashcardCardRequest("  Updated front  ", null, "  Updated back  ", null, " hint ", null, 3));
 
         assertThat(response.frontText()).isEqualTo("Updated front");
         assertThat(response.backText()).isEqualTo("Updated back");
@@ -221,14 +229,14 @@ class AdminFlashcardServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         FlashcardCard first = card(flashcardSet, 0);
         FlashcardCard second = card(flashcardSet, 1);
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
                 .thenReturn(List.of(first, second));
 
         FlashcardSetResponse response = adminFlashcardService.reorderCards(
                 flashcardSet.getId(),
-                new ReorderFlashcardCardsRequest(List.of(second.getId(), first.getId()))
-        );
+                new ReorderFlashcardCardsRequest(List.of(second.getId(), first.getId())));
 
         assertThat(second.getOrderIndex()).isZero();
         assertThat(first.getOrderIndex()).isEqualTo(1);
