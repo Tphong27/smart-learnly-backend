@@ -86,19 +86,24 @@ public class CurriculumResolutionService {
         return resolveClassEffectivePublished(courseId, classId);
     }
 
+    // @Transactional(readOnly = true)
+    // public CurriculumResolution resolveTraineeProgress(UUID courseId, UUID classId, UUID studentId) {
+    //     requireClassEnrollment(courseId, classId, studentId);
+    //     ClassCurriculumBinding binding = requireBinding(classId, courseId);
+
+    //     if (binding.getDraftVersionId() != null) {
+    //         CurriculumVersion draft = findClassVersion(binding.getDraftVersionId(), classId);
+    //         if (draft.getStatus() == CurriculumStatus.DRAFT) {
+    //             return new CurriculumResolution(draft, binding, classId, true, SOURCE_CLASS_DRAFT);
+    //         }
+    //     }
+
+    //     return resolveClassEffectivePublished(courseId, classId);
+    // }
+
     @Transactional(readOnly = true)
     public CurriculumResolution resolveTraineeProgress(UUID courseId, UUID classId, UUID studentId) {
-        requireClassEnrollment(courseId, classId, studentId);
-        ClassCurriculumBinding binding = requireBinding(classId, courseId);
-
-        if (binding.getDraftVersionId() != null) {
-            CurriculumVersion draft = findClassVersion(binding.getDraftVersionId(), classId);
-            if (draft.getStatus() == CurriculumStatus.DRAFT) {
-                return new CurriculumResolution(draft, binding, classId, true, SOURCE_CLASS_DRAFT);
-            }
-        }
-
-        return resolveClassEffectivePublished(courseId, classId);
+        return resolveTraineeLearning(courseId, classId, studentId);
     }
 
     @Transactional(readOnly = true)

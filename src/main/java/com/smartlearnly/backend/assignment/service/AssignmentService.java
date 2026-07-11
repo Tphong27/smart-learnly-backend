@@ -77,9 +77,20 @@ public class AssignmentService {
                 .toList();
     }
 
-    public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId, Boolean isFlashtest) {
+    // public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId,
+    // Boolean isFlashtest) {
+    // UserAccount actor = currentUserService.requireAuthenticatedUser();
+    // return assignmentRepository.findAvailableForStudent(actor.getId(), courseId,
+    // isFlashtest)
+    // .stream()
+    // .map(this::mapToResponse)
+    // .toList();
+    // }
+
+    public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId, UUID classId, Boolean isFlashtest) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        return assignmentRepository.findAvailableForStudent(actor.getId(), courseId, isFlashtest)
+
+        return assignmentRepository.findAvailableForStudent(actor.getId(), courseId, classId, isFlashtest)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -97,8 +108,7 @@ public class AssignmentService {
     public AssignmentModel.Response getAssignmentById(UUID id) {
 
         Assignment assignment = assignmentRepository.findById(id)
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Assignment not found"));
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
 
         return mapToResponse(assignment);
     }
@@ -106,8 +116,7 @@ public class AssignmentService {
     public AssignmentModel.Response getAssignmentByLessonId(UUID lessonId) {
 
         Assignment assignment = assignmentRepository.findByLessonId(lessonId)
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Assignment not found"));
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
 
         return mapToResponse(assignment);
     }
@@ -118,26 +127,33 @@ public class AssignmentService {
             AssignmentModel.UpdateRequest request) {
 
         Assignment assignment = assignmentRepository.findById(id)
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Assignment not found"));
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
 
-        if (request.getTitle() != null) assignment.setTitle(request.getTitle());
+        if (request.getTitle() != null)
+            assignment.setTitle(request.getTitle());
         if (request.getLessonId() != null) {
             validateLessonForClass(assignment.getClassId(), request.getLessonId());
             assignment.setLessonId(request.getLessonId());
         }
-        if (request.getDescription() != null) assignment.setDescription(request.getDescription());
+        if (request.getDescription() != null)
+            assignment.setDescription(request.getDescription());
         assignment.setInstructionFileUrl(request.getInstructionFileUrl());
         assignment.setInstructionFileName(request.getInstructionFileName());
-        if (request.getDueDate() != null) assignment.setDueDate(request.getDueDate());
+        if (request.getDueDate() != null)
+            assignment.setDueDate(request.getDueDate());
         if (request.getAllowLateSubmission() != null) {
             assignment.setAllowLateSubmission(request.getAllowLateSubmission());
         }
-        if (request.getLockoutDate() != null) assignment.setLockoutDate(request.getLockoutDate());
-        if (request.getMaxScore() != null) assignment.setMaxScore(request.getMaxScore());
-        if (request.getIsArchived() != null) assignment.setIsArchived(request.getIsArchived());
-        if (request.getTestId() != null) assignment.setTestId(request.getTestId());
-        if (request.getIsFlashtest() != null) assignment.setIsFlashtest(request.getIsFlashtest());
+        if (request.getLockoutDate() != null)
+            assignment.setLockoutDate(request.getLockoutDate());
+        if (request.getMaxScore() != null)
+            assignment.setMaxScore(request.getMaxScore());
+        if (request.getIsArchived() != null)
+            assignment.setIsArchived(request.getIsArchived());
+        if (request.getTestId() != null)
+            assignment.setTestId(request.getTestId());
+        if (request.getIsFlashtest() != null)
+            assignment.setIsFlashtest(request.getIsFlashtest());
 
         Assignment updated = assignmentRepository.save(assignment);
         if (Boolean.TRUE.equals(updated.getIsFlashtest())) {
@@ -158,8 +174,7 @@ public class AssignmentService {
 
     private AssignmentModel.Response mapToResponse(Assignment assignment) {
 
-        AssignmentModel.Response response =
-                new AssignmentModel.Response();
+        AssignmentModel.Response response = new AssignmentModel.Response();
 
         response.setId(assignment.getId());
         UUID classId = resolveClassId(assignment);
@@ -256,4 +271,3 @@ public class AssignmentService {
                 || "SME".equalsIgnoreCase(role);
     }
 }
-

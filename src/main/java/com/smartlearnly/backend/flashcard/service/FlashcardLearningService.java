@@ -22,6 +22,12 @@ import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -50,6 +56,9 @@ public class FlashcardLearningService {
     private final FlashcardProgressRepository flashcardProgressRepository;
     private final EnrollmentAccessService enrollmentAccessService;
     private final CurrentUserService currentUserService;
+    private final CurriculumLessonRepository curriculumLessonRepository;
+    private final ClassOfferingRepository classOfferingRepository;
+    private final CurriculumResolutionService curriculumResolutionService;
 
     @Transactional(readOnly = true)
     public List<LearningFlashcardSetResponse> listLearningFlashcards() {
@@ -60,58 +69,278 @@ public class FlashcardLearningService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
-    public FlashcardPracticeSetResponse getLessonFlashcards(UUID lessonId) {
-        Lesson lesson = findLesson(lessonId);
-        requireFlashcardLesson(lesson);
-        CourseEnrollment enrollment = enrollmentAccessService.requireCourseAccess(lesson.getCourse().getId());
-        FlashcardSet flashcardSet = flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lessonId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
+    // @Transactional(readOnly = true)
+    // public FlashcardPracticeSetResponse getLessonFlashcards(UUID lessonId) {
+    // Lesson lesson = findLesson(lessonId);
+    // requireFlashcardLesson(lesson);
+    // CourseEnrollment enrollment =
+    // enrollmentAccessService.requireCourseAccess(lesson.getCourse().getId());
+    // FlashcardSet flashcardSet =
+    // flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lessonId)
+    // .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+    // "Flashcard set was not found"));
 
-        return toPracticeSetResponse(flashcardSet, enrollment.getStudentId());
+    // return toPracticeSetResponse(flashcardSet, enrollment.getStudentId());
+    // }
+
+    @Transactional(readOnly = true)
+    public FlashcardPracticeSetResponse getLessonFlashcards(
+            UUID lessonReferenceId,
+            UUID classId) {
+        UserAccount student = currentUserService.requireAuthenticatedUser();
+
+        ClassOffering classOffering = classOfferingRepository
+                .findByIdAndDeletedAtIsNull(classId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "Class was not found"));
+
+        UUID courseId = classOffering.getCourseId();
+
+        CurriculumResolution resolution = curriculumResolutionService.resolveTraineeLearning(
+                courseId,
+                classId,
+                student.getId());
+
+        CurriculumLesson curriculumLesson = curriculumLessonRepository
+                .findEffectiveLessonReference(
+                        resolution.version().getId(),
+                        lessonReferenceId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "Flashcard lesson was not found in this class curriculum"));
+
+        requireCurriculumFlashcardLesson(curriculumLesson);
+
+        FlashcardSet flashcardSet = findEffectiveFlashcardSet(curriculumLesson);
+
+        return toCurriculumPracticeSetResponse(flashcardSet, curriculumLesson, student.getId());
     }
 
     @Transactional(readOnly = true)
     public FlashcardPracticeSetResponse getSetPractice(UUID setId) {
-        FlashcardSet flashcardSet = findSet(setId);
-        Lesson lesson = requireLinkedFlashcardLesson(flashcardSet);
-        CourseEnrollment enrollment = enrollmentAccessService.requireCourseAccess(lesson.getCourse().getId());
+        UserAccount student = currentUserService.requireAuthenticatedUser();
 
-        return toPracticeSetResponse(flashcardSet, enrollment.getStudentId());
+        FlashcardSet flashcardSet = findSet(setId);
+
+        if (flashcardSet.getCurriculumLessonId() != null) {
+            CurriculumLesson curriculumLesson = curriculumLessonRepository
+                    .findById(
+                            flashcardSet.getCurriculumLessonId())
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.RESOURCE_NOT_FOUND,
+                            "Flashcard curriculum lesson was not found"));
+
+            UUID courseId = curriculumLesson
+                    .getSection()
+                    .getCurriculumVersion()
+                    .getCourseId();
+
+            enrollmentAccessService.requireCourseAccess(
+                    courseId);
+
+            return toCurriculumPracticeSetResponse(
+                    flashcardSet,
+                    curriculumLesson,
+                    student.getId());
+        }
+
+        Lesson lesson = requireLinkedFlashcardLesson(
+                flashcardSet);
+
+        CourseEnrollment enrollment = enrollmentAccessService.requireCourseAccess(
+                lesson.getCourse().getId());
+
+        return toPracticeSetResponse(
+                flashcardSet,
+                enrollment.getStudentId());
     }
 
     @Transactional
-    public FlashcardProgressResponse submitProgress(UUID cardId, FlashcardProgressRequest request) {
+    public FlashcardProgressResponse submitProgress(
+            UUID cardId,
+            FlashcardProgressRequest request) {
         FlashcardCard card = findCard(cardId);
+
         FlashcardSet flashcardSet = card.getFlashcardSet();
-        Lesson lesson = requireLinkedFlashcardLesson(flashcardSet);
-        CourseEnrollment enrollment = enrollmentAccessService.requireCourseAccess(lesson.getCourse().getId());
+
+        UUID courseId = resolveFlashcardCourseId(flashcardSet);
+
+        CourseEnrollment enrollment = enrollmentAccessService.requireCourseAccess(courseId);
+
         String result = normalizeResult(request.result());
 
         FlashcardProgress progress = flashcardProgressRepository
-                .findByStudentIdAndCardId(enrollment.getStudentId(), cardId)
-                .orElseGet(() -> newProgress(enrollment.getStudentId(), card));
+                .findByStudentIdAndCardId(
+                        enrollment.getStudentId(),
+                        cardId)
+                .orElseGet(() -> newProgress(
+                        enrollment.getStudentId(),
+                        card));
 
         Instant now = Instant.now();
+
         if (RESULT_KNOWN.equals(result)) {
-            int nextInterval = nextKnownInterval(progress.getIntervalDays());
-            progress.setLearningStatus(STATUS_KNOWN);
-            progress.setLastReviewResult(RESULT_KNOWN);
-            progress.setRepetitions(defaultInt(progress.getRepetitions()) + 1);
-            progress.setIntervalDays(nextInterval);
-            progress.setLastReviewedAt(now);
-            progress.setNextReviewAt(now.plus(nextInterval, ChronoUnit.DAYS));
+            int nextInterval = nextKnownInterval(
+                    progress.getIntervalDays());
+
+            progress.setLearningStatus(
+                    STATUS_KNOWN);
+
+            progress.setLastReviewResult(
+                    RESULT_KNOWN);
+
+            progress.setRepetitions(
+                    defaultInt(
+                            progress.getRepetitions()) + 1);
+
+            progress.setIntervalDays(
+                    nextInterval);
+
+            progress.setLastReviewedAt(
+                    now);
+
+            progress.setNextReviewAt(
+                    now.plus(
+                            nextInterval,
+                            ChronoUnit.DAYS));
+        } else {
+            progress.setLearningStatus(
+                    STATUS_LEARNING);
+
+            progress.setLastReviewResult(
+                    RESULT_STILL_LEARNING);
+
+            progress.setIntervalDays(
+                    1);
+
+            progress.setLastReviewedAt(
+                    now);
+
+            progress.setNextReviewAt(
+                    now.plus(
+                            1,
+                            ChronoUnit.DAYS));
         }
-        else {
-            progress.setLearningStatus(STATUS_LEARNING);
-            progress.setLastReviewResult(RESULT_STILL_LEARNING);
-            progress.setIntervalDays(1);
-            progress.setLastReviewedAt(now);
-            progress.setNextReviewAt(now.plus(1, ChronoUnit.DAYS));
-        }
+
         progress.setUpdatedAt(now);
 
-        return toProgressResponse(flashcardProgressRepository.save(progress));
+        return toProgressResponse(
+                flashcardProgressRepository
+                        .save(progress));
+    }
+
+    private void requireCurriculumFlashcardLesson(
+            CurriculumLesson lesson) {
+        if (lesson.getType() != LessonType.FLASHCARD) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Lesson is not a flashcard lesson");
+        }
+
+        if (lesson.getStatus() == LessonStatus.INACTIVE) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
+                    "Flashcard lesson was not found");
+        }
+    }
+
+    private FlashcardSet findEffectiveFlashcardSet(CurriculumLesson curriculumLesson) {
+        // 1. Flashcard riêng của class curriculum.
+        FlashcardSet customizedSet = flashcardSetRepository
+                .findByCurriculumLessonIdAndDeletedAtIsNull(
+                        curriculumLesson.getId())
+                .orElse(null);
+
+        if (customizedSet != null) {
+            return customizedSet;
+        }
+
+        // 2. Curriculum đang kế thừa master/legacy flashcard.
+        UUID sourceLessonId = curriculumLesson.getSourceLessonId();
+
+        if (sourceLessonId != null) {
+            FlashcardSet inheritedSet = flashcardSetRepository
+                    .findByLessonIdAndDeletedAtIsNull(
+                            sourceLessonId)
+                    .orElse(null);
+
+            if (inheritedSet != null) {
+                return inheritedSet;
+            }
+        }
+
+        // 3. lessonIdentityId hiện cũng chính là legacy lesson id
+        // đối với dữ liệu master đã migrate của project.
+        UUID lessonIdentityId = curriculumLesson.getLessonIdentityId();
+
+        if (lessonIdentityId != null) {
+            FlashcardSet identitySet = flashcardSetRepository
+                    .findByLessonIdAndDeletedAtIsNull(
+                            lessonIdentityId)
+                    .orElse(null);
+
+            if (identitySet != null) {
+                return identitySet;
+            }
+        }
+
+        throw new BusinessException(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard set was not found for this curriculum lesson");
+    }
+
+    private FlashcardPracticeSetResponse toCurriculumPracticeSetResponse(
+            FlashcardSet flashcardSet,
+            CurriculumLesson curriculumLesson,
+            UUID studentId) {
+        List<FlashcardCard> cards = flashcardCardRepository
+                .findActiveBySetIdOrderByOrderIndex(
+                        flashcardSet.getId());
+
+        Map<UUID, FlashcardProgress> progressByCardId = findProgressByCardId(
+                studentId,
+                cards);
+
+        UUID courseId = curriculumLesson
+                .getSection()
+                .getCurriculumVersion()
+                .getCourseId();
+
+        return new FlashcardPracticeSetResponse(
+                flashcardSet.getId(),
+                curriculumLesson.getId(),
+                courseId,
+                curriculumLesson.getSection().getId(),
+                flashcardSet.getTitle(),
+                flashcardSet.getDescription(),
+                cards.stream()
+                        .map(card -> toPracticeCardResponse(
+                                card,
+                                progressByCardId.get(
+                                        card.getId())))
+                        .toList());
+    }
+
+    private UUID resolveFlashcardCourseId(FlashcardSet flashcardSet) {
+        if (flashcardSet.getCurriculumLessonId() != null) {
+            CurriculumLesson curriculumLesson = curriculumLessonRepository
+                    .findById(
+                            flashcardSet.getCurriculumLessonId())
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.RESOURCE_NOT_FOUND,
+                            "Flashcard curriculum lesson was not found"));
+
+            return curriculumLesson
+                    .getSection()
+                    .getCurriculumVersion()
+                    .getCourseId();
+        }
+
+        Lesson lesson = requireLinkedFlashcardLesson(
+                flashcardSet);
+
+        return lesson.getCourse().getId();
     }
 
     private Lesson findLesson(UUID lessonId) {
@@ -169,8 +398,7 @@ public class FlashcardLearningService {
                 flashcardSet.getDescription(),
                 cards.stream()
                         .map(card -> toPracticeCardResponse(card, progressByCardId.get(card.getId())))
-                        .toList()
-        );
+                        .toList());
     }
 
     private LearningFlashcardSetResponse toLearningFlashcardSetResponse(LearningFlashcardSetProjection projection) {
@@ -190,8 +418,7 @@ public class FlashcardLearningService {
                 toInt(projection.getKnownCount()),
                 toInt(projection.getStillLearningCount()),
                 toInt(projection.getNotStartedCount()),
-                projection.getLastReviewedAt()
-        );
+                projection.getLastReviewedAt());
     }
 
     private Map<UUID, FlashcardProgress> findProgressByCardId(UUID studentId, List<FlashcardCard> cards) {
@@ -215,8 +442,7 @@ public class FlashcardLearningService {
                 card.getHint(),
                 card.getExplanation(),
                 card.getOrderIndex(),
-                progress == null ? null : toProgressSummary(progress)
-        );
+                progress == null ? null : toProgressSummary(progress));
     }
 
     private FlashcardProgressSummary toProgressSummary(FlashcardProgress progress) {
@@ -226,8 +452,7 @@ public class FlashcardLearningService {
                 progress.getRepetitions(),
                 progress.getIntervalDays(),
                 progress.getLastReviewedAt(),
-                progress.getNextReviewAt()
-        );
+                progress.getNextReviewAt());
     }
 
     private FlashcardProgressResponse toProgressResponse(FlashcardProgress progress) {
@@ -238,8 +463,7 @@ public class FlashcardLearningService {
                 progress.getRepetitions(),
                 progress.getIntervalDays(),
                 progress.getLastReviewedAt(),
-                progress.getNextReviewAt()
-        );
+                progress.getNextReviewAt());
     }
 
     private FlashcardProgress newProgress(UUID studentId, FlashcardCard card) {
