@@ -19,13 +19,13 @@ import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.course.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
-import com.smartlearnly.backend.learning.module.entity.CourseSection;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.Comparator;
@@ -45,12 +45,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AdminFlashcardService {
     private final CourseRepository courseRepository;
-    private final CourseSectionRepository courseSectionRepository;
     private final LessonRepository lessonRepository;
     private final FlashcardSetRepository flashcardSetRepository;
     private final FlashcardCardRepository flashcardCardRepository;
     private final CurrentUserService currentUserService;
     private final CurriculumLessonRepository curriculumLessonRepository;
+    private final CurriculumSectionRepository curriculumSectionRepository;
     private final CourseAccessService courseAccessService;
 
     @Transactional
@@ -60,25 +60,24 @@ public class AdminFlashcardService {
             CreateFlashcardLessonRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
         Course course = findCourse(courseId);
-        CourseSection section = courseSectionRepository.findByIdAndCourseId(sectionId, courseId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
+        CurriculumSection section = findCurriculumSection(courseId, sectionId);
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 
-        Lesson lesson = new Lesson();
-        lesson.setCourse(course);
+        CurriculumLesson lesson = new CurriculumLesson();
         lesson.setSection(section);
+        lesson.setLessonIdentityId(UUID.randomUUID());
         lesson.setTitle(normalizeRequired(request.title(), "Flashcard lesson title is required"));
         lesson.setType(LessonType.FLASHCARD);
         lesson.setStatus(parseLessonStatus(request.status(), LessonStatus.DRAFT));
         lesson.setPreview(Boolean.TRUE.equals(request.isPreview()));
         lesson.setSortOrder(request.sortOrder() == null
-                ? lessonRepository.findMaxSortOrderBySectionId(sectionId) + 1
+                ? curriculumLessonRepository.findMaxSortOrderBySectionId(sectionId) + 1
                 : request.sortOrder());
 
-        Lesson savedLesson = lessonRepository.save(lesson);
+        CurriculumLesson savedLesson = curriculumLessonRepository.save(lesson);
 
         FlashcardSet flashcardSet = new FlashcardSet();
-        flashcardSet.setLesson(savedLesson);
+        flashcardSet.setCurriculumLessonId(savedLesson.getId());
         flashcardSet.setCourse(course);
         flashcardSet.setCreatedBy(actor);
         flashcardSet.setTitle(savedLesson.getTitle());
@@ -117,9 +116,7 @@ public class AdminFlashcardService {
         if (request.title() != null) {
             String title = normalizeRequired(request.title(), "Flashcard set title is required");
             flashcardSet.setTitle(title);
-            Lesson lesson = requireLinkedLesson(flashcardSet);
-            lesson.setTitle(title);
-            lessonRepository.save(lesson);
+            updateLinkedLessonTitle(flashcardSet, title);
         }
         if (request.description() != null) {
             flashcardSet.setDescription(normalizeNullable(request.description()));
@@ -140,9 +137,7 @@ public class AdminFlashcardService {
         activeCards.forEach(card -> card.setDeletedAt(now));
         flashcardCardRepository.saveAll(activeCards);
 
-        Lesson lesson = requireLinkedLesson(flashcardSet);
-        lesson.setStatus(LessonStatus.INACTIVE);
-        lessonRepository.save(lesson);
+        deactivateLinkedLesson(flashcardSet);
         flashcardSetRepository.save(flashcardSet);
     }
 
@@ -295,10 +290,21 @@ public class AdminFlashcardService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
     }
 
+    private CurriculumSection findCurriculumSection(UUID courseId, UUID sectionId) {
+        CurriculumSection section = curriculumSectionRepository.findById(sectionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
+
+        if (!courseId.equals(section.getCurriculumVersion().getCourseId())) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found");
+        }
+
+        return section;
+    }
+
     private FlashcardSet findSet(UUID setId) {
         FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
-        requireLinkedLesson(flashcardSet);
+        requireLinkedFlashcardLesson(flashcardSet);
         return flashcardSet;
     }
 
@@ -311,22 +317,66 @@ public class AdminFlashcardService {
         return flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(setId);
     }
 
-    private Lesson requireLinkedLesson(FlashcardSet flashcardSet) {
+    private void requireLinkedFlashcardLesson(FlashcardSet flashcardSet) {
         Lesson lesson = flashcardSet.getLesson();
-        if (lesson == null || lesson.getCourse() == null || lesson.getCourse().getDeletedAt() != null) {
+        if (lesson != null) {
+            if (lesson.getCourse() == null || lesson.getCourse().getDeletedAt() != null) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
+            }
+            if (lesson.getType() != LessonType.FLASHCARD) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard set is not linked to a flashcard lesson");
+            }
+            return;
+        }
+
+        requireLinkedCurriculumLesson(flashcardSet);
+    }
+
+    private CurriculumLesson requireLinkedCurriculumLesson(FlashcardSet flashcardSet) {
+        UUID curriculumLessonId = flashcardSet.getCurriculumLessonId();
+        if (curriculumLessonId == null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
         }
+
+        CurriculumLesson lesson = curriculumLessonRepository.findById(curriculumLessonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found"));
         if (lesson.getType() != LessonType.FLASHCARD) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard set is not linked to a flashcard lesson");
         }
         return lesson;
     }
 
+    private void updateLinkedLessonTitle(FlashcardSet flashcardSet, String title) {
+        if (flashcardSet.getLesson() != null) {
+            Lesson lesson = flashcardSet.getLesson();
+            lesson.setTitle(title);
+            lessonRepository.save(lesson);
+            return;
+        }
+
+        CurriculumLesson lesson = requireLinkedCurriculumLesson(flashcardSet);
+        lesson.setTitle(title);
+        curriculumLessonRepository.save(lesson);
+    }
+
+    private void deactivateLinkedLesson(FlashcardSet flashcardSet) {
+        if (flashcardSet.getLesson() != null) {
+            Lesson lesson = flashcardSet.getLesson();
+            lesson.setStatus(LessonStatus.INACTIVE);
+            lessonRepository.save(lesson);
+            return;
+        }
+
+        CurriculumLesson lesson = requireLinkedCurriculumLesson(flashcardSet);
+        lesson.setStatus(LessonStatus.INACTIVE);
+        curriculumLessonRepository.save(lesson);
+    }
+
     private void requireActiveSet(FlashcardSet flashcardSet) {
         if (flashcardSet == null || flashcardSet.getDeletedAt() != null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found");
         }
-        requireLinkedLesson(flashcardSet);
+        requireLinkedFlashcardLesson(flashcardSet);
     }
 
     private void applyCardCreateRequest(FlashcardCard card, CreateFlashcardCardRequest request) {
@@ -399,11 +449,26 @@ public class AdminFlashcardService {
     }
 
     private FlashcardSetResponse toSetResponse(FlashcardSet flashcardSet, List<FlashcardCard> cards) {
-        Lesson lesson = requireLinkedLesson(flashcardSet);
+        Lesson legacyLesson = flashcardSet.getLesson();
+        if (legacyLesson != null) {
+            requireLinkedFlashcardLesson(flashcardSet);
+            return new FlashcardSetResponse(
+                    flashcardSet.getId(),
+                    legacyLesson.getId(),
+                    legacyLesson.getCourse().getId(),
+                    legacyLesson.getSection().getId(),
+                    flashcardSet.getTitle(),
+                    flashcardSet.getDescription(),
+                    cards.stream().map(this::toCardResponse).toList(),
+                    flashcardSet.getCreatedAt(),
+                    flashcardSet.getUpdatedAt());
+        }
+
+        CurriculumLesson lesson = requireLinkedCurriculumLesson(flashcardSet);
         return new FlashcardSetResponse(
                 flashcardSet.getId(),
                 lesson.getId(),
-                lesson.getCourse().getId(),
+                lesson.getSection().getCurriculumVersion().getCourseId(),
                 lesson.getSection().getId(),
                 flashcardSet.getTitle(),
                 flashcardSet.getDescription(),
