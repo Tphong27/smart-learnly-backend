@@ -21,6 +21,7 @@ public record CourseProgressItemResponse(
         int overallPercent,
         ProgressMetricResponse lesson,
         ProgressMetricResponse quiz,
-        ProgressMetricResponse flashcard
+        ProgressMetricResponse flashcard,
+        ProgressMetricResponse assignment
 ) {
 }
