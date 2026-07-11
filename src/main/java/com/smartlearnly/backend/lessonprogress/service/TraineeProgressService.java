@@ -54,8 +54,12 @@ public class TraineeProgressService {
                 UserAccount student = currentUserService.requireAuthenticatedUser();
                 List<MyCourseResponse> myCourses = courseEnrollmentService.getMyCourses();
 
+                // List<CourseProgressItemResponse> courses = myCourses.stream()
+                // .map(course -> buildCourseProgress(student.getId(), course))
+                // .toList();
                 List<CourseProgressItemResponse> courses = myCourses.stream()
-                                .map(course -> buildCourseProgress(student.getId(), course))
+                                .filter(course -> course.enrolledClass() != null)
+                                .map(course -> buildClassProgress(student.getId(), course))
                                 .toList();
 
                 List<CourseProgressItemResponse> completedCourseItems = courses.stream()
@@ -124,36 +128,64 @@ public class TraineeProgressService {
                                 saved.getLessonIdentityId());
         }
 
-        private CourseProgressItemResponse buildCourseProgress(UUID studentId, MyCourseResponse course) {
-                UUID classId = course.enrolledClass() == null ? null : course.enrolledClass().id();
-                UUID classEnrollmentId = course.enrolledClass() == null ? null : course.enrolledClass().classEnrollmentId();
-                String className = course.enrolledClass() == null ? null : course.enrolledClass().className();
+        private CourseProgressItemResponse buildClassProgress(
+                        UUID studentId,
+                        MyCourseResponse course) {
+                if (course.enrolledClass() == null) {
+                        throw new BusinessException(ErrorCode.CONFLICT, "Trainee progress requires an enrolled class");
+                }
 
-                ProgressCounts counts = classId == null
-                                ? calculateLegacyCourseProgress(studentId, course.id())
-                                : calculateClassCurriculumProgress(studentId, course.id(), classId);
+                UUID classId = course.enrolledClass().id();
+                UUID classEnrollmentId = course.enrolledClass().classEnrollmentId();
+                String className = course.enrolledClass().className();
 
-                ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
-                ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
+                ProgressCounts counts = calculateClassCurriculumProgress(
+                                studentId,
+                                course.id(),
+                                classId);
 
-                int overallPercent = calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
+                ProgressMetricResponse lessonMetric = metric(
+                                "Lesson",
+                                counts.lessonCompleted(),
+                                counts.lessonTotal());
+
+                ProgressMetricResponse quizMetric = metric(
+                                "Quiz",
+                                counts.quizCompleted(),
+                                counts.quizTotal());
+
+                ProgressMetricResponse flashcardMetric = metric(
+                                "Flashcard",
+                                counts.flashcardCompleted(),
+                                counts.flashcardTotal());
+
+                int overallPercent = calculateOverallPercent(
+                                lessonMetric,
+                                quizMetric,
+                                flashcardMetric);
 
                 return new CourseProgressItemResponse(
                                 course.id(),
                                 course.id(),
                                 course.enrollmentId(),
+
                                 classId,
                                 classEnrollmentId,
                                 className,
+
                                 course.title(),
                                 course.category() == null ? "Course" : course.category().name(),
+
                                 course.enrollmentStatus(),
+
                                 overallPercent >= 100 ? "COMPLETED" : "IN_PROGRESS",
+
                                 course.accessAllowed(),
                                 course.accessBlockedReason(),
                                 course.avatarUrl(),
+
                                 overallPercent,
+
                                 lessonMetric,
                                 quizMetric,
                                 flashcardMetric);
@@ -177,41 +209,45 @@ public class TraineeProgressService {
 
                 return new ProgressCounts(
                                 countByProgressGroup(lessons, ProgressGroup.LESSON),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.LESSON),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.LESSON),
                                 countByProgressGroup(lessons, ProgressGroup.QUIZ),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.QUIZ),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.QUIZ),
                                 countByProgressGroup(lessons, ProgressGroup.FLASHCARD),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.FLASHCARD));
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.FLASHCARD));
         }
 
-        private ProgressCounts calculateLegacyCourseProgress(UUID studentId, UUID courseId) {
-                List<CourseSection> sections = courseSectionRepository
-                                .findByCourseIdOrderBySortOrderAscCreatedAtAsc(courseId);
-                List<Lesson> lessons = sections.stream()
-                                .flatMap(section -> section.getLessons().stream())
-                                .filter(this::isVisibleForLearningProgress)
-                                .sorted(Comparator
-                                                .comparing((Lesson lesson) -> lesson.getSection().getSortOrder())
-                                                .thenComparing(Lesson::getSortOrder)
-                                                .thenComparing(Lesson::getCreatedAt))
-                                .toList();
+        // private ProgressCounts calculateLegacyCourseProgress(UUID studentId, UUID courseId) {
+        //         List<CourseSection> sections = courseSectionRepository
+        //                         .findByCourseIdOrderBySortOrderAscCreatedAtAsc(courseId);
+        //         List<Lesson> lessons = sections.stream()
+        //                         .flatMap(section -> section.getLessons().stream())
+        //                         .filter(this::isVisibleForLearningProgress)
+        //                         .sorted(Comparator
+        //                                         .comparing((Lesson lesson) -> lesson.getSection().getSortOrder())
+        //                                         .thenComparing(Lesson::getSortOrder)
+        //                                         .thenComparing(Lesson::getCreatedAt))
+        //                         .toList();
 
-                Map<UUID, LessonProgress> progressByLessonId = lessonProgressRepository
-                                .findByStudentIdAndCourseId(studentId, courseId)
-                                .stream()
-                                .collect(Collectors.toMap(
-                                                LessonProgress::getLessonId,
-                                                Function.identity(),
-                                                (left, right) -> left));
+        //         Map<UUID, LessonProgress> progressByLessonId = lessonProgressRepository
+        //                         .findByStudentIdAndCourseId(studentId, courseId)
+        //                         .stream()
+        //                         .collect(Collectors.toMap(
+        //                                         LessonProgress::getLessonId,
+        //                                         Function.identity(),
+        //                                         (left, right) -> left));
 
-                return new ProgressCounts(
-                                countLegacyByProgressGroup(lessons, ProgressGroup.LESSON),
-                                countCompletedLegacyByProgressGroup(lessons, progressByLessonId, ProgressGroup.LESSON),
-                                countLegacyByProgressGroup(lessons, ProgressGroup.QUIZ),
-                                countCompletedLegacyByProgressGroup(lessons, progressByLessonId, ProgressGroup.QUIZ),
-                                countLegacyByProgressGroup(lessons, ProgressGroup.FLASHCARD),
-                                countCompletedLegacyByProgressGroup(lessons, progressByLessonId, ProgressGroup.FLASHCARD));
-        }
+        //         return new ProgressCounts(
+        //                         countLegacyByProgressGroup(lessons, ProgressGroup.LESSON),
+        //                         countCompletedLegacyByProgressGroup(lessons, progressByLessonId, ProgressGroup.LESSON),
+        //                         countLegacyByProgressGroup(lessons, ProgressGroup.QUIZ),
+        //                         countCompletedLegacyByProgressGroup(lessons, progressByLessonId, ProgressGroup.QUIZ),
+        //                         countLegacyByProgressGroup(lessons, ProgressGroup.FLASHCARD),
+        //                         countCompletedLegacyByProgressGroup(lessons, progressByLessonId,
+        //                                         ProgressGroup.FLASHCARD));
+        // }
 
         private ClassOffering requireClass(UUID classId) {
                 return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
@@ -223,12 +259,18 @@ public class TraineeProgressService {
         private List<CurriculumLesson> orderedCurriculumLessons(CurriculumVersion version) {
                 return version.getSections().stream()
                                 .sorted(Comparator
-                                                .comparing(CurriculumSection::getSortOrder, Comparator.nullsLast(Integer::compareTo))
-                                                .thenComparing(CurriculumSection::getCreatedAt, Comparator.nullsLast(Instant::compareTo)))
+                                                .comparing(CurriculumSection::getSortOrder,
+                                                                Comparator.nullsLast(Integer::compareTo))
+                                                .thenComparing(CurriculumSection::getCreatedAt,
+                                                                Comparator.nullsLast(Instant::compareTo)))
                                 .flatMap(section -> section.getLessons().stream()
                                                 .sorted(Comparator
-                                                                .comparing(CurriculumLesson::getSortOrder, Comparator.nullsLast(Integer::compareTo))
-                                                                .thenComparing(CurriculumLesson::getCreatedAt, Comparator.nullsLast(Instant::compareTo))))
+                                                                .comparing(CurriculumLesson::getSortOrder,
+                                                                                Comparator.nullsLast(
+                                                                                                Integer::compareTo))
+                                                                .thenComparing(CurriculumLesson::getCreatedAt,
+                                                                                Comparator.nullsLast(
+                                                                                                Instant::compareTo))))
                                 .toList();
         }
 
@@ -253,7 +295,8 @@ public class TraineeProgressService {
                 return (int) lessons.stream()
                                 .filter(lesson -> belongsToProgressGroup(lesson.getType(), group))
                                 .filter(lesson -> {
-                                        LessonProgress progress = progressByLessonIdentityId.get(lesson.getLessonIdentityId());
+                                        LessonProgress progress = progressByLessonIdentityId
+                                                        .get(lesson.getLessonIdentityId());
                                         return progress != null && progress.isCompleted();
                                 })
                                 .count();

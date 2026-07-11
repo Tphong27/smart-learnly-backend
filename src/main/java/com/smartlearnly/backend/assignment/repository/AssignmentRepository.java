@@ -42,18 +42,54 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
             @Param("courseId") UUID courseId,
             @Param("isFlashtest") Boolean isFlashtest);
 
+    // @Query("""
+    // select assignment
+    // from Assignment assignment
+    // join ClassOffering classOffering on classOffering.id = assignment.classId
+    // join ClassEnrollment classEnrollment on classEnrollment.classId =
+    // assignment.classId
+    // where classEnrollment.studentId = :studentId
+    // and classEnrollment.status =
+    // com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE
+    // and (:courseId is null or classOffering.courseId = :courseId)
+    // and (
+    // :isFlashtest is null
+    // or (:isFlashtest = true and assignment.isFlashtest = true)
+    // or (:isFlashtest = false and (assignment.isFlashtest = false or
+    // assignment.isFlashtest is null))
+    // )
+    // and assignment.isArchived = false
+    // order by assignment.createdAt desc
+    // """)
+    // List<Assignment> findAvailableForStudent(
+    // @Param("studentId") UUID studentId,
+    // @Param("courseId") UUID courseId,
+    // @Param("isFlashtest") Boolean isFlashtest);
+
     @Query("""
             select assignment
             from Assignment assignment
-            join ClassOffering classOffering on classOffering.id = assignment.classId
-            join ClassEnrollment classEnrollment on classEnrollment.classId = assignment.classId
+            join ClassOffering classOffering
+                on classOffering.id = assignment.classId
+            join ClassEnrollment classEnrollment
+                on classEnrollment.classId = assignment.classId
             where classEnrollment.studentId = :studentId
-              and classEnrollment.status = com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE
+              and classEnrollment.status in (
+                  com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE,
+                  com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.COMPLETED
+              )
               and (:courseId is null or classOffering.courseId = :courseId)
+              and (:classId is null or assignment.classId = :classId)
               and (
                   :isFlashtest is null
                   or (:isFlashtest = true and assignment.isFlashtest = true)
-                  or (:isFlashtest = false and (assignment.isFlashtest = false or assignment.isFlashtest is null))
+                  or (
+                      :isFlashtest = false
+                      and (
+                          assignment.isFlashtest = false
+                          or assignment.isFlashtest is null
+                      )
+                  )
               )
               and assignment.isArchived = false
             order by assignment.createdAt desc
@@ -61,6 +97,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
     List<Assignment> findAvailableForStudent(
             @Param("studentId") UUID studentId,
             @Param("courseId") UUID courseId,
+            @Param("classId") UUID classId,
             @Param("isFlashtest") Boolean isFlashtest);
 
     Optional<Assignment> findByLessonId(UUID lessonId);
