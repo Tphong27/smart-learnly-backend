@@ -1,5 +1,9 @@
 package com.smartlearnly.backend.question.service;
 
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.AuditDomain;
+import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -11,6 +15,7 @@ import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -28,6 +33,7 @@ public class QuestionBankService {
     private final QuestionRepository questionRepository;
     private final CourseRepository courseRepository;
     private final CurrentUserService currentUserService;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public List<QuestionBankDto.Response> list(UUID courseId, String search, String status) {
@@ -60,7 +66,20 @@ public class QuestionBankService {
         bank.setStatus(normalizeStatus(request.status(), STATUS_DRAFT));
         bank.setCreatedBy(actor.getId());
 
-        return toResponse(questionBankRepository.save(bank));
+        QuestionBank saved = questionBankRepository.save(bank);
+        auditLogService.recordUser(
+                actor,
+                AuditAction.QUESTION_BANK_CREATED,
+                AuditDomain.CONTENT,
+                AuditResult.SUCCESS,
+                "QUESTION_BANK",
+                saved.getId().toString(),
+                "Question bank was created",
+                null,
+                Map.of("status", saved.getStatus()),
+                null
+        );
+        return toResponse(saved);
     }
 
     @Transactional
@@ -70,13 +89,28 @@ public class QuestionBankService {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question bank");
         }
 
+        String previousStatus = bank.getStatus();
         bank.setName(normalizeRequired(request.name(), "Bank name is required"));
         bank.setDescription(normalizeNullable(request.description()));
         if (request.status() != null && !request.status().isBlank()) {
             bank.setStatus(normalizeStatus(request.status(), bank.getStatus()));
         }
 
-        return toResponse(questionBankRepository.save(bank));
+        QuestionBank saved = questionBankRepository.save(bank);
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        auditLogService.recordUser(
+                actor,
+                AuditAction.QUESTION_BANK_UPDATED,
+                AuditDomain.CONTENT,
+                AuditResult.SUCCESS,
+                "QUESTION_BANK",
+                saved.getId().toString(),
+                "Question bank was updated",
+                Map.of("status", previousStatus),
+                Map.of("status", saved.getStatus()),
+                null
+        );
+        return toResponse(saved);
     }
 
     @Transactional
@@ -86,8 +120,55 @@ public class QuestionBankService {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question bank is already archived");
         }
 
+        String previousStatus = bank.getStatus();
         bank.setStatus(STATUS_ARCHIVED);
-        questionBankRepository.save(bank);
+        QuestionBank saved = questionBankRepository.save(bank);
+
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        auditLogService.recordUser(
+                actor,
+                AuditAction.QUESTION_BANK_ARCHIVED,
+                AuditDomain.CONTENT,
+                AuditResult.SUCCESS,
+                "QUESTION_BANK",
+                saved.getId().toString(),
+                "Question bank was archived",
+                Map.of("status", previousStatus),
+                Map.of("status", STATUS_ARCHIVED),
+                null
+        );
+    }
+
+    @Transactional
+    public QuestionBankDto.Response restore(UUID bankId, String targetStatus) {
+        QuestionBank bank = findBank(bankId);
+        if (!STATUS_ARCHIVED.equals(bank.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only an archived question bank can be restored");
+        }
+
+        String normalizedTarget = normalizeStatus(targetStatus, null);
+        if (STATUS_ARCHIVED.equals(normalizedTarget)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Restored question bank cannot remain archived");
+        }
+
+        String previousStatus = bank.getStatus();
+        bank.setStatus(normalizedTarget);
+        QuestionBank saved = questionBankRepository.save(bank);
+
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        auditLogService.recordUser(
+                actor,
+                AuditAction.QUESTION_BANK_RESTORED,
+                AuditDomain.CONTENT,
+                AuditResult.SUCCESS,
+                "QUESTION_BANK",
+                saved.getId().toString(),
+                "Question bank was restored",
+                Map.of("status", previousStatus),
+                Map.of("status", saved.getStatus()),
+                null
+        );
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
