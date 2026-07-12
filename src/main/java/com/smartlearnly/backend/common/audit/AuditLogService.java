@@ -177,6 +177,7 @@ public class AuditLogService {
         if (value.startsWith("ENROLLMENT_")) return AuditDomain.ENROLLMENT;
         if (value.startsWith("ORDER_")) return AuditDomain.ORDER;
         if (value.startsWith("PAYMENT_")) return AuditDomain.PAYMENT;
+        if (value.startsWith("QUESTION_BANK_")) return AuditDomain.CONTENT;
         if (value.equals("PROFILE_UPDATED")) return AuditDomain.USER;
         return AuditDomain.AUTH;
     }

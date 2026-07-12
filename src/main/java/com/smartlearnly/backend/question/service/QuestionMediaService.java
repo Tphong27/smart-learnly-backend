@@ -7,9 +7,11 @@ import com.smartlearnly.backend.file.service.FileStorageService;
 import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
 import com.smartlearnly.backend.question.dto.QuestionMediaDtos;
 import com.smartlearnly.backend.question.entity.Question;
+import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
+import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import java.io.IOException;
@@ -48,6 +50,7 @@ public class QuestionMediaService {
 
     private final QuestionRepository questionRepository;
     private final QuestionMediaAttachmentRepository mediaAttachmentRepository;
+    private final QuestionBankRepository questionBankRepository;
     private final FileStorageService fileStorageService;
     private final StorageProperties storageProperties;
     private final Tika tika = new Tika();
@@ -65,6 +68,11 @@ public class QuestionMediaService {
         }
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media for an archived question");
+        }
+        QuestionBank owningBank = questionBankRepository.findById(question.getQuestionBankId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question bank not found"));
+        if ("archived".equals(owningBank.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media in an archived question bank");
         }
         if (files == null || files.isEmpty()) {
             return List.of();
@@ -263,6 +271,11 @@ public class QuestionMediaService {
         Question question = ensureQuestionExists(questionId);
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media for an archived question");
+        }
+        QuestionBank bank = questionBankRepository.findById(question.getQuestionBankId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question bank not found"));
+        if ("archived".equals(bank.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media in an archived question bank");
         }
         return question;
     }
