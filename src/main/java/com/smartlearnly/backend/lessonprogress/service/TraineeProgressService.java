@@ -18,12 +18,8 @@ import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
-import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
-import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
-import com.smartlearnly.backend.learning.module.entity.CourseSection;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.lessonprogress.dto.CourseProgressItemResponse;
 import com.smartlearnly.backend.lessonprogress.dto.LessonProgressResponse;
 import com.smartlearnly.backend.lessonprogress.dto.ProgressMetricResponse;
@@ -47,8 +43,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class TraineeProgressService {
         private final CurrentUserService currentUserService;
         private final CourseEnrollmentService courseEnrollmentService;
-        private final CourseSectionRepository courseSectionRepository;
-        private final LessonRepository lessonRepository;
         private final LessonProgressRepository lessonProgressRepository;
         private final ClassOfferingRepository classOfferingRepository;
         private final CurriculumResolutionService curriculumResolutionService;
@@ -132,6 +126,19 @@ public class TraineeProgressService {
                                 saved.getLessonIdentityId());
         }
 
+        @Transactional(readOnly = true)
+        public int calculateStudentClassProgressPercent(UUID studentId, UUID courseId, UUID classId) {
+                ProgressCounts counts = calculateClassCurriculumProgress(studentId, courseId, classId);
+
+                ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
+
+                ProgressMetricResponse quizMetric = metric( "Quiz", counts.quizCompleted(), counts.quizTotal());
+
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
+
+                return calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
+        }
+
         private CourseProgressItemResponse buildClassProgress(UUID studentId, MyCourseResponse course) {
 
                 if (course.enrolledClass() == null) {
@@ -145,7 +152,8 @@ public class TraineeProgressService {
                 ProgressCounts counts = calculateClassCurriculumProgress(studentId, course.id(), classId);
                 ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
                 ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(),
+                                counts.flashcardTotal());
                 ProgressMetricResponse assignmentMetric = calculateAssignmentMetric(studentId, course.id(), classId);
                 int overallPercent = calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
 
@@ -254,10 +262,6 @@ public class TraineeProgressService {
                 return lesson.getStatus() == LessonStatus.PUBLISHED;
         }
 
-        private boolean isVisibleForLearningProgress(Lesson lesson) {
-                return lesson.getStatus() == LessonStatus.PUBLISHED;
-        }
-
         private int countByProgressGroup(List<CurriculumLesson> lessons, ProgressGroup group) {
                 return (int) lessons.stream()
                                 .filter(lesson -> belongsToProgressGroup(lesson.getType(), group))
@@ -273,25 +277,6 @@ public class TraineeProgressService {
                                 .filter(lesson -> {
                                         LessonProgress progress = progressByLessonIdentityId
                                                         .get(lesson.getLessonIdentityId());
-                                        return progress != null && progress.isCompleted();
-                                })
-                                .count();
-        }
-
-        private int countLegacyByProgressGroup(List<Lesson> lessons, ProgressGroup group) {
-                return (int) lessons.stream()
-                                .filter(lesson -> belongsToProgressGroup(lesson.getType(), group))
-                                .count();
-        }
-
-        private int countCompletedLegacyByProgressGroup(
-                        List<Lesson> lessons,
-                        Map<UUID, LessonProgress> progressByLessonId,
-                        ProgressGroup group) {
-                return (int) lessons.stream()
-                                .filter(lesson -> belongsToProgressGroup(lesson.getType(), group))
-                                .filter(lesson -> {
-                                        LessonProgress progress = progressByLessonId.get(lesson.getId());
                                         return progress != null && progress.isCompleted();
                                 })
                                 .count();
