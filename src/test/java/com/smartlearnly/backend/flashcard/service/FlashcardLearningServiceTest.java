@@ -5,7 +5,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.entity.CourseEnrollment;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.service.EnrollmentAccessService;
@@ -51,6 +61,12 @@ class FlashcardLearningServiceTest {
     private EnrollmentAccessService enrollmentAccessService;
     @Mock
     private CurrentUserService currentUserService;
+    @Mock
+    private CurriculumLessonRepository curriculumLessonRepository;
+    @Mock
+    private ClassOfferingRepository classOfferingRepository;
+    @Mock
+    private CurriculumResolutionService curriculumResolutionService;
 
     private FlashcardLearningService flashcardLearningService;
 
@@ -62,7 +78,10 @@ class FlashcardLearningServiceTest {
                 flashcardCardRepository,
                 flashcardProgressRepository,
                 enrollmentAccessService,
-                currentUserService
+                currentUserService,
+                curriculumLessonRepository,
+                classOfferingRepository,
+                curriculumResolutionService
         );
     }
 
@@ -114,8 +133,17 @@ class FlashcardLearningServiceTest {
     @Test
     void getLessonFlashcardsShouldReturnCardsWithStudentProgress() {
         UUID studentId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        UUID lessonReferenceId = UUID.randomUUID();
+        UserAccount student = new UserAccount();
+        student.setId(studentId);
         FlashcardSet flashcardSet = flashcardSet();
-        Lesson lesson = flashcardSet.getLesson();
+        Course course = flashcardSet.getCourse();
+        ClassOffering classOffering = classOffering(classId, course.getId());
+        CurriculumVersion version = version(course.getId());
+        CurriculumSection section = curriculumSection(version);
+        CurriculumLesson lesson = curriculumLesson(section, lessonReferenceId);
+        flashcardSet.setCurriculumLessonId(lesson.getId());
         FlashcardCard first = card(flashcardSet, 0);
         FlashcardCard second = card(flashcardSet, 1);
         FlashcardProgress progress = progress(studentId, first);
@@ -123,15 +151,21 @@ class FlashcardLearningServiceTest {
         progress.setLastReviewResult("known");
         progress.setRepetitions(2);
         progress.setIntervalDays(4);
-        when(lessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
-        when(enrollmentAccessService.requireCourseAccess(lesson.getCourse().getId())).thenReturn(enrollment(studentId, lesson.getCourse().getId()));
-        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lesson.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId)).thenReturn(Optional.of(classOffering));
+        when(curriculumResolutionService.resolveTraineeLearning(course.getId(), classId, studentId))
+                .thenReturn(new CurriculumResolution(version, null, classId, false,
+                        CurriculumResolutionService.SOURCE_MASTER_INHERITED));
+        when(curriculumLessonRepository.findEffectiveLessonReference(version.getId(), lessonReferenceId))
+                .thenReturn(Optional.of(lesson));
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId()))
+                .thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
                 .thenReturn(List.of(first, second));
         when(flashcardProgressRepository.findByStudentIdAndCardIds(studentId, List.of(first.getId(), second.getId())))
                 .thenReturn(List.of(progress));
 
-        FlashcardPracticeSetResponse response = flashcardLearningService.getLessonFlashcards(lesson.getId());
+        FlashcardPracticeSetResponse response = flashcardLearningService.getLessonFlashcards(lessonReferenceId, classId);
 
         assertThat(response.id()).isEqualTo(flashcardSet.getId());
         assertThat(response.cards()).hasSize(2);
@@ -229,6 +263,38 @@ class FlashcardLearningServiceTest {
         return section;
     }
 
+    private CurriculumVersion version(UUID courseId) {
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(UUID.randomUUID());
+        version.setCourseId(courseId);
+        version.setScope(CurriculumScope.MASTER);
+        version.setStatus(CurriculumStatus.PUBLISHED);
+        version.setVersionNumber(1);
+        return version;
+    }
+
+    private CurriculumSection curriculumSection(CurriculumVersion version) {
+        CurriculumSection section = new CurriculumSection();
+        section.setId(UUID.randomUUID());
+        section.setCurriculumVersion(version);
+        section.setTitle("Section");
+        section.setSortOrder(0);
+        return section;
+    }
+
+    private CurriculumLesson curriculumLesson(CurriculumSection section, UUID lessonReferenceId) {
+        CurriculumLesson lesson = new CurriculumLesson();
+        lesson.setId(UUID.randomUUID());
+        lesson.setSection(section);
+        lesson.setLessonIdentityId(lessonReferenceId);
+        lesson.setTitle("Flashcards");
+        lesson.setType(LessonType.FLASHCARD);
+        lesson.setStatus(LessonStatus.PUBLISHED);
+        lesson.setPreview(false);
+        lesson.setSortOrder(0);
+        return lesson;
+    }
+
     private Lesson lesson(Course course, CourseSection section) {
         Lesson lesson = new Lesson();
         lesson.setId(UUID.randomUUID());
@@ -247,6 +313,7 @@ class FlashcardLearningServiceTest {
         CourseSection section = section(course);
         FlashcardSet flashcardSet = new FlashcardSet();
         flashcardSet.setId(UUID.randomUUID());
+        flashcardSet.setCourse(course);
         flashcardSet.setLesson(lesson(course, section));
         flashcardSet.setTitle("Flashcards");
         flashcardSet.setCreatedAt(Instant.now());
@@ -283,5 +350,12 @@ class FlashcardLearningServiceTest {
         enrollment.setCourseId(courseId);
         enrollment.setStatus(EnrollmentStatus.ACTIVE);
         return enrollment;
+    }
+
+    private ClassOffering classOffering(UUID classId, UUID courseId) {
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(classId);
+        classOffering.setCourseId(courseId);
+        return classOffering;
     }
 }
