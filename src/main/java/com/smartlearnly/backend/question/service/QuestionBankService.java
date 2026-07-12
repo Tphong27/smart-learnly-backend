@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.question.service;
 
+import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditDomain;
 import com.smartlearnly.backend.common.audit.AuditLogService;
@@ -18,7 +19,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,18 +37,38 @@ public class QuestionBankService {
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
 
+    private static final int MAX_PAGE_SIZE = 200;
+
     @Transactional(readOnly = true)
     public List<QuestionBankDto.Response> list(UUID courseId, String search, String status) {
         String normalizedStatus = normalizeStatusFilter(status);
         String normalizedSearch = normalizeNullable(search);
 
-        return questionBankRepository.findAll(Sort.by(Sort.Direction.DESC, "updatedAt"))
-                .stream()
-                .filter(bank -> courseId == null || courseId.equals(bank.getCourseId()))
-                .filter(bank -> normalizedStatus == null || normalizedStatus.equals(bank.getStatus()))
-                .filter(bank -> matchesSearch(bank, normalizedSearch))
-                .map(this::toResponse)
-                .toList();
+        return questionBankRepository.searchForAdmin(
+                courseId,
+                normalizedStatus,
+                normalizedSearch,
+                PageRequest.of(0, MAX_PAGE_SIZE)
+        ).getContent().stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<QuestionBankDto.Response> listPaged(UUID courseId, String search, String status, int page, int size) {
+        String normalizedStatus = normalizeStatusFilter(status);
+        String normalizedSearch = normalizeNullable(search);
+
+        int effectivePage = Math.max(0, page);
+        int effectiveSize = Math.min(Math.max(1, size), MAX_PAGE_SIZE);
+
+        Page<QuestionBank> result = questionBankRepository.searchForAdmin(
+                courseId,
+                normalizedStatus,
+                normalizedSearch,
+                PageRequest.of(effectivePage, effectiveSize)
+        );
+
+        List<QuestionBankDto.Response> items = result.getContent().stream().map(this::toResponse).toList();
+        return new PageResponse<>(items, result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional(readOnly = true)
@@ -208,17 +230,6 @@ public class QuestionBankService {
                 bank.getCreatedAt(),
                 bank.getUpdatedAt()
         );
-    }
-
-    private boolean matchesSearch(QuestionBank bank, String search) {
-        if (search == null) {
-            return true;
-        }
-        String haystack = ((bank.getName() == null ? "" : bank.getName())
-                + " "
-                + (bank.getDescription() == null ? "" : bank.getDescription()))
-                .toLowerCase(Locale.ROOT);
-        return haystack.contains(search.toLowerCase(Locale.ROOT));
     }
 
     private String normalizeStatusFilter(String status) {

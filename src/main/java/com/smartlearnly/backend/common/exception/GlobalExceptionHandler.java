@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -152,6 +153,43 @@ public class GlobalExceptionHandler {
                 List.of(),
                 request
         );
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolationException(
+            DataIntegrityViolationException exception,
+            HttpServletRequest request
+    ) {
+        String message = "Database constraint violated";
+        String rootMessage = exception.getMostSpecificCause() == null
+                ? exception.getMessage()
+                : exception.getMostSpecificCause().getMessage();
+        String constraintName = extractConstraintName(rootMessage);
+        if ("uq_questions_bank_lower_text".equalsIgnoreCase(constraintName)) {
+            message = "A question with the same text already exists in this bank.";
+            return buildResponse(ErrorCode.BUSINESS_RULE_VIOLATION, message, List.of(), request);
+        }
+        log.warn("DataIntegrityViolationException at {}: {}", request.getRequestURI(), rootMessage);
+        return buildResponse(ErrorCode.BUSINESS_RULE_VIOLATION, message, List.of(), request);
+    }
+
+    private String extractConstraintName(String message) {
+        if (message == null) {
+            return null;
+        }
+        int constraintIndex = message.indexOf("constraint");
+        if (constraintIndex < 0) {
+            return null;
+        }
+        int start = constraintIndex + "constraint".length();
+        while (start < message.length() && !Character.isLetterOrDigit(message.charAt(start)) && message.charAt(start) != '_') {
+            start += 1;
+        }
+        int end = start;
+        while (end < message.length() && (Character.isLetterOrDigit(message.charAt(end)) || message.charAt(end) == '_')) {
+            end += 1;
+        }
+        return start < end ? message.substring(start, end) : null;
     }
 
     @ExceptionHandler(AuthenticationException.class)
