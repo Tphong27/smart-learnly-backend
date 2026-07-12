@@ -38,6 +38,12 @@ public final class QuestionBankDto {
     ) {
     }
 
+    public record RestoreRequest(
+            @NotBlank(message = "Target status is required")
+            String status
+    ) {
+    }
+
     public record Response(
             UUID bankId,
             UUID id,
