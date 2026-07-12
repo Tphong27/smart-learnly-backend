@@ -103,6 +103,7 @@ public class QuestionService {
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question");
         }
+        questionBankService.findActiveBankEntity(question.getQuestionBankId());
         QuestionBank bank = resolveBank(request.resolvedBankId() == null ? question.getQuestionBankId() : request.resolvedBankId(), request.courseId());
         QuestionType questionType = parseSupportedQuestionType(request.questionType());
         validateAnswers(questionType, request.answers());
@@ -126,6 +127,7 @@ public class QuestionService {
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
         }
+        questionBankService.findActiveBankEntity(question.getQuestionBankId());
         question.setStatus(QuestionStatus.ARCHIVED);
         questionRepository.save(question);
     }
