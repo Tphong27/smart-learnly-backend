@@ -13,6 +13,12 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardLessonRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardCardResponse;
@@ -29,10 +35,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
-import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
-import com.smartlearnly.backend.course.service.CourseAccessService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -49,8 +52,6 @@ class AdminFlashcardServiceTest {
     @Mock
     private CourseRepository courseRepository;
     @Mock
-    private CourseSectionRepository courseSectionRepository;
-    @Mock
     private LessonRepository lessonRepository;
     @Mock
     private FlashcardSetRepository flashcardSetRepository;
@@ -64,35 +65,38 @@ class AdminFlashcardServiceTest {
     private CurriculumLessonRepository curriculumLessonRepository;
 
     @Mock
+    private CurriculumSectionRepository curriculumSectionRepository;
+
+    @Mock
     private CourseAccessService courseAccessService;
 
     @BeforeEach
     void setUp() {
         adminFlashcardService = new AdminFlashcardService(
                 courseRepository,
-                courseSectionRepository,
                 lessonRepository,
                 flashcardSetRepository,
                 flashcardCardRepository,
                 currentUserService,
                 curriculumLessonRepository,
+                curriculumSectionRepository,
                 courseAccessService);
     }
 
     @Test
     void createFlashcardLessonShouldCreateLessonAndLinkedSet() {
         Course course = course();
-        CourseSection section = section(course);
+        CurriculumSection section = curriculumSection(course);
         UserAccount actor = actor();
         UUID lessonId = UUID.randomUUID();
         UUID setId = UUID.randomUUID();
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(courseSectionRepository.findByIdAndCourseId(section.getId(), course.getId()))
+        when(curriculumSectionRepository.findById(section.getId()))
                 .thenReturn(Optional.of(section));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(lessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(4);
-        when(lessonRepository.save(any(Lesson.class))).thenAnswer(invocation -> {
-            Lesson lesson = invocation.getArgument(0);
+        when(curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(4);
+        when(curriculumLessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {
+            CurriculumLesson lesson = invocation.getArgument(0);
             lesson.setId(lessonId);
             return lesson;
         });
@@ -109,15 +113,15 @@ class AdminFlashcardServiceTest {
 
         assertThat(response.lessonId()).isEqualTo(lessonId);
         assertThat(response.setId()).isEqualTo(setId);
-        ArgumentCaptor<Lesson> lessonCaptor = ArgumentCaptor.forClass(Lesson.class);
+        ArgumentCaptor<CurriculumLesson> lessonCaptor = ArgumentCaptor.forClass(CurriculumLesson.class);
         ArgumentCaptor<FlashcardSet> setCaptor = ArgumentCaptor.forClass(FlashcardSet.class);
-        verify(lessonRepository).save(lessonCaptor.capture());
+        verify(curriculumLessonRepository).save(lessonCaptor.capture());
         verify(flashcardSetRepository).save(setCaptor.capture());
         assertThat(lessonCaptor.getValue().getType()).isEqualTo(LessonType.FLASHCARD);
         assertThat(lessonCaptor.getValue().getTitle()).isEqualTo("Terms");
         assertThat(lessonCaptor.getValue().getStatus()).isEqualTo(LessonStatus.PUBLISHED);
         assertThat(lessonCaptor.getValue().getSortOrder()).isEqualTo(5);
-        assertThat(setCaptor.getValue().getLesson().getId()).isEqualTo(lessonId);
+        assertThat(setCaptor.getValue().getCurriculumLessonId()).isEqualTo(lessonId);
         assertThat(setCaptor.getValue().getCourse()).isSameAs(course);
         assertThat(setCaptor.getValue().getCreatedBy()).isSameAs(actor);
         assertThat(setCaptor.getValue().getIsPublic()).isFalse();
@@ -271,6 +275,19 @@ class AdminFlashcardServiceTest {
         return section;
     }
 
+    private CurriculumSection curriculumSection(Course course) {
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(UUID.randomUUID());
+        version.setCourseId(course.getId());
+
+        CurriculumSection section = new CurriculumSection();
+        section.setId(UUID.randomUUID());
+        section.setCurriculumVersion(version);
+        section.setTitle("Section");
+        section.setSortOrder(0);
+        return section;
+    }
+
     private Lesson lesson(Course course, CourseSection section) {
         Lesson lesson = new Lesson();
         lesson.setId(UUID.randomUUID());
@@ -289,6 +306,7 @@ class AdminFlashcardServiceTest {
         CourseSection section = section(course);
         FlashcardSet flashcardSet = new FlashcardSet();
         flashcardSet.setId(UUID.randomUUID());
+        flashcardSet.setCourse(course);
         flashcardSet.setLesson(lesson(course, section));
         flashcardSet.setTitle("Flashcards");
         flashcardSet.setCreatedAt(Instant.now());
