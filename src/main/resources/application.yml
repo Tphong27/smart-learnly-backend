@@ -86,6 +86,7 @@ app:
         question-media-bucket: ${APP_STORAGE_QUESTION_MEDIA_BUCKET:question-media}
         question-image-max-size: ${APP_STORAGE_QUESTION_IMAGE_MAX_SIZE:5MB}
         question-audio-max-size: ${APP_STORAGE_QUESTION_AUDIO_MAX_SIZE:20MB}
+        question-video-max-size: ${APP_STORAGE_QUESTION_VIDEO_MAX_SIZE:100MB}
         r2-account-id: ${CLOUDFLARE_R2_ACCOUNT_ID:${R2_ACCOUNT_ID:}}
         r2-endpoint: ${CLOUDFLARE_R2_ENDPOINT:${R2_ENDPOINT:}}
         r2-region: ${CLOUDFLARE_R2_REGION:${R2_REGION:auto}}
