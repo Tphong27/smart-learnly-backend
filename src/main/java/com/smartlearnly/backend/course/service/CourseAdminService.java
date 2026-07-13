@@ -8,6 +8,7 @@ import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.course.dto.CourseResponse;
 import com.smartlearnly.backend.course.dto.CreateCourseRequest;
 import com.smartlearnly.backend.course.dto.UpdateCourseRequest;
@@ -29,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,16 +48,31 @@ public class CourseAdminService {
     private final CourseAccessService courseAccessService;
 
     @Transactional(readOnly = true)
-    public PageResponse<CourseResponse> list(int page, int size) {
-        Page<Course> coursePage;
+    public PageResponse<CourseResponse> list(
+            int page,
+            int size,
+            String keyword,
+            String status,
+            UUID categoryId,
+            String level
+    ) {
+        CourseStatus resolvedStatus = parseCourseStatus(status, null);
+        String resolvedKeyword = normalizeNullable(keyword);
+        String resolvedLevel = normalizeNullable(level);
+        Specification<Course> filters = buildListFilters(
+                resolvedKeyword,
+                resolvedStatus,
+                categoryId,
+                resolvedLevel);
 
         if (courseAccessService.isCurrentUserTrainer()) {
             UUID trainerId = courseAccessService.getCurrentUserId();
-
-            coursePage = courseRepository.findAllAssignedToTrainer(trainerId, PageRequest.of(page, size));
-        } else {
-            coursePage = courseRepository.findAllByDeletedAtIsNull(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+            filters = filters.and(assignedToTrainer(trainerId));
         }
+
+        Page<Course> coursePage = courseRepository.findAll(
+                filters,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
 
         return new PageResponse<>(
                 coursePage.getContent().stream().map(CourseDtoMapper::toCourseResponse).toList(),
@@ -63,6 +80,54 @@ public class CourseAdminService {
                 coursePage.getSize(),
                 coursePage.getTotalElements(),
                 coursePage.getTotalPages());
+    }
+
+    private Specification<Course> buildListFilters(
+            String keyword,
+            CourseStatus status,
+            UUID categoryId,
+            String level
+    ) {
+        Specification<Course> filters = (root, query, criteriaBuilder) ->
+                criteriaBuilder.isNull(root.get("deletedAt"));
+
+        if (keyword != null) {
+            String pattern = "%" + keyword.toLowerCase(Locale.ROOT) + "%";
+            filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder.or(
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("title")), pattern),
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("slug")), pattern),
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("shortDescription")), pattern)));
+        }
+        if (status != null) {
+            filters = filters.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                            root.get("status").cast(String.class),
+                            status.name().toLowerCase(Locale.ROOT)));
+        }
+        if (categoryId != null) {
+            filters = filters.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(root.get("category").get("id"), categoryId));
+        }
+        if (level != null) {
+            filters = filters.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                            criteriaBuilder.lower(root.get("level")),
+                            level.toLowerCase(Locale.ROOT)));
+        }
+        return filters;
+    }
+
+    private Specification<Course> assignedToTrainer(UUID trainerId) {
+        return (root, query, criteriaBuilder) -> {
+            var assignment = query.subquery(UUID.class);
+            var classOffering = assignment.from(ClassOffering.class);
+            assignment.select(classOffering.get("id"));
+            assignment.where(
+                    criteriaBuilder.equal(classOffering.get("courseId"), root.get("id")),
+                    criteriaBuilder.equal(classOffering.get("trainerId"), trainerId),
+                    criteriaBuilder.isNull(classOffering.get("deletedAt")));
+            return criteriaBuilder.exists(assignment);
+        };
     }
 
     @Transactional(readOnly = true)
