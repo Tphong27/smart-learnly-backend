@@ -17,6 +17,39 @@ public record LearningLessonResponse(
     boolean completed,
     List<LearningResourceResponse> resources,
     boolean hlsReady,
-    String hlsPlaylistUrl
+    String hlsPlaylistUrl,
+    UUID lessonIdentityId
 ) {
+    public LearningLessonResponse(
+            UUID lessonId,
+            String title,
+            String lessonType,
+            String status,
+            String videoUrl,
+            String content,
+            String attachmentUrl,
+            Integer durationSeconds,
+            boolean isPreview,
+            int sortOrder,
+            boolean completed,
+            List<LearningResourceResponse> resources,
+            boolean hlsReady,
+            String hlsPlaylistUrl) {
+        this(
+                lessonId,
+                title,
+                lessonType,
+                status,
+                videoUrl,
+                content,
+                attachmentUrl,
+                durationSeconds,
+                isPreview,
+                sortOrder,
+                completed,
+                resources,
+                hlsReady,
+                hlsPlaylistUrl,
+                null);
+    }
 }

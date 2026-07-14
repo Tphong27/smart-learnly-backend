@@ -63,6 +63,7 @@ public class AssignmentSubmissionModel {
         private UUID id;
         private UUID assignmentId;
         private UUID studentId;
+        private String studentName;
         private String submissionText;
         private String fileUrl;
         private String fileName;

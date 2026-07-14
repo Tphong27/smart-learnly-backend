@@ -1,22 +1,25 @@
 package com.smartlearnly.backend.lessonprogress.service;
 
+import com.smartlearnly.backend.assignment.entity.Assignment;
+import com.smartlearnly.backend.assignment.entity.AssignmentSubmission;
+import com.smartlearnly.backend.assignment.entity.SubmissionStatus;
+import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
+import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
-import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
-import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
-import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
-import com.smartlearnly.backend.enrollment.service.EnrollmentAccessService;
-import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
-import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
-import com.smartlearnly.backend.learning.module.entity.CourseSection;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.lessonprogress.dto.CourseProgressItemResponse;
 import com.smartlearnly.backend.lessonprogress.dto.LessonProgressResponse;
 import com.smartlearnly.backend.lessonprogress.dto.ProgressMetricResponse;
@@ -24,7 +27,6 @@ import com.smartlearnly.backend.lessonprogress.dto.TraineeProgressResponse;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
-
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -41,33 +43,21 @@ import org.springframework.transaction.annotation.Transactional;
 public class TraineeProgressService {
         private final CurrentUserService currentUserService;
         private final CourseEnrollmentService courseEnrollmentService;
-        private final EnrollmentAccessService enrollmentAccessService;
-        private final CourseSectionRepository courseSectionRepository;
-        private final LessonRepository lessonRepository;
         private final LessonProgressRepository lessonProgressRepository;
         private final ClassOfferingRepository classOfferingRepository;
-        private final ClassEnrollmentRepository classEnrollmentRepository;
+        private final CurriculumResolutionService curriculumResolutionService;
+        private final CurriculumLessonRepository curriculumLessonRepository;
+        private final AssignmentRepository assignmentRepository;
+        private final AssignmentSubmissionRepository assignmentSubmissionRepository;
 
         @Transactional(readOnly = true)
         public TraineeProgressResponse getMyProgress() {
                 UserAccount student = currentUserService.requireAuthenticatedUser();
-
                 List<MyCourseResponse> myCourses = courseEnrollmentService.getMyCourses();
 
-                List<UUID> courseIds = myCourses.stream()
-                                .map(MyCourseResponse::id)
-                                .toList();
-
-                Map<UUID, List<LessonProgress>> progressByCourseId = lessonProgressRepository
-                                .findByStudentIdAndCourseIdIn(student.getId(), courseIds)
-                                .stream()
-                                .collect(Collectors.groupingBy(LessonProgress::getCourseId));
-
                 List<CourseProgressItemResponse> courses = myCourses.stream()
-                                .map(course -> buildCourseProgress(
-                                                student.getId(),
-                                                course,
-                                                progressByCourseId.getOrDefault(course.id(), List.of())))
+                                .filter(course -> course.enrolledClass() != null)
+                                .map(course -> buildClassProgress(student.getId(), course))
                                 .toList();
 
                 List<CourseProgressItemResponse> completedCourseItems = courses.stream()
@@ -90,27 +80,36 @@ public class TraineeProgressService {
         @Transactional
         public LessonProgressResponse updateLessonProgress(UUID lessonId, UUID classId, boolean completed) {
                 UserAccount student = currentUserService.requireAuthenticatedUser();
+                ClassOffering classOffering = requireClass(classId);
+                UUID courseId = classOffering.getCourseId();
 
-                Lesson lesson = lessonRepository.findById(lessonId)
+                CurriculumResolution resolution = curriculumResolutionService
+                                .resolveTraineeLearning(courseId, classId, student.getId());
+                CurriculumLesson lesson = curriculumLessonRepository
+                                .findEffectiveLessonReference(resolution.version().getId(), lessonId)
                                 .orElseThrow(() -> new BusinessException(
                                                 ErrorCode.RESOURCE_NOT_FOUND,
-                                                "Lesson not found"));
-
-                UUID courseId = lesson.getCourse().getId();
-
-                enrollmentAccessService.requireCourseAccess(courseId);
-                validateClassAccess(student.getId(), courseId, classId);
+                                                "Lesson not found in this class curriculum"));
 
                 LessonProgress progress = lessonProgressRepository
-                                .findByStudentIdAndLessonId(student.getId(), lessonId)
+                                .findByStudentIdAndClassIdAndLessonIdentityId(
+                                                student.getId(),
+                                                classId,
+                                                lesson.getLessonIdentityId())
                                 .orElseGet(() -> {
                                         LessonProgress created = new LessonProgress();
                                         created.setStudentId(student.getId());
                                         created.setCourseId(courseId);
-                                        created.setLessonId(lessonId);
+                                        created.setClassId(classId);
+                                        created.setLessonIdentityId(lesson.getLessonIdentityId());
+                                        created.setLessonId(lesson.getId());
                                         return created;
                                 });
 
+                progress.setCourseId(courseId);
+                progress.setClassId(classId);
+                progress.setLessonIdentityId(lesson.getLessonIdentityId());
+                progress.setLessonId(lesson.getId());
                 progress.setCompleted(completed);
                 progress.setLastAccessedAt(Instant.now());
                 progress.setCompletedAt(completed ? Instant.now() : null);
@@ -122,69 +121,41 @@ public class TraineeProgressService {
                                 saved.getCourseId(),
                                 saved.isCompleted(),
                                 saved.getCompletedAt(),
-                                saved.getLastAccessedAt());
+                                saved.getLastAccessedAt(),
+                                saved.getClassId(),
+                                saved.getLessonIdentityId());
         }
 
-        private CourseProgressItemResponse buildCourseProgress(
-                        UUID studentId,
-                        MyCourseResponse course,
-                        List<LessonProgress> progressItems) {
-                List<CourseSection> sections = courseSectionRepository
-                                .findByCourseIdOrderBySortOrderAscCreatedAtAsc(course.id());
+        @Transactional(readOnly = true)
+        public int calculateStudentClassProgressPercent(UUID studentId, UUID courseId, UUID classId) {
+                ProgressCounts counts = calculateClassCurriculumProgress(studentId, courseId, classId);
 
-                List<Lesson> lessons = sections.stream()
-                                .flatMap(section -> section.getLessons().stream())
-                                .filter(this::isVisibleForLearningProgress)
-                                .sorted(Comparator
-                                                .comparing((Lesson lesson) -> lesson.getSection().getSortOrder())
-                                                .thenComparing(Lesson::getSortOrder)
-                                                .thenComparing(Lesson::getCreatedAt))
-                                .toList();
+                ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
 
-                Map<UUID, LessonProgress> progressByLessonId = progressItems.stream()
-                                .collect(Collectors.toMap(
-                                                LessonProgress::getLessonId,
-                                                Function.identity(),
-                                                (left, right) -> left));
+                ProgressMetricResponse quizMetric = metric( "Quiz", counts.quizCompleted(), counts.quizTotal());
 
-                int lessonTotal = countByProgressGroup(lessons, ProgressGroup.LESSON);
-                int lessonCompleted = countCompletedByProgressGroup(
-                                lessons,
-                                progressByLessonId,
-                                ProgressGroup.LESSON);
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
 
-                int quizTotal = countByProgressGroup(lessons, ProgressGroup.QUIZ);
-                int quizCompleted = countCompletedByProgressGroup(
-                                lessons,
-                                progressByLessonId,
-                                ProgressGroup.QUIZ);
+                return calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
+        }
 
-                int flashcardTotal = countByProgressGroup(lessons, ProgressGroup.FLASHCARD);
-                int flashcardCompleted = countCompletedByProgressGroup(
-                                lessons,
-                                progressByLessonId,
-                                ProgressGroup.FLASHCARD);
+        private CourseProgressItemResponse buildClassProgress(UUID studentId, MyCourseResponse course) {
 
-                ProgressMetricResponse lessonMetric = metric("Lesson", lessonCompleted, lessonTotal);
-                ProgressMetricResponse quizMetric = metric("Quiz", quizCompleted, quizTotal);
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", flashcardCompleted, flashcardTotal);
+                if (course.enrolledClass() == null) {
+                        throw new BusinessException(ErrorCode.CONFLICT, "Trainee progress requires an enrolled class");
+                }
 
-                int overallPercent = calculateOverallPercent(
-                                lessonMetric,
-                                quizMetric,
-                                flashcardMetric);
+                UUID classId = course.enrolledClass().id();
+                UUID classEnrollmentId = course.enrolledClass().classEnrollmentId();
+                String className = course.enrolledClass().className();
 
-                UUID classId = course.enrolledClass() == null
-                                ? null
-                                : course.enrolledClass().id();
-
-                UUID classEnrollmentId = course.enrolledClass() == null
-                                ? null
-                                : course.enrolledClass().classEnrollmentId();
-
-                String className = course.enrolledClass() == null
-                                ? null
-                                : course.enrolledClass().className();
+                ProgressCounts counts = calculateClassCurriculumProgress(studentId, course.id(), classId);
+                ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
+                ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(),
+                                counts.flashcardTotal());
+                ProgressMetricResponse assignmentMetric = calculateAssignmentMetric(studentId, course.id(), classId);
+                int overallPercent = calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
 
                 return new CourseProgressItemResponse(
                                 course.id(),
@@ -197,61 +168,115 @@ public class TraineeProgressService {
 
                                 course.title(),
                                 course.category() == null ? "Course" : course.category().name(),
+
                                 course.enrollmentStatus(),
+
                                 overallPercent >= 100 ? "COMPLETED" : "IN_PROGRESS",
+
                                 course.accessAllowed(),
                                 course.accessBlockedReason(),
                                 course.avatarUrl(),
+
                                 overallPercent,
+
                                 lessonMetric,
                                 quizMetric,
-                                flashcardMetric);
+                                flashcardMetric,
+                                assignmentMetric);
         }
 
-        private void validateClassAccess(UUID studentId, UUID courseId, UUID classId) {
-                ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
+        private ProgressCounts calculateClassCurriculumProgress(UUID studentId, UUID courseId, UUID classId) {
+                CurriculumResolution resolution = curriculumResolutionService
+                                .resolveTraineeProgress(courseId, classId, studentId);
+                List<CurriculumLesson> lessons = orderedCurriculumLessons(resolution.version()).stream()
+                                .filter(this::isVisibleForLearningProgress)
+                                .toList();
+
+                Map<UUID, LessonProgress> progressByLessonIdentityId = lessonProgressRepository
+                                .findByStudentIdAndClassIdAndCourseId(studentId, classId, courseId)
+                                .stream()
+                                .filter(progress -> progress.getLessonIdentityId() != null)
+                                .collect(Collectors.toMap(
+                                                LessonProgress::getLessonIdentityId,
+                                                Function.identity(),
+                                                (left, right) -> left));
+
+                return new ProgressCounts(
+                                countByProgressGroup(lessons, ProgressGroup.LESSON),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.LESSON),
+                                countByProgressGroup(lessons, ProgressGroup.QUIZ),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.QUIZ),
+                                countByProgressGroup(lessons, ProgressGroup.FLASHCARD),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.FLASHCARD));
+        }
+
+        private ProgressMetricResponse calculateAssignmentMetric(UUID studentId, UUID courseId, UUID classId) {
+                List<Assignment> assignments = assignmentRepository.findAvailableForStudent(studentId, courseId,
+                                classId, false);
+                int total = assignments.size();
+                int completed = (int) assignments.stream().filter(assignment -> assignmentSubmissionRepository
+                                .findByAssignmentIdAndStudentId(assignment.getId(), studentId)
+                                .map(AssignmentSubmission::getStatus)
+                                .filter(this::isCompletedAssignmentStatus)
+                                .isPresent())
+                                .count();
+                return metric("Assignment", completed, total);
+        }
+
+        private boolean isCompletedAssignmentStatus(SubmissionStatus status) {
+                return status == SubmissionStatus.SUBMITTED
+                                || status == SubmissionStatus.GRADED
+                                || status == SubmissionStatus.LATE
+                                || status == SubmissionStatus.EXPIRED;
+        }
+
+        private ClassOffering requireClass(UUID classId) {
+                return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
                                 .orElseThrow(() -> new BusinessException(
                                                 ErrorCode.RESOURCE_NOT_FOUND,
                                                 "Class not found"));
-
-                if (!courseId.equals(classOffering.getCourseId())) {
-                        throw new BusinessException(
-                                        ErrorCode.INVALID_REQUEST,
-                                        "Class does not belong to this course");
-                }
-
-                ClassEnrollment classEnrollment = classEnrollmentRepository
-                                .findByClassIdAndStudentId(classId, studentId)
-                                .orElseThrow(() -> new BusinessException(
-                                                ErrorCode.FORBIDDEN,
-                                                "You are not enrolled in this class"));
-
-                if (classEnrollment.getStatus() != EnrollmentStatus.ACTIVE
-                                && classEnrollment.getStatus() != EnrollmentStatus.COMPLETED) {
-                        throw new BusinessException(
-                                        ErrorCode.FORBIDDEN,
-                                        "Class access is not active");
-                }
         }
 
-        private boolean isVisibleForLearningProgress(Lesson lesson) {
+        private List<CurriculumLesson> orderedCurriculumLessons(CurriculumVersion version) {
+                return version.getSections().stream()
+                                .sorted(Comparator
+                                                .comparing(CurriculumSection::getSortOrder,
+                                                                Comparator.nullsLast(Integer::compareTo))
+                                                .thenComparing(CurriculumSection::getCreatedAt,
+                                                                Comparator.nullsLast(Instant::compareTo)))
+                                .flatMap(section -> section.getLessons().stream()
+                                                .sorted(Comparator
+                                                                .comparing(CurriculumLesson::getSortOrder,
+                                                                                Comparator.nullsLast(
+                                                                                                Integer::compareTo))
+                                                                .thenComparing(CurriculumLesson::getCreatedAt,
+                                                                                Comparator.nullsLast(
+                                                                                                Instant::compareTo))))
+                                .toList();
+        }
+
+        private boolean isVisibleForLearningProgress(CurriculumLesson lesson) {
                 return lesson.getStatus() == LessonStatus.PUBLISHED;
         }
 
-        private int countByProgressGroup(List<Lesson> lessons, ProgressGroup group) {
+        private int countByProgressGroup(List<CurriculumLesson> lessons, ProgressGroup group) {
                 return (int) lessons.stream()
                                 .filter(lesson -> belongsToProgressGroup(lesson.getType(), group))
                                 .count();
         }
 
-        private int countCompletedByProgressGroup(
-                        List<Lesson> lessons,
-                        Map<UUID, LessonProgress> progressByLessonId,
+        private int countCompletedCurriculumByProgressGroup(
+                        List<CurriculumLesson> lessons,
+                        Map<UUID, LessonProgress> progressByLessonIdentityId,
                         ProgressGroup group) {
                 return (int) lessons.stream()
                                 .filter(lesson -> belongsToProgressGroup(lesson.getType(), group))
                                 .filter(lesson -> {
-                                        LessonProgress progress = progressByLessonId.get(lesson.getId());
+                                        LessonProgress progress = progressByLessonIdentityId
+                                                        .get(lesson.getLessonIdentityId());
                                         return progress != null && progress.isCompleted();
                                 })
                                 .count();
@@ -308,6 +333,15 @@ public class TraineeProgressService {
                 }
 
                 return (int) Math.round(weightedSum / totalWeight);
+        }
+
+        private record ProgressCounts(
+                        int lessonTotal,
+                        int lessonCompleted,
+                        int quizTotal,
+                        int quizCompleted,
+                        int flashcardTotal,
+                        int flashcardCompleted) {
         }
 
         private enum ProgressGroup {

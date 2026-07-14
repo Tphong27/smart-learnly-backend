@@ -30,6 +30,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class CourseAdminServiceTest {
@@ -41,6 +45,8 @@ class CourseAdminServiceTest {
     private CurrentUserService currentUserService;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private CourseAccessService courseAccessService;
 
     private CourseAdminService courseAdminService;
     private StorageProperties storageProperties;
@@ -55,7 +61,8 @@ class CourseAdminServiceTest {
                 categoryRepository,
                 currentUserService,
                 auditLogService,
-                storageProperties
+                storageProperties,
+                courseAccessService
         );
     }
 
@@ -97,6 +104,48 @@ class CourseAdminServiceTest {
         assertThat(courseCaptor.getValue().getCreator()).isEqualTo(admin);
         assertThat(courseCaptor.getValue().getStatus()).isEqualTo(CourseStatus.DRAFT);
         verify(auditLogService).record(admin.getEmail(), "COURSE_CREATED", "COURSE", response.id().toString());
+    }
+
+    @Test
+    void listShouldApplyServerSideFiltersBeforePagination() {
+        UUID categoryId = UUID.randomUUID();
+        when(courseAccessService.isCurrentUserTrainer()).thenReturn(false);
+        when(courseRepository.findAll(
+                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
+                any(Pageable.class)))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        var response = courseAdminService.list(
+                0,
+                20,
+                "  react  ",
+                "published",
+                categoryId,
+                "beginner");
+
+        assertThat(response.totalItems()).isZero();
+        assertThat(response.page()).isZero();
+        verify(courseRepository).findAll(
+                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
+                any(Pageable.class));
+    }
+
+    @Test
+    void listShouldRejectUnknownStatus() {
+        assertThatThrownBy(() -> courseAdminService.list(
+                0,
+                20,
+                null,
+                "archived",
+                null,
+                null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        verify(courseRepository, never()).findAll(
+                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
+                any(Pageable.class));
     }
 
     @Test

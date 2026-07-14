@@ -7,9 +7,11 @@ import com.smartlearnly.backend.file.service.FileStorageService;
 import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
 import com.smartlearnly.backend.question.dto.QuestionMediaDtos;
 import com.smartlearnly.backend.question.entity.Question;
+import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
+import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import java.io.IOException;
@@ -32,6 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class QuestionMediaService {
     public static final int MAX_IMAGES_PER_QUESTION = 5;
     public static final int MAX_AUDIOS_PER_QUESTION = 3;
+    public static final int MAX_VIDEOS_PER_QUESTION = 1;
 
     private static final Map<String, String> IMAGE_TYPES = Map.of(
             "image/jpeg", "jpg",
@@ -45,9 +48,21 @@ public class QuestionMediaService {
             "audio/wav", "wav",
             "audio/x-wav", "wav"
     );
+    private static final Map<String, String> VIDEO_TYPES = Map.ofEntries(
+            Map.entry("video/mp4", "mp4"),
+            Map.entry("video/mpeg", "mpg"),
+            Map.entry("video/webm", "webm"),
+            Map.entry("video/quicktime", "mov"),
+            Map.entry("video/x-matroska", "mkv"),
+            Map.entry("video/x-msvideo", "avi"),
+            Map.entry("video/x-ms-wmv", "wmv"),
+            Map.entry("video/3gpp", "3gp"),
+            Map.entry("video/x-flv", "flv")
+    );
 
     private final QuestionRepository questionRepository;
     private final QuestionMediaAttachmentRepository mediaAttachmentRepository;
+    private final QuestionBankRepository questionBankRepository;
     private final FileStorageService fileStorageService;
     private final StorageProperties storageProperties;
     private final Tika tika = new Tika();
@@ -65,6 +80,11 @@ public class QuestionMediaService {
         }
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media for an archived question");
+        }
+        QuestionBank owningBank = questionBankRepository.findById(question.getQuestionBankId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question bank not found"));
+        if ("archived".equals(owningBank.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media in an archived question bank");
         }
         if (files == null || files.isEmpty()) {
             return List.of();
@@ -165,7 +185,7 @@ public class QuestionMediaService {
         try {
             return QuestionMediaType.valueOf(normalized);
         } catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Media type must be image or audio");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Media type must be image, audio, or video");
         }
     }
 
@@ -208,7 +228,7 @@ public class QuestionMediaService {
 
         String objectKey = "questions/%s/%s/%s.%s".formatted(
                 question.getId(),
-                mediaType == QuestionMediaType.IMAGE ? "images" : "audios",
+                mediaType == QuestionMediaType.IMAGE ? "images" : mediaType == QuestionMediaType.AUDIO ? "audios" : "videos",
                 UUID.randomUUID(),
                 extension
         );
@@ -251,6 +271,7 @@ public class QuestionMediaService {
         List<QuestionMediaAttachment> attachments = new ArrayList<>();
         attachments.addAll(mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(questionId, QuestionMediaType.IMAGE));
         attachments.addAll(mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(questionId, QuestionMediaType.AUDIO));
+        attachments.addAll(mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(questionId, QuestionMediaType.VIDEO));
         return attachments;
     }
 
@@ -263,6 +284,11 @@ public class QuestionMediaService {
         Question question = ensureQuestionExists(questionId);
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media for an archived question");
+        }
+        QuestionBank bank = questionBankRepository.findById(question.getQuestionBankId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question bank not found"));
+        if ("archived".equals(bank.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media in an archived question bank");
         }
         return question;
     }
@@ -289,42 +315,61 @@ public class QuestionMediaService {
         try {
             return tika.detect(content);
         } catch (Exception exception) {
-            throw new BusinessException(ErrorCode.UNSUPPORTED_MEDIA_TYPE, mediaType == QuestionMediaType.IMAGE
-                    ? "Question image type could not be detected"
-                    : "Question audio type could not be detected");
+            String base = switch (mediaType) {
+                case IMAGE -> "Question image";
+                case AUDIO -> "Question audio";
+                case VIDEO -> "Question video";
+            };
+            throw new BusinessException(ErrorCode.UNSUPPORTED_MEDIA_TYPE, base + " type could not be detected");
         }
     }
 
     private Map<String, String> allowedTypes(QuestionMediaType mediaType) {
-        return mediaType == QuestionMediaType.IMAGE ? IMAGE_TYPES : AUDIO_TYPES;
+        return switch (mediaType) {
+            case IMAGE -> IMAGE_TYPES;
+            case AUDIO -> AUDIO_TYPES;
+            case VIDEO -> VIDEO_TYPES;
+        };
     }
 
     private DataSize maxSize(QuestionMediaType mediaType) {
-        return mediaType == QuestionMediaType.IMAGE
-                ? storageProperties.getQuestionImageMaxSize()
-                : storageProperties.getQuestionAudioMaxSize();
+        return switch (mediaType) {
+            case IMAGE -> storageProperties.getQuestionImageMaxSize();
+            case AUDIO -> storageProperties.getQuestionAudioMaxSize();
+            case VIDEO -> storageProperties.getQuestionVideoMaxSize();
+        };
     }
 
     private int maxCount(QuestionMediaType mediaType) {
-        return mediaType == QuestionMediaType.IMAGE ? MAX_IMAGES_PER_QUESTION : MAX_AUDIOS_PER_QUESTION;
+        return switch (mediaType) {
+            case IMAGE -> MAX_IMAGES_PER_QUESTION;
+            case AUDIO -> MAX_AUDIOS_PER_QUESTION;
+            case VIDEO -> MAX_VIDEOS_PER_QUESTION;
+        };
     }
 
     private String maxCountMessage(QuestionMediaType mediaType) {
-        return mediaType == QuestionMediaType.IMAGE
-                ? "A question can have at most 5 images"
-                : "A question can have at most 3 audio files";
+        return switch (mediaType) {
+            case IMAGE -> "A question can have at most 5 images";
+            case AUDIO -> "A question can have at most 3 audio files";
+            case VIDEO -> "A question can have at most 1 video";
+        };
     }
 
     private String requiredFileMessage(QuestionMediaType mediaType) {
-        return mediaType == QuestionMediaType.IMAGE
-                ? "Question image file is required"
-                : "Question audio file is required";
+        return switch (mediaType) {
+            case IMAGE -> "Question image file is required";
+            case AUDIO -> "Question audio file is required";
+            case VIDEO -> "Question video file is required";
+        };
     }
 
     private String unsupportedTypeMessage(QuestionMediaType mediaType) {
-        return mediaType == QuestionMediaType.IMAGE
-                ? "Question image must be JPEG, PNG, or WebP"
-                : "Question audio must be MP3, M4A, or WAV";
+        return switch (mediaType) {
+            case IMAGE -> "Question image must be JPEG, PNG, or WebP";
+            case AUDIO -> "Question audio must be MP3, M4A, or WAV";
+            case VIDEO -> "Question video must be MP4, WebM, MOV, AVI, MKV, WMV, 3GP, FLV, or MPEG";
+        };
     }
 
     private String normalizeFileName(String originalFileName, String fallback) {

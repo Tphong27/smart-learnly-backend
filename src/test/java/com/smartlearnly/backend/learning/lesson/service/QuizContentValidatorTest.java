@@ -36,9 +36,9 @@ class QuizContentValidatorTest {
                     {
                       "title": "",
                       "media": {
-                        "type": "video",
-                        "url": "https://cdn.example.com/question.mp4",
-                        "objectPath": "2026/07/question.mp4"
+                        "type": "audio",
+                        "url": "https://cdn.example.com/question.mp3",
+                        "objectPath": "2026/07/question.mp3"
                       },
                       "type": "single_choice",
                       "number_of_options": 2,
@@ -46,8 +46,8 @@ class QuizContentValidatorTest {
                         {
                           "text": "",
                           "media": {
-                            "type": "image",
-                            "url": "https://cdn.example.com/a.png"
+                            "type": "audio",
+                            "url": "https://cdn.example.com/a.mp3"
                           }
                         },
                         {
@@ -108,7 +108,7 @@ class QuizContentValidatorTest {
                   "questions": [
                     {
                       "title": "Question",
-                      "media": { "type": "audio", "url": "https://cdn.example.com/a.mp3" },
+                      "media": { "type": "document", "url": "https://cdn.example.com/a.pdf" },
                       "type": "single_choice",
                       "options": ["A", "B"],
                       "correct_answers": [1]
@@ -117,7 +117,7 @@ class QuizContentValidatorTest {
                 }
                 """))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("media type must be image or video");
+                .hasMessageContaining("media type must be image, video, or audio");
     }
 
     @Test

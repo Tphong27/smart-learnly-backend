@@ -38,5 +38,6 @@ public class StorageProperties {
     private String questionMediaBucket = "question-media";
     private DataSize questionImageMaxSize = DataSize.ofMegabytes(5);
     private DataSize questionAudioMaxSize = DataSize.ofMegabytes(20);
+    private DataSize questionVideoMaxSize = DataSize.ofMegabytes(100);
 }
 

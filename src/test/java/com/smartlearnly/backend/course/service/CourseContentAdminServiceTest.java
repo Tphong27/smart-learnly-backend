@@ -19,13 +19,18 @@ import com.smartlearnly.backend.course.entity.Category;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
-import com.smartlearnly.backend.learning.lesson.entity.Lesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
-import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
-import com.smartlearnly.backend.learning.module.entity.CourseSection;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,20 +43,31 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * The admin content service now authors MASTER {@link CurriculumVersion} data instead of the legacy
+ * CourseSection/Lesson entities, so the setup builds curriculum-domain objects and mocks the
+ * curriculum repositories. The original behavioural intent of every case is preserved.
+ */
 @ExtendWith(MockitoExtension.class)
 class CourseContentAdminServiceTest {
     @Mock
     private CourseRepository courseRepository;
     @Mock
-    private CourseSectionRepository courseSectionRepository;
+    private CurriculumVersionRepository curriculumVersionRepository;
     @Mock
-    private LessonRepository lessonRepository;
+    private CurriculumSectionRepository curriculumSectionRepository;
+    @Mock
+    private CurriculumLessonRepository curriculumLessonRepository;
     @Mock
     private CurrentUserService currentUserService;
     @Mock
     private AuditLogService auditLogService;
     @Mock
     private QuizContentValidator quizContentValidator;
+    @Mock
+    private CourseAccessService courseAccessService;
+
+    private final CurriculumDtoMapper curriculumDtoMapper = new CurriculumDtoMapper();
 
     private CourseContentAdminService courseContentAdminService;
 
@@ -59,21 +75,28 @@ class CourseContentAdminServiceTest {
     void setUp() {
         courseContentAdminService = new CourseContentAdminService(
                 courseRepository,
-                courseSectionRepository,
-                lessonRepository,
+                curriculumVersionRepository,
+                curriculumSectionRepository,
+                curriculumLessonRepository,
+                curriculumDtoMapper,
                 currentUserService,
                 auditLogService,
-                quizContentValidator
+                quizContentValidator,
+                courseAccessService
         );
     }
 
     @Test
     void reorderSectionsShouldRequireEverySectionExactlyOnce() {
         Course course = course();
-        CourseSection first = section(course, 0);
-        CourseSection second = section(course, 1);
+        CurriculumVersion version = version(course);
+        CurriculumSection first = section(version, 0);
+        CurriculumSection second = section(version, 1);
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(courseSectionRepository.findByCourseIdOrderBySortOrderAscCreatedAtAsc(course.getId()))
+        when(curriculumVersionRepository
+                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(course.getId(), CurriculumScope.MASTER))
+                .thenReturn(Optional.of(version));
+        when(curriculumSectionRepository.findByCurriculumVersionIdOrderBySortOrderAscCreatedAtAsc(version.getId()))
                 .thenReturn(List.of(first, second));
 
         assertThatThrownBy(() -> courseContentAdminService.reorderSections(
@@ -84,19 +107,21 @@ class CourseContentAdminServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
 
-        verify(courseSectionRepository, never()).saveAll(anyList());
+        verify(curriculumSectionRepository, never()).saveAll(anyList());
     }
 
     @Test
     void listLessonsShouldIncludeInactiveLessonsForAdmin() {
         Course course = course();
-        CourseSection section = section(course, 0);
-        Lesson draft = lesson(course, section);
-        Lesson inactive = lesson(course, section);
+        CurriculumVersion version = version(course);
+        CurriculumSection section = section(version, 0);
+        CurriculumLesson draft = lesson(section);
+        CurriculumLesson inactive = lesson(section);
         inactive.setStatus(LessonStatus.INACTIVE);
         inactive.setSortOrder(1);
-        when(courseSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
-        when(lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(section.getId()))
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(curriculumSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(curriculumLessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(section.getId()))
                 .thenReturn(List.of(draft, inactive));
 
         List<LessonResponse> response = courseContentAdminService.listLessons(section.getId());
@@ -108,17 +133,19 @@ class CourseContentAdminServiceTest {
     @Test
     void reorderLessonsShouldIncludeInactiveLessonsForAdmin() {
         Course course = course();
-        CourseSection section = section(course, 0);
-        Lesson draft = lesson(course, section);
-        Lesson inactive = lesson(course, section);
+        CurriculumVersion version = version(course);
+        CurriculumSection section = section(version, 0);
+        CurriculumLesson draft = lesson(section);
+        CurriculumLesson inactive = lesson(section);
         inactive.setStatus(LessonStatus.INACTIVE);
         inactive.setSortOrder(1);
         UserAccount actor = new UserAccount();
         actor.setEmail("admin@smartlearnly.dev");
-        when(courseSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
-        when(lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(section.getId()))
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(curriculumSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(curriculumLessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(section.getId()))
                 .thenReturn(List.of(draft, inactive));
-        when(lessonRepository.saveAll(List.of(draft, inactive))).thenReturn(List.of(draft, inactive));
+        when(curriculumLessonRepository.saveAll(anyList())).thenReturn(List.of(draft, inactive));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
 
         List<LessonResponse> response = courseContentAdminService.reorderLessons(
@@ -134,12 +161,14 @@ class CourseContentAdminServiceTest {
     @Test
     void updateLessonShouldAcceptTypeAliasAndReplaceResources() {
         Course course = course();
-        CourseSection section = section(course, 0);
-        Lesson lesson = lesson(course, section);
+        CurriculumVersion version = version(course);
+        CurriculumSection section = section(version, 0);
+        CurriculumLesson lesson = lesson(section);
         UserAccount actor = new UserAccount();
         actor.setEmail("admin@smartlearnly.dev");
-        when(lessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
-        when(lessonRepository.save(lesson)).thenReturn(lesson);
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(curriculumLessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(curriculumLessonRepository.save(lesson)).thenReturn(lesson);
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
 
         LessonResponse response = courseContentAdminService.updateLesson(
@@ -191,10 +220,23 @@ class CourseContentAdminServiceTest {
         return course;
     }
 
-    private CourseSection section(Course course, int sortOrder) {
-        CourseSection section = new CourseSection();
+    private CurriculumVersion version(Course course) {
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(UUID.randomUUID());
+        version.setCourseId(course.getId());
+        version.setScope(CurriculumScope.MASTER);
+        version.setStatus(CurriculumStatus.DRAFT);
+        version.setVersionNumber(1);
+        version.setTitle(course.getTitle());
+        version.setCreatedAt(Instant.now());
+        version.setUpdatedAt(Instant.now());
+        return version;
+    }
+
+    private CurriculumSection section(CurriculumVersion version, int sortOrder) {
+        CurriculumSection section = new CurriculumSection();
         section.setId(UUID.randomUUID());
-        section.setCourse(course);
+        section.setCurriculumVersion(version);
         section.setTitle("Section " + sortOrder);
         section.setSortOrder(sortOrder);
         section.setCreatedAt(Instant.now());
@@ -202,11 +244,11 @@ class CourseContentAdminServiceTest {
         return section;
     }
 
-    private Lesson lesson(Course course, CourseSection section) {
-        Lesson lesson = new Lesson();
+    private CurriculumLesson lesson(CurriculumSection section) {
+        CurriculumLesson lesson = new CurriculumLesson();
         lesson.setId(UUID.randomUUID());
-        lesson.setCourse(course);
         lesson.setSection(section);
+        lesson.setLessonIdentityId(UUID.randomUUID());
         lesson.setTitle("Lesson");
         lesson.setType(LessonType.RICH_TEXT);
         lesson.setPreview(false);

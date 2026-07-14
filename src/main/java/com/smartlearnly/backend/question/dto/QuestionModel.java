@@ -110,7 +110,8 @@ public final class QuestionModel {
             boolean correct,
             boolean isCorrect,
             int displayOrder,
-            int orderIndex
+            int orderIndex,
+            List<QuestionAnswerMediaResponse> media
     ) {
     }
 

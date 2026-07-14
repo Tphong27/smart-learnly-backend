@@ -13,6 +13,12 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardLessonRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardCardResponse;
@@ -29,7 +35,6 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import com.smartlearnly.backend.learning.module.entity.CourseSection;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.List;
@@ -47,8 +52,6 @@ class AdminFlashcardServiceTest {
     @Mock
     private CourseRepository courseRepository;
     @Mock
-    private CourseSectionRepository courseSectionRepository;
-    @Mock
     private LessonRepository lessonRepository;
     @Mock
     private FlashcardSetRepository flashcardSetRepository;
@@ -58,32 +61,42 @@ class AdminFlashcardServiceTest {
     private CurrentUserService currentUserService;
 
     private AdminFlashcardService adminFlashcardService;
+    @Mock
+    private CurriculumLessonRepository curriculumLessonRepository;
+
+    @Mock
+    private CurriculumSectionRepository curriculumSectionRepository;
+
+    @Mock
+    private CourseAccessService courseAccessService;
 
     @BeforeEach
     void setUp() {
         adminFlashcardService = new AdminFlashcardService(
                 courseRepository,
-                courseSectionRepository,
                 lessonRepository,
                 flashcardSetRepository,
                 flashcardCardRepository,
-                currentUserService
-        );
+                currentUserService,
+                curriculumLessonRepository,
+                curriculumSectionRepository,
+                courseAccessService);
     }
 
     @Test
     void createFlashcardLessonShouldCreateLessonAndLinkedSet() {
         Course course = course();
-        CourseSection section = section(course);
+        CurriculumSection section = curriculumSection(course);
         UserAccount actor = actor();
         UUID lessonId = UUID.randomUUID();
         UUID setId = UUID.randomUUID();
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(courseSectionRepository.findByIdAndCourseId(section.getId(), course.getId())).thenReturn(Optional.of(section));
+        when(curriculumSectionRepository.findById(section.getId()))
+                .thenReturn(Optional.of(section));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(lessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(4);
-        when(lessonRepository.save(any(Lesson.class))).thenAnswer(invocation -> {
-            Lesson lesson = invocation.getArgument(0);
+        when(curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(4);
+        when(curriculumLessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {
+            CurriculumLesson lesson = invocation.getArgument(0);
             lesson.setId(lessonId);
             return lesson;
         });
@@ -96,20 +109,19 @@ class AdminFlashcardServiceTest {
         FlashcardLessonCreatedResponse response = adminFlashcardService.createFlashcardLesson(
                 course.getId(),
                 section.getId(),
-                new CreateFlashcardLessonRequest("  Terms  ", "Basics", null, true, "published")
-        );
+                new CreateFlashcardLessonRequest("  Terms  ", "Basics", null, true, "published"));
 
         assertThat(response.lessonId()).isEqualTo(lessonId);
         assertThat(response.setId()).isEqualTo(setId);
-        ArgumentCaptor<Lesson> lessonCaptor = ArgumentCaptor.forClass(Lesson.class);
+        ArgumentCaptor<CurriculumLesson> lessonCaptor = ArgumentCaptor.forClass(CurriculumLesson.class);
         ArgumentCaptor<FlashcardSet> setCaptor = ArgumentCaptor.forClass(FlashcardSet.class);
-        verify(lessonRepository).save(lessonCaptor.capture());
+        verify(curriculumLessonRepository).save(lessonCaptor.capture());
         verify(flashcardSetRepository).save(setCaptor.capture());
         assertThat(lessonCaptor.getValue().getType()).isEqualTo(LessonType.FLASHCARD);
         assertThat(lessonCaptor.getValue().getTitle()).isEqualTo("Terms");
         assertThat(lessonCaptor.getValue().getStatus()).isEqualTo(LessonStatus.PUBLISHED);
         assertThat(lessonCaptor.getValue().getSortOrder()).isEqualTo(5);
-        assertThat(setCaptor.getValue().getLesson().getId()).isEqualTo(lessonId);
+        assertThat(setCaptor.getValue().getCurriculumLessonId()).isEqualTo(lessonId);
         assertThat(setCaptor.getValue().getCourse()).isSameAs(course);
         assertThat(setCaptor.getValue().getCreatedBy()).isSameAs(actor);
         assertThat(setCaptor.getValue().getIsPublic()).isFalse();
@@ -119,7 +131,8 @@ class AdminFlashcardServiceTest {
     @Test
     void addCardShouldAcceptFrontAndBackTextCard() {
         FlashcardSet flashcardSet = flashcardSet();
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
         when(flashcardCardRepository.save(any(FlashcardCard.class))).thenAnswer(invocation -> {
             FlashcardCard card = invocation.getArgument(0);
@@ -129,8 +142,7 @@ class AdminFlashcardServiceTest {
 
         FlashcardCardResponse response = adminFlashcardService.addCard(
                 flashcardSet.getId(),
-                new CreateFlashcardCardRequest("  Front  ", null, "  Back  ", null, null, null, null)
-        );
+                new CreateFlashcardCardRequest("  Front  ", null, "  Back  ", null, null, null, null));
 
         assertThat(response.frontText()).isEqualTo("Front");
         assertThat(response.backText()).isEqualTo("Back");
@@ -181,7 +193,8 @@ class AdminFlashcardServiceTest {
     @Test
     void addCardShouldAcceptFrontImageOnlyCard() {
         FlashcardSet flashcardSet = flashcardSet();
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(1);
         when(flashcardCardRepository.save(any(FlashcardCard.class))).thenAnswer(invocation -> {
             FlashcardCard card = invocation.getArgument(0);
@@ -222,7 +235,8 @@ class AdminFlashcardServiceTest {
     @Test
     void addCardShouldRejectHintOnlyCard() {
         FlashcardSet flashcardSet = flashcardSet();
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
 
         assertThatThrownBy(() -> adminFlashcardService.addCard(
                 flashcardSet.getId(),
@@ -237,7 +251,8 @@ class AdminFlashcardServiceTest {
     @Test
     void addCardShouldRejectExplanationOnlyCard() {
         FlashcardSet flashcardSet = flashcardSet();
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
 
         assertThatThrownBy(() -> adminFlashcardService.addCard(
                 flashcardSet.getId(),
@@ -272,8 +287,7 @@ class AdminFlashcardServiceTest {
 
         FlashcardCardResponse response = adminFlashcardService.updateCard(
                 card.getId(),
-                new UpdateFlashcardCardRequest("  Updated front  ", null, "  Updated back  ", null, " hint ", null, 3)
-        );
+                new UpdateFlashcardCardRequest("  Updated front  ", null, "  Updated back  ", null, " hint ", null, 3));
 
         assertThat(response.frontText()).isEqualTo("Updated front");
         assertThat(response.backText()).isEqualTo("Updated back");
@@ -312,14 +326,14 @@ class AdminFlashcardServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         FlashcardCard first = card(flashcardSet, 0);
         FlashcardCard second = card(flashcardSet, 1);
-        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
                 .thenReturn(List.of(first, second));
 
         FlashcardSetResponse response = adminFlashcardService.reorderCards(
                 flashcardSet.getId(),
-                new ReorderFlashcardCardsRequest(List.of(second.getId(), first.getId()))
-        );
+                new ReorderFlashcardCardsRequest(List.of(second.getId(), first.getId())));
 
         assertThat(second.getOrderIndex()).isZero();
         assertThat(first.getOrderIndex()).isEqualTo(1);
@@ -354,6 +368,19 @@ class AdminFlashcardServiceTest {
         return section;
     }
 
+    private CurriculumSection curriculumSection(Course course) {
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(UUID.randomUUID());
+        version.setCourseId(course.getId());
+
+        CurriculumSection section = new CurriculumSection();
+        section.setId(UUID.randomUUID());
+        section.setCurriculumVersion(version);
+        section.setTitle("Section");
+        section.setSortOrder(0);
+        return section;
+    }
+
     private Lesson lesson(Course course, CourseSection section) {
         Lesson lesson = new Lesson();
         lesson.setId(UUID.randomUUID());
@@ -372,6 +399,7 @@ class AdminFlashcardServiceTest {
         CourseSection section = section(course);
         FlashcardSet flashcardSet = new FlashcardSet();
         flashcardSet.setId(UUID.randomUUID());
+        flashcardSet.setCourse(course);
         flashcardSet.setLesson(lesson(course, section));
         flashcardSet.setTitle("Flashcards");
         flashcardSet.setCreatedAt(Instant.now());

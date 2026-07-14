@@ -8,10 +8,21 @@ import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionReposi
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassAdminProjection;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,9 +36,14 @@ public class AssignmentService {
     private final ClassOfferingRepository classOfferingRepository;
     private final CurrentUserService currentUserService;
     private final AssignmentSubmissionRepository assignmentSubmissionRepository;
+    private final CurriculumResolutionService curriculumResolutionService;
+    private final CurriculumLessonRepository curriculumLessonRepository;
+    private final CurriculumVersionRepository curriculumVersionRepository;
 
     public AssignmentModel.Response createAssignment(
             AssignmentModel.CreateRequest request) {
+
+        validateLessonForClass(request.getClassId(), request.getLessonId());
 
         Assignment assignment = new Assignment();
 
@@ -66,9 +82,20 @@ public class AssignmentService {
                 .toList();
     }
 
-    public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId, Boolean isFlashtest) {
+    // public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId,
+    // Boolean isFlashtest) {
+    // UserAccount actor = currentUserService.requireAuthenticatedUser();
+    // return assignmentRepository.findAvailableForStudent(actor.getId(), courseId,
+    // isFlashtest)
+    // .stream()
+    // .map(this::mapToResponse)
+    // .toList();
+    // }
+
+    public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId, UUID classId, Boolean isFlashtest) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        return assignmentRepository.findAvailableForStudent(actor.getId(), courseId, isFlashtest)
+
+        return assignmentRepository.findAvailableForStudent(actor.getId(), courseId, classId, isFlashtest)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -86,19 +113,109 @@ public class AssignmentService {
     public AssignmentModel.Response getAssignmentById(UUID id) {
 
         Assignment assignment = assignmentRepository.findById(id)
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Assignment not found"));
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
 
         return mapToResponse(assignment);
     }
 
     public AssignmentModel.Response getAssignmentByLessonId(UUID lessonId) {
+        return findAssignmentByLessonId(lessonId, null)
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
+    }
 
-        Assignment assignment = assignmentRepository.findByLessonId(lessonId)
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Assignment not found"));
+    public Optional<AssignmentModel.Response> findAssignmentByLessonId(
+            UUID lessonId,
+            UUID classId) {
+        if (lessonId == null) {
+            return Optional.empty();
+        }
 
-        return mapToResponse(assignment);
+        List<UUID> lessonReferences = resolveEquivalentLessonReferences(lessonId);
+
+        if (classId != null) {
+            Optional<Assignment> classAssignment = selectBestAssignment(
+                    assignmentRepository.findByLessonIdInAndClassId(
+                            lessonReferences,
+                            classId),
+                    lessonReferences);
+            if (classAssignment.isPresent()) {
+                return classAssignment.map(this::mapToResponse);
+            }
+        }
+
+        Optional<Assignment> sharedAssignment = selectBestAssignment(
+                assignmentRepository.findByLessonIdInAndClassIdIsNull(
+                        lessonReferences),
+                lessonReferences);
+        if (sharedAssignment.isPresent()) {
+            return sharedAssignment.map(this::mapToResponse);
+        }
+
+        if (classId == null) {
+            return selectBestAssignment(
+                    assignmentRepository.findByLessonIdIn(lessonReferences),
+                    lessonReferences)
+                    .map(this::mapToResponse);
+        }
+
+        return Optional.empty();
+    }
+
+    private List<UUID> resolveEquivalentLessonReferences(UUID lessonId) {
+        Set<UUID> references = new LinkedHashSet<>();
+        references.add(lessonId);
+
+        curriculumLessonRepository.findById(lessonId).ifPresent(lesson -> {
+            addLessonReferences(references, lesson);
+            UUID lessonIdentityId = lesson.getLessonIdentityId();
+            if (lessonIdentityId != null) {
+                curriculumLessonRepository.findAllByLessonIdentityId(lessonIdentityId)
+                        .forEach(equivalentLesson ->
+                                addLessonReferences(references, equivalentLesson));
+            }
+        });
+
+        return List.copyOf(references);
+    }
+
+    private void addLessonReferences(
+            Set<UUID> references,
+            CurriculumLesson lesson) {
+        if (lesson.getId() != null) {
+            references.add(lesson.getId());
+        }
+        if (lesson.getSourceCurriculumLessonId() != null) {
+            references.add(lesson.getSourceCurriculumLessonId());
+        }
+        if (lesson.getSourceLessonId() != null) {
+            references.add(lesson.getSourceLessonId());
+        }
+        if (lesson.getLessonIdentityId() != null) {
+            references.add(lesson.getLessonIdentityId());
+        }
+    }
+
+    private Optional<Assignment> selectBestAssignment(
+            List<Assignment> assignments,
+            List<UUID> lessonReferences) {
+        if (assignments == null || assignments.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Comparator<Assignment> newestFirst = Comparator.comparing(
+                Assignment::getUpdatedAt,
+                Comparator.nullsFirst(Comparator.naturalOrder()));
+
+        for (UUID reference : lessonReferences) {
+            Optional<Assignment> match = assignments.stream()
+                    .filter(assignment -> reference.equals(assignment.getLessonId()))
+                    .max(newestFirst);
+            if (match.isPresent()) {
+                return match;
+            }
+        }
+
+        return Optional.empty();
     }
 
     @Transactional
@@ -107,23 +224,33 @@ public class AssignmentService {
             AssignmentModel.UpdateRequest request) {
 
         Assignment assignment = assignmentRepository.findById(id)
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Assignment not found"));
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
 
-        if (request.getTitle() != null) assignment.setTitle(request.getTitle());
-        if (request.getLessonId() != null) assignment.setLessonId(request.getLessonId());
-        if (request.getDescription() != null) assignment.setDescription(request.getDescription());
+        if (request.getTitle() != null)
+            assignment.setTitle(request.getTitle());
+        if (request.getLessonId() != null) {
+            validateLessonForClass(assignment.getClassId(), request.getLessonId());
+            assignment.setLessonId(request.getLessonId());
+        }
+        if (request.getDescription() != null)
+            assignment.setDescription(request.getDescription());
         assignment.setInstructionFileUrl(request.getInstructionFileUrl());
         assignment.setInstructionFileName(request.getInstructionFileName());
-        if (request.getDueDate() != null) assignment.setDueDate(request.getDueDate());
+        if (request.getDueDate() != null)
+            assignment.setDueDate(request.getDueDate());
         if (request.getAllowLateSubmission() != null) {
             assignment.setAllowLateSubmission(request.getAllowLateSubmission());
         }
-        if (request.getLockoutDate() != null) assignment.setLockoutDate(request.getLockoutDate());
-        if (request.getMaxScore() != null) assignment.setMaxScore(request.getMaxScore());
-        if (request.getIsArchived() != null) assignment.setIsArchived(request.getIsArchived());
-        if (request.getTestId() != null) assignment.setTestId(request.getTestId());
-        if (request.getIsFlashtest() != null) assignment.setIsFlashtest(request.getIsFlashtest());
+        if (request.getLockoutDate() != null)
+            assignment.setLockoutDate(request.getLockoutDate());
+        if (request.getMaxScore() != null)
+            assignment.setMaxScore(request.getMaxScore());
+        if (request.getIsArchived() != null)
+            assignment.setIsArchived(request.getIsArchived());
+        if (request.getTestId() != null)
+            assignment.setTestId(request.getTestId());
+        if (request.getIsFlashtest() != null)
+            assignment.setIsFlashtest(request.getIsFlashtest());
 
         Assignment updated = assignmentRepository.save(assignment);
         if (Boolean.TRUE.equals(updated.getIsFlashtest())) {
@@ -144,12 +271,12 @@ public class AssignmentService {
 
     private AssignmentModel.Response mapToResponse(Assignment assignment) {
 
-        AssignmentModel.Response response =
-                new AssignmentModel.Response();
+        AssignmentModel.Response response = new AssignmentModel.Response();
 
         response.setId(assignment.getId());
-        response.setClassId(assignment.getClassId());
-        response.setCourseId(resolveCourseId(assignment.getClassId()));
+        UUID classId = resolveClassId(assignment);
+        response.setClassId(classId);
+        response.setCourseId(resolveCourseId(classId, assignment));
         response.setLessonId(assignment.getLessonId());
         response.setTitle(assignment.getTitle());
         response.setDescription(assignment.getDescription());
@@ -172,9 +299,48 @@ public class AssignmentService {
         return response;
     }
 
-    private UUID resolveCourseId(UUID classId) {
-        if (classId == null) {
+    private void validateLessonForClass(UUID classId, UUID lessonId) {
+        if (classId == null || lessonId == null) {
+            return;
+        }
+
+        ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
+        CurriculumResolution resolution = curriculumResolutionService.resolveClassEffectivePublished(
+                classOffering.getCourseId(),
+                classId);
+        boolean lessonBelongsToClass = curriculumLessonRepository
+                .findEffectiveLessonReference(resolution.version().getId(), lessonId)
+                .isPresent();
+        if (!lessonBelongsToClass) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Assignment lesson must belong to this class curriculum");
+        }
+    }
+
+    private UUID resolveClassId(Assignment assignment) {
+        if (assignment.getClassId() != null) {
+            return assignment.getClassId();
+        }
+        if (assignment.getLessonId() == null) {
             return null;
+        }
+        return curriculumLessonRepository.findById(assignment.getLessonId())
+                .flatMap(lesson -> curriculumVersionRepository.findById(lesson.getCurriculumVersionId()))
+                .map(version -> version.getClassId())
+                .orElse(null);
+    }
+
+    private UUID resolveCourseId(UUID classId, Assignment assignment) {
+        if (classId == null) {
+            if (assignment.getLessonId() == null) {
+                return null;
+            }
+            return curriculumLessonRepository.findById(assignment.getLessonId())
+                    .flatMap(lesson -> curriculumVersionRepository.findById(lesson.getCurriculumVersionId()))
+                    .map(version -> version.getCourseId())
+                    .orElse(null);
         }
         return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
                 .map(ClassOffering::getCourseId)
@@ -202,4 +368,3 @@ public class AssignmentService {
                 || "SME".equalsIgnoreCase(role);
     }
 }
-

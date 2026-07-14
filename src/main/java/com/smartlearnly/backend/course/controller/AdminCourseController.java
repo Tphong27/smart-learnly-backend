@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import java.net.URI;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -43,9 +44,15 @@ public class AdminCourseController {
     @Operation(summary = "List courses for admin")
     public ApiResponse<PageResponse<CourseResponse>> list(
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @RequestParam(required = false) @Size(max = 200) String keyword,
+            @RequestParam(required = false) @Size(max = 20) String status,
+            @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) @Size(max = 30) String level
     ) {
-        return ApiResponse.success("Courses loaded successfully", courseAdminService.list(page, size));
+        return ApiResponse.success(
+                "Courses loaded successfully",
+                courseAdminService.list(page, size, keyword, status, categoryId, level));
     }
 
     @PostMapping
@@ -68,7 +75,7 @@ public class AdminCourseController {
     }
 
     @PatchMapping("/{courseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     @Operation(summary = "Update selected course fields")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,

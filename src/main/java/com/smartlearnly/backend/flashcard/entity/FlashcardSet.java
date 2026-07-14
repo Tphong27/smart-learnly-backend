@@ -34,6 +34,9 @@ public class FlashcardSet {
     @JoinColumn(name = "lesson_id")
     private Lesson lesson;
 
+    @Column(name = "curriculum_lesson_id")
+    private UUID curriculumLessonId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_id")
     private Course course;

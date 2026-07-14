@@ -7,6 +7,7 @@ public record OrderItemResponse(
         UUID id,
         UUID courseId,
         UUID classId,
+        String className,
         String itemTitle,
         BigDecimal unitPrice,
         BigDecimal discountAmount,

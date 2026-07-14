@@ -16,6 +16,7 @@ import org.springframework.data.repository.query.Param;
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, UUID> {
     Page<PaymentTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
+    Page<PaymentTransaction> findAllByOrderByCreatedAtDesc(Pageable pageable);
     Optional<PaymentTransaction> findByIdAndUserId(UUID id, UUID userId);
 
     Optional<PaymentTransaction> findFirstByOrderIdOrderByCreatedAtDesc(UUID orderId);

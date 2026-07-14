@@ -5,9 +5,11 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
+import com.smartlearnly.backend.question.dto.QuestionAnswerMediaResponse;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
 import com.smartlearnly.backend.question.dto.QuestionModel;
+import com.smartlearnly.backend.question.entity.QuestionAnswerMediaAttachment;
 import com.smartlearnly.backend.question.entity.BloomLevel;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
@@ -16,17 +18,21 @@ import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
+import com.smartlearnly.backend.question.repository.QuestionAnswerMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -41,6 +47,7 @@ public class QuestionService {
 
     private final QuestionRepository questionRepository;
     private final QuestionAnswerRepository answerRepository;
+    private final QuestionAnswerMediaAttachmentRepository answerMediaRepository;
     private final QuestionMediaAttachmentRepository mediaAttachmentRepository;
     private final QuestionBankService questionBankService;
     private final CourseSectionRepository courseSectionRepository;
@@ -103,6 +110,7 @@ public class QuestionService {
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question");
         }
+        questionBankService.findActiveBankEntity(question.getQuestionBankId());
         QuestionBank bank = resolveBank(request.resolvedBankId() == null ? question.getQuestionBankId() : request.resolvedBankId(), request.courseId());
         QuestionType questionType = parseSupportedQuestionType(request.questionType());
         validateAnswers(questionType, request.answers());
@@ -126,6 +134,7 @@ public class QuestionService {
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
         }
+        questionBankService.findActiveBankEntity(question.getQuestionBankId());
         question.setStatus(QuestionStatus.ARCHIVED);
         questionRepository.save(question);
     }
@@ -471,12 +480,33 @@ public class QuestionService {
     }
 
     private QuestionModel.Response toResponse(Question question) {
-        List<QuestionModel.AnswerResponse> answers = answerRepository.findByQuestionIdOrderByOrderIndexAsc(question.getId()).stream().map(answer -> new QuestionModel.AnswerResponse(answer.getId(), answer.getId(), answer.getAnswerText(), Boolean.TRUE.equals(answer.getIsCorrect()), Boolean.TRUE.equals(answer.getIsCorrect()), answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(), answer.getOrderIndex() == null ? 0 : answer.getOrderIndex())).toList();
+        List<QuestionAnswer> answerEntities = answerRepository.findByQuestionIdOrderByOrderIndexAsc(question.getId());
+        Map<UUID, List<QuestionAnswerMediaAttachment>> mediaByAnswer = answerEntities.isEmpty()
+                ? Collections.emptyMap()
+                : answerMediaRepository.findByAnswerIdIn(answerEntities.stream().map(QuestionAnswer::getId).toList()).stream()
+                        .collect(Collectors.groupingBy(QuestionAnswerMediaAttachment::getAnswerId));
+        List<QuestionModel.AnswerResponse> answers = answerEntities.stream().map(answer -> {
+            List<QuestionAnswerMediaResponse> answerMedia = (mediaByAnswer.getOrDefault(answer.getId(), List.of())).stream()
+                    .map(this::toAnswerMediaResponse)
+                    .toList();
+            return new QuestionModel.AnswerResponse(
+                    answer.getId(),
+                    answer.getId(),
+                    answer.getAnswerText(),
+                    Boolean.TRUE.equals(answer.getIsCorrect()),
+                    Boolean.TRUE.equals(answer.getIsCorrect()),
+                    answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(),
+                    answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(),
+                    answerMedia
+            );
+        }).toList();
         List<QuestionMediaAttachment> imageAttachments = mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), QuestionMediaType.IMAGE);
         List<QuestionMediaAttachment> audioAttachments = mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), QuestionMediaType.AUDIO);
+        List<QuestionMediaAttachment> videoAttachments = mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(question.getId(), QuestionMediaType.VIDEO);
         List<QuestionMediaAttachmentResponse> mediaAttachments = new ArrayList<>();
         mediaAttachments.addAll(imageAttachments.stream().map(this::toMediaResponse).toList());
         mediaAttachments.addAll(audioAttachments.stream().map(this::toMediaResponse).toList());
+        mediaAttachments.addAll(videoAttachments.stream().map(this::toMediaResponse).toList());
         String imageUrl = imageAttachments.isEmpty() ? null : imageAttachments.get(0).getMediaUrl();
         String audioUrl = audioAttachments.isEmpty() ? null : audioAttachments.get(0).getMediaUrl();
         return new QuestionModel.Response(question.getId(), question.getId(), question.getQuestionBankId(), question.getQuestionBankId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), imageUrl, audioUrl, mediaAttachments, Boolean.TRUE.equals(question.getIsAiGenerated()), question.getImportSource(), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
@@ -487,6 +517,24 @@ public class QuestionService {
                 attachment.getId(),
                 attachment.getId(),
                 attachment.getQuestionId(),
+                toApiValue(attachment.getMediaType()),
+                attachment.getMediaUrl(),
+                attachment.getObjectKey(),
+                attachment.getBucket(),
+                attachment.getContentType(),
+                attachment.getFileSize() == null ? 0 : attachment.getFileSize(),
+                attachment.getOriginalFileName(),
+                attachment.getDisplayOrder() == null ? 0 : attachment.getDisplayOrder(),
+                attachment.getImportSource(),
+                attachment.getCreatedAt(),
+                attachment.getUpdatedAt()
+        );
+    }
+
+    private QuestionAnswerMediaResponse toAnswerMediaResponse(QuestionAnswerMediaAttachment attachment) {
+        return new QuestionAnswerMediaResponse(
+                attachment.getId(),
+                attachment.getAnswerId(),
                 toApiValue(attachment.getMediaType()),
                 attachment.getMediaUrl(),
                 attachment.getObjectKey(),

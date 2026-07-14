@@ -1,14 +1,14 @@
 package com.smartlearnly.backend.learning.service;
 
-import com.smartlearnly.backend.classroom.entity.ClassOffering;
-import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
-import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
-import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
-import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
+import com.smartlearnly.backend.curriculum.dto.CurriculumMetadataResponse;
+import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.service.EnrollmentAccessService;
 import com.smartlearnly.backend.hls.entity.HlsLesson;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
@@ -20,12 +20,13 @@ import com.smartlearnly.backend.learning.module.repository.CourseSectionReposito
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
-import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.course.service.CourseAccessService;
 
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -43,116 +44,85 @@ public class LearningContentService {
         private final CurrentUserService currentUserService;
         private final LessonProgressRepository lessonProgressRepository;
         private final HlsLessonRepository hlsLessonRepository;
-        private final ClassOfferingRepository classOfferingRepository;
-        private final ClassEnrollmentRepository classEnrollmentRepository;
+        private final CurriculumResolutionService curriculumResolutionService;
+        private final CurriculumDtoMapper curriculumDtoMapper;
+        private final CourseAccessService courseAccessService;
 
         @Transactional(readOnly = true)
         public LearningContentResponse getLearningContent(UUID courseId, UUID classId) {
                 UserAccount student = currentUserService.requireAuthenticatedUser();
 
                 enrollmentAccessService.requireCourseAccess(courseId);
-                validateClassAccess(student.getId(), courseId, classId);
+                CurriculumResolution resolution = curriculumResolutionService
+                                .resolveTraineeProgress(courseId, classId, student.getId());
 
                 Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
                                 .orElseThrow(() -> new BusinessException(
                                                 ErrorCode.RESOURCE_NOT_FOUND,
                                                 "Course not found"));
 
-                List<CourseSection> sections = courseSectionRepository
-                                .findByCourseIdOrderBySortOrderAscCreatedAtAsc(courseId);
-
-                Set<UUID> completedLessonIds = lessonProgressRepository
-                                .findByStudentIdAndCourseId(student.getId(), courseId)
+                Set<UUID> completedLessonIdentityIds = lessonProgressRepository
+                                .findByStudentIdAndClassIdAndCourseId(student.getId(), classId, courseId)
                                 .stream()
                                 .filter(LessonProgress::isCompleted)
-                                .map(LessonProgress::getLessonId)
+                                .map(LessonProgress::getLessonIdentityId)
+                                .filter(Objects::nonNull)
                                 .collect(Collectors.toSet());
 
-                List<LearningSectionResponse> sectionResponses = sections.stream()
-                                .map(section -> toSectionResponse(section, completedLessonIds))
-                                .filter(this::hasLessons)
-                                .toList();
+                CurriculumMetadataResponse metadata = curriculumDtoMapper.toMetadata(
+                                resolution.version(),
+                                resolution.classId(),
+                                resolution.source());
 
-                LearningStats stats = calculateStats(sectionResponses);
-
-                return new LearningContentResponse(
-                                courseId,
+                return curriculumDtoMapper.toLearningContentResponse(
+                                resolution.version(),
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
-                                sectionResponses,
-                                stats);
+                                completedLessonIdentityIds,
+                                metadata);
         }
 
         @Transactional(readOnly = true)
         public LearningContentResponse getPreviewContent(UUID courseId) {
                 Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
                                 .orElseThrow(() -> new RuntimeException("Course not found"));
+                CurriculumResolution resolution = curriculumResolutionService.resolvePublicMaster(courseId);
+                CurriculumMetadataResponse metadata = curriculumDtoMapper.toMetadata(
+                                resolution.version(),
+                                resolution.classId(),
+                                resolution.source());
 
-                List<CourseSection> sections = courseSectionRepository
-                                .findByCourseIdOrderBySortOrderAscCreatedAtAsc(courseId);
-
-                List<LearningSectionResponse> sectionResponses = sections.stream()
-                                .map(this::toPreviewSectionResponse)
-                                .filter(s -> s != null)
-                                .toList();
-
-                LearningStats stats = calculateStats(sectionResponses);
-
-                return new LearningContentResponse(
-                                courseId,
+                return curriculumDtoMapper.toPreviewLearningContentResponse(
+                                resolution.version(),
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
-                                sectionResponses,
-                                stats);
+                                metadata);
         }
 
         @Transactional(readOnly = true)
         public LearningContentResponse getAdminPreviewContent(UUID courseId) {
-                Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
-                                .orElseThrow(() -> new RuntimeException("Course not found"));
+                courseAccessService.requireReadableCourse(courseId);
 
-                List<CourseSection> sections = courseSectionRepository
-                                .findByCourseIdOrderBySortOrderAscCreatedAtAsc(courseId);
-
-                List<LearningSectionResponse> sectionResponses = sections.stream()
-                                .map(this::toSectionResponseWithoutProgress)
-                                .filter(this::hasLessons)
-                                .toList();
-
-                LearningStats stats = calculateStats(sectionResponses);
-
-                return new LearningContentResponse(
-                                courseId,
-                                course.getTitle(),
-                                course.getThumbnailUrl(),
-                                sectionResponses,
-                                stats);
-        }
-
-        private void validateClassAccess(UUID studentId, UUID courseId, UUID classId) {
-                ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
+                Course course = courseRepository
+                                .findByIdAndDeletedAtIsNull(courseId)
                                 .orElseThrow(() -> new BusinessException(
                                                 ErrorCode.RESOURCE_NOT_FOUND,
-                                                "Class not found"));
+                                                "Course was not found"));
 
-                if (!courseId.equals(classOffering.getCourseId())) {
-                        throw new BusinessException(
-                                        ErrorCode.INVALID_REQUEST,
-                                        "Class does not belong to this course");
-                }
+                CurriculumResolution resolution = curriculumResolutionService
+                                .resolveMasterAuthoring(courseId);
 
-                ClassEnrollment classEnrollment = classEnrollmentRepository
-                                .findByClassIdAndStudentId(classId, studentId)
-                                .orElseThrow(() -> new BusinessException(
-                                                ErrorCode.FORBIDDEN,
-                                                "You are not enrolled in this class"));
+                CurriculumMetadataResponse metadata = curriculumDtoMapper.toMetadata(
+                                resolution.version(),
+                                resolution.classId(),
+                                resolution.source());
 
-                if (classEnrollment.getStatus() != EnrollmentStatus.ACTIVE
-                                && classEnrollment.getStatus() != EnrollmentStatus.COMPLETED) {
-                        throw new BusinessException(
-                                        ErrorCode.FORBIDDEN,
-                                        "Class access is not active");
-                }
+                return curriculumDtoMapper.toLearningContentResponse(
+                                resolution.version(),
+                                course.getTitle(),
+                                course.getThumbnailUrl(),
+                                Set.of(),
+                                metadata);
         }
 
         private LearningSectionResponse toSectionResponseWithoutProgress(CourseSection section) {
@@ -177,23 +147,6 @@ public class LearningContentService {
                 if (lessonResponses.isEmpty()) {
                         return null;
                 }
-                return new LearningSectionResponse(
-                                section.getId(),
-                                section.getTitle(),
-                                section.getSortOrder(),
-                                lessonResponses);
-        }
-
-        private LearningSectionResponse toSectionResponse(
-                        CourseSection section,
-                        Set<UUID> completedLessonIds) {
-                List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
-                                .filter(this::isPublishedLesson)
-                                .map(lesson -> toLessonResponse(
-                                                lesson,
-                                                completedLessonIds.contains(lesson.getId())))
-                                .toList();
-
                 return new LearningSectionResponse(
                                 section.getId(),
                                 section.getTitle(),

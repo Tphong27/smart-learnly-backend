@@ -21,6 +21,14 @@ public interface FlashcardSetRepository extends JpaRepository<FlashcardSet, UUID
     Optional<FlashcardSet> findByLessonIdAndDeletedAtIsNull(@Param("lessonId") UUID lessonId);
 
     @Query("""
+            select flashcardSet
+            from FlashcardSet flashcardSet
+            where flashcardSet.curriculumLessonId = :curriculumLessonId
+              and flashcardSet.deletedAt is null
+            """)
+    Optional<FlashcardSet> findByCurriculumLessonIdAndDeletedAtIsNull(@Param("curriculumLessonId") UUID curriculumLessonId);
+
+    @Query("""
             select count(flashcardSet) > 0
             from FlashcardSet flashcardSet
             where flashcardSet.lesson.id = :lessonId

@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Validated
@@ -37,18 +38,16 @@ public class FlashcardLearningController {
     public ApiResponse<List<LearningFlashcardSetResponse>> listLearningFlashcards() {
         return ApiResponse.success(
                 "Flashcards loaded successfully",
-                flashcardLearningService.listLearningFlashcards()
-        );
+                flashcardLearningService.listLearningFlashcards());
     }
 
     @GetMapping("/lessons/{lessonId}/flashcards")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Get flashcards for a lesson")
-    public ApiResponse<FlashcardPracticeSetResponse> getLessonFlashcards(@PathVariable UUID lessonId) {
-        return ApiResponse.success(
-                "Flashcards loaded successfully",
-                flashcardLearningService.getLessonFlashcards(lessonId)
-        );
+    @Operation(summary = "Get flashcards for a class curriculum lesson")
+    public ApiResponse<FlashcardPracticeSetResponse> getLessonFlashcards(
+            @PathVariable UUID lessonId,
+            @RequestParam UUID classId) {
+        return ApiResponse.success("Flashcards loaded successfully",flashcardLearningService.getLessonFlashcards(lessonId, classId));
     }
 
     @GetMapping("/flashcard-sets/{setId}")
@@ -57,8 +56,7 @@ public class FlashcardLearningController {
     public ApiResponse<FlashcardPracticeSetResponse> getSetPractice(@PathVariable UUID setId) {
         return ApiResponse.success(
                 "Flashcards loaded successfully",
-                flashcardLearningService.getSetPractice(setId)
-        );
+                flashcardLearningService.getSetPractice(setId));
     }
 
     @PostMapping("/flashcards/{cardId}/progress")
@@ -66,11 +64,9 @@ public class FlashcardLearningController {
     @Operation(summary = "Submit flashcard review progress")
     public ApiResponse<FlashcardProgressResponse> submitProgress(
             @PathVariable UUID cardId,
-            @Valid @RequestBody FlashcardProgressRequest request
-    ) {
+            @Valid @RequestBody FlashcardProgressRequest request) {
         return ApiResponse.success(
                 "Flashcard progress saved successfully",
-                flashcardLearningService.submitProgress(cardId, request)
-        );
+                flashcardLearningService.submitProgress(cardId, request));
     }
 }

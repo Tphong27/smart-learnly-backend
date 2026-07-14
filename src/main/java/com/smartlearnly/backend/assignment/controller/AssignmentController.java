@@ -1,7 +1,7 @@
 package com.smartlearnly.backend.assignment.controller;
 
 import com.smartlearnly.backend.assignment.dto.AssignmentModel;
-import com.smartlearnly.backend.assignment.service.AssignmentService; // Đảm bảo import đúng gói service của bạn
+import com.smartlearnly.backend.assignment.service.AssignmentService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -15,7 +15,6 @@ public class AssignmentController {
 
     private final AssignmentService assignmentService;
 
-    // Tiêm Service qua Constructor giống hệt CourseController
     public AssignmentController(AssignmentService assignmentService) {
         this.assignmentService = assignmentService;
     }
@@ -39,11 +38,20 @@ public class AssignmentController {
         return ResponseEntity.ok(assignmentService.getMyAssignments(courseId, isFlashtest));
     }
 
+    // @GetMapping("/available")
+    // public ResponseEntity<List<AssignmentModel.Response>> getAvailable(
+    //         @RequestParam(required = false) UUID courseId,
+    //         @RequestParam(required = false) Boolean isFlashtest) {
+    //     return ResponseEntity.ok(assignmentService.getAvailableAssignments(courseId, isFlashtest));
+    // }
+
     @GetMapping("/available")
     public ResponseEntity<List<AssignmentModel.Response>> getAvailable(
             @RequestParam(required = false) UUID courseId,
+            @RequestParam(required = false) UUID classId,
             @RequestParam(required = false) Boolean isFlashtest) {
-        return ResponseEntity.ok(assignmentService.getAvailableAssignments(courseId, isFlashtest));
+        return ResponseEntity.ok(
+                assignmentService.getAvailableAssignments(courseId, classId, isFlashtest));
     }
 
     @GetMapping("/classes")
@@ -59,14 +67,17 @@ public class AssignmentController {
     }
 
     @GetMapping("/lesson/{lessonId}")
-    public ResponseEntity<AssignmentModel.Response> getByLessonId(@PathVariable UUID lessonId) {
-        AssignmentModel.Response response = assignmentService.getAssignmentByLessonId(lessonId);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<AssignmentModel.Response> getByLessonId(
+            @PathVariable UUID lessonId,
+            @RequestParam(required = false) UUID classId) {
+        return assignmentService.findAssignmentByLessonId(lessonId, classId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<AssignmentModel.Response> update(
-            @PathVariable UUID id, 
+            @PathVariable UUID id,
             @Valid @RequestBody AssignmentModel.UpdateRequest request) {
         AssignmentModel.Response response = assignmentService.updateAssignment(id, request);
         return ResponseEntity.ok(response);

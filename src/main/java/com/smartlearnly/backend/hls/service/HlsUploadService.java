@@ -5,6 +5,7 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.file.service.CloudflareR2StorageClient;
 import com.smartlearnly.backend.hls.config.HlsProperties;
 import com.smartlearnly.backend.hls.entity.HlsLesson;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,9 @@ public class HlsUploadService {
     private final VideoProcessingService videoProcessingService;
     private final HlsLessonRepository hlsLessonRepository;
     private final LessonRepository lessonRepository;
+    // Trainer edit CurriculumLesson (versioned) — cần lookup ở cả 2 bảng để HLS pipeline
+    // hoạt động cho cả master Lesson lẫn class curriculum lesson.
+    private final CurriculumLessonRepository curriculumLessonRepository;
     private final HlsProperties hlsProperties;
     private final ApplicationEventPublisher eventPublisher;
     private final CloudflareR2StorageClient r2StorageClient;
@@ -93,9 +97,12 @@ public class HlsUploadService {
         UUID lessonId = request.lessonId();
         MultipartFile videoFile = request.videoFile();
 
-        // Validate lesson exists
-        lessonRepository.findById(lessonId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson not found: " + lessonId));
+        // Validate lesson exists trong 1 trong 2 bảng: legacy `lessons` (master authoring cũ) hoặc
+        // `curriculum_lessons` (versioning mới — trainer/SME edit).
+        if (lessonRepository.findById(lessonId).isEmpty()
+                && curriculumLessonRepository.findById(lessonId).isEmpty()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson not found: " + lessonId);
+        }
 
         // Validate file
         validateVideoFile(videoFile);
@@ -301,10 +308,15 @@ public class HlsUploadService {
 
     @Transactional
     public void updateLessonVideoUrlDirect(UUID lessonId, VideoProcessingService.HlsProcessingResult result) {
+        String videoUrl = result.masterPlaylistPath();
+        // Ghi videoUrl vào đúng bảng chứa lesson. Chỉ 1 bảng có row → chỉ 1 ifPresent trúng.
         lessonRepository.findById(lessonId).ifPresent(lesson -> {
-            String videoUrl = result.masterPlaylistPath();
             lesson.setVideoUrl(videoUrl);
             lessonRepository.save(lesson);
+        });
+        curriculumLessonRepository.findById(lessonId).ifPresent(lesson -> {
+            lesson.setVideoUrl(videoUrl);
+            curriculumLessonRepository.save(lesson);
         });
     }
 
@@ -348,10 +360,14 @@ public class HlsUploadService {
 
         hlsLessonRepository.delete(hlsLesson);
 
-        // Clear video URL from lesson
+        // Clear video URL from lesson — thử cả 2 bảng.
         lessonRepository.findById(lessonId).ifPresent(lesson -> {
             lesson.setVideoUrl(null);
             lessonRepository.save(lesson);
+        });
+        curriculumLessonRepository.findById(lessonId).ifPresent(lesson -> {
+            lesson.setVideoUrl(null);
+            curriculumLessonRepository.save(lesson);
         });
 
         log.info("Deleted HLS content for lesson {}", lessonId);

@@ -1,11 +1,13 @@
 package com.smartlearnly.backend.course.service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.smartlearnly.backend.course.dto.CategorySummaryResponse;
+import com.smartlearnly.backend.course.dto.CourseCatalogSort;
 import com.smartlearnly.backend.course.dto.CourseDetailResponse;
 import com.smartlearnly.backend.course.dto.CourseListItemResponse;
 import com.smartlearnly.backend.course.dto.LearningObjectiveResponse;
@@ -17,6 +19,15 @@ import com.smartlearnly.backend.course.repository.CourseListProjection;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.course.repository.CurriculumRowProjection;
 import com.smartlearnly.backend.course.repository.LearningObjectiveProjection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
+import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
+import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
+import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -47,6 +58,9 @@ class CourseQueryServiceTests {
 	private ClassOfferingRepository classOfferingRepository;
 
 	@Mock
+	private CurriculumResolutionService curriculumResolutionService;
+
+	@Mock
 	private CourseListProjection projection;
 
 	@Mock
@@ -55,14 +69,10 @@ class CourseQueryServiceTests {
 	@Mock
 	private LearningObjectiveProjection objectiveProjection;
 
-	@Mock
-	private CurriculumRowProjection firstLessonRow;
-
-	@Mock
-	private CurriculumRowProjection secondLessonRow;
-
-	@Mock
-	private CurriculumRowProjection emptyModuleRow;
+	private CourseQueryService service() {
+		return new CourseQueryService(courseRepository, categoryRepository, classOfferingRepository,
+				curriculumResolutionService);
+	}
 
 	@Test
 	void mapsPublishedCourseProjectionToResponse() {
@@ -84,9 +94,7 @@ class CourseQueryServiceTests {
 		when(courseRepository.findPublishedCourses(pageable))
 				.thenReturn(new PageImpl<>(List.of(projection), pageable, 1));
 
-		Page<CourseListItemResponse> result = new CourseQueryService(courseRepository, categoryRepository,
-				classOfferingRepository).getCourses(0,
-						20);
+		Page<CourseListItemResponse> result = service().getCourses(0, 20);
 
 		assertThat(result.getTotalElements()).isEqualTo(1);
 		assertThat(result.getContent().get(0))
@@ -112,9 +120,65 @@ class CourseQueryServiceTests {
 		when(courseRepository.findPublishedCourses(cappedPageable))
 				.thenReturn(Page.empty(cappedPageable));
 
-		new CourseQueryService(courseRepository, categoryRepository, classOfferingRepository).getCourses(2, 250);
+		service().getCourses(2, 250);
 
 		verify(courseRepository).findPublishedCourses(cappedPageable);
+	}
+
+	@Test
+	void filtersPublishedCoursesWithNormalizedParamsAndSelectedSort() {
+		PageRequest pageable = PageRequest.of(0, 20);
+		when(courseRepository.findPublishedCoursesByFilters(
+				"%java%",
+				"programming",
+				new BigDecimal("10000"),
+				new BigDecimal("500000"),
+				true,
+				true,
+				"PRICE_ASC",
+				pageable))
+				.thenReturn(Page.empty(pageable));
+
+		Page<CourseListItemResponse> result = service().getCourses(
+				" java ",
+				" programming ",
+				new BigDecimal("10000"),
+				new BigDecimal("500000"),
+				true,
+				true,
+				CourseCatalogSort.PRICE_ASC,
+				0,
+				20);
+
+		assertThat(result).isEmpty();
+		verify(courseRepository).findPublishedCoursesByFilters(
+				"%java%",
+				"programming",
+				new BigDecimal("10000"),
+				new BigDecimal("500000"),
+				true,
+				true,
+				"PRICE_ASC",
+				pageable);
+	}
+
+	@Test
+	void rejectsPriceRangeWhenMinimumExceedsMaximum() {
+		assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> service().getCourses(
+				null,
+				null,
+				new BigDecimal("500000"),
+				new BigDecimal("100000"),
+				false,
+				null,
+				CourseCatalogSort.POPULAR,
+				0,
+				20)))
+				.isInstanceOf(ResponseStatusException.class)
+				.satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value())
+						.isEqualTo(400));
+
+		verifyNoInteractions(courseRepository);
 	}
 
 	@Test
@@ -125,8 +189,7 @@ class CourseQueryServiceTests {
 				cappedPageable))
 				.thenReturn(new PageImpl<>(List.of(projection), cappedPageable, 1));
 
-		Page<CourseListItemResponse> result = new CourseQueryService(courseRepository, categoryRepository,
-				classOfferingRepository)
+		Page<CourseListItemResponse> result = service()
 				.searchCourses("  50%_off\\today  ", 1, 250);
 
 		assertThat(result.getContent()).hasSize(1);
@@ -148,6 +211,34 @@ class CourseQueryServiceTests {
 		assertThat(query.countQuery())
 				.contains("c.status = 'published'::public.course_status")
 				.contains("c.deleted_at IS NULL");
+	}
+
+	@Test
+	void filteredCatalogQueryUsesOnlyPublishedCoursesAndEffectiveSalePrice() throws Exception {
+		Query query = CourseRepository.class
+				.getMethod(
+						"findPublishedCoursesByFilters",
+						String.class,
+						String.class,
+						BigDecimal.class,
+						BigDecimal.class,
+						boolean.class,
+						Boolean.class,
+						String.class,
+						Pageable.class)
+				.getAnnotation(Query.class);
+
+		assertThat(query.value())
+				.contains("c.status = 'published'::public.course_status")
+				.contains("c.deleted_at IS NULL")
+				.contains("category.slug = :categorySlug")
+				.contains("c.discounted_price < c.price")
+				.contains("CASE WHEN :sort = 'PRICE_ASC'")
+				.contains("CASE WHEN :sort = 'PRICE_DESC'");
+		assertThat(query.countQuery())
+				.contains("c.status = 'published'::public.course_status")
+				.contains("c.deleted_at IS NULL")
+				.contains("c.discounted_price < c.price");
 	}
 
 	@Test
@@ -175,8 +266,7 @@ class CourseQueryServiceTests {
 
 		assertThat(org.assertj.core.api.Assertions
 				.catchThrowable(
-						() -> new CourseQueryService(courseRepository, categoryRepository, classOfferingRepository)
-								.getCoursesByCategory("Java", 0, 20)))
+						() -> service().getCoursesByCategory("Java", 0, 20)))
 				.isInstanceOf(ResponseStatusException.class)
 				.satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value())
 						.isEqualTo(404));
@@ -192,8 +282,7 @@ class CourseQueryServiceTests {
 		when(courseRepository.findPublishedCoursesByCategorySlug("java", cappedPageable))
 				.thenReturn(Page.empty(cappedPageable));
 
-		Page<CourseListItemResponse> result = new CourseQueryService(courseRepository, categoryRepository,
-				classOfferingRepository)
+		Page<CourseListItemResponse> result = service()
 				.getCoursesByCategory("java", 2, 250);
 
 		assertThat(result).isEmpty();
@@ -251,30 +340,21 @@ class CourseQueryServiceTests {
 				.thenReturn(Optional.of(detailProjection));
 		when(courseRepository.findLearningObjectivesByCourseId(courseId))
 				.thenReturn(List.of(objectiveProjection));
-		when(firstLessonRow.getModuleId()).thenReturn(firstModuleId);
-		when(firstLessonRow.getModuleTitle()).thenReturn("Getting Started");
-		when(firstLessonRow.getModuleOrderIndex()).thenReturn(0);
-		when(firstLessonRow.getLessonId()).thenReturn(firstLessonId);
-		when(firstLessonRow.getLessonTitle()).thenReturn("Introduction");
-		when(firstLessonRow.getLessonType()).thenReturn("video");
-		when(firstLessonRow.getLessonOrderIndex()).thenReturn(0);
-		when(firstLessonRow.getLessonPreview()).thenReturn(true);
-		when(secondLessonRow.getModuleId()).thenReturn(firstModuleId);
-		when(secondLessonRow.getLessonId()).thenReturn(secondLessonId);
-		when(secondLessonRow.getLessonTitle()).thenReturn("Project Setup");
-		when(secondLessonRow.getLessonType()).thenReturn(null);
-		when(secondLessonRow.getLessonOrderIndex()).thenReturn(1);
-		when(secondLessonRow.getLessonPreview()).thenReturn(false);
-		when(emptyModuleRow.getModuleId()).thenReturn(secondModuleId);
-		when(emptyModuleRow.getModuleTitle()).thenReturn("Advanced Topics");
-		when(emptyModuleRow.getModuleOrderIndex()).thenReturn(1);
-		when(emptyModuleRow.getLessonId()).thenReturn(null);
-		when(courseRepository.findActiveCurriculumByCourseId(courseId))
-				.thenReturn(List.of(firstLessonRow, secondLessonRow, emptyModuleRow));
 
-		CourseDetailResponse result = new CourseQueryService(courseRepository, categoryRepository,
-				classOfferingRepository)
-				.getCourseDetail("spring-boot-fundamentals");
+		// Course detail now derives its curriculum preview from the resolved public MASTER version.
+		// The "Advanced Topics" module has no PUBLISHED lessons, mirroring the original empty-module case.
+		CurriculumVersion version = version(courseId);
+		CurriculumSection firstModule = section(version, firstModuleId, "Getting Started", 0);
+		firstModule.getLessons().add(publishedLesson(firstModule, firstLessonId, "Introduction", LessonType.VIDEO, 0, true));
+		firstModule.getLessons().add(publishedLesson(firstModule, secondLessonId, "Project Setup", null, 1, false));
+		CurriculumSection secondModule = section(version, secondModuleId, "Advanced Topics", 1);
+		version.getSections().add(firstModule);
+		version.getSections().add(secondModule);
+		when(curriculumResolutionService.resolvePublicMaster(courseId))
+				.thenReturn(new CurriculumResolution(version, null, null, false,
+						CurriculumResolutionService.SOURCE_MASTER_PUBLIC));
+
+		CourseDetailResponse result = service().getCourseDetail("spring-boot-fundamentals");
 
 		assertThat(result).isEqualTo(new CourseDetailResponse(
 				courseId,
@@ -302,7 +382,7 @@ class CourseQueryServiceTests {
 										new LessonPreviewResponse(
 												firstLessonId,
 												"Introduction",
-												"video",
+												"VIDEO",
 												0,
 												true),
 										new LessonPreviewResponse(
@@ -319,7 +399,7 @@ class CourseQueryServiceTests {
 				List.of()));
 		verify(courseRepository).findPublishedCourseBySlug("spring-boot-fundamentals");
 		verify(courseRepository).findLearningObjectivesByCourseId(courseId);
-		verify(courseRepository).findActiveCurriculumByCourseId(courseId);
+		verify(curriculumResolutionService).resolvePublicMaster(courseId);
 		verify(classOfferingRepository).findPublicClassesByCourseId(courseId);
 	}
 
@@ -329,8 +409,7 @@ class CourseQueryServiceTests {
 
 		assertThat(org.assertj.core.api.Assertions
 				.catchThrowable(
-						() -> new CourseQueryService(courseRepository, categoryRepository, classOfferingRepository)
-								.getCourseDetail("missing")))
+						() -> service().getCourseDetail("missing")))
 				.isInstanceOf(ResponseStatusException.class)
 				.satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value())
 						.isEqualTo(404));
@@ -340,8 +419,7 @@ class CourseQueryServiceTests {
 
 	@Test
 	void reservedCourseSlugsReturnNotFoundWithoutRepositoryAccess() {
-		CourseQueryService service = new CourseQueryService(courseRepository, categoryRepository,
-				classOfferingRepository);
+		CourseQueryService service = service();
 
 		assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> service.getCourseDetail("search")))
 				.isInstanceOf(ResponseStatusException.class);
@@ -384,5 +462,49 @@ class CourseQueryServiceTests {
 						"l.id ASC")
 				.doesNotContain("l.content")
 				.doesNotContain("materials");
+	}
+
+	private CurriculumVersion version(UUID courseId) {
+		CurriculumVersion version = new CurriculumVersion();
+		version.setId(UUID.randomUUID());
+		version.setCourseId(courseId);
+		version.setScope(CurriculumScope.MASTER);
+		version.setStatus(CurriculumStatus.PUBLISHED);
+		version.setVersionNumber(1);
+		version.setCreatedAt(Instant.now());
+		version.setUpdatedAt(Instant.now());
+		return version;
+	}
+
+	private CurriculumSection section(CurriculumVersion version, UUID id, String title, int sortOrder) {
+		CurriculumSection section = new CurriculumSection();
+		section.setId(id);
+		section.setCurriculumVersion(version);
+		section.setTitle(title);
+		section.setSortOrder(sortOrder);
+		section.setCreatedAt(Instant.now());
+		section.setUpdatedAt(Instant.now());
+		return section;
+	}
+
+	private CurriculumLesson publishedLesson(
+			CurriculumSection section,
+			UUID id,
+			String title,
+			LessonType type,
+			int sortOrder,
+			boolean preview) {
+		CurriculumLesson lesson = new CurriculumLesson();
+		lesson.setId(id);
+		lesson.setSection(section);
+		lesson.setLessonIdentityId(UUID.randomUUID());
+		lesson.setTitle(title);
+		lesson.setType(type);
+		lesson.setPreview(preview);
+		lesson.setStatus(LessonStatus.PUBLISHED);
+		lesson.setSortOrder(sortOrder);
+		lesson.setCreatedAt(Instant.now());
+		lesson.setUpdatedAt(Instant.now());
+		return lesson;
 	}
 }

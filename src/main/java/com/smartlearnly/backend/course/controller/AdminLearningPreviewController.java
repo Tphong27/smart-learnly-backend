@@ -18,7 +18,7 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/courses")
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @Tag(name = "Admin Course Learning Preview", description = "Admin learning preview APIs for viewing courses as a learner")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminLearningPreviewController {

@@ -22,6 +22,7 @@ import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.List;
@@ -39,6 +40,7 @@ public class OrderService {
     private final SePayOrderRepository sePayOrderRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
+    private final ClassOfferingRepository classOfferingRepository;
 
     @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID orderId) {
@@ -118,10 +120,17 @@ public class OrderService {
     }
 
     private OrderItemResponse toOrderItemResponse(OrderItem item) {
+        String className = item.getClassId() == null
+            ? null
+            : classOfferingRepository.findById(item.getClassId())
+                    .map(classOffering -> classOffering.getClassName())
+                    .orElse(null);
+
         return new OrderItemResponse(
                 item.getId(),
                 item.getCourseId(),
                 item.getClassId(),
+                className,
                 item.getItemTitle(),
                 item.getUnitPrice(),
                 item.getDiscountAmount(),

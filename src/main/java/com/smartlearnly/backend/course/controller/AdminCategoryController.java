@@ -30,9 +30,9 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/categories")
-@Tag(name = "Admin Categories", description = "Administrator course-category management APIs.")
+@Tag(name = "Admin Categories", description = "Course-category management APIs.")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminCategoryController {
     private final CategoryService categoryService;
@@ -42,12 +42,12 @@ public class AdminCategoryController {
     public ApiResponse<List<CategoryResponse>> list(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean active,
-            @RequestParam(required = false) UUID parentId
-    ) {
+            @RequestParam(required = false) UUID parentId) {
         return ApiResponse.success("Categories loaded successfully", categoryService.list(keyword, active, parentId));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     @Operation(summary = "Create a root or child category")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Category created"),
@@ -67,15 +67,14 @@ public class AdminCategoryController {
     }
 
     @PatchMapping("/{categoryId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     @Operation(summary = "Update selected category fields")
-    public ApiResponse<CategoryResponse> update(
-            @PathVariable UUID categoryId,
-            @Valid @RequestBody UpdateCategoryRequest request
-    ) {
+    public ApiResponse<CategoryResponse> update(@PathVariable UUID categoryId, @Valid @RequestBody UpdateCategoryRequest request) {
         return ApiResponse.success("Category updated successfully", categoryService.update(categoryId, request));
     }
 
     @DeleteMapping("/{categoryId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     @Operation(summary = "Delete an unused category")
     public ApiResponse<Void> delete(@PathVariable UUID categoryId) {
         categoryService.delete(categoryId);

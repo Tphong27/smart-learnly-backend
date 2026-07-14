@@ -25,6 +25,9 @@ public class LessonFileUploadService {
             "docx",
             "ppt",
             "pptx",
+            "mp3",
+            "m4a",
+            "wav",
             "mp4",
             "webm",
             "mov"
@@ -46,6 +49,8 @@ public class LessonFileUploadService {
             "webp",
             "gif",
             "mp3",
+            "m4a",
+            "wav",
             "mp4"
     );
 

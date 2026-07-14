@@ -69,4 +69,17 @@ public class QuestionBankController {
         questionBankService.archive(bankId);
         return ApiResponse.success("Question bank archived successfully");
     }
+
+    @PostMapping("/{bankId}/restore")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @Operation(summary = "Restore a previously archived question bank")
+    public ApiResponse<QuestionBankDto.Response> restore(
+            @PathVariable UUID bankId,
+            @Valid @RequestBody QuestionBankDto.RestoreRequest request
+    ) {
+        return ApiResponse.success(
+                "Question bank restored successfully",
+                questionBankService.restore(bankId, request.status())
+        );
+    }
 }
