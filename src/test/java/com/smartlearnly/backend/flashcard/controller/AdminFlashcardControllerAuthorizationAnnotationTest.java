@@ -31,4 +31,16 @@ class AdminFlashcardControllerAuthorizationAnnotationTest {
         assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'SME', 'TRAINER')");
         assertThat(annotation.value()).doesNotContain("TMO");
     }
+
+    @Test
+    void adminFlashcardImageUploadShouldAllowAdminSmeAndTrainerOnly() {
+        PreAuthorize annotation = AnnotatedElementUtils.findMergedAnnotation(
+                AdminFlashcardImageUploadController.class,
+                PreAuthorize.class
+        );
+
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'SME', 'TRAINER')");
+        assertThat(annotation.value()).doesNotContain("TMO");
+    }
 }

@@ -117,7 +117,7 @@ class AdminFlashcardServiceTest {
     }
 
     @Test
-    void addCardShouldAcceptTextOnlyCard() {
+    void addCardShouldAcceptFrontAndBackTextCard() {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
@@ -138,7 +138,48 @@ class AdminFlashcardServiceTest {
     }
 
     @Test
-    void addCardShouldAcceptImageOnlyCard() {
+    void addCardShouldAcceptFrontOnlyCard() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
+        when(flashcardCardRepository.save(any(FlashcardCard.class))).thenAnswer(invocation -> {
+            FlashcardCard card = invocation.getArgument(0);
+            card.setId(UUID.randomUUID());
+            return card;
+        });
+
+        FlashcardCardResponse response = adminFlashcardService.addCard(
+                flashcardSet.getId(),
+                new CreateFlashcardCardRequest("Front only", null, null, null, null, null, null)
+        );
+
+        assertThat(response.frontText()).isEqualTo("Front only");
+        assertThat(response.backText()).isNull();
+        assertThat(response.orderIndex()).isZero();
+    }
+
+    @Test
+    void addCardShouldAcceptBackOnlyCard() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
+        when(flashcardCardRepository.save(any(FlashcardCard.class))).thenAnswer(invocation -> {
+            FlashcardCard card = invocation.getArgument(0);
+            card.setId(UUID.randomUUID());
+            return card;
+        });
+
+        FlashcardCardResponse response = adminFlashcardService.addCard(
+                flashcardSet.getId(),
+                new CreateFlashcardCardRequest(null, null, "Back only", null, null, null, null)
+        );
+
+        assertThat(response.frontText()).isNull();
+        assertThat(response.backText()).isEqualTo("Back only");
+    }
+
+    @Test
+    void addCardShouldAcceptFrontImageOnlyCard() {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(1);
@@ -150,22 +191,42 @@ class AdminFlashcardServiceTest {
 
         FlashcardCardResponse response = adminFlashcardService.addCard(
                 flashcardSet.getId(),
-                new CreateFlashcardCardRequest(null, "https://cdn.test/front.png", null, "https://cdn.test/back.png", null, null, null)
+                new CreateFlashcardCardRequest(null, "https://cdn.test/front.png", null, null, null, null, null)
         );
 
         assertThat(response.frontImageUrl()).isEqualTo("https://cdn.test/front.png");
-        assertThat(response.backImageUrl()).isEqualTo("https://cdn.test/back.png");
+        assertThat(response.backText()).isNull();
         assertThat(response.orderIndex()).isEqualTo(2);
     }
 
     @Test
-    void addCardShouldRejectEmptyFrontSide() {
+    void addCardShouldAcceptBackImageOnlyCard() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(1);
+        when(flashcardCardRepository.save(any(FlashcardCard.class))).thenAnswer(invocation -> {
+            FlashcardCard card = invocation.getArgument(0);
+            card.setId(UUID.randomUUID());
+            return card;
+        });
+
+        FlashcardCardResponse response = adminFlashcardService.addCard(
+                flashcardSet.getId(),
+                new CreateFlashcardCardRequest(null, null, null, "https://cdn.test/back.png", null, null, null)
+        );
+
+        assertThat(response.frontText()).isNull();
+        assertThat(response.backImageUrl()).isEqualTo("https://cdn.test/back.png");
+    }
+
+    @Test
+    void addCardShouldRejectHintOnlyCard() {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
         assertThatThrownBy(() -> adminFlashcardService.addCard(
                 flashcardSet.getId(),
-                new CreateFlashcardCardRequest(" ", null, "Back", null, null, null, null)
+                new CreateFlashcardCardRequest(" ", null, " ", null, "Hint only", null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -174,13 +235,28 @@ class AdminFlashcardServiceTest {
     }
 
     @Test
-    void addCardShouldRejectEmptyBackSide() {
+    void addCardShouldRejectExplanationOnlyCard() {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
         assertThatThrownBy(() -> adminFlashcardService.addCard(
                 flashcardSet.getId(),
-                new CreateFlashcardCardRequest("Front", null, " ", null, null, null, null)
+                new CreateFlashcardCardRequest(null, null, null, null, null, "Explanation only", null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(flashcardCardRepository, never()).save(any());
+    }
+
+    @Test
+    void addCardShouldRejectFullyEmptyCard() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> adminFlashcardService.addCard(
+                flashcardSet.getId(),
+                new CreateFlashcardCardRequest(" ", " ", " ", " ", null, null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -203,6 +279,21 @@ class AdminFlashcardServiceTest {
         assertThat(response.backText()).isEqualTo("Updated back");
         assertThat(response.hint()).isEqualTo("hint");
         assertThat(response.orderIndex()).isEqualTo(3);
+    }
+
+    @Test
+    void updateCardShouldRejectClearingExistingCardToEmpty() {
+        FlashcardCard card = card(flashcardSet(), 0);
+        when(flashcardCardRepository.findByIdAndDeletedAtIsNull(card.getId())).thenReturn(Optional.of(card));
+
+        assertThatThrownBy(() -> adminFlashcardService.updateCard(
+                card.getId(),
+                new UpdateFlashcardCardRequest(" ", " ", " ", " ", null, null, null)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(flashcardCardRepository, never()).save(any());
     }
 
     @Test

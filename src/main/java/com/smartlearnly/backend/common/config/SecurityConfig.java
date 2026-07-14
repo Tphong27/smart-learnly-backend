@@ -135,6 +135,12 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "SME")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/courses", "/api/v1/admin/courses/**")
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
+                        .requestMatchers(
+                                "/api/v1/admin/flashcard-sets/**",
+                                "/api/v1/admin/flashcard-cards/**",
+                                "/api/v1/admin/flashcard-staging-cards/**"
+                        )
+                        .hasAnyRole("ADMIN", "SME", "TRAINER")
                         .requestMatchers("/api/v1/admin/classes/**", "/api/v1/admin/classes")
                         .hasAnyRole("ADMIN", "TMO")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/users", "/api/v1/admin/users/**")
