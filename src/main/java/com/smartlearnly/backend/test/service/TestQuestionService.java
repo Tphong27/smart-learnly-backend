@@ -2,8 +2,10 @@ package com.smartlearnly.backend.test.service;
 
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.entity.Question;
+import com.smartlearnly.backend.question.entity.QuestionAnswerMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaType;
+import com.smartlearnly.backend.question.repository.QuestionAnswerMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
@@ -14,7 +16,10 @@ import com.smartlearnly.backend.test.repository.TestQuestionRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +31,7 @@ public class TestQuestionService {
     private final QuestionRepository questionRepository;
     private final QuestionAnswerRepository answerRepository;
     private final QuestionMediaAttachmentRepository mediaAttachmentRepository;
+    private final QuestionAnswerMediaAttachmentRepository answerMediaAttachmentRepository;
 
     public TestQuestionModel.Response addQuestionToTest(
             TestQuestionModel.AddRequest request) {
@@ -184,7 +190,8 @@ public class TestQuestionService {
                         Boolean.TRUE.equals(answer.getIsCorrect()),
                         Boolean.TRUE.equals(answer.getIsCorrect()),
                         answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(),
-                        answer.getOrderIndex() == null ? 0 : answer.getOrderIndex()))
+                        answer.getOrderIndex() == null ? 0 : answer.getOrderIndex(),
+                        List.of()))
                 .toList());
     }
 
@@ -203,8 +210,17 @@ public class TestQuestionService {
         response.setQuestionType(question.getQuestionType() == null
                 ? null
                 : question.getQuestionType().name().toLowerCase());
-        response.setAnswers(answerRepository
-                .findByQuestionIdOrderByOrderIndexAsc(question.getId())
+        List<com.smartlearnly.backend.question.entity.QuestionAnswer> answerEntities =
+                answerRepository.findByQuestionIdOrderByOrderIndexAsc(question.getId());
+        Map<UUID, List<QuestionAnswerMediaAttachment>> mediaByAnswer = answerEntities.isEmpty()
+                ? Map.of()
+                : answerMediaAttachmentRepository.findByAnswerIdIn(
+                                answerEntities.stream()
+                                        .map(com.smartlearnly.backend.question.entity.QuestionAnswer::getId)
+                                        .toList())
+                        .stream()
+                        .collect(Collectors.groupingBy(QuestionAnswerMediaAttachment::getAnswerId));
+        response.setAnswers(answerEntities
                 .stream()
                 .map(answer -> {
                     TestQuestionModel.LearnerAnswerResponse learnerAnswer =
@@ -215,6 +231,27 @@ public class TestQuestionService {
                     learnerAnswer.setAnswerText(answer.getAnswerText());
                     learnerAnswer.setDisplayOrder(order);
                     learnerAnswer.setOrderIndex(order);
+                    List<QuestionAnswerMediaAttachment> answerMedia =
+                            mediaByAnswer.getOrDefault(answer.getId(), List.of());
+                    learnerAnswer.setMedia(answerMedia.stream().map(media -> {
+                        com.smartlearnly.backend.question.dto.QuestionAnswerMediaResponse dto =
+                                new com.smartlearnly.backend.question.dto.QuestionAnswerMediaResponse(
+                                        media.getId(),
+                                        media.getAnswerId(),
+                                        media.getMediaType() == null ? null
+                                                : media.getMediaType().name().toLowerCase(Locale.ROOT),
+                                        media.getMediaUrl(),
+                                        media.getObjectKey(),
+                                        media.getBucket(),
+                                        media.getContentType(),
+                                        media.getFileSize() == null ? 0 : media.getFileSize(),
+                                        media.getOriginalFileName(),
+                                        media.getDisplayOrder() == null ? 0 : media.getDisplayOrder(),
+                                        media.getImportSource(),
+                                        media.getCreatedAt(),
+                                        media.getUpdatedAt());
+                        return dto;
+                    }).toList());
                     return learnerAnswer;
                 })
                 .toList());

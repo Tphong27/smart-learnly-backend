@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.test.dto;
 
+import com.smartlearnly.backend.question.dto.QuestionAnswerMediaResponse;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import java.math.BigDecimal;
 import java.util.List;
@@ -67,5 +68,6 @@ public class TestQuestionModel {
         private String answerText;
         private Integer displayOrder;
         private Integer orderIndex;
+        private List<QuestionAnswerMediaResponse> media;
     }
 }

@@ -17,6 +17,7 @@ import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionType;
+import com.smartlearnly.backend.question.repository.QuestionAnswerMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
@@ -46,6 +47,8 @@ class QuestionServiceRaceConditionTest {
     @Mock
     private QuestionAnswerRepository answerRepository;
     @Mock
+    private QuestionAnswerMediaAttachmentRepository answerMediaRepository;
+    @Mock
     private QuestionMediaAttachmentRepository mediaAttachmentRepository;
     @Mock
     private QuestionBankService questionBankService;
@@ -65,6 +68,7 @@ class QuestionServiceRaceConditionTest {
         questionService = new QuestionService(
                 questionRepository,
                 answerRepository,
+                answerMediaRepository,
                 mediaAttachmentRepository,
                 questionBankService,
                 courseSectionRepository,
