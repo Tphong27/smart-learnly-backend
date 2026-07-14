@@ -13,11 +13,16 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -114,11 +119,103 @@ public class AssignmentService {
     }
 
     public AssignmentModel.Response getAssignmentByLessonId(UUID lessonId) {
-
-        Assignment assignment = assignmentRepository.findByLessonId(lessonId)
+        return findAssignmentByLessonId(lessonId, null)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
+    }
 
-        return mapToResponse(assignment);
+    public Optional<AssignmentModel.Response> findAssignmentByLessonId(
+            UUID lessonId,
+            UUID classId) {
+        if (lessonId == null) {
+            return Optional.empty();
+        }
+
+        List<UUID> lessonReferences = resolveEquivalentLessonReferences(lessonId);
+
+        if (classId != null) {
+            Optional<Assignment> classAssignment = selectBestAssignment(
+                    assignmentRepository.findByLessonIdInAndClassId(
+                            lessonReferences,
+                            classId),
+                    lessonReferences);
+            if (classAssignment.isPresent()) {
+                return classAssignment.map(this::mapToResponse);
+            }
+        }
+
+        Optional<Assignment> sharedAssignment = selectBestAssignment(
+                assignmentRepository.findByLessonIdInAndClassIdIsNull(
+                        lessonReferences),
+                lessonReferences);
+        if (sharedAssignment.isPresent()) {
+            return sharedAssignment.map(this::mapToResponse);
+        }
+
+        if (classId == null) {
+            return selectBestAssignment(
+                    assignmentRepository.findByLessonIdIn(lessonReferences),
+                    lessonReferences)
+                    .map(this::mapToResponse);
+        }
+
+        return Optional.empty();
+    }
+
+    private List<UUID> resolveEquivalentLessonReferences(UUID lessonId) {
+        Set<UUID> references = new LinkedHashSet<>();
+        references.add(lessonId);
+
+        curriculumLessonRepository.findById(lessonId).ifPresent(lesson -> {
+            addLessonReferences(references, lesson);
+            UUID lessonIdentityId = lesson.getLessonIdentityId();
+            if (lessonIdentityId != null) {
+                curriculumLessonRepository.findAllByLessonIdentityId(lessonIdentityId)
+                        .forEach(equivalentLesson ->
+                                addLessonReferences(references, equivalentLesson));
+            }
+        });
+
+        return List.copyOf(references);
+    }
+
+    private void addLessonReferences(
+            Set<UUID> references,
+            CurriculumLesson lesson) {
+        if (lesson.getId() != null) {
+            references.add(lesson.getId());
+        }
+        if (lesson.getSourceCurriculumLessonId() != null) {
+            references.add(lesson.getSourceCurriculumLessonId());
+        }
+        if (lesson.getSourceLessonId() != null) {
+            references.add(lesson.getSourceLessonId());
+        }
+        if (lesson.getLessonIdentityId() != null) {
+            references.add(lesson.getLessonIdentityId());
+        }
+    }
+
+    private Optional<Assignment> selectBestAssignment(
+            List<Assignment> assignments,
+            List<UUID> lessonReferences) {
+        if (assignments == null || assignments.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Comparator<Assignment> newestFirst = Comparator.comparing(
+                Assignment::getUpdatedAt,
+                Comparator.nullsFirst(Comparator.naturalOrder()));
+
+        for (UUID reference : lessonReferences) {
+            Optional<Assignment> match = assignments.stream()
+                    .filter(assignment -> reference.equals(assignment.getLessonId()))
+                    .max(newestFirst);
+            if (match.isPresent()) {
+                return match;
+            }
+        }
+
+        return Optional.empty();
     }
 
     @Transactional

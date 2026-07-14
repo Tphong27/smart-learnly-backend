@@ -15,6 +15,8 @@ public interface CurriculumLessonRepository extends JpaRepository<CurriculumLess
 
     Optional<CurriculumLesson> findByCurriculumVersionIdAndLessonIdentityId(UUID curriculumVersionId, UUID lessonIdentityId);
 
+    List<CurriculumLesson> findAllByLessonIdentityId(UUID lessonIdentityId);
+
     @Query("""
             select lesson
             from CurriculumLesson lesson

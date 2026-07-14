@@ -67,9 +67,12 @@ public class AssignmentController {
     }
 
     @GetMapping("/lesson/{lessonId}")
-    public ResponseEntity<AssignmentModel.Response> getByLessonId(@PathVariable UUID lessonId) {
-        AssignmentModel.Response response = assignmentService.getAssignmentByLessonId(lessonId);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<AssignmentModel.Response> getByLessonId(
+            @PathVariable UUID lessonId,
+            @RequestParam(required = false) UUID classId) {
+        return assignmentService.findAssignmentByLessonId(lessonId, classId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}")

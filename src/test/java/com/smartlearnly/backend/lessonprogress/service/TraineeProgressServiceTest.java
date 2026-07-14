@@ -99,6 +99,7 @@ class TraineeProgressServiceTest {
         ArgumentCaptor<LessonProgress> captor = ArgumentCaptor.forClass(LessonProgress.class);
         verify(lessonProgressRepository).save(captor.capture());
         LessonProgress saved = captor.getValue();
+        assertThat(saved.getLessonId()).isEqualTo(lessonRowIdA);
         assertThat(saved.getClassId()).isEqualTo(classA);
         assertThat(saved.getLessonIdentityId()).isEqualTo(lessonIdentityId);
         assertThat(saved.isCompleted()).isTrue();
