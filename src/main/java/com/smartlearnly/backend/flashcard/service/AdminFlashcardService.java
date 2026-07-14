@@ -416,11 +416,11 @@ public class AdminFlashcardService {
     private void validateCard(FlashcardCard card) {
         boolean hasFront = hasText(card.getFrontText()) || hasText(card.getFrontImageUrl());
         boolean hasBack = hasText(card.getBackText()) || hasText(card.getBackImageUrl());
-        if (!hasFront) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard front side requires text or image");
-        }
-        if (!hasBack) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard back side requires text or image");
+        if (!hasFront && !hasBack) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "At least one side needs text or an image"
+            );
         }
     }
 

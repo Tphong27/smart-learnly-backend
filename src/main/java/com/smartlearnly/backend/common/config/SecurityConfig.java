@@ -137,18 +137,30 @@ public class SecurityConfig {
                         // Admin course content management: allow ADMIN/TMO/SME/TRAINER to access course content authoring APIs
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/courses", "/api/v1/admin/courses/**")
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
-                        .requestMatchers("/api/v1/admin/sections/**")
-                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-                        .requestMatchers("/api/v1/admin/lessons/**")
-                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-                        .requestMatchers("/api/v1/admin/flashcard-sets/**", "/api/v1/admin/flashcard-cards/**")
-                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/categories", "/api/v1/admin/categories/**")
-                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-                        // GET class list/detail: mở cho ADMIN/TMO/SME/TRAINER để staff các role có thể duyệt lớp.
-                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/classes", "/api/v1/admin/classes/**")
-                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-                        // Các thao tác write vẫn giữ ADMIN/TMO
+.requestMatchers("/api/v1/admin/sections/**")
+.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+.requestMatchers("/api/v1/admin/lessons/**")
+.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+.requestMatchers(
+        "/api/v1/admin/flashcard-sets/**",
+        "/api/v1/admin/flashcard-cards/**",
+        "/api/v1/admin/flashcard-staging-cards/**"
+)
+.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+.requestMatchers(
+        HttpMethod.GET,
+        "/api/v1/admin/categories",
+        "/api/v1/admin/categories/**"
+)
+.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+// GET class list/detail: mở cho ADMIN/TMO/SME/TRAINER để staff các role có thể duyệt lớp.
+.requestMatchers(
+        HttpMethod.GET,
+        "/api/v1/admin/classes",
+        "/api/v1/admin/classes/**"
+)
+.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+// Các thao tác write vẫn giữ ADMIN/TMO
                         .requestMatchers("/api/v1/admin/classes/**", "/api/v1/admin/classes")
                         .hasAnyRole("ADMIN", "TMO")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/users", "/api/v1/admin/users/**")
