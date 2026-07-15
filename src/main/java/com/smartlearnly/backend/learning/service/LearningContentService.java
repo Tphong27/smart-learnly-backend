@@ -52,22 +52,49 @@ public class LearningContentService {
         public LearningContentResponse getLearningContent(UUID courseId, UUID classId) {
                 UserAccount student = currentUserService.requireAuthenticatedUser();
 
-                enrollmentAccessService.requireCourseAccess(courseId);
-                CurriculumResolution resolution = curriculumResolutionService
-                                .resolveTraineeProgress(courseId, classId, student.getId());
+                CurriculumResolution resolution;
 
-                Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
-                                .orElseThrow(() -> new BusinessException(
-                                                ErrorCode.RESOURCE_NOT_FOUND,
-                                                "Course not found"));
+                /*
+                 * Học online:
+                 * - Không có classId.
+                 * - Kiểm tra CourseEnrollment.
+                 * - Sử dụng master curriculum của course.
+                 */
+                if (classId == null) {
+                        resolution = curriculumResolutionService.resolveOnlineLearning(courseId, student.getId());
+                }
 
-                Set<UUID> completedLessonIdentityIds = lessonProgressRepository
-                                .findByStudentIdAndClassIdAndCourseId(student.getId(), classId, courseId)
-                                .stream()
-                                .filter(LessonProgress::isCompleted)
-                                .map(LessonProgress::getLessonIdentityId)
-                                .filter(Objects::nonNull)
-                                .collect(Collectors.toSet());
+                /*
+                 * Học theo lớp offline:
+                 * - Có classId.
+                 * - Kiểm tra ClassEnrollment.
+                 * - Sử dụng curriculum hiệu lực của class.
+                 */
+                else {
+                        resolution = curriculumResolutionService .resolveClassLearning(courseId, classId, student.getId());
+                }
+
+                Course course = courseRepository
+                                .findByIdAndDeletedAtIsNull(courseId)
+                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course not found"));
+
+                Set<UUID> completedLessonIdentityIds;
+
+                /*
+                 * classId null nghĩa là học online.
+                 * Tạm thời không gọi query progress theo class với giá trị null.
+                 */
+                if (classId == null) {
+                        completedLessonIdentityIds = Set.of();
+                } else {
+                        completedLessonIdentityIds = lessonProgressRepository
+                                        .findByStudentIdAndClassIdAndCourseId(student.getId(), classId, courseId)
+                                        .stream()
+                                        .filter(LessonProgress::isCompleted)
+                                        .map(LessonProgress::getLessonIdentityId)
+                                        .filter(Objects::nonNull)
+                                        .collect(Collectors.toSet());
+                }
 
                 CurriculumMetadataResponse metadata = curriculumDtoMapper.toMetadata(
                                 resolution.version(),

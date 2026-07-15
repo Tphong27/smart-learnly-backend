@@ -14,6 +14,8 @@ import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepositor
 import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
+import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
+import com.smartlearnly.backend.enrollment.entity.CourseEnrollment;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class CurriculumResolutionService {
     public static final String SOURCE_MASTER_INHERITED = "master_inherited";
     public static final String SOURCE_CLASS_DRAFT = "class_draft";
     public static final String SOURCE_CLASS_PUBLISHED = "class_published";
+    private final CourseEnrollmentRepository courseEnrollmentRepository;
 
     private final CurriculumVersionRepository curriculumVersionRepository;
     private final ClassCurriculumBindingRepository bindingRepository;
@@ -86,20 +89,28 @@ public class CurriculumResolutionService {
         return resolveClassEffectivePublished(courseId, classId);
     }
 
-    // @Transactional(readOnly = true)
-    // public CurriculumResolution resolveTraineeProgress(UUID courseId, UUID classId, UUID studentId) {
-    //     requireClassEnrollment(courseId, classId, studentId);
-    //     ClassCurriculumBinding binding = requireBinding(classId, courseId);
+    @Transactional(readOnly = true)
+    public CurriculumResolution resolveOnlineLearning(UUID courseId, UUID studentId) {
+        requireCourseEnrollment(courseId, studentId);
 
-    //     if (binding.getDraftVersionId() != null) {
-    //         CurriculumVersion draft = findClassVersion(binding.getDraftVersionId(), classId);
-    //         if (draft.getStatus() == CurriculumStatus.DRAFT) {
-    //             return new CurriculumResolution(draft, binding, classId, true, SOURCE_CLASS_DRAFT);
-    //         }
-    //     }
+        CurriculumVersion version = findPublishedMaster(courseId);
 
-    //     return resolveClassEffectivePublished(courseId, classId);
-    // }
+        return new CurriculumResolution(
+                version,
+                null,
+                null,
+                false,
+                SOURCE_MASTER_PUBLIC);
+    }
+
+    @Transactional(readOnly = true)
+    public CurriculumResolution resolveClassLearning(
+            UUID courseId,
+            UUID classId,
+            UUID studentId) {
+        requireClassEnrollment(courseId, classId, studentId);
+        return resolveClassEffectivePublished(courseId, classId);
+    }
 
     @Transactional(readOnly = true)
     public CurriculumResolution resolveTraineeProgress(UUID courseId, UUID classId, UUID studentId) {
@@ -138,6 +149,21 @@ public class CurriculumResolutionService {
             return findClassVersion(binding.getPublishedVersionId(), classId);
         }
         return findVersion(binding.getBaseMasterVersionId());
+    }
+
+    private void requireCourseEnrollment(UUID courseId, UUID studentId) {
+        CourseEnrollment enrollment = courseEnrollmentRepository
+                .findByCourseIdAndStudentId(courseId, studentId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.FORBIDDEN,
+                        "You are not enrolled in this course"));
+
+        if (enrollment.getStatus() != EnrollmentStatus.ACTIVE
+                && enrollment.getStatus() != EnrollmentStatus.COMPLETED) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "Course access is not active");
+        }
     }
 
     private CurriculumVersion findPublishedMaster(UUID courseId) {

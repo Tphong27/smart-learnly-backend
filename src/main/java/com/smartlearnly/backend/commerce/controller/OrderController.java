@@ -37,7 +37,7 @@ public class OrderController {
     ) {
         return ApiResponse.success(
                 "Checkout created successfully",
-                checkoutService.checkout(request.courseId(), request.classId())
+                checkoutService.checkout(request.itemType(), request.courseId(), request.classId())
         );
     }
 

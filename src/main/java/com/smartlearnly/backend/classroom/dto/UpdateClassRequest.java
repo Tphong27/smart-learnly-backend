@@ -1,8 +1,10 @@
 package com.smartlearnly.backend.classroom.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -23,6 +25,8 @@ public class UpdateClassRequest {
     @Positive
     private Integer maxStudents;
     private String status;
+    @DecimalMin(value = "0.0", inclusive = true)
+    private BigDecimal price;
 
     private boolean courseIdProvided;
     private boolean classNameProvided;
@@ -67,6 +71,14 @@ public class UpdateClassRequest {
     public void setScheduleDescription(String scheduleDescription) {
         this.scheduleDescription = scheduleDescription;
         this.scheduleDescriptionProvided = true;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(String price) {
+        this.price = new BigDecimal(price);
     }
 
     public LocalDate getStartDate() {
