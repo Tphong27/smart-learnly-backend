@@ -135,7 +135,7 @@ public class UpdateClassRequest {
     public boolean isScheduleDescriptionProvided() {
         return scheduleDescriptionProvided;
     }
-
+    
     public boolean isStartDateProvided() {
         return startDateProvided;
     }

@@ -92,6 +92,7 @@ public class ClassAdminService {
         classOffering.setClassName(normalizeRequired(request.className(), "Class name is required"));
         classOffering.setTrainerId(trainer == null ? null : trainer.getId());
         classOffering.setScheduleDescription(normalizeNullable(request.scheduleDescription()));
+        classOffering.setPrice(request.price());
         classOffering.setStartDate(request.startDate());
         classOffering.setEndDate(request.endDate());
         classOffering.setMaxStudents(request.maxStudents());
@@ -196,10 +197,10 @@ public class ClassAdminService {
         audit("CLASS_DELETED", classId);
     }
 
-    private ClassOffering findClass(UUID classId) {
-        return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
-    }
+    // private ClassOffering findClass(UUID classId) {
+    //     return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
+    //             .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
+    // }
 
     private ClassOffering findClassForUpdate(UUID classId) {
         return classOfferingRepository.findByIdForUpdate(classId)

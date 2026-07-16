@@ -96,6 +96,13 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                           AND (:startTo IS NULL OR cls.start_date <= :startTo)
                           AND (:minPrice IS NULL OR cls.price >= :minPrice)
                           AND (:maxPrice IS NULL OR cls.price <= :maxPrice)
+                          AND (
+                                SELECT COUNT(*)
+                                FROM public.class_enrollments counted_enrollment
+                                WHERE counted_enrollment.class_id = cls.id
+                                    AND counted_enrollment.status =
+                                    'active'::public.enroll_status
+                               ) < cls.max_students
             """, nativeQuery = true)
     Page<OpeningScheduleProjection> findOpeningSchedules(
             @Param("keyword") String keyword,
