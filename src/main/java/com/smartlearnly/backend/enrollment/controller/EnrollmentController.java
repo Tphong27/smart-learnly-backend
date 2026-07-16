@@ -5,7 +5,7 @@ import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentHistoryResponse;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentResponse;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentStatusHistoryResponse;
-import com.smartlearnly.backend.enrollment.dto.FreeEnrollmentRequest;
+import com.smartlearnly.backend.enrollment.dto.FreeCourseEnrollmentRequest;
 import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,15 +32,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class EnrollmentController {
     private final CourseEnrollmentService courseEnrollmentService;
 
-    @PostMapping("/free")
+    @PostMapping("/free-course")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Enroll in a published free course and selected class")
-    public ApiResponse<EnrollmentResponse> enrollFree(@Valid @RequestBody FreeEnrollmentRequest request) {
+    @Operation(summary = "Enroll in a published free online course")
+    public ApiResponse<EnrollmentResponse> enrollFreeCourse(
+            @Valid @RequestBody FreeCourseEnrollmentRequest request) {
         return ApiResponse.success(
-            "Course and class enrollment completed",
-            courseEnrollmentService.enrollFree(request.courseId(), request.classId())
-        );
-   }
+                "Free course enrollment completed",
+                courseEnrollmentService.enrollFreeCourse(request.courseId()));
+    }
 
     @GetMapping("/my-courses")
     @PreAuthorize("hasRole('TRAINEE')")
@@ -54,8 +54,7 @@ public class EnrollmentController {
     @Operation(summary = "List course enrollment history for the authenticated trainee")
     public ApiResponse<PageResponse<EnrollmentHistoryResponse>> getHistory(
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
-    ) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ApiResponse.success(courseEnrollmentService.getHistory(page, size));
     }
 
@@ -63,8 +62,7 @@ public class EnrollmentController {
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
     @Operation(summary = "List audited status transitions for a course enrollment")
     public ApiResponse<List<EnrollmentStatusHistoryResponse>> getStatusHistory(
-            @PathVariable UUID enrollmentId
-    ) {
+            @PathVariable UUID enrollmentId) {
         return ApiResponse.success(courseEnrollmentService.getStatusHistory(enrollmentId));
     }
 }

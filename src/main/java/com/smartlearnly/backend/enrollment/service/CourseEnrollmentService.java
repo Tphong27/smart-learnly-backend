@@ -56,7 +56,7 @@ public class CourseEnrollmentService {
         private final AuditLogService auditLogService;
 
         @Transactional
-        public EnrollmentResponse enrollFree(UUID courseId, UUID classId) {
+        public EnrollmentResponse enrollFreeCourse(UUID courseId) {
                 UserAccount student = currentUserService.requireAuthenticatedUser();
 
                 Course course = requirePublishedCourse(courseId);
@@ -64,34 +64,37 @@ public class CourseEnrollmentService {
                         throw new BusinessException(ErrorCode.COURSE_NOT_FREE);
                 }
 
-                ClassOffering classOffering = requireAvailableClassForCourse(courseId, classId);
-
-                CourseEnrollment existingCourseEnrollment = courseEnrollmentRepository
+                CourseEnrollment existingEnrollment = courseEnrollmentRepository
                                 .findByCourseIdAndStudentIdForUpdate(courseId, student.getId())
                                 .orElse(null);
 
-                boolean alreadyHadCourseAccess = hasAccess(existingCourseEnrollment);
-                boolean courseReactivated = false;
+                /*
+                 * Trường hợp trainee đã có quyền học ACTIVE hoặc COMPLETED:
+                 * không tạo enrollment mới và không ghi transition mới.
+                 */
+                if (hasAccess(existingEnrollment)) {
+                        return toEnrollmentResponse(existingEnrollment, true, false);
+                }
 
-                CourseEnrollment savedCourseEnrollment;
-
-                if (alreadyHadCourseAccess) {
-                        savedCourseEnrollment = existingCourseEnrollment;
-                } else if (existingCourseEnrollment == null) {
+                /*
+                 * Trường hợp trainee chưa từng đăng ký course:
+                 * tạo CourseEnrollment mới.
+                 */
+                if (existingEnrollment == null) {
                         CourseEnrollment created = new CourseEnrollment();
                         created.setCourseId(courseId);
                         created.setStudentId(student.getId());
                         created.setStatus(EnrollmentStatus.ACTIVE);
 
-                        savedCourseEnrollment = courseEnrollmentRepository.save(created);
+                        CourseEnrollment savedEnrollment = courseEnrollmentRepository.save(created);
 
                         recordCourseTransition(
-                                        savedCourseEnrollment,
+                                        savedEnrollment,
                                         null,
                                         EnrollmentStatus.ACTIVE,
                                         EnrollmentTransitionSource.FREE_ENROLLMENT,
                                         null,
-                                        "Initial free course enrollment");
+                                        "Initial free online course enrollment");
 
                         auditLogService.recordUser(
                                         student,
@@ -99,110 +102,58 @@ public class CourseEnrollmentService {
                                         AuditDomain.ENROLLMENT,
                                         AuditResult.SUCCESS,
                                         "COURSE_ENROLLMENT",
-                                        savedCourseEnrollment.getId().toString(),
-                                        "Free course enrollment was created",
+                                        savedEnrollment.getId().toString(),
+                                        "Free online course enrollment was created",
                                         null,
-                                        java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
-                                        java.util.Map.of("courseId", courseId, "classId", classId));
-                } else {
-                        ensureReactivatable(existingCourseEnrollment.getStatus());
+                                        java.util.Map.of(
+                                                        "status",
+                                                        EnrollmentStatus.ACTIVE.name()),
+                                        java.util.Map.of(
+                                                        "courseId",
+                                                        courseId));
 
-                        EnrollmentStatus fromStatus = existingCourseEnrollment.getStatus();
-                        existingCourseEnrollment.setStatus(EnrollmentStatus.ACTIVE);
-
-                        savedCourseEnrollment = courseEnrollmentRepository.save(existingCourseEnrollment);
-                        courseReactivated = true;
-
-                        recordCourseTransition(
-                                        savedCourseEnrollment,
-                                        fromStatus,
-                                        EnrollmentStatus.ACTIVE,
-                                        EnrollmentTransitionSource.FREE_ENROLLMENT,
-                                        null,
-                                        "Free course enrollment reactivation");
-
-                        auditLogService.recordUser(
-                                        student,
-                                        AuditAction.ENROLLMENT_REACTIVATED,
-                                        AuditDomain.ENROLLMENT,
-                                        AuditResult.SUCCESS,
-                                        "COURSE_ENROLLMENT",
-                                        savedCourseEnrollment.getId().toString(),
-                                        "Course enrollment was reactivated",
-                                        java.util.Map.of("status", fromStatus.name()),
-                                        java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
-                                        java.util.Map.of("courseId", courseId, "classId", classId));
+                        return toEnrollmentResponse(
+                                        savedEnrollment,
+                                        false,
+                                        false);
                 }
 
-                ClassEnrollment existingClassEnrollment = classEnrollmentRepository
-                                .findByClassIdAndStudentIdForUpdate(classId, student.getId())
-                                .orElse(null);
+                /*
+                 * Nếu enrollment cũ tồn tại nhưng không còn quyền học,
+                 * chỉ CANCELLED hoặc REFUNDED mới được kích hoạt lại.
+                 */
+                ensureReactivatable(existingEnrollment.getStatus());
 
-                boolean alreadyHadClassAccess = hasClassAccess(existingClassEnrollment);
-                boolean classReactivated = false;
+                EnrollmentStatus previousStatus = existingEnrollment.getStatus();
 
-                if (!alreadyHadClassAccess) {
-                        if (existingClassEnrollment != null) {
-                                ensureReactivatable(existingClassEnrollment.getStatus());
-                        }
+                existingEnrollment.setStatus(EnrollmentStatus.ACTIVE);
 
-                        long activeEnrollmentCount = classEnrollmentRepository.countByClassIdAndStatus(
-                                        classId,
-                                        "active");
+                CourseEnrollment reactivatedEnrollment = courseEnrollmentRepository.save(existingEnrollment);
 
-                        if (activeEnrollmentCount >= classOffering.getMaxStudents()) {
-                                throw new BusinessException(ErrorCode.CLASS_FULL);
-                        }
+                recordCourseTransition(
+                                reactivatedEnrollment,
+                                previousStatus,
+                                EnrollmentStatus.ACTIVE,
+                                EnrollmentTransitionSource.FREE_ENROLLMENT,
+                                null,
+                                "Free online course enrollment reactivation");
 
-                        ClassEnrollment classEnrollment;
-                        EnrollmentStatus fromClassStatus;
-
-                        if (existingClassEnrollment == null) {
-                                classEnrollment = new ClassEnrollment();
-                                classEnrollment.setClassId(classId);
-                                classEnrollment.setStudentId(student.getId());
-                                fromClassStatus = null;
-                        } else {
-                                classEnrollment = existingClassEnrollment;
-                                fromClassStatus = existingClassEnrollment.getStatus();
-                                classReactivated = true;
-                        }
-
-                        classEnrollment.setPrice(BigDecimal.ZERO);
-                        classEnrollment.setStatus(EnrollmentStatus.ACTIVE);
-
-                        ClassEnrollment savedClassEnrollment = classEnrollmentRepository.save(classEnrollment);
-
-                        recordClassTransition(
-                                        savedClassEnrollment,
-                                        fromClassStatus,
-                                        EnrollmentTransitionSource.FREE_ENROLLMENT,
-                                        null,
-                                        fromClassStatus == null
-                                                        ? "Initial free class enrollment"
-                                                        : "Free class enrollment reactivation");
-
-                        auditLogService.recordUser(
-                                        student,
-                                        fromClassStatus == null
-                                                        ? AuditAction.ENROLLMENT_CREATED
-                                                        : AuditAction.ENROLLMENT_REACTIVATED,
-                                        AuditDomain.ENROLLMENT,
-                                        AuditResult.SUCCESS,
-                                        "CLASS_ENROLLMENT",
-                                        savedClassEnrollment.getId().toString(),
-                                        "Free class enrollment was granted",
-                                        fromClassStatus == null
-                                                        ? null
-                                                        : java.util.Map.of("status", fromClassStatus.name()),
-                                        java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
-                                        java.util.Map.of("courseId", courseId, "classId", classId));
-                }
+                auditLogService.recordUser(
+                                student,
+                                AuditAction.ENROLLMENT_REACTIVATED,
+                                AuditDomain.ENROLLMENT,
+                                AuditResult.SUCCESS,
+                                "COURSE_ENROLLMENT",
+                                reactivatedEnrollment.getId().toString(),
+                                "Free online course enrollment was reactivated",
+                                java.util.Map.of("status", previousStatus.name()),
+                                java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
+                                java.util.Map.of("courseId", courseId));
 
                 return toEnrollmentResponse(
-                                savedCourseEnrollment,
-                                alreadyHadCourseAccess && alreadyHadClassAccess,
-                                courseReactivated || classReactivated);
+                                reactivatedEnrollment,
+                                false,
+                                true);
         }
 
         @Transactional
@@ -305,48 +256,48 @@ public class CourseEnrollmentService {
                                 .toList();
         }
 
-        private ClassOffering requireAvailableClassForCourse(UUID courseId, UUID classId) {
-                ClassOffering classOffering = classOfferingRepository.findByIdForUpdate(classId)
-                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
-                                                "Class not found"));
+        // private ClassOffering requireAvailableClassForCourse(UUID courseId, UUID classId) {
+        //         ClassOffering classOffering = classOfferingRepository.findByIdForUpdate(classId)
+        //                         .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+        //                                         "Class not found"));
 
-                if (!courseId.equals(classOffering.getCourseId())) {
-                        throw new BusinessException(
-                                        ErrorCode.INVALID_REQUEST,
-                                        "Class must belong to the selected course");
-                }
+        //         if (!courseId.equals(classOffering.getCourseId())) {
+        //                 throw new BusinessException(
+        //                                 ErrorCode.INVALID_REQUEST,
+        //                                 "Class must belong to the selected course");
+        //         }
 
-                if (classOffering.getStatus() == ClassStatus.CANCELLED
-                                || classOffering.getStatus() == ClassStatus.COMPLETED) {
-                        throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
-                }
+        //         if (classOffering.getStatus() == ClassStatus.CANCELLED
+        //                         || classOffering.getStatus() == ClassStatus.COMPLETED) {
+        //                 throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
+        //         }
 
-                return classOffering;
-        }
+        //         return classOffering;
+        // }
 
-        private boolean hasClassAccess(ClassEnrollment enrollment) {
-                return enrollment != null
-                                && (enrollment.getStatus() == EnrollmentStatus.ACTIVE
-                                                || enrollment.getStatus() == EnrollmentStatus.COMPLETED);
-        }
+        // private boolean hasClassAccess(ClassEnrollment enrollment) {
+        //         return enrollment != null
+        //                         && (enrollment.getStatus() == EnrollmentStatus.ACTIVE
+        //                                         || enrollment.getStatus() == EnrollmentStatus.COMPLETED);
+        // }
 
-        private void recordClassTransition(
-                        ClassEnrollment enrollment,
-                        EnrollmentStatus fromStatus,
-                        EnrollmentTransitionSource source,
-                        UUID transactionId,
-                        String reason) {
-                EnrollmentStatusHistory history = new EnrollmentStatusHistory();
-                history.setClassEnrollmentId(enrollment.getId());
-                history.setStudentId(enrollment.getStudentId());
-                history.setFromStatus(fromStatus);
-                history.setToStatus(EnrollmentStatus.ACTIVE);
-                history.setSource(source);
-                history.setTransactionId(transactionId);
-                history.setReason(reason);
+        // private void recordClassTransition(
+        //                 ClassEnrollment enrollment,
+        //                 EnrollmentStatus fromStatus,
+        //                 EnrollmentTransitionSource source,
+        //                 UUID transactionId,
+        //                 String reason) {
+        //         EnrollmentStatusHistory history = new EnrollmentStatusHistory();
+        //         history.setClassEnrollmentId(enrollment.getId());
+        //         history.setStudentId(enrollment.getStudentId());
+        //         history.setFromStatus(fromStatus);
+        //         history.setToStatus(EnrollmentStatus.ACTIVE);
+        //         history.setSource(source);
+        //         history.setTransactionId(transactionId);
+        //         history.setReason(reason);
 
-                enrollmentStatusHistoryRepository.save(history);
-        }
+        //         enrollmentStatusHistoryRepository.save(history);
+        // }
 
         private Course requirePublishedCourse(UUID courseId) {
                 Course course = courseRepository.findByIdAndDeletedAtIsNullForUpdate(courseId)
