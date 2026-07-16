@@ -76,27 +76,27 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                 cls.start_date ASC,
                 cls.created_at DESC
             """, countQuery = """
-            SELECT COUNT(*)
-            FROM public.classes cls
-            JOIN public.courses course
-                ON course.id = cls.course_id
-            WHERE cls.deleted_at IS NULL
-              AND course.deleted_at IS NULL
-              AND course.status = 'published'::public.course_status
-              AND cls.status = 'upcoming'::public.class_status
-              AND cls.start_date >= CURRENT_DATE
-              AND cls.price IS NOT NULL
-              AND (
-                  :keyword IS NULL
-                  OR cls.class_name ILIKE :keyword ESCAPE '\\'
-                  OR course.title ILIKE :keyword ESCAPE '\\'
-              )
-              AND (:courseId IS NULL OR cls.course_id = :courseId)
-              AND (:startFrom IS NULL OR cls.start_date >= :startFrom)
-              AND (:startTo IS NULL OR cls.start_date <= :startTo)
-              AND (:minPrice IS NULL OR cls.price >= :minPrice)
-              AND (:maxPrice IS NULL OR cls.price <= :maxPrice)
-            """)
+                        SELECT COUNT(*)
+                        FROM public.classes cls
+                        JOIN public.courses course
+                            ON course.id = cls.course_id
+                        WHERE cls.deleted_at IS NULL
+                          AND course.deleted_at IS NULL
+                          AND course.status = 'published'::public.course_status
+                          AND cls.status = 'upcoming'::public.class_status
+                          AND cls.start_date >= CURRENT_DATE
+                          AND cls.price IS NOT NULL
+                          AND (
+                              :keyword IS NULL
+                              OR cls.class_name ILIKE :keyword ESCAPE '\\'
+                              OR course.title ILIKE :keyword ESCAPE '\\'
+                          )
+                          AND (:courseId IS NULL OR cls.course_id = :courseId)
+                          AND (:startFrom IS NULL OR cls.start_date >= :startFrom)
+                          AND (:startTo IS NULL OR cls.start_date <= :startTo)
+                          AND (:minPrice IS NULL OR cls.price >= :minPrice)
+                          AND (:maxPrice IS NULL OR cls.price <= :maxPrice)
+            """, nativeQuery = true)
     Page<OpeningScheduleProjection> findOpeningSchedules(
             @Param("keyword") String keyword,
             @Param("courseId") UUID courseId,

@@ -36,6 +36,7 @@ public class UpdateClassRequest {
     private boolean endDateProvided;
     private boolean maxStudentsProvided;
     private boolean statusProvided;
+    private boolean priceProvided;
 
     public UUID getCourseId() {
         return courseId;
@@ -68,17 +69,10 @@ public class UpdateClassRequest {
         return scheduleDescription;
     }
 
-    public void setScheduleDescription(String scheduleDescription) {
+    public void setScheduleDescription(
+            String scheduleDescription) {
         this.scheduleDescription = scheduleDescription;
         this.scheduleDescriptionProvided = true;
-    }
-
-    public BigDecimal getPrice() {
-        return price;
-    }
-
-    public void setPrice(String price) {
-        this.price = new BigDecimal(price);
     }
 
     public LocalDate getStartDate() {
@@ -117,6 +111,15 @@ public class UpdateClassRequest {
         this.statusProvided = true;
     }
 
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+        this.priceProvided = true;
+    }
+
     public boolean isCourseIdProvided() {
         return courseIdProvided;
     }
@@ -149,10 +152,20 @@ public class UpdateClassRequest {
         return statusProvided;
     }
 
+    public boolean isPriceProvided() {
+        return priceProvided;
+    }
+
     @JsonIgnore
     public boolean hasAnyField() {
-        return courseIdProvided || classNameProvided || trainerIdProvided
-                || scheduleDescriptionProvided || startDateProvided
-                || endDateProvided || maxStudentsProvided || statusProvided;
+        return courseIdProvided
+                || classNameProvided
+                || trainerIdProvided
+                || scheduleDescriptionProvided
+                || startDateProvided
+                || endDateProvided
+                || maxStudentsProvided
+                || statusProvided
+                || priceProvided;
     }
 }

@@ -65,7 +65,7 @@ public class ClassOffering {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @Column(name = "price", nullable = false, precision = 12, scale = 2)
+    @Column(name = "price", precision = 12, scale = 2)
     private BigDecimal price;
 
     @PrePersist
@@ -78,7 +78,7 @@ public class ClassOffering {
             status = ClassStatus.UPCOMING;
         }
         // if (price == null) {
-        //     price = BigDecimal.ZERO;
+        // price = BigDecimal.ZERO;
         // }
         if (createdAt == null) {
             createdAt = now;

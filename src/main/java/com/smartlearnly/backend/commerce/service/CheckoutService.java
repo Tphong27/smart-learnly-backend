@@ -359,14 +359,18 @@ public class CheckoutService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Class must belong to the selected course");
         }
 
-        if (classOffering.getStatus() == ClassStatus.CANCELLED
-                || classOffering.getStatus() == ClassStatus.COMPLETED) {
-            throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
+        if (classOffering.getStatus() != ClassStatus.UPCOMING) {
+            throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE, "Only upcoming classes can be registered");
         }
 
         if (classOffering.getStartDate() == null
                 || classOffering.getStartDate().isBefore(LocalDate.now())) {
             throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE, "Class registration is no longer available");
+        }
+
+        if (classOffering.getPrice() == null
+                || classOffering.getPrice().signum() < 0) {
+            throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE, "Class price is not configured");
         }
 
         long activeCount = classEnrollmentRepository.countByClassIdAndStatus(classOffering.getId(), "active");

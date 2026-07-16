@@ -101,7 +101,7 @@ class CourseEnrollmentServiceTest {
             return enrollment;
         });
 
-        EnrollmentResponse response = service.enrollFree(course.getId(), classOffering.getId());
+        EnrollmentResponse response = service.enrollFreeCourse(course.getId());
 
         assertThat(response.status()).isEqualTo("ACTIVE");
         assertThat(response.alreadyEnrolled()).isFalse();
@@ -134,7 +134,7 @@ class CourseEnrollmentServiceTest {
         when(classEnrollmentRepository.findByClassIdAndStudentIdForUpdate(classOffering.getId(), studentId))
                 .thenReturn(Optional.of(existingClassEnrollment));
 
-        EnrollmentResponse response = service.enrollFree(course.getId(), classOffering.getId());
+        EnrollmentResponse response = service.enrollFreeCourse(course.getId());
 
         assertThat(response.alreadyEnrolled()).isTrue();
         verify(courseEnrollmentRepository, never()).save(any());
@@ -164,7 +164,7 @@ class CourseEnrollmentServiceTest {
             return enrollment;
         });
 
-        EnrollmentResponse response = service.enrollFree(course.getId(), classOffering.getId());
+        EnrollmentResponse response = service.enrollFreeCourse(course.getId());
 
         assertThat(response.reactivated()).isTrue();
         assertThat(existing.getStatus()).isEqualTo(EnrollmentStatus.ACTIVE);
@@ -232,7 +232,7 @@ class CourseEnrollmentServiceTest {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user(studentId));
         when(courseRepository.findByIdAndDeletedAtIsNullForUpdate(course.getId())).thenReturn(Optional.of(course));
 
-        assertThatThrownBy(() -> service.enrollFree(course.getId(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.enrollFreeCourse(course.getId()))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.COURSE_NOT_FREE));
         verify(courseEnrollmentRepository, never()).save(any());

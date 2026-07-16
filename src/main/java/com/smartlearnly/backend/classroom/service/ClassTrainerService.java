@@ -84,6 +84,7 @@ public class ClassTrainerService {
                 classOffering.getTrainerId(),
                 classOffering.getTrainerName(),
                 classOffering.getScheduleDescription(),
+                classOffering.getPrice(),
                 classOffering.getStartDate(),
                 classOffering.getEndDate(),
                 maxStudents,

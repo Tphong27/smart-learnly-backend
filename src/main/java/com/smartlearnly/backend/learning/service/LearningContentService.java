@@ -71,12 +71,14 @@ public class LearningContentService {
                  * - Sử dụng curriculum hiệu lực của class.
                  */
                 else {
-                        resolution = curriculumResolutionService .resolveClassLearning(courseId, classId, student.getId());
+                        resolution = curriculumResolutionService.resolveClassLearning(courseId, classId,
+                                        student.getId());
                 }
 
                 Course course = courseRepository
                                 .findByIdAndDeletedAtIsNull(courseId)
-                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course not found"));
+                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Course not found"));
 
                 Set<UUID> completedLessonIdentityIds;
 
@@ -85,7 +87,13 @@ public class LearningContentService {
                  * Tạm thời không gọi query progress theo class với giá trị null.
                  */
                 if (classId == null) {
-                        completedLessonIdentityIds = Set.of();
+                        completedLessonIdentityIds = lessonProgressRepository
+                                        .findByStudentIdAndCourseIdAndClassIdIsNull(student.getId(), courseId)
+                                        .stream()
+                                        .filter(LessonProgress::isCompleted)
+                                        .map(LessonProgress::getLessonIdentityId)
+                                        .filter(Objects::nonNull)
+                                        .collect(Collectors.toSet());
                 } else {
                         completedLessonIdentityIds = lessonProgressRepository
                                         .findByStudentIdAndClassIdAndCourseId(student.getId(), classId, courseId)

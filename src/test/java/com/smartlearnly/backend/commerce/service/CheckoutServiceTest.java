@@ -34,6 +34,7 @@ import com.smartlearnly.backend.enrollment.entity.CourseEnrollment;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
+import com.smartlearnly.backend.commerce.dto.CheckoutItemType;
 import com.smartlearnly.backend.payment.sepay.SePayPaymentInstruction;
 import com.smartlearnly.backend.payment.sepay.SePayPaymentInstructionService;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -53,388 +54,384 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class CheckoutServiceTest {
-    @Mock
-    private OrderRepository orderRepository;
-
-    @Mock
-    private OrderItemRepository orderItemRepository;
-
-    @Mock
-    private PaymentTransactionRepository paymentTransactionRepository;
-
-    @Mock
-    private SePayOrderRepository sePayOrderRepository;
-
-    @Mock
-    private CourseRepository courseRepository;
-
-    @Mock
-    private ClassOfferingRepository classOfferingRepository;
-
-    @Mock
-    private CourseEnrollmentRepository courseEnrollmentRepository;
-
-    @Mock
-    private ClassEnrollmentRepository classEnrollmentRepository;
-
-    @Mock
-    private CurrentUserService currentUserService;
-
-    @Mock
-    private AuditLogService auditLogService;
-
-    @Mock
-    private ObjectProvider<SePayPaymentInstructionService> sePayInstructionServices;
-
-    private CheckoutService service;
-
-    @BeforeEach
-    void setUp() {
-        service = new CheckoutService(
-                orderRepository,
-                orderItemRepository,
-                paymentTransactionRepository,
-                sePayOrderRepository,
-                courseRepository,
-                classOfferingRepository,
-                courseEnrollmentRepository,
-                classEnrollmentRepository,
-                currentUserService,
-                auditLogService,
-                sePayInstructionServices
-        );
-
-        ReflectionTestUtils.setField(service, "checkoutExpiration", Duration.ofMinutes(30));
-    }
-
-    @Test
-    void checkoutShouldCreateOrderSnapshotPendingTransactionAndSePayOrder() {
-        UserAccount user = user();
-        Course course = paidPublishedCourse();
-        ClassOffering classOffering = classOffering(course.getId());
+        @Mock
+        private OrderRepository orderRepository;
+
+        @Mock
+        private OrderItemRepository orderItemRepository;
+
+        @Mock
+        private PaymentTransactionRepository paymentTransactionRepository;
+
+        @Mock
+        private SePayOrderRepository sePayOrderRepository;
+
+        @Mock
+        private CourseRepository courseRepository;
+
+        @Mock
+        private ClassOfferingRepository classOfferingRepository;
+
+        @Mock
+        private CourseEnrollmentRepository courseEnrollmentRepository;
+
+        @Mock
+        private ClassEnrollmentRepository classEnrollmentRepository;
+
+        @Mock
+        private CurrentUserService currentUserService;
+
+        @Mock
+        private AuditLogService auditLogService;
+
+        @Mock
+        private ObjectProvider<SePayPaymentInstructionService> sePayInstructionServices;
+
+        private CheckoutService service;
+
+        @BeforeEach
+        void setUp() {
+                service = new CheckoutService(
+                                orderRepository,
+                                orderItemRepository,
+                                paymentTransactionRepository,
+                                sePayOrderRepository,
+                                courseRepository,
+                                classOfferingRepository,
+                                courseEnrollmentRepository,
+                                classEnrollmentRepository,
+                                currentUserService,
+                                auditLogService,
+                                sePayInstructionServices);
+
+                ReflectionTestUtils.setField(service, "checkoutExpiration", Duration.ofMinutes(30));
+        }
+
+        @Test
+        void checkoutShouldCreateOrderSnapshotPendingTransactionAndSePayOrder() {
+                UserAccount user = user();
+                Course course = paidPublishedCourse();
+                ClassOffering classOffering = classOffering(course.getId());
+
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
 
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-
-        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
-                .thenReturn(Optional.of(course));
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                                .thenReturn(Optional.of(course));
 
-        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                .thenReturn(Optional.of(classOffering));
+                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
+                                .thenReturn(Optional.of(classOffering));
 
-        when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                .thenReturn(Optional.empty());
+                when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
+                                .thenReturn(Optional.empty());
+
+                when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
+                                .thenReturn(Optional.empty());
+
+                when(orderRepository.existsByOrderCode(anyString()))
+                                .thenReturn(false);
+
+                when(orderRepository.save(any(PurchaseOrder.class)))
+                                .thenAnswer(invocation -> {
+                                        PurchaseOrder order = invocation.getArgument(0);
+                                        order.setId(UUID.randomUUID());
+                                        return order;
+                                });
+
+                when(orderItemRepository.saveAll(any()))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                when(paymentTransactionRepository.save(any(PaymentTransaction.class)))
+                                .thenAnswer(invocation -> {
+                                        PaymentTransaction transaction = invocation.getArgument(0);
+                                        transaction.setId(UUID.randomUUID());
+                                        return transaction;
+                                });
+
+                when(sePayInstructionServices.getIfAvailable())
+                                .thenReturn(request -> new SePayPaymentInstruction(
+                                                "SLPABC123",
+                                                "123456789",
+                                                "MBBANK",
+                                                "SMART LEARNLY",
+                                                "https://qr.example/SLPABC123",
+                                                request.amount(),
+                                                request.expiresAt()));
 
-        when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
-                .thenReturn(Optional.empty());
-
-        when(orderRepository.existsByOrderCode(anyString()))
-                .thenReturn(false);
+                when(sePayOrderRepository.save(any(SePayOrder.class)))
+                                .thenAnswer(invocation -> {
+                                        SePayOrder sePayOrder = invocation.getArgument(0);
+                                        sePayOrder.setId(UUID.randomUUID());
+                                        return sePayOrder;
+                                });
+
+                CheckoutResponse response = service.checkout(
+                                CheckoutItemType.COURSE,
+                                course.getId(),
+                                null);
 
-        when(orderRepository.save(any(PurchaseOrder.class)))
-                .thenAnswer(invocation -> {
-                    PurchaseOrder order = invocation.getArgument(0);
-                    order.setId(UUID.randomUUID());
-                    return order;
-                });
-
-        when(orderItemRepository.saveAll(any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        when(paymentTransactionRepository.save(any(PaymentTransaction.class)))
-                .thenAnswer(invocation -> {
-                    PaymentTransaction transaction = invocation.getArgument(0);
-                    transaction.setId(UUID.randomUUID());
-                    return transaction;
-                });
+                assertThat(response.orderId()).isNotNull();
+                assertThat(response.transactionId()).isNotNull();
+                assertThat(response.paymentGateway()).isEqualTo("SEPAY");
+                assertThat(response.paymentCode()).isEqualTo("SLPABC123");
+                assertThat(response.amount()).isEqualByComparingTo("399000");
+                assertThat(response.status()).isEqualTo("PENDING");
+
+                ArgumentCaptor<PaymentTransaction> transactionCaptor = ArgumentCaptor
+                                .forClass(PaymentTransaction.class);
+
+                verify(paymentTransactionRepository).save(transactionCaptor.capture());
+
+                assertThat(transactionCaptor.getValue().getStatus())
+                                .isEqualTo(TransactionStatus.PENDING);
+
+                assertThat(transactionCaptor.getValue().getPaymentGateway())
+                                .isEqualTo(PaymentGateway.SEPAY);
+
+                ArgumentCaptor<SePayOrder> sePayOrderCaptor = ArgumentCaptor.forClass(SePayOrder.class);
+
+                verify(sePayOrderRepository).save(sePayOrderCaptor.capture());
+
+                assertThat(sePayOrderCaptor.getValue().getStatus())
+                                .isEqualTo(SePayOrderStatus.WAITING_PAYMENT);
+
+                assertThat(sePayOrderCaptor.getValue().getAmount())
+                                .isEqualByComparingTo("399000");
+        }
+
+        @Test
+        void checkoutShouldRejectCourseThatAlreadyHasActiveEnrollment() {
+                UserAccount user = user();
+                Course course = paidPublishedCourse();
+                ClassOffering classOffering = classOffering(course.getId());
+
+                CourseEnrollment enrollment = new CourseEnrollment();
+                enrollment.setStatus(EnrollmentStatus.ACTIVE);
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(user);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                                .thenReturn(Optional.of(course));
+
+                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
+                                .thenReturn(Optional.of(classOffering));
+
+                when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
+                                .thenReturn(Optional.of(enrollment));
+
+                assertThatThrownBy(() -> service.checkout(
+                                CheckoutItemType.COURSE,
+                                course.getId(),
+                                null))
+                                .isInstanceOfSatisfying(BusinessException.class,
+                                                exception -> assertThat(exception.errorCode())
+                                                                .isEqualTo(ErrorCode.CONFLICT));
 
-        when(sePayInstructionServices.getIfAvailable())
-                .thenReturn(request -> new SePayPaymentInstruction(
-                        "SLPABC123",
-                        "123456789",
-                        "MBBANK",
-                        "SMART LEARNLY",
-                        "https://qr.example/SLPABC123",
-                        request.amount(),
-                        request.expiresAt()
-                ));
-
-        when(sePayOrderRepository.save(any(SePayOrder.class)))
-                .thenAnswer(invocation -> {
-                    SePayOrder sePayOrder = invocation.getArgument(0);
-                    sePayOrder.setId(UUID.randomUUID());
-                    return sePayOrder;
-                });
-
-        CheckoutResponse response = service.checkout(course.getId(), classOffering.getId());
-
-        assertThat(response.orderId()).isNotNull();
-        assertThat(response.transactionId()).isNotNull();
-        assertThat(response.paymentGateway()).isEqualTo("SEPAY");
-        assertThat(response.paymentCode()).isEqualTo("SLPABC123");
-        assertThat(response.amount()).isEqualByComparingTo("399000");
-        assertThat(response.status()).isEqualTo("PENDING");
-
-        ArgumentCaptor<PaymentTransaction> transactionCaptor =
-                ArgumentCaptor.forClass(PaymentTransaction.class);
-
-        verify(paymentTransactionRepository).save(transactionCaptor.capture());
-
-        assertThat(transactionCaptor.getValue().getStatus())
-                .isEqualTo(TransactionStatus.PENDING);
-
-        assertThat(transactionCaptor.getValue().getPaymentGateway())
-                .isEqualTo(PaymentGateway.SEPAY);
-
-        ArgumentCaptor<SePayOrder> sePayOrderCaptor =
-                ArgumentCaptor.forClass(SePayOrder.class);
-
-        verify(sePayOrderRepository).save(sePayOrderCaptor.capture());
-
-        assertThat(sePayOrderCaptor.getValue().getStatus())
-                .isEqualTo(SePayOrderStatus.WAITING_PAYMENT);
-
-        assertThat(sePayOrderCaptor.getValue().getAmount())
-                .isEqualByComparingTo("399000");
-    }
-
-    @Test
-    void checkoutShouldRejectCourseThatAlreadyHasActiveEnrollment() {
-        UserAccount user = user();
-        Course course = paidPublishedCourse();
-        ClassOffering classOffering = classOffering(course.getId());
-
-        CourseEnrollment enrollment = new CourseEnrollment();
-        enrollment.setStatus(EnrollmentStatus.ACTIVE);
-
-        when(currentUserService.requireAuthenticatedUser())
-                .thenReturn(user);
-
-        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
-                .thenReturn(Optional.of(course));
-
-        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                .thenReturn(Optional.of(classOffering));
-
-        when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                .thenReturn(Optional.of(enrollment));
-
-        assertThatThrownBy(() -> service.checkout(course.getId(), classOffering.getId()))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.CONFLICT));
-
-        verify(orderRepository, never()).save(any());
-        verify(paymentTransactionRepository, never()).save(any());
-        verify(sePayOrderRepository, never()).save(any());
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void checkoutShouldUseCoursePrice() {
-        UserAccount user = user();
-        Course course = paidPublishedCourse();
-        ClassOffering classOffering = classOffering(course.getId());
-
-        when(currentUserService.requireAuthenticatedUser())
-                .thenReturn(user);
-
-        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
-                .thenReturn(Optional.of(course));
-
-        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                .thenReturn(Optional.of(classOffering));
-
-        when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                .thenReturn(Optional.empty());
-
-        when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
-                .thenReturn(Optional.empty());
-
-        when(orderRepository.existsByOrderCode(anyString()))
-                .thenReturn(false);
-
-        when(orderRepository.save(any(PurchaseOrder.class)))
-                .thenAnswer(invocation -> {
-                    PurchaseOrder order = invocation.getArgument(0);
-                    order.setId(UUID.randomUUID());
-                    return order;
-                });
-
-        when(orderItemRepository.saveAll(any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        when(paymentTransactionRepository.save(any(PaymentTransaction.class)))
-                .thenAnswer(invocation -> {
-                    PaymentTransaction transaction = invocation.getArgument(0);
-                    transaction.setId(UUID.randomUUID());
-                    return transaction;
-                });
-
-        when(sePayInstructionServices.getIfAvailable())
-                .thenReturn(request -> new SePayPaymentInstruction(
-                        "SLPCOURSE1",
-                        "123456789",
-                        "MBBANK",
-                        "SMART LEARNLY",
-                        "https://qr.example/SLPCOURSE1",
-                        request.amount(),
-                        request.expiresAt()
-                ));
-
-        when(sePayOrderRepository.save(any(SePayOrder.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        CheckoutResponse response = service.checkout(course.getId(), classOffering.getId());
-
-        assertThat(response.amount()).isEqualByComparingTo("399000");
-
-        ArgumentCaptor<List<OrderItem>> itemsCaptor =
-                ArgumentCaptor.forClass(List.class);
-
-        verify(orderItemRepository).saveAll(itemsCaptor.capture());
-
-        OrderItem savedItem = itemsCaptor.getValue().get(0);
-
-        assertThat(savedItem.getCourseId()).isEqualTo(course.getId());
-        assertThat(savedItem.getClassId()).isEqualTo(classOffering.getId());
-        assertThat(savedItem.getUnitPrice()).isEqualByComparingTo("399000");
-        assertThat(savedItem.getDiscountAmount()).isEqualByComparingTo("0");
-        assertThat(savedItem.getFinalAmount()).isEqualByComparingTo("399000");
-    }
-
-    @Test
-    void checkoutShouldUseDiscountedCoursePriceWhenAvailable() {
-        UserAccount user = user();
-        Course course = paidPublishedCourse();
-        course.setDiscountedPrice(new BigDecimal("299000"));
-
-        ClassOffering classOffering = classOffering(course.getId());
-
-        when(currentUserService.requireAuthenticatedUser())
-                .thenReturn(user);
-
-        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
-                .thenReturn(Optional.of(course));
-
-        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                .thenReturn(Optional.of(classOffering));
-
-        when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                .thenReturn(Optional.empty());
-
-        when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
-                .thenReturn(Optional.empty());
-
-        when(orderRepository.existsByOrderCode(anyString()))
-                .thenReturn(false);
-
-        when(orderRepository.save(any(PurchaseOrder.class)))
-                .thenAnswer(invocation -> {
-                    PurchaseOrder order = invocation.getArgument(0);
-                    order.setId(UUID.randomUUID());
-                    return order;
-                });
-
-        when(orderItemRepository.saveAll(any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        when(paymentTransactionRepository.save(any(PaymentTransaction.class)))
-                .thenAnswer(invocation -> {
-                    PaymentTransaction transaction = invocation.getArgument(0);
-                    transaction.setId(UUID.randomUUID());
-                    return transaction;
-                });
-
-        when(sePayInstructionServices.getIfAvailable())
-                .thenReturn(request -> new SePayPaymentInstruction(
-                        "SLPDISCOUNT",
-                        "123456789",
-                        "MBBANK",
-                        "SMART LEARNLY",
-                        "https://qr.example/SLPDISCOUNT",
-                        request.amount(),
-                        request.expiresAt()
-                ));
-
-        when(sePayOrderRepository.save(any(SePayOrder.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        CheckoutResponse response = service.checkout(course.getId(), classOffering.getId());
-
-        assertThat(response.amount()).isEqualByComparingTo("299000");
-    }
-
-    @Test
-    void checkoutShouldRollbackBeforePersistingSePayOrderWhenAdapterMissing() {
-        UserAccount user = user();
-        Course course = paidPublishedCourse();
-        ClassOffering classOffering = classOffering(course.getId());
-
-        when(currentUserService.requireAuthenticatedUser())
-                .thenReturn(user);
-
-        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
-                .thenReturn(Optional.of(course));
-
-        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                .thenReturn(Optional.of(classOffering));
-
-        when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                .thenReturn(Optional.empty());
-
-        when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
-                .thenReturn(Optional.empty());
-
-        when(orderRepository.existsByOrderCode(anyString()))
-                .thenReturn(false);
-
-        when(orderRepository.save(any(PurchaseOrder.class)))
-                .thenAnswer(invocation -> {
-                    PurchaseOrder order = invocation.getArgument(0);
-                    order.setId(UUID.randomUUID());
-                    return order;
-                });
-
-        when(paymentTransactionRepository.save(any(PaymentTransaction.class)))
-                .thenAnswer(invocation -> {
-                    PaymentTransaction transaction = invocation.getArgument(0);
-                    transaction.setId(UUID.randomUUID());
-                    return transaction;
-                });
-
-        when(sePayInstructionServices.getIfAvailable())
-                .thenReturn(null);
-
-        assertThatThrownBy(() -> service.checkout(course.getId(), classOffering.getId()))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode())
-                                .isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE));
-
-        verify(sePayOrderRepository, never()).save(any());
-    }
-
-    private UserAccount user() {
-        UserAccount user = new UserAccount();
-        user.setId(UUID.randomUUID());
-        user.setRole("TRAINEE");
-        return user;
-    }
-
-    private Course paidPublishedCourse() {
-        Course course = new Course();
-        course.setId(UUID.randomUUID());
-        course.setTitle("Java Backend");
-        course.setPrice(new BigDecimal("399000"));
-        course.setFree(false);
-        course.setStatus(CourseStatus.PUBLISHED);
-        return course;
-    }
-
-    private ClassOffering classOffering(UUID courseId) {
-        ClassOffering classOffering = new ClassOffering();
-        classOffering.setId(UUID.randomUUID());
-        classOffering.setCourseId(courseId);
-        classOffering.setClassName("Java Backend - K01");
-        classOffering.setStatus(ClassStatus.UPCOMING);
-        return classOffering;
-    }
+                verify(orderRepository, never()).save(any());
+                verify(paymentTransactionRepository, never()).save(any());
+                verify(sePayOrderRepository, never()).save(any());
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void checkoutShouldUseCoursePrice() {
+                UserAccount user = user();
+                Course course = paidPublishedCourse();
+                ClassOffering classOffering = classOffering(course.getId());
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(user);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                                .thenReturn(Optional.of(course));
+
+                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
+                                .thenReturn(Optional.of(classOffering));
+
+                when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
+                                .thenReturn(Optional.empty());
+
+                when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
+                                .thenReturn(Optional.empty());
+
+                when(orderRepository.existsByOrderCode(anyString()))
+                                .thenReturn(false);
+
+                when(orderRepository.save(any(PurchaseOrder.class)))
+                                .thenAnswer(invocation -> {
+                                        PurchaseOrder order = invocation.getArgument(0);
+                                        order.setId(UUID.randomUUID());
+                                        return order;
+                                });
+
+                when(orderItemRepository.saveAll(any()))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                when(paymentTransactionRepository.save(any(PaymentTransaction.class)))
+                                .thenAnswer(invocation -> {
+                                        PaymentTransaction transaction = invocation.getArgument(0);
+                                        transaction.setId(UUID.randomUUID());
+                                        return transaction;
+                                });
+
+                when(sePayInstructionServices.getIfAvailable())
+                                .thenReturn(request -> new SePayPaymentInstruction(
+                                                "SLPCOURSE1",
+                                                "123456789",
+                                                "MBBANK",
+                                                "SMART LEARNLY",
+                                                "https://qr.example/SLPCOURSE1",
+                                                request.amount(),
+                                                request.expiresAt()));
+
+                when(sePayOrderRepository.save(any(SePayOrder.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                CheckoutResponse response = service.checkout(
+                                CheckoutItemType.COURSE,
+                                course.getId(),
+                                null);
+
+                assertThat(response.amount()).isEqualByComparingTo("399000");
+
+                ArgumentCaptor<List<OrderItem>> itemsCaptor = ArgumentCaptor.forClass(List.class);
+
+                verify(orderItemRepository).saveAll(itemsCaptor.capture());
+
+                OrderItem savedItem = itemsCaptor.getValue().get(0);
+
+                assertThat(savedItem.getCourseId()).isEqualTo(course.getId());
+                assertThat(savedItem.getClassId()).isNull();
+                assertThat(savedItem.getUnitPrice()).isEqualByComparingTo("399000");
+                assertThat(savedItem.getDiscountAmount()).isEqualByComparingTo("0");
+                assertThat(savedItem.getFinalAmount()).isEqualByComparingTo("399000");
+        }
+
+        @Test
+        void checkoutShouldUseDiscountedCoursePriceWhenAvailable() {
+                UserAccount user = user();
+                Course course = paidPublishedCourse();
+                course.setDiscountedPrice(new BigDecimal("299000"));
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(user);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                                .thenReturn(Optional.of(course));
+
+                when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
+                                .thenReturn(Optional.empty());
+
+                when(orderRepository.existsByOrderCode(anyString()))
+                                .thenReturn(false);
+
+                when(orderRepository.save(any(PurchaseOrder.class)))
+                                .thenAnswer(invocation -> {
+                                        PurchaseOrder order = invocation.getArgument(0);
+                                        order.setId(UUID.randomUUID());
+                                        return order;
+                                });
+
+                when(orderItemRepository.saveAll(any()))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                when(paymentTransactionRepository.save(any(PaymentTransaction.class)))
+                                .thenAnswer(invocation -> {
+                                        PaymentTransaction transaction = invocation.getArgument(0);
+                                        transaction.setId(UUID.randomUUID());
+                                        return transaction;
+                                });
+
+                when(sePayInstructionServices.getIfAvailable())
+                                .thenReturn(request -> new SePayPaymentInstruction(
+                                                "SLPDISCOUNT",
+                                                "123456789",
+                                                "MBBANK",
+                                                "SMART LEARNLY",
+                                                "https://qr.example/SLPDISCOUNT",
+                                                request.amount(),
+                                                request.expiresAt()));
+
+                when(sePayOrderRepository.save(any(SePayOrder.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                CheckoutResponse response = service.checkout(
+                                CheckoutItemType.COURSE,
+                                course.getId(),
+                                null);
+
+                assertThat(response.amount()).isEqualByComparingTo("299000");
+        }
+
+        @Test
+        void checkoutShouldRollbackBeforePersistingSePayOrderWhenAdapterMissing() {
+                UserAccount user = user();
+                Course course = paidPublishedCourse();
+                ClassOffering classOffering = classOffering(course.getId());
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(user);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                                .thenReturn(Optional.of(course));
+
+                when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
+                                .thenReturn(Optional.empty());
+
+                when(orderRepository.existsByOrderCode(anyString()))
+                                .thenReturn(false);
+
+                when(orderRepository.save(any(PurchaseOrder.class)))
+                                .thenAnswer(invocation -> {
+                                        PurchaseOrder order = invocation.getArgument(0);
+                                        order.setId(UUID.randomUUID());
+                                        return order;
+                                });
+
+                when(paymentTransactionRepository.save(any(PaymentTransaction.class)))
+                                .thenAnswer(invocation -> {
+                                        PaymentTransaction transaction = invocation.getArgument(0);
+                                        transaction.setId(UUID.randomUUID());
+                                        return transaction;
+                                });
+
+                when(sePayInstructionServices.getIfAvailable())
+                                .thenReturn(null);
+
+                assertThatThrownBy(() -> service.checkout(
+                                CheckoutItemType.COURSE,
+                                course.getId(),
+                                null))
+                                .isInstanceOfSatisfying(BusinessException.class,
+                                                exception -> assertThat(exception.errorCode())
+                                                                .isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE));
+
+                verify(sePayOrderRepository, never()).save(any());
+        }
+
+        private UserAccount user() {
+                UserAccount user = new UserAccount();
+                user.setId(UUID.randomUUID());
+                user.setRole("TRAINEE");
+                return user;
+        }
+
+        private Course paidPublishedCourse() {
+                Course course = new Course();
+                course.setId(UUID.randomUUID());
+                course.setTitle("Java Backend");
+                course.setPrice(new BigDecimal("399000"));
+                course.setFree(false);
+                course.setStatus(CourseStatus.PUBLISHED);
+                return course;
+        }
+
+        private ClassOffering classOffering(UUID courseId) {
+                ClassOffering classOffering = new ClassOffering();
+                classOffering.setId(UUID.randomUUID());
+                classOffering.setCourseId(courseId);
+                classOffering.setClassName("Java Backend - K01");
+                classOffering.setStatus(ClassStatus.UPCOMING);
+                return classOffering;
+        }
 }

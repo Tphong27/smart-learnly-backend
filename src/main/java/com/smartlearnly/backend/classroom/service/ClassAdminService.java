@@ -95,6 +95,7 @@ public class ClassAdminService {
         classOffering.setStartDate(request.startDate());
         classOffering.setEndDate(request.endDate());
         classOffering.setMaxStudents(request.maxStudents());
+        classOffering.setPrice(request.price());
         classOffering.setStatus(ClassStatus.UPCOMING);
         classOffering.setCreatedBy(actor.getId());
 
@@ -153,6 +154,16 @@ public class ClassAdminService {
                         "Maximum students cannot be lower than the active enrollment count");
             }
             classOffering.setMaxStudents(request.getMaxStudents());
+        }
+        if (request.isPriceProvided()) {
+            if (request.getPrice() == null) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Class price is required");
+            }
+
+            classOffering.setPrice(
+                    request.getPrice());
         }
         if (request.isStatusProvided()) {
             classOffering.setStatus(normalizeClassStatus(request.getStatus()));
