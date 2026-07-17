@@ -60,8 +60,14 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                   OR course.title ILIKE :keyword ESCAPE '\\'
               )
               AND (:courseId IS NULL OR cls.course_id = :courseId)
-              AND (:startFrom IS NULL OR cls.start_date >= :startFrom)
-              AND (:startTo IS NULL OR cls.start_date <= :startTo)
+              AND (
+                    CAST(:startFrom AS date) IS NULL
+                    OR cls.start_date >= CAST(:startFrom AS date)
+                  )
+              AND (
+                    CAST(:startTo AS date) IS NULL
+                    OR cls.start_date <= CAST(:startTo AS date)
+                  )
               AND (:minPrice IS NULL OR cls.price >= :minPrice)
               AND (:maxPrice IS NULL OR cls.price <= :maxPrice)
             GROUP BY
@@ -92,8 +98,14 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                               OR course.title ILIKE :keyword ESCAPE '\\'
                           )
                           AND (:courseId IS NULL OR cls.course_id = :courseId)
-                          AND (:startFrom IS NULL OR cls.start_date >= :startFrom)
-                          AND (:startTo IS NULL OR cls.start_date <= :startTo)
+                          AND (
+                                CAST(:startFrom AS date) IS NULL
+                                OR cls.start_date >= CAST(:startFrom AS date)
+                              )
+                          AND (
+                                CAST(:startTo AS date) IS NULL
+                                OR cls.start_date <= CAST(:startTo AS date)
+                              )
                           AND (:minPrice IS NULL OR cls.price >= :minPrice)
                           AND (:maxPrice IS NULL OR cls.price <= :maxPrice)
                           AND (
