@@ -33,12 +33,14 @@ public class AssignmentController {
             @RequestParam(required = false) String mode,
             @RequestParam(required = false) String currentTitle,
             @RequestParam(required = false) String currentDescription,
+            @RequestParam(required = false) String sourceCacheKey,
             @RequestPart(value = "file", required = false) MultipartFile file) {
         AssignmentAiDraftModel.Response response = assignmentAiDraftService.generateDraft(
                 message,
                 mode,
                 currentTitle,
                 currentDescription,
+                sourceCacheKey,
                 file);
         return ResponseEntity.ok(response);
     }
