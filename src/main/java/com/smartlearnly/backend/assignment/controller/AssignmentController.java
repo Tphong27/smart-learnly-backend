@@ -1,8 +1,8 @@
 package com.smartlearnly.backend.assignment.controller;
 
 import com.smartlearnly.backend.assignment.dto.AssignmentModel;
-import com.smartlearnly.backend.assignment.dto.AssignmentAiDraftModel;
-import com.smartlearnly.backend.assignment.service.AssignmentAiDraftService;
+// import com.smartlearnly.backend.assignment.dto.AssignmentAiDraftModel;
+// import com.smartlearnly.backend.assignment.service.AssignmentAiDraftService;
 import com.smartlearnly.backend.assignment.service.AssignmentService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -18,32 +18,37 @@ import org.springframework.web.multipart.MultipartFile;
 public class AssignmentController {
 
     private final AssignmentService assignmentService;
-    private final AssignmentAiDraftService assignmentAiDraftService;
+    // private final AssignmentAiDraftService assignmentAiDraftService;
 
-    public AssignmentController(
-            AssignmentService assignmentService,
-            AssignmentAiDraftService assignmentAiDraftService) {
+    // public AssignmentController(
+    // AssignmentService assignmentService,
+    // AssignmentAiDraftService assignmentAiDraftService) {
+    // this.assignmentService = assignmentService;
+    // this.assignmentAiDraftService = assignmentAiDraftService;
+    // }
+    public AssignmentController(AssignmentService assignmentService) {
         this.assignmentService = assignmentService;
-        this.assignmentAiDraftService = assignmentAiDraftService;
     }
 
-    @PostMapping(value = "/ai-draft", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<AssignmentAiDraftModel.Response> generateAiDraft(
-            @RequestParam String message,
-            @RequestParam(required = false) String mode,
-            @RequestParam(required = false) String currentTitle,
-            @RequestParam(required = false) String currentDescription,
-            @RequestParam(required = false) String sourceCacheKey,
-            @RequestPart(value = "file", required = false) MultipartFile file) {
-        AssignmentAiDraftModel.Response response = assignmentAiDraftService.generateDraft(
-                message,
-                mode,
-                currentTitle,
-                currentDescription,
-                sourceCacheKey,
-                file);
-        return ResponseEntity.ok(response);
-    }
+    // @PostMapping(value = "/ai-draft", consumes =
+    // MediaType.MULTIPART_FORM_DATA_VALUE)
+    // public ResponseEntity<AssignmentAiDraftModel.Response> generateAiDraft(
+    // @RequestParam String message,
+    // @RequestParam(required = false) String mode,
+    // @RequestParam(required = false) String currentTitle,
+    // @RequestParam(required = false) String currentDescription,
+    // @RequestParam(required = false) String sourceCacheKey,
+    // @RequestPart(value = "file", required = false) MultipartFile file) {
+    // AssignmentAiDraftModel.Response response =
+    // assignmentAiDraftService.generateDraft(
+    // message,
+    // mode,
+    // currentTitle,
+    // currentDescription,
+    // sourceCacheKey,
+    // file);
+    // return ResponseEntity.ok(response);
+    // }
 
     @PostMapping
     public ResponseEntity<AssignmentModel.Response> create(@Valid @RequestBody AssignmentModel.CreateRequest request) {
@@ -66,9 +71,10 @@ public class AssignmentController {
 
     // @GetMapping("/available")
     // public ResponseEntity<List<AssignmentModel.Response>> getAvailable(
-    //         @RequestParam(required = false) UUID courseId,
-    //         @RequestParam(required = false) Boolean isFlashtest) {
-    //     return ResponseEntity.ok(assignmentService.getAvailableAssignments(courseId, isFlashtest));
+    // @RequestParam(required = false) UUID courseId,
+    // @RequestParam(required = false) Boolean isFlashtest) {
+    // return ResponseEntity.ok(assignmentService.getAvailableAssignments(courseId,
+    // isFlashtest));
     // }
 
     @GetMapping("/available")

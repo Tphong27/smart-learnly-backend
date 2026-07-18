@@ -157,6 +157,65 @@ public class CourseEnrollmentService {
         }
 
         @Transactional
+        public EnrollmentResponse grantFreeClassCourseEnrollment(UUID studentId, UUID courseId, UUID classId) {
+                requirePublishedCourse(courseId);
+                CourseEnrollment existing = courseEnrollmentRepository
+                                .findByCourseIdAndStudentIdForUpdate(courseId, studentId)
+                                .orElse(null);
+
+                if (hasAccess(existing)) {
+                        return toEnrollmentResponse(existing, true, false);
+                }
+
+                CourseEnrollment enrollment;
+                EnrollmentStatus fromStatus;
+
+                if (existing == null) {
+                        enrollment = new CourseEnrollment();
+                        enrollment.setCourseId(courseId);
+                        enrollment.setStudentId(studentId);
+                        fromStatus = null;
+                } else {
+                        ensureReactivatable(existing.getStatus());
+                        enrollment = existing;
+                        fromStatus = existing.getStatus();
+                }
+
+                enrollment.setStatus(EnrollmentStatus.ACTIVE);
+                CourseEnrollment saved = courseEnrollmentRepository.save(enrollment);
+                recordCourseTransition(
+                                saved,
+                                fromStatus,
+                                EnrollmentStatus.ACTIVE,
+                                EnrollmentTransitionSource.FREE_ENROLLMENT,
+                                null,
+                                fromStatus == null
+                                                ? "Course access granted by free class enrollment"
+                                                : "Course access reactivated by free class enrollment");
+
+                AuditAction auditAction = fromStatus == null
+                                ? AuditAction.ENROLLMENT_CREATED
+                                : AuditAction.ENROLLMENT_REACTIVATED;
+
+                auditLogService.recordSystem(
+                                "free-class-enrollment",
+                                auditAction,
+                                AuditDomain.ENROLLMENT,
+                                AuditResult.SUCCESS,
+                                "COURSE_ENROLLMENT",
+                                saved.getId().toString(),
+                                "Course access was granted by a free class enrollment",
+                                java.util.Map.of(
+                                                "studentId", studentId,
+                                                "courseId", courseId,
+                                                "classId", classId),
+                                "free-class:" + classId,
+                                null);
+
+                return toEnrollmentResponse(saved, false, fromStatus != null);
+        }
+
+        @Transactional
         public EnrollmentResponse grantPaidCourseEnrollment(
                         UUID studentId,
                         UUID courseId,
@@ -256,49 +315,6 @@ public class CourseEnrollmentService {
                                 .toList();
         }
 
-        // private ClassOffering requireAvailableClassForCourse(UUID courseId, UUID classId) {
-        //         ClassOffering classOffering = classOfferingRepository.findByIdForUpdate(classId)
-        //                         .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
-        //                                         "Class not found"));
-
-        //         if (!courseId.equals(classOffering.getCourseId())) {
-        //                 throw new BusinessException(
-        //                                 ErrorCode.INVALID_REQUEST,
-        //                                 "Class must belong to the selected course");
-        //         }
-
-        //         if (classOffering.getStatus() == ClassStatus.CANCELLED
-        //                         || classOffering.getStatus() == ClassStatus.COMPLETED) {
-        //                 throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE);
-        //         }
-
-        //         return classOffering;
-        // }
-
-        // private boolean hasClassAccess(ClassEnrollment enrollment) {
-        //         return enrollment != null
-        //                         && (enrollment.getStatus() == EnrollmentStatus.ACTIVE
-        //                                         || enrollment.getStatus() == EnrollmentStatus.COMPLETED);
-        // }
-
-        // private void recordClassTransition(
-        //                 ClassEnrollment enrollment,
-        //                 EnrollmentStatus fromStatus,
-        //                 EnrollmentTransitionSource source,
-        //                 UUID transactionId,
-        //                 String reason) {
-        //         EnrollmentStatusHistory history = new EnrollmentStatusHistory();
-        //         history.setClassEnrollmentId(enrollment.getId());
-        //         history.setStudentId(enrollment.getStudentId());
-        //         history.setFromStatus(fromStatus);
-        //         history.setToStatus(EnrollmentStatus.ACTIVE);
-        //         history.setSource(source);
-        //         history.setTransactionId(transactionId);
-        //         history.setReason(reason);
-
-        //         enrollmentStatusHistoryRepository.save(history);
-        // }
-
         private Course requirePublishedCourse(UUID courseId) {
                 Course course = courseRepository.findByIdAndDeletedAtIsNullForUpdate(courseId)
                                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
@@ -324,9 +340,18 @@ public class CourseEnrollmentService {
                 }
         }
 
+        /**
+         * Course được xem là miễn phí nếu:
+         * - Admin đánh dấu isFree = true; hoặc
+         * - Giá gốc bằng 0; hoặc
+         * - Giá sau giảm bằng 0.
+         */
         private boolean isFree(Course course) {
                 BigDecimal price = course.getPrice() == null ? BigDecimal.ZERO : course.getPrice();
-                return Boolean.TRUE.equals(course.getFree()) || price.compareTo(BigDecimal.ZERO) == 0;
+                BigDecimal discountedPrice = course.getDiscountedPrice();
+                return Boolean.TRUE.equals(course.getFree())
+                                || price.compareTo(BigDecimal.ZERO) == 0
+                                || (discountedPrice != null && discountedPrice.compareTo(BigDecimal.ZERO) == 0);
         }
 
         private boolean hasAccess(CourseEnrollment enrollment) {

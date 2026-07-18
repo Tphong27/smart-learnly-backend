@@ -2,11 +2,14 @@ package com.smartlearnly.backend.enrollment.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.enrollment.dto.ClassEnrollmentResponse;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentHistoryResponse;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentResponse;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentStatusHistoryResponse;
+import com.smartlearnly.backend.enrollment.dto.FreeClassEnrollmentRequest;
 import com.smartlearnly.backend.enrollment.dto.FreeCourseEnrollmentRequest;
 import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
+import com.smartlearnly.backend.enrollment.service.ClassEnrollmentService;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Enrollments", description = "Enrollment access and history endpoints")
 public class EnrollmentController {
     private final CourseEnrollmentService courseEnrollmentService;
+    private final ClassEnrollmentService classEnrollmentService;
 
     @PostMapping("/free-course")
     @PreAuthorize("hasRole('TRAINEE')")
@@ -64,5 +68,16 @@ public class EnrollmentController {
     public ApiResponse<List<EnrollmentStatusHistoryResponse>> getStatusHistory(
             @PathVariable UUID enrollmentId) {
         return ApiResponse.success(courseEnrollmentService.getStatusHistory(enrollmentId));
+    }
+
+    @PostMapping("/free-class")
+    @PreAuthorize("hasRole('TRAINEE')")
+    @Operation(summary = "Enroll in an upcoming free offline class")
+    public ApiResponse<ClassEnrollmentResponse> enrollFreeClass(
+            @Valid @RequestBody FreeClassEnrollmentRequest request) {
+
+        return ApiResponse.success(
+                "Free class enrollment completed",
+                classEnrollmentService.enrollFreeClass(request.classId()));
     }
 }

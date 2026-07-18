@@ -27,7 +27,7 @@ public class LearningController {
     @Operation(summary = "Get full learning content for an enrolled course and class")
     public ApiResponse<LearningContentResponse> getLearningContent(
             @PathVariable UUID courseId,
-            @RequestParam UUID classId) {
+            @RequestParam(required = false) UUID classId) {
         return ApiResponse.success(
                 "Learning content loaded successfully",
                 learningContentService.getLearningContent(courseId, classId));

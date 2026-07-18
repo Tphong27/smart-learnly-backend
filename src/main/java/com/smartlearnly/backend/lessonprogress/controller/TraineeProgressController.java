@@ -40,10 +40,16 @@ public class TraineeProgressController {
     @Operation(summary = "Mark lesson, quiz, or flashcard as completed/incomplete")
     public ApiResponse<LessonProgressResponse> updateLessonProgress(
             @PathVariable UUID lessonId,
-            @RequestParam UUID classId,
+            @RequestParam(required = false) UUID courseId,
+            @RequestParam(required = false) UUID classId,
             @Valid @RequestBody UpdateLessonProgressRequest request) {
+
         return ApiResponse.success(
                 "Lesson progress updated successfully",
-                traineeProgressService.updateLessonProgress(lessonId, classId, request.completed()));
+                traineeProgressService.updateLessonProgress(
+                        lessonId,
+                        courseId,
+                        classId,
+                        request.completed()));
     }
 }

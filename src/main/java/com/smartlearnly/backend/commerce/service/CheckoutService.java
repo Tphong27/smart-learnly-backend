@@ -345,9 +345,7 @@ public class CheckoutService {
 
     private void requirePaidCourse(Course course) {
         if (isFree(course)) {
-            throw new BusinessException(
-                    ErrorCode.COURSE_NOT_ENROLLABLE,
-                    "Free courses must use the free enrollment flow");
+            throw new BusinessException(ErrorCode.COURSE_NOT_ENROLLABLE, "Free courses must use the free enrollment flow");
         }
     }
 
@@ -435,7 +433,10 @@ public class CheckoutService {
 
     private boolean isFree(Course course) {
         BigDecimal price = money(course.getPrice());
-        return Boolean.TRUE.equals(course.getFree()) || price.compareTo(BigDecimal.ZERO) == 0;
+        BigDecimal discountedPrice = course.getDiscountedPrice();
+        return Boolean.TRUE.equals(course.getFree())
+                || price.compareTo(BigDecimal.ZERO) == 0
+                || (discountedPrice != null && discountedPrice.compareTo(BigDecimal.ZERO) == 0);
     }
 
     private String generateOrderCode() {

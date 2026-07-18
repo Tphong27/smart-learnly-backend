@@ -15,11 +15,16 @@ public interface LessonProgressRepository extends JpaRepository<LessonProgress, 
             UUID classId,
             UUID lessonIdentityId);
 
+    Optional<LessonProgress> findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(
+            UUID studentId,
+            UUID courseId,
+            UUID lessonIdentityId);
+
     List<LessonProgress> findByStudentIdAndCourseId(UUID studentId, UUID courseId);
 
     List<LessonProgress> findByStudentIdAndClassIdAndCourseId(UUID studentId, UUID classId, UUID courseId);
 
     List<LessonProgress> findByStudentIdAndCourseIdIn(UUID studentId, Collection<UUID> courseIds);
-    
+
     List<LessonProgress> findByStudentIdAndCourseIdAndClassIdIsNull(UUID studentId, UUID courseId);
 }

@@ -32,6 +32,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -56,8 +57,9 @@ public class TraineeProgressService {
                 List<MyCourseResponse> myCourses = courseEnrollmentService.getMyCourses();
 
                 List<CourseProgressItemResponse> courses = myCourses.stream()
-                                .filter(course -> course.enrolledClass() != null)
-                                .map(course -> buildClassProgress(student.getId(), course))
+                                .map(course -> course.enrolledClass() == null
+                                                ? buildOnlineProgress(student.getId(), course)
+                                                : buildClassProgress(student.getId(), course))
                                 .toList();
 
                 List<CourseProgressItemResponse> completedCourseItems = courses.stream()
@@ -78,25 +80,41 @@ public class TraineeProgressService {
         }
 
         @Transactional
-        public LessonProgressResponse updateLessonProgress(UUID lessonId, UUID classId, boolean completed) {
+        public LessonProgressResponse updateLessonProgress(UUID lessonId, UUID requestedCourseId, UUID classId,
+                        boolean completed) {
                 UserAccount student = currentUserService.requireAuthenticatedUser();
-                ClassOffering classOffering = requireClass(classId);
-                UUID courseId = classOffering.getCourseId();
+                UUID courseId;
+                CurriculumResolution resolution;
+                if (classId == null) {
+                        if (requestedCourseId == null) {
+                                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                                                "Course is required for online lesson progress");
+                        }
+                        courseId = requestedCourseId;
+                        resolution = curriculumResolutionService.resolveOnlineLearning(courseId, student.getId());
+                } else {
+                        ClassOffering classOffering = requireClass(classId);
+                        courseId = classOffering.getCourseId();
 
-                CurriculumResolution resolution = curriculumResolutionService
-                                .resolveTraineeLearning(courseId, classId, student.getId());
+                        if (requestedCourseId != null && !requestedCourseId.equals(courseId)) {
+                                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                                                "Class does not belong to the selected course");
+                        }
+
+                        resolution = curriculumResolutionService.resolveTraineeLearning(courseId, classId,
+                                        student.getId());
+                }
+
                 CurriculumLesson lesson = curriculumLessonRepository
                                 .findEffectiveLessonReference(resolution.version().getId(), lessonId)
-                                .orElseThrow(() -> new BusinessException(
-                                                ErrorCode.RESOURCE_NOT_FOUND,
-                                                "Lesson not found in this class curriculum"));
+                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Lesson not found in the effective curriculum"));
 
-                LessonProgress progress = lessonProgressRepository
-                                .findByStudentIdAndClassIdAndLessonIdentityId(
-                                                student.getId(),
-                                                classId,
-                                                lesson.getLessonIdentityId())
-                                .orElseGet(() -> {
+                LessonProgress progress = findLessonProgress(
+                                student.getId(),
+                                courseId,
+                                classId,
+                                lesson.getLessonIdentityId()).orElseGet(() -> {
                                         LessonProgress created = new LessonProgress();
                                         created.setStudentId(student.getId());
                                         created.setCourseId(courseId);
@@ -132,11 +150,22 @@ public class TraineeProgressService {
 
                 ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
 
-                ProgressMetricResponse quizMetric = metric( "Quiz", counts.quizCompleted(), counts.quizTotal());
+                ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
 
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(),
+                                counts.flashcardTotal());
 
                 return calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
+        }
+
+        private Optional<LessonProgress> findLessonProgress(UUID studentId, UUID courseId, UUID classId,
+                        UUID lessonIdentityId) {
+                if (classId == null) {
+                        return lessonProgressRepository.findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(
+                                        studentId, courseId, lessonIdentityId);
+                }
+                return lessonProgressRepository.findByStudentIdAndClassIdAndLessonIdentityId(studentId, classId,
+                                lessonIdentityId);
         }
 
         private CourseProgressItemResponse buildClassProgress(UUID studentId, MyCourseResponse course) {
@@ -183,6 +212,73 @@ public class TraineeProgressService {
                                 quizMetric,
                                 flashcardMetric,
                                 assignmentMetric);
+        }
+
+        private CourseProgressItemResponse buildOnlineProgress(UUID studentId, MyCourseResponse course) {
+                ProgressCounts counts = calculateOnlineCurriculumProgress(studentId, course.id());
+                ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
+                ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
+                int overallPercent = calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
+                return new CourseProgressItemResponse(
+                                course.id(),
+                                course.id(),
+                                course.enrollmentId(),
+
+                                null, // classId
+                                null, // classEnrollmentId
+                                null, // className
+
+                                course.title(),
+                                course.category() == null ? "Course" : course.category().name(),
+
+                                course.enrollmentStatus(),
+                                overallPercent >= 100 ? "COMPLETED" : "IN_PROGRESS",
+
+                                course.accessAllowed(),
+                                course.accessBlockedReason(),
+                                course.avatarUrl(),
+
+                                overallPercent,
+
+                                lessonMetric,
+                                quizMetric,
+                                flashcardMetric,
+                                metric("Assignment", 0, 0));
+        }
+
+        private ProgressCounts calculateOnlineCurriculumProgress(UUID studentId, UUID courseId) {
+                CurriculumResolution resolution = curriculumResolutionService.resolveOnlineLearning(courseId,
+                                studentId);
+
+                List<CurriculumLesson> lessons = orderedCurriculumLessons(resolution.version()).stream()
+                                .filter(this::isVisibleForLearningProgress)
+                                .toList();
+
+                Map<UUID, LessonProgress> progressByLessonIdentityId = lessonProgressRepository
+                                .findByStudentIdAndCourseIdAndClassIdIsNull(studentId, courseId)
+                                .stream()
+                                .filter(progress -> progress.getLessonIdentityId() != null)
+                                .collect(Collectors.toMap(
+                                                LessonProgress::getLessonIdentityId,
+                                                Function.identity(),
+                                                (left, right) -> left));
+
+                return progressCounts(lessons, progressByLessonIdentityId);
+        }
+
+        private ProgressCounts progressCounts(List<CurriculumLesson> lessons,
+                        Map<UUID, LessonProgress> progressByLessonIdentityId) {
+                return new ProgressCounts(
+                                countByProgressGroup(lessons, ProgressGroup.LESSON),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.LESSON),
+                                countByProgressGroup(lessons, ProgressGroup.QUIZ),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.QUIZ),
+                                countByProgressGroup(lessons, ProgressGroup.FLASHCARD),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.FLASHCARD));
         }
 
         private ProgressCounts calculateClassCurriculumProgress(UUID studentId, UUID courseId, UUID classId) {
