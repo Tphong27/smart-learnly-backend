@@ -17,6 +17,82 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     Page<PaymentTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
     Page<PaymentTransaction> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    @Query(
+            value = """
+                    select transaction_record.*
+                    from public.transactions transaction_record
+                    where transaction_record.user_id = :userId
+                      and (
+                          cast(:keyword as text) is null
+                          or coalesce(transaction_record.invoice_number, '') ilike concat('%', cast(:keyword as text), '%')
+                          or cast(transaction_record.id as text) ilike concat('%', cast(:keyword as text), '%')
+                          or cast(transaction_record.order_id as text) ilike concat('%', cast(:keyword as text), '%')
+                      )
+                      and (
+                          cast(:status as text) is null
+                          or cast(transaction_record.status as text) = cast(:status as text)
+                      )
+                    order by transaction_record.created_at desc
+                    """,
+            countQuery = """
+                    select count(*)
+                    from public.transactions transaction_record
+                    where transaction_record.user_id = :userId
+                      and (
+                          cast(:keyword as text) is null
+                          or coalesce(transaction_record.invoice_number, '') ilike concat('%', cast(:keyword as text), '%')
+                          or cast(transaction_record.id as text) ilike concat('%', cast(:keyword as text), '%')
+                          or cast(transaction_record.order_id as text) ilike concat('%', cast(:keyword as text), '%')
+                      )
+                      and (
+                          cast(:status as text) is null
+                          or cast(transaction_record.status as text) = cast(:status as text)
+                      )
+                    """,
+            nativeQuery = true)
+    Page<PaymentTransaction> searchByUserId(
+            @Param("userId") UUID userId,
+            @Param("keyword") String keyword,
+            @Param("status") String status,
+            Pageable pageable);
+
+    @Query(
+            value = """
+                    select transaction_record.*
+                    from public.transactions transaction_record
+                    where (
+                          cast(:keyword as text) is null
+                          or coalesce(transaction_record.invoice_number, '') ilike concat('%', cast(:keyword as text), '%')
+                          or cast(transaction_record.id as text) ilike concat('%', cast(:keyword as text), '%')
+                          or cast(transaction_record.order_id as text) ilike concat('%', cast(:keyword as text), '%')
+                      )
+                      and (
+                          cast(:status as text) is null
+                          or cast(transaction_record.status as text) = cast(:status as text)
+                      )
+                    order by transaction_record.created_at desc
+                    """,
+            countQuery = """
+                    select count(*)
+                    from public.transactions transaction_record
+                    where (
+                          cast(:keyword as text) is null
+                          or coalesce(transaction_record.invoice_number, '') ilike concat('%', cast(:keyword as text), '%')
+                          or cast(transaction_record.id as text) ilike concat('%', cast(:keyword as text), '%')
+                          or cast(transaction_record.order_id as text) ilike concat('%', cast(:keyword as text), '%')
+                      )
+                      and (
+                          cast(:status as text) is null
+                          or cast(transaction_record.status as text) = cast(:status as text)
+                      )
+                    """,
+            nativeQuery = true)
+    Page<PaymentTransaction> searchAll(
+            @Param("keyword") String keyword,
+            @Param("status") String status,
+            Pageable pageable);
+
     Optional<PaymentTransaction> findByIdAndUserId(UUID id, UUID userId);
 
     Optional<PaymentTransaction> findFirstByOrderIdOrderByCreatedAtDesc(UUID orderId);

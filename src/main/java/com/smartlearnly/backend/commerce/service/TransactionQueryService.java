@@ -28,23 +28,35 @@ public class TransactionQueryService {
     private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
-    public PageResponse<TransactionResponse> listMyTransactions(int page, int size) {
+    public PageResponse<TransactionResponse> listMyTransactions(
+            int page,
+            int size,
+            String keyword,
+            TransactionStatus status) {
         UUID userId = currentUserService.requireAuthenticatedUser().getId();
-        Page<PaymentTransaction> transactions = paymentTransactionRepository.findByUserIdOrderByCreatedAtDesc(
+        Page<PaymentTransaction> transactions = paymentTransactionRepository.searchByUserId(
                 userId,
-                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
+                normalizeKeyword(keyword),
+                status == null ? null : status.name(),
+                createPageRequest(page, size));
 
         return toPageResponse(transactions);
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<TransactionResponse> listAllTransactions(int page, int size) {
+    public PageResponse<TransactionResponse> listAllTransactions(
+            int page,
+            int size,
+            String keyword,
+            TransactionStatus status) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         if (!isAdminOrTmo(actor)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "Only Admin or TMO can view all transactions");
         }
-        Page<PaymentTransaction> transactions = paymentTransactionRepository.findAllByOrderByCreatedAtDesc(
-                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
+        Page<PaymentTransaction> transactions = paymentTransactionRepository.searchAll(
+                normalizeKeyword(keyword),
+                status == null ? null : status.name(),
+                createPageRequest(page, size));
 
         return toPageResponse(transactions);
     }
@@ -101,6 +113,18 @@ public class TransactionQueryService {
                 transaction.getPaidAt(),
                 transaction.getExpiresAt(),
                 transaction.getCreatedAt());
+    }
+
+    private PageRequest createPageRequest(int page, int size) {
+        return PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+    }
+
+    private String normalizeKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+
+        return keyword.trim();
     }
 
     private boolean isAdminOrTmo(UserAccount user) {
