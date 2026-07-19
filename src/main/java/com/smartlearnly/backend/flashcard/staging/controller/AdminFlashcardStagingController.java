@@ -6,6 +6,8 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingCardResponse;
@@ -173,6 +175,18 @@ public class AdminFlashcardStagingController {
     public ApiResponse<Void> rejectCard(@PathVariable UUID stagingCardId) {
         adminFlashcardStagingService.rejectCard(stagingCardId);
         return ApiResponse.success("Flashcard staging card rejected successfully");
+    }
+
+    @PostMapping("/flashcard-sets/{setId}/staging/reject")
+    @Operation(summary = "Reject flashcard staging cards")
+    public ApiResponse<RejectStagingCardsResponse> reject(
+            @PathVariable UUID setId,
+            @Valid @RequestBody RejectStagingCardsRequest request
+    ) {
+        return ApiResponse.success(
+                "Flashcard staging cards rejected successfully",
+                adminFlashcardStagingService.reject(setId, request)
+        );
     }
 
     @PostMapping("/flashcard-sets/{setId}/staging/approve")
