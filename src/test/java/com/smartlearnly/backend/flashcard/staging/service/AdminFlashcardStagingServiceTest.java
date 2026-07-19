@@ -21,6 +21,8 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.UpdateStagingCardRequest;
@@ -48,6 +50,7 @@ import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -865,6 +868,256 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void approveAcceptsOneValidDraftId() {
+        assertApproveBulkSize(1);
+    }
+
+    @Test
+    void approveAcceptsFiveValidDraftIds() {
+        assertApproveBulkSize(5);
+    }
+
+    @Test
+    void approveAcceptsFortyNineValidDraftIds() {
+        assertApproveBulkSize(49);
+    }
+
+    @Test
+    void approveAcceptsFiftyValidDraftIds() {
+        assertApproveBulkSize(50);
+    }
+
+    @Test
+    void batchRejectAcceptsOneValidDraftId() {
+        assertRejectBulkSize(1);
+    }
+
+    @Test
+    void batchRejectAcceptsFiveValidDraftIds() {
+        assertRejectBulkSize(5);
+    }
+
+    @Test
+    void batchRejectAcceptsFortyNineValidDraftIds() {
+        assertRejectBulkSize(49);
+    }
+
+    @Test
+    void batchRejectAcceptsFiftyValidDraftIds() {
+        assertRejectBulkSize(50);
+    }
+
+    @Test
+    void batchRejectRejectsDuplicateRequestIdsBeforeWrites() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet), "draft", 0);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.reject(
+                flashcardSet.getId(),
+                new RejectStagingCardsRequest(List.of(card.getId(), card.getId()))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        assertThat(card.getStatus()).isEqualTo("draft");
+        verify(stagingCardRepository, never()).findByIdIn(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void batchRejectRejectsEmptyListBeforeWrites() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.reject(
+                flashcardSet.getId(),
+                new RejectStagingCardsRequest(List.of())
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(stagingCardRepository, never()).findByIdIn(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void batchRejectRejectsMissingIdBeforeWrites() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingBatch batch = stagingBatch(flashcardSet);
+        FlashcardStagingCard existing = stagingCard(batch, "draft", 0);
+        UUID missingId = UUID.randomUUID();
+        List<UUID> requestedIds = List.of(existing.getId(), missingId);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(stagingCardRepository.findByIdIn(requestedIds)).thenReturn(List.of(existing));
+
+        assertThatThrownBy(() -> service.reject(
+                flashcardSet.getId(),
+                new RejectStagingCardsRequest(requestedIds)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+
+        assertThat(existing.getStatus()).isEqualTo("draft");
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void batchRejectRejectsNonDraftIdWithoutMutatingAnyCard() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingBatch batch = stagingBatch(flashcardSet);
+        FlashcardStagingCard draft = stagingCard(batch, "draft", 0);
+        FlashcardStagingCard approved = stagingCard(batch, "approved", 1);
+        List<UUID> requestedIds = List.of(draft.getId(), approved.getId());
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(stagingCardRepository.findByIdIn(requestedIds)).thenReturn(List.of(draft, approved));
+
+        assertThatThrownBy(() -> service.reject(
+                flashcardSet.getId(),
+                new RejectStagingCardsRequest(requestedIds)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        assertThat(draft.getStatus()).isEqualTo("draft");
+        assertThat(approved.getStatus()).isEqualTo("approved");
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void batchRejectRejectsCardFromAnotherSetBeforeWrites() {
+        FlashcardSet selectedSet = flashcardSet();
+        FlashcardSet otherSet = flashcardSet();
+        FlashcardStagingCard otherCard = stagingCard(stagingBatch(otherSet), "draft", 0);
+        List<UUID> requestedIds = List.of(otherCard.getId());
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(selectedSet.getId())).thenReturn(Optional.of(selectedSet));
+        when(stagingCardRepository.findByIdIn(requestedIds)).thenReturn(List.of(otherCard));
+
+        assertThatThrownBy(() -> service.reject(
+                selectedSet.getId(),
+                new RejectStagingCardsRequest(requestedIds)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        assertThat(otherCard.getStatus()).isEqualTo("draft");
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void batchRejectEnforcesMaximumCollectionSizeBeforeWrites() {
+        FlashcardSet flashcardSet = flashcardSet();
+        List<UUID> requestedIds = new ArrayList<>();
+        for (int index = 0; index < 501; index += 1) {
+            requestedIds.add(UUID.randomUUID());
+        }
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertThatThrownBy(() -> service.reject(
+                flashcardSet.getId(),
+                new RejectStagingCardsRequest(requestedIds)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(stagingCardRepository, never()).findByIdIn(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void approveRejectsDuplicateRequestIdsBeforeWrites() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet), "draft", 0);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+
+        assertThatThrownBy(() -> service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(List.of(card.getId(), card.getId()))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        assertThat(card.getStatus()).isEqualTo("draft");
+        verify(stagingCardRepository, never()).findByIdIn(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void approveRejectsMissingIdBeforeWrites() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingBatch batch = stagingBatch(flashcardSet);
+        FlashcardStagingCard existing = stagingCard(batch, "draft", 0);
+        UUID missingId = UUID.randomUUID();
+        List<UUID> requestedIds = List.of(existing.getId(), missingId);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(stagingCardRepository.findByIdIn(requestedIds)).thenReturn(List.of(existing));
+
+        assertThatThrownBy(() -> service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(requestedIds)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+
+        assertThat(existing.getStatus()).isEqualTo("draft");
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void approveRejectsCardFromAnotherSetBeforeWrites() {
+        FlashcardSet selectedSet = flashcardSet();
+        FlashcardSet otherSet = flashcardSet();
+        FlashcardStagingCard otherCard = stagingCard(stagingBatch(otherSet), "draft", 0);
+        List<UUID> requestedIds = List.of(otherCard.getId());
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(selectedSet.getId())).thenReturn(Optional.of(selectedSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(stagingCardRepository.findByIdIn(requestedIds)).thenReturn(List.of(otherCard));
+
+        assertThatThrownBy(() -> service.approve(
+                selectedSet.getId(),
+                new ApproveStagingCardsRequest(requestedIds)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        assertThat(otherCard.getStatus()).isEqualTo("draft");
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void approveEnforcesMaximumCollectionSizeBeforeWrites() {
+        FlashcardSet flashcardSet = flashcardSet();
+        List<UUID> requestedIds = new ArrayList<>();
+        for (int index = 0; index < 501; index += 1) {
+            requestedIds.add(UUID.randomUUID());
+        }
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+
+        assertThatThrownBy(() -> service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(requestedIds)
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+
+        verify(stagingCardRepository, never()).findByIdIn(anyList());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void approveSelectedStagingCardsCreatesRealFlashcardsAppendedAfterExistingMaxOrderIndex() {
         FlashcardSet flashcardSet = flashcardSet();
         UserAccount actor = actor();
@@ -1159,6 +1412,81 @@ class AdminFlashcardStagingServiceTest {
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).imported()).isFalse();
+    }
+
+    private void assertApproveBulkSize(int size) {
+        FlashcardSet flashcardSet = flashcardSet();
+        UserAccount actor = actor();
+        FlashcardStagingBatch batch = stagingBatch(flashcardSet);
+        List<FlashcardStagingCard> cards = stagingCards(batch, size);
+        List<UUID> requestedIds = cards.stream().map(FlashcardStagingCard::getId).toList();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+        when(stagingCardRepository.findByIdIn(requestedIds)).thenReturn(cards);
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of());
+        when(flashcardCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardCard> savedCards = invocation.getArgument(0);
+            savedCards.forEach(card -> card.setId(UUID.randomUUID()));
+            return savedCards;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stagingCardRepository.countByBatchIdAndStatus(batch.getId(), "draft")).thenReturn(0L);
+
+        ApproveStagingCardsResponse response = service.approve(
+                flashcardSet.getId(),
+                new ApproveStagingCardsRequest(requestedIds)
+        );
+
+        assertThat(response.approvedCount()).isEqualTo(size);
+        assertThat(response.flashcardIds()).hasSize(size);
+        ArgumentCaptor<List<FlashcardCard>> flashcardsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(flashcardCardRepository).saveAll(flashcardsCaptor.capture());
+        assertThat(flashcardsCaptor.getValue()).hasSize(size);
+        assertThat(flashcardsCaptor.getValue()).extracting(FlashcardCard::getOrderIndex)
+                .containsExactlyElementsOf(orderIndexes(size));
+        assertThat(cards).extracting(FlashcardStagingCard::getStatus).containsOnly("approved");
+        assertThat(batch.getStatus()).isEqualTo("approved");
+        assertThat(batch.getApprovedBy()).isSameAs(actor);
+    }
+
+    private void assertRejectBulkSize(int size) {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardStagingBatch batch = stagingBatch(flashcardSet);
+        List<FlashcardStagingCard> cards = stagingCards(batch, size);
+        List<UUID> requestedIds = cards.stream().map(FlashcardStagingCard::getId).toList();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(stagingCardRepository.findByIdIn(requestedIds)).thenReturn(cards);
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RejectStagingCardsResponse response = service.reject(
+                flashcardSet.getId(),
+                new RejectStagingCardsRequest(requestedIds)
+        );
+
+        assertThat(response.rejectedCount()).isEqualTo(size);
+        ArgumentCaptor<List<FlashcardStagingCard>> rejectedCaptor = ArgumentCaptor.forClass(List.class);
+        verify(stagingCardRepository).saveAll(rejectedCaptor.capture());
+        assertThat(rejectedCaptor.getValue()).hasSize(size);
+        assertThat(cards).extracting(FlashcardStagingCard::getStatus).containsOnly("rejected");
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    private List<Integer> orderIndexes(int size) {
+        List<Integer> indexes = new ArrayList<>();
+        for (int index = 0; index < size; index += 1) {
+            indexes.add(index);
+        }
+        return indexes;
+    }
+
+    private List<FlashcardStagingCard> stagingCards(FlashcardStagingBatch batch, int size) {
+        List<FlashcardStagingCard> cards = new ArrayList<>();
+        for (int index = 0; index < size; index += 1) {
+            cards.add(stagingCard(batch, "draft", index));
+        }
+        return cards;
     }
 
     private FlashcardSet flashcardSet() {

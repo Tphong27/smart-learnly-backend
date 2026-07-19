@@ -13,6 +13,8 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionAnswerResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
@@ -76,6 +78,7 @@ public class AdminFlashcardStagingService {
     private static final String STATUS_REJECTED = "rejected";
     private static final List<String> VISIBLE_STAGING_STATUSES = List.of(STATUS_DRAFT, STATUS_APPROVED);
     private static final Set<String> IMPORTED_SOURCE_STATUSES = Set.of(STATUS_DRAFT, STATUS_APPROVED);
+    private static final int MAX_STAGING_ACTION_CARD_COUNT = 500;
     private static final long MAX_GENERATION_FILE_SIZE_BYTES = 10L * 1024L * 1024L;
     private static final long MAX_TRANSCRIPT_FILE_SIZE_BYTES = 5L * 1024L * 1024L;
     private static final int DEFAULT_DESIRED_COUNT = 10;
@@ -393,9 +396,29 @@ public class AdminFlashcardStagingService {
     }
 
     @Transactional
+    public RejectStagingCardsResponse reject(UUID setId, RejectStagingCardsRequest request) {
+        resolveSetContext(setId);
+        if (request == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one staging card id is required");
+        }
+        List<FlashcardStagingCard> cards = resolveCardsForAction(
+                setId,
+                request.stagingCardIds(),
+                "Rejection request contains duplicate staging card ids",
+                "Only draft staging cards can be rejected"
+        );
+
+        for (FlashcardStagingCard card : cards) {
+            card.setStatus(STATUS_REJECTED);
+        }
+        List<FlashcardStagingCard> savedCards = stagingCardRepository.saveAll(cards);
+        return new RejectStagingCardsResponse(savedCards.size());
+    }
+
+    @Transactional
     public ApproveStagingCardsResponse approve(UUID setId, ApproveStagingCardsRequest request) {
         SetContext context = resolveSetContext(setId);
-        if (request == null || request.stagingCardIds() == null || request.stagingCardIds().isEmpty()) {
+        if (request == null) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one staging card id is required");
         }
         UserAccount actor = currentUserService.requireAuthenticatedUser();
@@ -430,7 +453,21 @@ public class AdminFlashcardStagingService {
     }
 
     private List<FlashcardStagingCard> resolveCardsForApproval(UUID setId, List<UUID> requestedIds) {
-        assertNoDuplicates(requestedIds, "Approval request contains duplicate staging card ids");
+        return resolveCardsForAction(
+                setId,
+                requestedIds,
+                "Approval request contains duplicate staging card ids",
+                "Only draft staging cards can be approved"
+        );
+    }
+
+    private List<FlashcardStagingCard> resolveCardsForAction(
+            UUID setId,
+            List<UUID> requestedIds,
+            String duplicateMessage,
+            String draftMessage
+    ) {
+        validateStagingActionIds(requestedIds, duplicateMessage);
         Map<UUID, FlashcardStagingCard> cardsById = stagingCardRepository.findByIdIn(requestedIds).stream()
                 .collect(Collectors.toMap(FlashcardStagingCard::getId, Function.identity()));
         if (cardsById.size() != requestedIds.size()) {
@@ -443,10 +480,26 @@ public class AdminFlashcardStagingService {
             if (!setId.equals(card.getBatch().getFlashcardSet().getId())) {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST, "Staging card must belong to the selected flashcard set");
             }
-            requireDraftCard(card, "Only draft staging cards can be approved");
+            requireDraftCard(card, draftMessage);
             cards.add(card);
         }
         return cards;
+    }
+
+    private void validateStagingActionIds(List<UUID> requestedIds, String duplicateMessage) {
+        if (requestedIds == null || requestedIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one staging card id is required");
+        }
+        if (requestedIds.size() > MAX_STAGING_ACTION_CARD_COUNT) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Staging card request must not exceed 500 cards"
+            );
+        }
+        if (requestedIds.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Staging card id must not be null");
+        }
+        assertNoDuplicates(requestedIds, duplicateMessage);
     }
 
     private void assertNoDuplicateApproval(UUID setId, List<FlashcardStagingCard> cards) {
