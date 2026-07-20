@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface CurriculumLessonRepository extends JpaRepository<CurriculumLesson, UUID> {
+    List<CurriculumLesson> findByCurriculumVersionIdOrderBySortOrderAscCreatedAtAsc(UUID curriculumVersionId);
+
     List<CurriculumLesson> findBySectionIdOrderBySortOrderAscCreatedAtAsc(UUID sectionId);
 
     Optional<CurriculumLesson> findByIdAndSectionId(UUID id, UUID sectionId);
