@@ -64,6 +64,8 @@ app:
         ai-provider: ${AI_PROVIDER:none}
         payment-provider: ${PAYMENT_PROVIDER:none}
     payment:
+        checkout-expiration: ${CHECKOUT_EXPIRATION:PT30M}
+        order-expiration-interval: ${ORDER_EXPIRATION_INTERVAL:PT1M}
         sepay:
             webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
             api-token: ${SEPAY_API_TOKEN:}

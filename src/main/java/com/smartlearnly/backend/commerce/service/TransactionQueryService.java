@@ -62,6 +62,20 @@ public class TransactionQueryService {
     }
 
     @Transactional(readOnly = true)
+    public TransactionResponse getTransaction(UUID transactionId) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+
+        PaymentTransaction transaction = paymentTransactionRepository.findById(transactionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Transaction was not found"));
+
+        if (!transaction.getUserId().equals(actor.getId()) && !isAdminOrTmo(actor)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "Transaction access is denied");
+        }
+
+        return toTransactionResponse(transaction);
+    }
+
+    @Transactional(readOnly = true)
     public InvoiceResponse getInvoice(UUID transactionId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 

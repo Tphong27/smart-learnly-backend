@@ -82,7 +82,9 @@ public class OpenApiConfig {
                 .pathsToMatch(
                         "/api/v1/cart/**",
                         "/api/v1/orders/**",
-                        "/api/v1/transactions/**"
+                        "/api/v1/transactions/**",
+                        "/api/v1/sepay-events/**",
+                        "/api/v1/payments/**"
                 )
                 .build();
     }

@@ -51,6 +51,15 @@ public class TransactionController {
         return ApiResponse.success("Transactions loaded successfully", result);
     }
 
+    @GetMapping("/{transactionId}")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
+    @Operation(summary = "Get transaction detail")
+    public ApiResponse<TransactionResponse> getTransaction(@PathVariable UUID transactionId) {
+        return ApiResponse.success(
+                "Transaction loaded successfully",
+                transactionQueryService.getTransaction(transactionId));
+    }
+
     @GetMapping("/{transactionId}/invoice")
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
     @Operation(summary = "Get transaction invoice")

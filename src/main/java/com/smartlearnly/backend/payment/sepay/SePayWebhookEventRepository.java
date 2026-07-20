@@ -1,7 +1,11 @@
 package com.smartlearnly.backend.payment.sepay;
 
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -80,5 +84,71 @@ public class SePayWebhookEventRepository {
                 """,
                 reason,
                 gatewayEventId);
+    }
+
+    public long countEvents(String status) {
+        String normalizedStatus = normalizeStatus(status);
+        if (normalizedStatus == null) {
+            Long count = jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM public.sepay_webhook_events",
+                    Long.class);
+            return count == null ? 0L : count;
+        }
+
+        Long count = jdbcTemplate.queryForObject(
+                """
+                SELECT count(*)
+                FROM public.sepay_webhook_events
+                WHERE processing_status = ?
+                """,
+                Long.class,
+                normalizedStatus);
+        return count == null ? 0L : count;
+    }
+
+    public List<SePayWebhookEventResponse> findEvents(String status, int limit, int offset) {
+        String normalizedStatus = normalizeStatus(status);
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("""
+                SELECT id,
+                       gateway_event_id,
+                       processing_status,
+                       failure_reason,
+                       received_at,
+                       processed_at
+                FROM public.sepay_webhook_events
+                """);
+
+        if (normalizedStatus != null) {
+            sql.append(" WHERE processing_status = ? ");
+            args.add(normalizedStatus);
+        }
+
+        sql.append(" ORDER BY received_at DESC LIMIT ? OFFSET ? ");
+        args.add(limit);
+        args.add(offset);
+
+        return jdbcTemplate.query(
+                sql.toString(),
+                (resultSet, rowNumber) -> new SePayWebhookEventResponse(
+                        resultSet.getObject("id", UUID.class),
+                        resultSet.getLong("gateway_event_id"),
+                        resultSet.getString("processing_status"),
+                        resultSet.getString("failure_reason"),
+                        toInstant(resultSet.getTimestamp("received_at")),
+                        toInstant(resultSet.getTimestamp("processed_at"))
+                ),
+                args.toArray());
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        return status.trim().toUpperCase();
+    }
+
+    private Instant toInstant(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
     }
 }
