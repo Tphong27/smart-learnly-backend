@@ -44,6 +44,8 @@ class ClassAdminServiceTest {
         @Mock
         private CurrentUserService currentUserService;
         @Mock
+        private ClassSessionScheduleService classSessionScheduleService;
+        @Mock
         private AuditLogService auditLogService;
 
         private ClassAdminService service;
@@ -56,7 +58,8 @@ class ClassAdminServiceTest {
                                 courseRepository,
                                 userRepository,
                                 currentUserService,
-                                auditLogService);
+                                auditLogService,
+                                classSessionScheduleService);
         }
 
         @Test
