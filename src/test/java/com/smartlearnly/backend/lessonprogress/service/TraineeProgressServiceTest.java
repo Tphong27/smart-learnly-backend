@@ -93,7 +93,7 @@ class TraineeProgressServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         LessonProgressResponse response = traineeProgressService
-                .updateLessonProgress(lessonIdentityId, classA, true);
+                .updateLessonProgress(lessonIdentityId, null, classA, true);
 
         // Progress is persisted scoped to class A and the shared lesson identity.
         ArgumentCaptor<LessonProgress> captor = ArgumentCaptor.forClass(LessonProgress.class);

@@ -13,6 +13,7 @@ import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatusHistory;
@@ -43,6 +44,8 @@ class ClassEnrollmentServiceTest {
     private CourseEnrollmentService courseEnrollmentService;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private CurrentUserService currentUserService;
 
     private ClassEnrollmentService service;
 
@@ -54,7 +57,8 @@ class ClassEnrollmentServiceTest {
                 enrollmentStatusHistoryRepository,
                 successfulPaymentRepository,
                 courseEnrollmentService,
-                auditLogService
+                auditLogService,
+                currentUserService
         );
     }
 
