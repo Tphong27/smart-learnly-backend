@@ -1119,6 +1119,9 @@ class AdminFlashcardStagingServiceTest {
         verify(stagingCardRepository, never()).findByIdIn(anyList());
         verify(stagingCardRepository, never()).saveAll(anyList());
         verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void rejectStagingCardRequiresAccessToItsOwningSet() {
         FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet()), "draft", 0);
         when(stagingCardRepository.findById(card.getId())).thenReturn(Optional.of(card));
