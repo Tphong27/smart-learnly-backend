@@ -19,6 +19,7 @@ public class FlashcardStagingCardEditService {
 
     @Transactional
     public StagingCardResponse updateCard(UUID stagingCardId, UpdateStagingCardRequest request) {
+        adminFlashcardStagingService.requireCardAccess(stagingCardId);
         FlashcardStagingCard card = stagingCardRepository.findById(stagingCardId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard staging card was not found"));
         if (!"draft".equalsIgnoreCase(card.getStatus())) {

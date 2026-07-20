@@ -25,6 +25,7 @@ public class HlsProperties {
     private String r2BasePath = "hls";
     private String rawBucket;
     private String outputBucket;
+    private String aiAudioBucket;
     private String callbackSecret;
     private int callbackTimestampToleranceSeconds = 300;
     private int segmentDuration = 10;

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-if [[ $# -lt 2 || $# -gt 6 ]]; then
-    echo "Usage: $0 <input-file> <output-dir> [segment-duration] [qualities-file] [qualities] [ffmpeg-preset]" >&2
+if [[ $# -lt 2 || $# -gt 7 ]]; then
+    echo "Usage: $0 <input-file> <output-dir> [segment-duration] [qualities-file] [qualities] [ffmpeg-preset] [audio-duration-file]" >&2
     exit 64
 fi
 
@@ -12,6 +12,7 @@ segment_duration=${3:-10}
 qualities_file=${4:-"${output_dir}.qualities"}
 requested_qualities=${5:-"480p,720p"}
 ffmpeg_preset=${6:-"veryfast"}
+audio_duration_file=${7:-"${output_dir}.audio-duration-ms"}
 
 if [[ -z "$output_dir" ||
     "$output_dir" != /* ||
@@ -75,6 +76,36 @@ fi
 rm -rf -- "$output_dir"
 mkdir -p -- "$output_dir"
 mkdir -p -- "$(dirname "$qualities_file")"
+mkdir -p -- "$(dirname "$audio_duration_file")"
+
+rm -f -- "$audio_duration_file"
+if ffprobe -v error -select_streams a:0 -show_entries stream=index -of csv=p=0 "$input_file" | grep -q '^[0-9]'; then
+    mkdir -p -- "${output_dir}/ai"
+    ffmpeg \
+        -hide_banner \
+        -loglevel warning \
+        -y \
+        -i "$input_file" \
+        -map 0:a:0 \
+        -vn \
+        -ac 1 \
+        -ar 16000 \
+        -b:a 48k \
+        "${output_dir}/ai/source.mp3"
+    test -s "${output_dir}/ai/source.mp3"
+    audio_duration_seconds=$(ffprobe \
+        -v error \
+        -show_entries format=duration \
+        -of csv=p=0 \
+        "${output_dir}/ai/source.mp3")
+    awk -v duration="$audio_duration_seconds" 'BEGIN {
+        milliseconds = int((duration * 1000) + 0.5)
+        if (milliseconds <= 0) exit 1
+        print milliseconds
+    }' >"$audio_duration_file"
+else
+    echo "Source video has no audio stream; AI audio derivative was skipped."
+fi
 
 key_file="${output_dir}/enc.key"
 key_info_file=$(mktemp)

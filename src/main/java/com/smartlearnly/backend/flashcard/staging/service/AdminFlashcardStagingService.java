@@ -4,6 +4,11 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.service.TrainerClassCurriculumService;
 import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
@@ -55,6 +60,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -102,6 +108,12 @@ public class AdminFlashcardStagingService {
     );
 
     private final FlashcardSetRepository flashcardSetRepository;
+    @Autowired
+    private CurriculumLessonRepository curriculumLessonRepository;
+    @Autowired
+    private CourseAccessService courseAccessService;
+    @Autowired
+    private TrainerClassCurriculumService trainerClassCurriculumService;
     private final FlashcardCardRepository flashcardCardRepository;
     private final FlashcardStagingBatchRepository stagingBatchRepository;
     private final FlashcardStagingCardRepository stagingCardRepository;
@@ -179,7 +191,7 @@ public class AdminFlashcardStagingService {
         Map<UUID, String> bankNames = bankNames(questions.stream().map(Question::getQuestionBankId).collect(Collectors.toSet()));
         FlashcardStagingBatch batch = new FlashcardStagingBatch();
         batch.setFlashcardSet(context.flashcardSet());
-        batch.setLesson(context.lesson());
+        applyBatchTarget(batch, context);
         batch.setCourse(context.course());
         batch.setCreatedBy(actor);
         batch.setSourceType(SOURCE_TYPE_QUESTION_BANK);
@@ -377,7 +389,7 @@ public class AdminFlashcardStagingService {
 
     @Transactional
     public StagingCardResponse updateCard(UUID stagingCardId, UpdateStagingCardRequest request) {
-        FlashcardStagingCard card = findStagingCard(stagingCardId);
+        FlashcardStagingCard card = findAuthorizedStagingCard(stagingCardId);
         requireDraftCard(card, "Only draft staging cards can be edited");
         applyUpdate(card, request);
         validateCard(card);
@@ -386,7 +398,7 @@ public class AdminFlashcardStagingService {
 
     @Transactional
     public void rejectCard(UUID stagingCardId) {
-        FlashcardStagingCard card = findStagingCard(stagingCardId);
+        FlashcardStagingCard card = findAuthorizedStagingCard(stagingCardId);
         requireDraftCard(card, "Only draft staging cards can be rejected");
         card.setStatus(STATUS_REJECTED);
         stagingCardRepository.save(card);
@@ -635,7 +647,7 @@ public class AdminFlashcardStagingService {
 
         FlashcardStagingBatch batch = new FlashcardStagingBatch();
         batch.setFlashcardSet(context.flashcardSet());
-        batch.setLesson(context.lesson());
+        applyBatchTarget(batch, context);
         batch.setCourse(context.course());
         batch.setCreatedBy(actor);
         batch.setSourceType(sourceType);
@@ -824,18 +836,57 @@ public class AdminFlashcardStagingService {
         FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
         Lesson lesson = flashcardSet.getLesson();
-        if (lesson == null || lesson.getCourse() == null || lesson.getCourse().getDeletedAt() != null) {
+        if (lesson != null) {
+            if (lesson.getCourse() == null || lesson.getCourse().getDeletedAt() != null) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
+            }
+            if (lesson.getType() != LessonType.FLASHCARD) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard set is not linked to a flashcard lesson");
+            }
+            if (courseAccessService != null) {
+                courseAccessService.requireReadableCourse(lesson.getCourse().getId());
+            }
+            return new SetContext(flashcardSet, lesson, null, lesson.getCourse());
+        }
+        UUID curriculumLessonId = flashcardSet.getCurriculumLessonId();
+        CurriculumLesson curriculumLesson = curriculumLessonId == null || curriculumLessonRepository == null ? null
+                : curriculumLessonRepository.findById(curriculumLessonId).orElse(null);
+        Course course = flashcardSet.getCourse();
+        if (curriculumLesson == null || curriculumLesson.getType() != LessonType.FLASHCARD
+                || course == null || course.getDeletedAt() != null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
         }
-        if (lesson.getType() != LessonType.FLASHCARD) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard set is not linked to a flashcard lesson");
+        var version = curriculumLesson.getSection().getCurriculumVersion();
+        if (version.getScope() == CurriculumScope.CLASS) {
+            if (version.getClassId() == null) {
+                throw new BusinessException(ErrorCode.CONFLICT, "Class curriculum is inconsistent");
+            }
+            trainerClassCurriculumService.requireOwnedClassLessonForRead(version.getClassId(), curriculumLessonId);
+        } else {
+            courseAccessService.requireReadableCourse(course.getId());
         }
-        return new SetContext(flashcardSet, lesson, lesson.getCourse());
+        return new SetContext(flashcardSet, null, curriculumLessonId, course);
+    }
+
+    private void applyBatchTarget(FlashcardStagingBatch batch, SetContext context) {
+        batch.setLesson(context.lesson());
+        batch.setCurriculumLessonId(context.curriculumLessonId());
     }
 
     private FlashcardStagingCard findStagingCard(UUID stagingCardId) {
         return stagingCardRepository.findById(stagingCardId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard staging card was not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public void requireCardAccess(UUID stagingCardId) {
+        findAuthorizedStagingCard(stagingCardId);
+    }
+
+    private FlashcardStagingCard findAuthorizedStagingCard(UUID stagingCardId) {
+        FlashcardStagingCard card = findStagingCard(stagingCardId);
+        resolveSetContext(card.getBatch().getFlashcardSet().getId());
+        return card;
     }
 
     private List<Question> loadQuestionsInRequestOrder(List<UUID> questionIds) {
@@ -1057,7 +1108,9 @@ public class AdminFlashcardStagingService {
         return new StagingBatchResponse(
                 batch.getId(),
                 batch.getFlashcardSet().getId(),
-                batch.getLesson().getId(),
+                batch.getLesson() == null ? batch.getCurriculumLessonId() : batch.getLesson().getId(),
+                batch.getCurriculumLessonId(),
+                batch.getSourceVideoAiContentId(),
                 batch.getCourse().getId(),
                 batch.getSourceType(),
                 batch.getStatus(),
@@ -1128,7 +1181,12 @@ public class AdminFlashcardStagingService {
         return value != null && !value.isBlank();
     }
 
-    private record SetContext(FlashcardSet flashcardSet, Lesson lesson, Course course) {
+    private record SetContext(
+            FlashcardSet flashcardSet,
+            Lesson lesson,
+            UUID curriculumLessonId,
+            Course course
+    ) {
     }
 
     private record TextGenerationInput(

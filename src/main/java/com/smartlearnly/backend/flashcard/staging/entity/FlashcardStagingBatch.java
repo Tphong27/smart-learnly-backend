@@ -34,9 +34,15 @@ public class FlashcardStagingBatch {
     @JoinColumn(name = "flashcard_set_id", nullable = false)
     private FlashcardSet flashcardSet;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "lesson_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lesson_id")
     private Lesson lesson;
+
+    @Column(name = "curriculum_lesson_id")
+    private UUID curriculumLessonId;
+
+    @Column(name = "source_video_ai_content_id")
+    private UUID sourceVideoAiContentId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "course_id", nullable = false)
