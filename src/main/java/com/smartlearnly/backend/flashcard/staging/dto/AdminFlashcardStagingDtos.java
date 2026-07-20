@@ -117,6 +117,13 @@ public final class AdminFlashcardStagingDtos {
     ) {
     }
 
+    public record RejectStagingCardsRequest(
+            @NotEmpty(message = "At least one staging card id is required")
+            @Size(max = 500, message = "Rejection request must not exceed 500 staging cards")
+            List<@NotNull(message = "Staging card id must not be null") UUID> stagingCardIds
+    ) {
+    }
+
     public record UpdateStagingCardRequest(
             String frontText,
 
@@ -205,6 +212,11 @@ public final class AdminFlashcardStagingDtos {
     public record ApproveStagingCardsResponse(
             int approvedCount,
             List<UUID> flashcardIds
+    ) {
+    }
+
+    public record RejectStagingCardsResponse(
+            int rejectedCount
     ) {
     }
 }
