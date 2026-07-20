@@ -10,12 +10,12 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record CreateClassRequest(
-                @NotNull UUID courseId,
-                @NotBlank @Size(max = 255) String className,
-                UUID trainerId,
-                @Size(max = 2000) String scheduleDescription,
-                LocalDate startDate,
-                LocalDate endDate,
-                @NotNull @Positive Integer maxStudents,
-                @NotNull @DecimalMin(value = "0.0", inclusive = true) BigDecimal price) {
+        @NotNull UUID courseId,
+        @NotBlank @Size(max = 255) String className,
+        UUID trainerId,
+        @NotBlank @Size(max = 2000) String scheduleDescription,
+        LocalDate startDate,
+        LocalDate endDate,
+        @NotNull @Positive Integer maxStudents,
+        @NotNull @DecimalMin(value = "0.0", inclusive = true) BigDecimal price) {
 }

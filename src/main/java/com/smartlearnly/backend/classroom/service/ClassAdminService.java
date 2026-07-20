@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.util.Locale;
 import java.util.List;
 import java.util.UUID;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -40,6 +41,7 @@ public class ClassAdminService {
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
+    private final ClassSessionScheduleService classSessionScheduleService;
 
     @Transactional(readOnly = true)
     public List<ClassStatusOptionResponse> listStatusOptions() {
@@ -100,7 +102,8 @@ public class ClassAdminService {
         classOffering.setStatus(ClassStatus.UPCOMING);
         classOffering.setCreatedBy(actor.getId());
 
-        ClassOffering saved = classOfferingRepository.save(classOffering);
+        ClassOffering saved = classOfferingRepository.saveAndFlush(classOffering);
+        classSessionScheduleService.synchronizeFutureSessions(saved);
         auditLogService.record(actor.getEmail(), "CLASS_CREATED", "CLASS", saved.getId().toString());
         return toResponse(saved, course, trainer, 0);
     }
@@ -112,6 +115,11 @@ public class ClassAdminService {
         }
 
         ClassOffering classOffering = findClassForUpdate(classId);
+        String previousScheduleDescription = classOffering.getScheduleDescription();
+        LocalDate previousStartDate = classOffering.getStartDate();
+        LocalDate previousEndDate = classOffering.getEndDate();
+        UUID previousTrainerId = classOffering.getTrainerId();
+
         if (classOffering.getStatus() == ClassStatus.CANCELLED && !request.isStatusProvided()) {
             throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE, "Cancelled classes cannot be updated");
         }
@@ -171,9 +179,24 @@ public class ClassAdminService {
         }
         validateDates(classOffering.getStartDate(), classOffering.getEndDate());
 
-        classOfferingRepository.saveAndFlush(classOffering);
-        audit("CLASS_UPDATED", classId);
+        boolean scheduleDefinitionChanged = !Objects.equals(
+                previousScheduleDescription,
+                classOffering.getScheduleDescription())
+                || !Objects.equals(
+                        previousStartDate,
+                        classOffering.getStartDate())
+                || !Objects.equals(
+                        previousEndDate,
+                        classOffering.getEndDate())
+                || !Objects.equals(
+                        previousTrainerId,
+                        classOffering.getTrainerId());
 
+        classOfferingRepository.saveAndFlush(classOffering);
+        if (scheduleDefinitionChanged) {
+            classSessionScheduleService.synchronizeFutureSessions(classOffering);
+        }
+        audit("CLASS_UPDATED", classId);
         return getClassDetailResponse(classId);
     }
 
@@ -198,8 +221,9 @@ public class ClassAdminService {
     }
 
     // private ClassOffering findClass(UUID classId) {
-    //     return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
-    //             .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
+    // return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
+    // .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class
+    // was not found"));
     // }
 
     private ClassOffering findClassForUpdate(UUID classId) {
