@@ -70,8 +70,12 @@ public class VideoProcessingService {
             String r2BasePath,
             List<String> generatedQualities,
             String masterPlaylistPath,
-            List<String> processedSteps
+            List<String> processedSteps,
+            String aiAudioObjectKey,
+            Long aiAudioDurationMs
     ) {}
+
+    private record AiAudioDerivative(Path path, long durationMs) {}
 
     /**
      * Callback interface for progress updates.
@@ -97,7 +101,7 @@ public class VideoProcessingService {
      * @return Processing result with R2 paths
      */
     public HlsProcessingResult processVideoToHls(Path inputVideoPath, UUID lessonId, String fileName) {
-        return processVideoToHls(inputVideoPath, lessonId, fileName, null);
+        return processVideoToHls(inputVideoPath, lessonId, UUID.randomUUID(), fileName, null);
     }
 
     /**
@@ -115,6 +119,16 @@ public class VideoProcessingService {
             String fileName,
             ProgressCallback callback
     ) {
+        return processVideoToHls(inputVideoPath, lessonId, UUID.randomUUID(), fileName, callback);
+    }
+
+    public HlsProcessingResult processVideoToHls(
+            Path inputVideoPath,
+            UUID lessonId,
+            UUID processingJobId,
+            String fileName,
+            ProgressCallback callback
+    ) {
         List<String> processedSteps = new ArrayList<>();
         Path workDir = null;
         try {
@@ -127,6 +141,8 @@ public class VideoProcessingService {
 
             Path inputFile = workDir.resolve("input" + getExtension(fileName));
             Files.copy(inputVideoPath, inputFile, StandardCopyOption.REPLACE_EXISTING);
+
+            AiAudioDerivative aiAudio = createAiAudioDerivative(inputFile, workDir);
 
             List<String> generatedQualities = new ArrayList<>();
             StringBuilder masterPlaylist = new StringBuilder();
@@ -188,13 +204,27 @@ public class VideoProcessingService {
             Path masterPath = workDir.resolve("master.m3u8");
             Files.writeString(masterPath, masterPlaylist.toString());
 
-            String r2BasePath = hlsProperties.getR2BasePath() + "/" + lessonId;
+            String r2BasePath = hlsProperties.getR2BasePath() + "/" + lessonId + "/" + processingJobId;
 
             // Step 6: Uploading to R2
             reportProgress(callback, 80, "Uploading to cloud storage...");
             processedSteps.add("Uploading to cloud storage");
 
             uploadToR2(workDir, r2BasePath);
+            String aiAudioObjectKey = null;
+            Long aiAudioDurationMs = null;
+            if (aiAudio != null) {
+                String candidateKey = r2BasePath + "/ai/source.mp3";
+                try {
+                    uploadAiAudio(aiAudio.path(), candidateKey);
+                    aiAudioObjectKey = candidateKey;
+                    aiAudioDurationMs = aiAudio.durationMs();
+                } catch (RuntimeException | IOException exception) {
+                    // Playback is the primary HLS outcome. A missing derivative disables the
+                    // manual AI action but must never make an otherwise valid video unusable.
+                    log.warn("HLS succeeded but AI audio upload failed for lesson {}", lessonId, exception);
+                }
+            }
 
             // Step 7: Finalizing
             reportProgress(callback, 95, "Finalizing...");
@@ -210,7 +240,9 @@ public class VideoProcessingService {
                     r2BasePath,
                     generatedQualities,
                     r2BasePath + "/master.m3u8",
-                    processedSteps
+                    processedSteps,
+                    aiAudioObjectKey,
+                    aiAudioDurationMs
             );
 
         } catch (IOException e) {
@@ -218,6 +250,72 @@ public class VideoProcessingService {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Failed to process video: " + e.getMessage());
         } finally {
             cleanupDirectory(workDir);
+        }
+    }
+
+    private AiAudioDerivative createAiAudioDerivative(Path inputFile, Path workDir) {
+        Path audioDir = workDir.resolve("ai");
+        Path audioFile = audioDir.resolve("source.mp3");
+        try {
+            Files.createDirectories(audioDir);
+            Process process = new ProcessBuilder(
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                    "-i", inputFile.toString(), "-map", "0:a:0?", "-vn",
+                    "-ac", "1", "-ar", "16000", "-b:a", "48k",
+                    audioFile.toString()
+            ).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+            if (!process.waitFor(30, TimeUnit.MINUTES)) {
+                process.destroyForcibly();
+                log.warn("AI audio derivative timed out for {}", inputFile);
+                return null;
+            }
+            if (process.exitValue() != 0 || !Files.isRegularFile(audioFile) || Files.size(audioFile) == 0) {
+                log.warn("No usable audio stream was found for {}", inputFile);
+                Files.deleteIfExists(audioFile);
+                return null;
+            }
+            long durationMs = probeDurationMs(audioFile);
+            return durationMs > 0 ? new AiAudioDerivative(audioFile, durationMs) : null;
+        } catch (IOException exception) {
+            log.warn("Could not create AI audio derivative for {}", inputFile, exception);
+            return null;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            log.warn("AI audio derivative was interrupted for {}", inputFile);
+            return null;
+        }
+    }
+
+    private long probeDurationMs(Path mediaFile) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder(
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", mediaFile.toString()
+        ).redirectErrorStream(true).start();
+        String output;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            output = reader.readLine();
+        }
+        if (!process.waitFor(30, TimeUnit.SECONDS) || process.exitValue() != 0 || output == null) {
+            process.destroyForcibly();
+            return 0;
+        }
+        try {
+            return Math.max(0, Math.round(Double.parseDouble(output.strip()) * 1000));
+        } catch (NumberFormatException exception) {
+            return 0;
+        }
+    }
+
+    private void uploadAiAudio(Path audioFile, String objectKey) throws IOException {
+        String bucket = hlsProperties.getAiAudioBucket();
+        if (bucket == null || bucket.isBlank()) {
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Private AI audio bucket is not configured"
+            );
+        }
+        try (InputStream input = Files.newInputStream(audioFile)) {
+            r2Client.putPrivateObject(bucket, objectKey, "audio/mpeg", input, Files.size(audioFile));
         }
     }
 
