@@ -62,6 +62,12 @@ public class HlsLesson {
     @Column(name = "processing_completed_at")
     private Instant processingCompletedAt;
 
+    @Column(name = "ai_audio_object_key", length = 1024)
+    private String aiAudioObjectKey;
+
+    @Column(name = "ai_audio_duration_ms")
+    private Long aiAudioDurationMs;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
