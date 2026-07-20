@@ -17,5 +17,7 @@ app:
   security:
     authentication-mode: jwt
     jwt-secret: smart-learnly-test-secret-key-at-least-32-characters
+  hls:
+    token-secret: smart-learnly-test-hls-secret-at-least-32-characters
   seed:
     auth-users-enabled: false

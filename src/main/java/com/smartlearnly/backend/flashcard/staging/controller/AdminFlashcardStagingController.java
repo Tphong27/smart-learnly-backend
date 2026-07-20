@@ -40,7 +40,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
 @Tag(name = "Admin Flashcard Staging", description = "Administrator flashcard staging APIs.")
 @SecurityRequirement(name = "bearerAuth")

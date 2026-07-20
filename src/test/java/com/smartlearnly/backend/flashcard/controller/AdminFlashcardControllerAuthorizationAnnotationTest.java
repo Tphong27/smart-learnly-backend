@@ -21,15 +21,14 @@ class AdminFlashcardControllerAuthorizationAnnotationTest {
     }
 
     @Test
-    void adminFlashcardStagingShouldAllowAdminSmeAndTrainerOnly() {
+    void adminFlashcardStagingShouldAllowVideoAiAuthoringRoles() {
         PreAuthorize annotation = AnnotatedElementUtils.findMergedAnnotation(
                 AdminFlashcardStagingController.class,
                 PreAuthorize.class
         );
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'SME', 'TRAINER')");
-        assertThat(annotation.value()).doesNotContain("TMO");
+        assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
     }
 
     @Test
