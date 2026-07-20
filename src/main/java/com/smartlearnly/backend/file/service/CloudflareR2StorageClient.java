@@ -14,6 +14,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
@@ -27,6 +28,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -269,6 +273,68 @@ public class CloudflareR2StorageClient implements FileStorageService {
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
                     "Failed to read HLS content"
             );
+        }
+    }
+
+    /**
+     * Downloads an object to a local file without buffering the full object in memory.
+     * The target is atomically replaced only after a successful transfer.
+     */
+    public void downloadObjectToFile(String bucket, String key, Path target) {
+        validateConfiguration();
+        if (bucket == null || bucket.isBlank() || key == null || key.isBlank() || target == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "R2 download request is invalid");
+        }
+        Path absoluteTarget = target.toAbsolutePath().normalize();
+        Path parent = absoluteTarget.getParent();
+        if (parent == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "R2 download target is invalid");
+        }
+        Path temporary = null;
+        try {
+            Files.createDirectories(parent);
+            temporary = Files.createTempFile(parent, ".r2-download-", ".tmp");
+            GetObjectRequest request = GetObjectRequest.builder().bucket(bucket).key(key).build();
+            try (ResponseInputStream<GetObjectResponse> response = getS3Client().getObject(request)) {
+                Files.copy(response, temporary, StandardCopyOption.REPLACE_EXISTING);
+            }
+            Files.move(temporary, absoluteTarget, StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+            temporary = null;
+        } catch (S3Exception exception) {
+            log.warn("R2 streaming download failed for bucket={} key={} status={}",
+                    bucket, key, exception.statusCode(), exception);
+            ErrorCode code = exception.statusCode() == 404
+                    ? ErrorCode.RESOURCE_NOT_FOUND
+                    : ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE;
+            throw new BusinessException(code, "Private AI audio is unavailable");
+        } catch (IOException | SdkException exception) {
+            log.warn("R2 streaming download failed for bucket={} key={}", bucket, key, exception);
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Private AI audio could not be downloaded");
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException exception) {
+                    log.debug("Could not delete temporary R2 download {}", temporary, exception);
+                }
+            }
+        }
+    }
+
+    public void deleteObject(String bucket, String key) {
+        validateConfiguration();
+        if (bucket == null || bucket.isBlank() || key == null || key.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "R2 delete request is invalid");
+        }
+        try {
+            getS3Client().deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+            log.info("R2 delete successful: bucket={}, key={}", bucket, key);
+        } catch (SdkException exception) {
+            log.warn("R2 delete failed for bucket={} key={}", bucket, key, exception);
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Private AI audio could not be deleted");
         }
     }
 

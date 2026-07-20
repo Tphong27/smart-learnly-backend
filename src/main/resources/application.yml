@@ -132,6 +132,7 @@ app:
         r2-base-path: ${APP_HLS_R2_BASE_PATH:hls}
         raw-bucket: ${APP_HLS_RAW_BUCKET:${R2_RAW_BUCKET:}}
         output-bucket: ${APP_HLS_OUTPUT_BUCKET:${R2_HLS_BUCKET:}}
+        ai-audio-bucket: ${APP_HLS_AI_AUDIO_BUCKET:}
         callback-secret: ${HLS_CALLBACK_SECRET:}
         callback-timestamp-tolerance-seconds: ${APP_HLS_CALLBACK_TIMESTAMP_TOLERANCE_SECONDS:300}
         segment-duration: ${APP_HLS_SEGMENT_DURATION:10}
@@ -148,6 +149,29 @@ app:
             workflow-file: ${HLS_GITHUB_WORKFLOW_FILE:hls-transcode.yml}
             ref: ${HLS_GITHUB_REF:main}
             token: ${HLS_GITHUB_TOKEN:}
+    video-ai:
+        enabled: ${APP_VIDEO_AI_ENABLED:false}
+        max-attempts: ${APP_VIDEO_AI_MAX_ATTEMPTS:3}
+        lease-duration: ${APP_VIDEO_AI_LEASE_DURATION:PT3H}
+        transcription:
+            enabled: ${APP_VIDEO_AI_TRANSCRIPTION_ENABLED:false}
+            provider: ${APP_VIDEO_AI_TRANSCRIPTION_PROVIDER:faster-whisper}
+            python-command: ${APP_VIDEO_AI_TRANSCRIPTION_PYTHON_COMMAND:python3}
+            script-path: ${APP_VIDEO_AI_TRANSCRIPTION_SCRIPT_PATH:scripts/video-ai/transcribe.py}
+            model: ${APP_VIDEO_AI_TRANSCRIPTION_MODEL:small}
+            device: ${APP_VIDEO_AI_TRANSCRIPTION_DEVICE:cpu}
+            compute-type: ${APP_VIDEO_AI_TRANSCRIPTION_COMPUTE_TYPE:int8}
+            cpu-threads: ${APP_VIDEO_AI_TRANSCRIPTION_CPU_THREADS:4}
+            beam-size: ${APP_VIDEO_AI_TRANSCRIPTION_BEAM_SIZE:5}
+            timeout: ${APP_VIDEO_AI_TRANSCRIPTION_TIMEOUT:PT2H}
+            model-cache-directory: ${APP_VIDEO_AI_TRANSCRIPTION_MODEL_CACHE_DIRECTORY:}
+        generation:
+            enabled: ${APP_VIDEO_AI_GENERATION_ENABLED:false}
+            api-key: ${VIDEO_AI_GEMINI_API_KEY:${GEMINI_API_KEY:}}
+            api-base-url: ${GEMINI_API_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+            model: ${APP_VIDEO_AI_GEMINI_MODEL:${GEMINI_MODEL:gemini-3.5-flash}}
+            timeout: ${APP_VIDEO_AI_GENERATION_TIMEOUT:PT90S}
+            max-transcript-characters: ${APP_VIDEO_AI_MAX_TRANSCRIPT_CHARACTERS:120000}
 
 springdoc:
     api-docs:

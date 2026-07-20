@@ -32,12 +32,33 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class ClassEnrollmentServiceTest {
+    @Mock
+    private ClassOfferingRepository classOfferingRepository;
+    @Mock
+    private ClassEnrollmentRepository classEnrollmentRepository;
+    @Mock
+    private EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
+    @Mock
+    private SuccessfulPaymentRepository successfulPaymentRepository;
+    @Mock
+    private CourseEnrollmentService courseEnrollmentService;
+    @Mock
+    private AuditLogService auditLogService;
+    @Mock
+    private CurrentUserService currentUserService;
 
-        @Mock
-        private ClassOfferingRepository classOfferingRepository;
-
-        @Mock
-        private ClassEnrollmentRepository classEnrollmentRepository;
+    @BeforeEach
+    void setUp() {
+        service = new ClassEnrollmentService(
+                classOfferingRepository,
+                classEnrollmentRepository,
+                enrollmentStatusHistoryRepository,
+                successfulPaymentRepository,
+                courseEnrollmentService,
+                auditLogService,
+                currentUserService
+        );
+    }
 
         @Mock
         private EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;

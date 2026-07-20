@@ -15,6 +15,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -40,6 +42,7 @@ public class HlsUploadService {
     private final CloudflareR2StorageClient r2StorageClient;
     private final HlsWorkflowDispatcher workflowDispatcher;
     private final HlsProcessingStateService processingStateService;
+    private final HlsLessonAccessService lessonAccessService;
 
     private static final long MAX_VIDEO_SIZE = 500L * 1024 * 1024; // 500MB
 
@@ -81,10 +84,11 @@ public class HlsUploadService {
     /**
      * Event to update HLS progress (used for async progress updates)
      */
-    public record HlsProgressEvent(UUID lessonId, int percent, String step) {}
+    public record HlsProgressEvent(UUID lessonId, UUID jobId, int percent, String step) {}
 
     public record HlsProcessingRequestedEvent(
             UUID lessonId,
+            UUID jobId,
             Path stagedVideo,
             String originalFilename
     ) {}
@@ -97,12 +101,7 @@ public class HlsUploadService {
         UUID lessonId = request.lessonId();
         MultipartFile videoFile = request.videoFile();
 
-        // Validate lesson exists trong 1 trong 2 bảng: legacy `lessons` (master authoring cũ) hoặc
-        // `curriculum_lessons` (versioning mới — trainer/SME edit).
-        if (lessonRepository.findById(lessonId).isEmpty()
-                && curriculumLessonRepository.findById(lessonId).isEmpty()) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson not found: " + lessonId);
-        }
+        lessonAccessService.requireWritableVideo(lessonId);
 
         // Validate file
         validateVideoFile(videoFile);
@@ -153,8 +152,14 @@ public class HlsUploadService {
             created.setLessonId(lessonId);
             return created;
         });
+        UUID jobId = UUID.randomUUID();
+        String outputPrefix = hlsProperties.getR2BasePath() + "/" + lessonId + "/" + jobId;
         hlsLesson.setHlsStatus("processing");
-        hlsLesson.setR2BasePath(hlsProperties.getR2BasePath() + "/" + lessonId);
+        hlsLesson.setR2BasePath(outputPrefix);
+        hlsLesson.setProcessingOutputPrefix(outputPrefix);
+        hlsLesson.setProcessingJobId(jobId);
+        hlsLesson.setProcessingProvider("local");
+        hlsLesson.setProcessingCompletedAt(null);
         hlsLesson.setQualities(hlsProperties.normalizedQualities());
         hlsLesson.setProgressPercent(0);
         hlsLesson.setCurrentStep("Initializing...");
@@ -166,6 +171,7 @@ public class HlsUploadService {
         Path stagedVideo = stageVideo(videoFile);
         eventPublisher.publishEvent(new HlsProcessingRequestedEvent(
                 lessonId,
+                jobId,
                 stagedVideo,
                 videoFile.getOriginalFilename()
         ));
@@ -175,7 +181,7 @@ public class HlsUploadService {
                 "processing",
                 "Video uploaded successfully. Processing started.",
                 hlsLesson.getR2BasePath(),
-                null
+                jobId
         );
     }
 
@@ -243,23 +249,26 @@ public class HlsUploadService {
                     videoProcessingService.processVideoToHls(
                             event.stagedVideo(),
                             lessonId,
+                            event.jobId(),
                             event.originalFilename(),
                             (percent, step) -> eventPublisher.publishEvent(
-                                    new HlsProgressEvent(lessonId, percent, step)
+                                    new HlsProgressEvent(lessonId, event.jobId(), percent, step)
                             )
                     );
 
             // Update HLS lesson with success status
-            updateHlsLessonSuccessDirect(lessonId, result);
+            boolean accepted = updateHlsLessonSuccessDirect(lessonId, event.jobId(), result);
 
-            // Update lesson with video URL
-            updateLessonVideoUrlDirect(lessonId, result);
+            // A replaced/stale job must never overwrite the active lesson URL.
+            if (accepted) {
+                updateLessonVideoUrlDirect(lessonId, result);
+            }
 
             log.info("HLS processing completed successfully for lesson {}", lessonId);
 
         } catch (Exception e) {
             log.error("HLS processing failed for lesson {}", lessonId, e);
-            updateHlsLessonFailureDirect(lessonId, e.getMessage());
+            updateHlsLessonFailureDirect(lessonId, event.jobId(), e.getMessage());
         } finally {
             try {
                 Files.deleteIfExists(event.stagedVideo());
@@ -278,6 +287,10 @@ public class HlsUploadService {
     public void handleHlsProgressEvent(HlsProgressEvent event) {
         log.debug("Received HLS progress event: {}% - {}", event.percent, event.step);
         hlsLessonRepository.findByLessonId(event.lessonId).ifPresent(hlsLesson -> {
+            if (!event.jobId().equals(hlsLesson.getProcessingJobId())) {
+                log.debug("Ignoring progress from stale HLS job {}", event.jobId());
+                return;
+            }
             hlsLesson.setProgressPercent(event.percent);
             hlsLesson.setCurrentStep(event.step);
             hlsLessonRepository.save(hlsLesson);
@@ -286,22 +299,43 @@ public class HlsUploadService {
 
     // Direct database update methods (used after async processing completes)
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    public void updateHlsLessonSuccessDirect(UUID lessonId, VideoProcessingService.HlsProcessingResult result) {
-        hlsLessonRepository.findByLessonId(lessonId).ifPresent(hlsLesson -> {
-            hlsLesson.setHlsStatus("ready");
-            hlsLesson.setProgressPercent(100);
-            hlsLesson.setCurrentStep("Complete");
-            hlsLesson.setR2BasePath(result.r2BasePath());
-            hlsLesson.setQualities(String.join(",", result.generatedQualities()));
-            hlsLessonRepository.save(hlsLesson);
-        });
+    public boolean updateHlsLessonSuccessDirect(
+            UUID lessonId,
+            UUID jobId,
+            VideoProcessingService.HlsProcessingResult result
+    ) {
+        HlsLesson hlsLesson = hlsLessonRepository.findByLessonId(lessonId).orElse(null);
+        if (hlsLesson == null || !jobId.equals(hlsLesson.getProcessingJobId())) {
+            log.info("Ignoring success from stale HLS job {} for lesson {}", jobId, lessonId);
+            return false;
+        }
+        String previousAiAudioKey = hlsLesson.getAiAudioObjectKey();
+        hlsLesson.setHlsStatus("ready");
+        hlsLesson.setProgressPercent(100);
+        hlsLesson.setCurrentStep("Complete");
+        hlsLesson.setErrorMessage(null);
+        hlsLesson.setR2BasePath(result.r2BasePath());
+        hlsLesson.setQualities(String.join(",", result.generatedQualities()));
+        hlsLesson.setAiAudioObjectKey(result.aiAudioObjectKey());
+        hlsLesson.setAiAudioDurationMs(result.aiAudioDurationMs());
+        hlsLesson.setProcessingCompletedAt(java.time.Instant.now());
+        hlsLessonRepository.save(hlsLesson);
+        if (previousAiAudioKey != null && !previousAiAudioKey.equals(result.aiAudioObjectKey())) {
+            afterCommit(() -> deleteAiAudioBestEffort(previousAiAudioKey));
+        }
+        return true;
     }
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    public void updateHlsLessonFailureDirect(UUID lessonId, String errorMessage) {
+    public void updateHlsLessonFailureDirect(UUID lessonId, UUID jobId, String errorMessage) {
         hlsLessonRepository.findByLessonId(lessonId).ifPresent(hlsLesson -> {
+            if (!jobId.equals(hlsLesson.getProcessingJobId())) {
+                log.info("Ignoring failure from stale HLS job {} for lesson {}", jobId, lessonId);
+                return;
+            }
             hlsLesson.setHlsStatus("failed");
             hlsLesson.setErrorMessage(errorMessage);
+            hlsLesson.setProcessingCompletedAt(java.time.Instant.now());
             hlsLessonRepository.save(hlsLesson);
         });
     }
@@ -325,6 +359,7 @@ public class HlsUploadService {
      */
     @Transactional(readOnly = true)
     public ProcessingStatus getProcessingStatus(UUID lessonId) {
+        lessonAccessService.requireReadable(lessonId);
         return hlsLessonRepository.findByLessonId(lessonId)
                 .map(hls -> new ProcessingStatus(
                         lessonId,
@@ -355,9 +390,11 @@ public class HlsUploadService {
      */
     @Transactional
     public void deleteHlsVideo(UUID lessonId) {
+        lessonAccessService.requireWritable(lessonId);
         HlsLesson hlsLesson = hlsLessonRepository.findByLessonId(lessonId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "HLS lesson not found"));
 
+        String aiAudioObjectKey = hlsLesson.getAiAudioObjectKey();
         hlsLessonRepository.delete(hlsLesson);
 
         // Clear video URL from lesson — thử cả 2 bảng.
@@ -370,7 +407,39 @@ public class HlsUploadService {
             curriculumLessonRepository.save(lesson);
         });
 
+        afterCommit(() -> deleteAiAudioBestEffort(aiAudioObjectKey));
+
         log.info("Deleted HLS content for lesson {}", lessonId);
+    }
+
+    private void deleteAiAudioBestEffort(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            return;
+        }
+        String audioBucket = hlsProperties.getAiAudioBucket();
+        if (audioBucket == null || audioBucket.isBlank()) {
+            log.warn("Cannot clean up AI audio {} because its private bucket is not configured", objectKey);
+            return;
+        }
+        try {
+            r2StorageClient.deleteObject(audioBucket, objectKey);
+        } catch (RuntimeException exception) {
+            log.warn("Could not clean up obsolete AI audio {}", objectKey, exception);
+        }
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+            return;
+        }
+        action.run();
     }
 
     private void validateVideoFile(MultipartFile file) {
@@ -441,7 +510,9 @@ public class HlsUploadService {
         return hlsProperties.getRawBucket() != null
                 && !hlsProperties.getRawBucket().isBlank()
                 && hlsProperties.getOutputBucket() != null
-                && !hlsProperties.getOutputBucket().isBlank();
+                && !hlsProperties.getOutputBucket().isBlank()
+                && hlsProperties.getAiAudioBucket() != null
+                && !hlsProperties.getAiAudioBucket().isBlank();
     }
 
     private void uploadRawVideo(MultipartFile videoFile, String sourceKey) {

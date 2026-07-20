@@ -3,6 +3,7 @@ package com.smartlearnly.backend.hls.service;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.file.service.CloudflareR2StorageClient;
 import com.smartlearnly.backend.hls.config.HlsProperties;
 import com.smartlearnly.backend.hls.dto.HlsProcessingCallbackRequest;
 import com.smartlearnly.backend.hls.entity.HlsLesson;
@@ -14,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +27,7 @@ public class HlsProcessingStateService {
     // trên `curriculum_lessons`, nên phải lookup + update ở cả 2 bảng.
     private final CurriculumLessonRepository curriculumLessonRepository;
     private final HlsProperties properties;
+    private final CloudflareR2StorageClient r2StorageClient;
 
     public record ProcessingReservation(boolean started, UUID jobId, String sourceKey,
             String outputPrefix, String status, String activePath, String message) {
@@ -100,10 +104,16 @@ public class HlsProcessingStateService {
                 || !(prefix + "/master.m3u8").equals(request.masterPlaylistPath())
                 || request.qualities() == null || request.qualities().isEmpty())
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Callback output does not match reserved job");
+        if ((request.aiAudioObjectKey() == null) != (request.aiAudioDurationMs() == null)
+                || (request.aiAudioObjectKey() != null
+                && !(prefix + "/ai/source.mp3").equals(request.aiAudioObjectKey()))) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Callback AI audio does not match reserved job");
+        }
         if ("ready".equals(hls.getHlsStatus()) && prefix.equals(hls.getR2BasePath()))
             return;
         if (terminal(hls))
             throw new BusinessException(ErrorCode.CONFLICT, "Job already terminated");
+        String previousAiAudioKey = hls.getAiAudioObjectKey();
         hls.setR2BasePath(prefix);
         hls.setEncryptionKeyPath(prefix + "/enc.key");
         hls.setQualities(String.join(",", request.qualities()));
@@ -112,7 +122,12 @@ public class HlsProcessingStateService {
         hls.setCurrentStep("Complete");
         hls.setErrorMessage(null);
         hls.setProcessingCompletedAt(Instant.now());
+        hls.setAiAudioObjectKey(request.aiAudioObjectKey());
+        hls.setAiAudioDurationMs(request.aiAudioDurationMs());
         hlsRepository.save(hls);
+        if (previousAiAudioKey != null && !previousAiAudioKey.equals(request.aiAudioObjectKey())) {
+            afterCommit(() -> deleteAiAudioBestEffort(previousAiAudioKey));
+        }
         String masterPlaylist = prefix + "/master.m3u8";
         // Ghi videoUrl vào bảng thực chứa lesson (legacy hoặc curriculum).
         lessonRepository.findByIdForUpdate(request.lessonId()).ifPresent(l -> {
@@ -163,5 +178,32 @@ public class HlsProcessingStateService {
 
     private boolean terminal(HlsLesson h) {
         return "ready".equals(h.getHlsStatus()) || "failed".equals(h.getHlsStatus());
+    }
+
+    private void deleteAiAudioBestEffort(String objectKey) {
+        String bucket = properties.getAiAudioBucket();
+        if (bucket == null || bucket.isBlank()) {
+            return;
+        }
+        try {
+            r2StorageClient.deleteObject(bucket, objectKey);
+        } catch (RuntimeException ignored) {
+            // The new video is already ready. Orphan cleanup can be retried operationally
+            // and must not turn a successful signed callback into a failure.
+        }
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+            return;
+        }
+        action.run();
     }
 }

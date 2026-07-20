@@ -64,6 +64,9 @@ class TraineeProgressServiceTest {
 
         @Mock
         private AssignmentSubmissionRepository assignmentSubmissionRepository;
+        
+        LessonProgressResponse response = traineeProgressService
+                .updateLessonProgress(lessonIdentityId, courseId, classA, true);
 
         @InjectMocks
         private TraineeProgressService traineeProgressService;

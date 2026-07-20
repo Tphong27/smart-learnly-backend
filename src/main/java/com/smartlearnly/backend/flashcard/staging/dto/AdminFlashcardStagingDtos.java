@@ -177,6 +177,8 @@ public final class AdminFlashcardStagingDtos {
             UUID id,
             UUID flashcardSetId,
             UUID lessonId,
+            UUID curriculumLessonId,
+            UUID sourceVideoAiContentId,
             UUID courseId,
             String sourceType,
             String status,

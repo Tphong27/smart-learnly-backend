@@ -54,6 +54,7 @@ jobs:
       R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       R2_RAW_BUCKET: ${{ vars.R2_RAW_BUCKET }}
       R2_HLS_BUCKET: ${{ vars.R2_HLS_BUCKET }}
+      R2_AI_AUDIO_BUCKET: ${{ vars.R2_AI_AUDIO_BUCKET }}
       HLS_CALLBACK_SECRET: ${{ secrets.HLS_CALLBACK_SECRET }}
       HLS_BACKEND_BASE_URL: ${{ vars.HLS_BACKEND_BASE_URL }}
       JOB_ID: ${{ inputs.job_id }}
@@ -93,6 +94,10 @@ jobs:
           }
           [[ "$R2_HLS_BUCKET" =~ $bucket_pattern ]] || {
             echo "R2_HLS_BUCKET is invalid." >&2
+            exit 78
+          }
+          [[ "$R2_AI_AUDIO_BUCKET" =~ $bucket_pattern ]] || {
+            echo "R2_AI_AUDIO_BUCKET is invalid." >&2
             exit 78
           }
           [[ "$R2_ENDPOINT" == https://*.r2.cloudflarestorage.com ]] || {
@@ -170,6 +175,7 @@ jobs:
           echo "HLS_QUALITIES=$qualities" >>"$GITHUB_ENV"
           echo "SEGMENT_DURATION=$segment_duration" >>"$GITHUB_ENV"
           echo "FFMPEG_PRESET=$ffmpeg_preset" >>"$GITHUB_ENV"
+          echo "AUDIO_DURATION_FILE=$RUNNER_TEMP/video-ai-audio-duration-ms.txt" >>"$GITHUB_ENV"
 
       - name: Install FFmpeg and R2 client dependencies
         shell: bash
@@ -214,7 +220,8 @@ jobs:
             "$SEGMENT_DURATION" \
             "$QUALITIES_FILE" \
             "$HLS_QUALITIES" \
-            "$FFMPEG_PRESET"
+            "$FFMPEG_PRESET" \
+            "$AUDIO_DURATION_FILE"
 
       - name: Upload HLS output to R2
         shell: bash
@@ -228,7 +235,22 @@ jobs:
             "$OUTPUT_DIR" \
             "s3://${R2_HLS_BUCKET}/${OUTPUT_PREFIX}" \
             --delete \
+            --exclude "ai/*" \
             --no-progress
+
+      - name: Upload private AI audio derivative to R2
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ -s "$OUTPUT_DIR/ai/source.mp3" ]]; then
+            time aws \
+              --endpoint-url "$R2_ENDPOINT" \
+              s3 cp \
+              "$OUTPUT_DIR/ai/source.mp3" \
+              "s3://${R2_AI_AUDIO_BUCKET}/${OUTPUT_PREFIX}/ai/source.mp3" \
+              --content-type "audio/mpeg" \
+              --no-progress
+          fi
 
       - name: Notify backend of success
         if: ${{ success() }}
@@ -250,12 +272,24 @@ jobs:
           fi
 
           qualities_json=$(jq -R -s 'split("\n") | map(select(length > 0))' "$QUALITIES_FILE")
+          ai_audio_object_key=""
+          ai_audio_duration_ms=""
+          if [[ -s "$OUTPUT_DIR/ai/source.mp3" && -s "$AUDIO_DURATION_FILE" ]]; then
+            ai_audio_object_key="${OUTPUT_PREFIX}/ai/source.mp3"
+            ai_audio_duration_ms=$(tr -d '[:space:]' <"$AUDIO_DURATION_FILE")
+            [[ "$ai_audio_duration_ms" =~ ^[1-9][0-9]*$ ]] || {
+              echo "AI audio duration is invalid." >&2
+              exit 70
+            }
+          fi
           body=$(jq -cn \
             --arg jobId "$JOB_ID" \
             --arg lessonId "$LESSON_ID" \
             --arg status "ready" \
             --arg r2BasePath "$OUTPUT_PREFIX" \
             --arg masterPlaylistPath "${OUTPUT_PREFIX}/master.m3u8" \
+            --arg aiAudioObjectKey "$ai_audio_object_key" \
+            --arg aiAudioDurationMs "$ai_audio_duration_ms" \
             --argjson qualities "$qualities_json" \
             '{
               jobId: $jobId,
@@ -263,7 +297,9 @@ jobs:
               status: $status,
               r2BasePath: $r2BasePath,
               masterPlaylistPath: $masterPlaylistPath,
-              qualities: $qualities
+              qualities: $qualities,
+              aiAudioObjectKey: (if $aiAudioObjectKey == "" then null else $aiAudioObjectKey end),
+              aiAudioDurationMs: (if $aiAudioDurationMs == "" then null else ($aiAudioDurationMs | tonumber) end)
             }')
           timestamp=$(date +%s)
           signature=$(BODY="$body" TIMESTAMP="$timestamp" SECRET="$HLS_CALLBACK_SECRET" python3 - <<'PY'
@@ -287,6 +323,18 @@ jobs:
             --header "X-HLS-Signature: $signature" \
             --data "$body" \
             "${HLS_BACKEND_BASE_URL%/}/api/v1/internal/hls/jobs/callback"
+
+      - name: Delete private raw source
+        if: ${{ success() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          aws \
+            --endpoint-url "$R2_ENDPOINT" \
+            s3 rm \
+            "s3://${R2_RAW_BUCKET}/${SOURCE_KEY}" \
+            --no-progress
 
       - name: Notify backend of failure
         if: ${{ failure() }}

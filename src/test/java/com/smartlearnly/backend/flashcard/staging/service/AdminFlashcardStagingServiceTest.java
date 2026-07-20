@@ -844,6 +844,8 @@ class AdminFlashcardStagingServiceTest {
     void updateStagingCardValidatesFrontAndBack() {
         FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet()), "draft", 0);
         when(stagingCardRepository.findById(card.getId())).thenReturn(Optional.of(card));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(card.getBatch().getFlashcardSet().getId()))
+                .thenReturn(Optional.of(card.getBatch().getFlashcardSet()));
 
         assertThatThrownBy(() -> service.updateCard(
                 card.getId(),
@@ -859,6 +861,8 @@ class AdminFlashcardStagingServiceTest {
     void rejectStagingCardChangesStatusAndDoesNotCreateRealFlashcard() {
         FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet()), "draft", 0);
         when(stagingCardRepository.findById(card.getId())).thenReturn(Optional.of(card));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(card.getBatch().getFlashcardSet().getId()))
+                .thenReturn(Optional.of(card.getBatch().getFlashcardSet()));
 
         service.rejectCard(card.getId());
 
@@ -1115,6 +1119,17 @@ class AdminFlashcardStagingServiceTest {
         verify(stagingCardRepository, never()).findByIdIn(anyList());
         verify(stagingCardRepository, never()).saveAll(anyList());
         verify(flashcardCardRepository, never()).saveAll(anyList());
+    void rejectStagingCardRequiresAccessToItsOwningSet() {
+        FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet()), "draft", 0);
+        when(stagingCardRepository.findById(card.getId())).thenReturn(Optional.of(card));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(card.getBatch().getFlashcardSet().getId()))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.rejectCard(card.getId()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+
+        verify(stagingCardRepository, never()).save(any());
     }
 
     @Test
