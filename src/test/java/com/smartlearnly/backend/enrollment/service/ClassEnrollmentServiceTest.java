@@ -46,6 +46,7 @@ class ClassEnrollmentServiceTest {
     private AuditLogService auditLogService;
     @Mock
     private CurrentUserService currentUserService;
+    private ClassEnrollmentService service;
 
     @BeforeEach
     void setUp() {
@@ -59,35 +60,6 @@ class ClassEnrollmentServiceTest {
                 currentUserService
         );
     }
-
-        @Mock
-        private EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
-
-        @Mock
-        private SuccessfulPaymentRepository successfulPaymentRepository;
-
-        @Mock
-        private CourseEnrollmentService courseEnrollmentService;
-
-        @Mock
-        private AuditLogService auditLogService;
-
-        @Mock
-        private CurrentUserService currentUserService;
-
-        private ClassEnrollmentService service;
-
-        @BeforeEach
-        void setUp() {
-                service = new ClassEnrollmentService(
-                                classOfferingRepository,
-                                classEnrollmentRepository,
-                                enrollmentStatusHistoryRepository,
-                                successfulPaymentRepository,
-                                courseEnrollmentService,
-                                auditLogService,
-                                currentUserService);
-        }
 
         @Test
         void successfulPaymentAndAvailableCapacityShouldCreateClassAndCourseEnrollment() {
