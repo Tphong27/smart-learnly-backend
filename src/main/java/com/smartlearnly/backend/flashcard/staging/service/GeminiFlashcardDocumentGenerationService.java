@@ -311,6 +311,7 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
                     .uri("/interactions")
                     .contentType(MediaType.APPLICATION_JSON)
                     .header("x-goog-api-key", properties.getApiKey())
+                    .header("Api-Revision", "2026-05-20")
                     .body(buildRequestBody(input))
                     .retrieve()
                     .body(String.class);
@@ -322,24 +323,21 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
         }
         catch (RestClientResponseException exception) {
             log.warn(
-                    "Gemini flashcard document {} HTTP error: status={} model={} endpoint={} responseBody={}",
+                    "Gemini flashcard document {} HTTP error: status={} model={} endpoint={}",
                     operation,
                     exception.getStatusCode().value(),
                     properties.getModel(),
-                    sanitizeEndpoint(properties.getApiBaseUrl()),
-                    truncateForLog(exception.getResponseBodyAsString(), 1600),
-                    exception
+                    sanitizeEndpoint(properties.getApiBaseUrl())
             );
             throw toProviderHttpException(exception);
         }
         catch (IOException | IllegalArgumentException exception) {
             log.warn(
-                    "Gemini flashcard document {} response parse error: model={} endpoint={} reason={}",
+                    "Gemini flashcard document {} response parse error: model={} endpoint={} errorType={}",
                     operation,
                     properties.getModel(),
                     sanitizeEndpoint(properties.getApiBaseUrl()),
-                    exception.getMessage(),
-                    exception
+                    exception.getClass().getSimpleName()
             );
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
@@ -348,12 +346,11 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
         }
         catch (RestClientException exception) {
             log.warn(
-                    "Gemini flashcard document {} request error: model={} endpoint={} reason={}",
+                    "Gemini flashcard document {} request error: model={} endpoint={} errorType={}",
                     operation,
                     properties.getModel(),
                     sanitizeEndpoint(properties.getApiBaseUrl()),
-                    exception.getMessage(),
-                    exception
+                    exception.getClass().getSimpleName()
             );
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
@@ -371,6 +368,7 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
         body.put("model", properties.getModel());
         body.put("input", input == null ? List.of() : input);
         body.put("response_format", responseFormat);
+        body.put("store", false);
         return body;
     }
 
