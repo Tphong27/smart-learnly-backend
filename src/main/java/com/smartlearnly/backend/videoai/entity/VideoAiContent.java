@@ -45,6 +45,8 @@ public class VideoAiContent {
     private String transcriptText;
     @Column(columnDefinition = "text")
     private String summary;
+    @Column(name = "suggested_title", length = 255)
+    private String suggestedTitle;
     @Column(name = "key_points", nullable = false, columnDefinition = "jsonb")
     @ColumnTransformer(write = "?::jsonb")
     private String keyPointsJson = "[]";

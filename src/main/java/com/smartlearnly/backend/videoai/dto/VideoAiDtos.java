@@ -101,6 +101,7 @@ public final class VideoAiDtos {
             UUID sourceVersion,
             String language,
             String transcriptText,
+            String suggestedTitle,
             String summary,
             List<String> keyPoints,
             String status,

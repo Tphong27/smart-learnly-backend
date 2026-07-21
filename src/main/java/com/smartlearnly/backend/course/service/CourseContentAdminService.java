@@ -11,6 +11,7 @@ import com.smartlearnly.backend.course.dto.ReorderRequest;
 import com.smartlearnly.backend.course.dto.SectionRequest;
 import com.smartlearnly.backend.course.dto.SectionResponse;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLessonResource;
@@ -26,6 +27,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -511,18 +513,22 @@ public class CourseContentAdminService {
                         CurriculumScope.MASTER
                 )
                 .orElseGet(() ->
-                        createInitialMasterDraft(course)
+                        createInitialMasterVersion(course)
                 );
     }
 
-    private CurriculumVersion createInitialMasterDraft(
+    private CurriculumVersion createInitialMasterVersion(
             Course course
     ) {
         CurriculumVersion version = new CurriculumVersion();
 
         version.setCourseId(course.getId());
         version.setScope(CurriculumScope.MASTER);
-        version.setStatus(CurriculumStatus.DRAFT);
+        boolean courseIsPublished = course.getStatus() == CourseStatus.PUBLISHED;
+        version.setStatus(courseIsPublished ? CurriculumStatus.PUBLISHED : CurriculumStatus.DRAFT);
+        if (courseIsPublished) {
+            version.setPublishedAt(Instant.now());
+        }
 
         int nextVersionNumber =
                 curriculumVersionRepository

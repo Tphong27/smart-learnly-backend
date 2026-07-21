@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriUtils;
@@ -25,6 +26,7 @@ import org.springframework.web.util.UriUtils;
 @RestController
 @RequestMapping("/api/v1/submissions")
 @RequiredArgsConstructor
+@PreAuthorize("isAuthenticated()")
 public class AssignmentSubmissionController {
 
     private final AssignmentSubmissionService submissionService;
@@ -32,6 +34,7 @@ public class AssignmentSubmissionController {
             Path.of("uploads", "assignment-submissions");
 
     @PostMapping("/start")
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<AssignmentSubmissionModel.Response> startAssignment(
             @Valid @RequestBody AssignmentSubmissionModel.StartRequest request) {
         AssignmentSubmissionModel.Response response =
@@ -40,6 +43,7 @@ public class AssignmentSubmissionController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<AssignmentSubmissionModel.Response> submitAssignment(
             @Valid @RequestBody AssignmentSubmissionModel.CreateRequest request) {
 
@@ -50,6 +54,7 @@ public class AssignmentSubmissionController {
     }
 
     @PostMapping(value = "/upload-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<Map<String, String>> uploadSubmissionFile(
             @RequestPart("file") MultipartFile file) throws IOException {
         if (file.isEmpty()) {
@@ -90,6 +95,7 @@ public class AssignmentSubmissionController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<AssignmentSubmissionModel.Response> updateSubmission(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentSubmissionModel.UpdateRequest request) {
@@ -101,6 +107,7 @@ public class AssignmentSubmissionController {
     }
 
     @PutMapping("/{id}/grade")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentSubmissionModel.Response> gradeSubmission(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentSubmissionModel.GradeRequest request) {
@@ -112,6 +119,7 @@ public class AssignmentSubmissionController {
     }
 
     @GetMapping("/assignment/{assignmentId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentSubmissionModel.Response>>
     getSubmissionsByAssignment(
             @PathVariable UUID assignmentId) {

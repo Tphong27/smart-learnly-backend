@@ -9,15 +9,14 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 class AdminFlashcardControllerAuthorizationAnnotationTest {
     @Test
-    void adminFlashcardCrudShouldAllowAdminSmeAndTrainerOnly() {
+    void adminFlashcardCrudShouldAllowAllCourseAuthoringRoles() {
         PreAuthorize annotation = AnnotatedElementUtils.findMergedAnnotation(
                 AdminFlashcardController.class,
                 PreAuthorize.class
         );
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'SME', 'TRAINER')");
-        assertThat(annotation.value()).doesNotContain("TMO");
+        assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
     }
 
     @Test

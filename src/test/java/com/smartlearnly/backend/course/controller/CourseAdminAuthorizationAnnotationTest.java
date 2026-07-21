@@ -10,21 +10,21 @@ import org.springframework.security.access.prepost.PreAuthorize;
 class CourseAdminAuthorizationAnnotationTest {
 
     @Test
-    void courseManagementShouldAllowAdminTmoAndSme() {
+    void courseManagementShouldAllowAllCourseAuthoringRoles() {
         assertThat(preAuthorizeValue(AdminCourseController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME')");
+                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
     }
 
     @Test
-    void courseContentShouldAllowAdminTmoAndSme() {
+    void courseContentShouldAllowAllCourseAuthoringRoles() {
         assertThat(preAuthorizeValue(AdminCourseContentController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME')");
+                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
     }
 
     @Test
-    void courseThumbnailUploadShouldAllowAdminTmoAndSme() {
+    void courseThumbnailUploadShouldAllowAllCourseAuthoringRoles() {
         assertThat(preAuthorizeValue(AdminUploadController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME')");
+                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
     }
 
     @Test
@@ -34,9 +34,9 @@ class CourseAdminAuthorizationAnnotationTest {
     }
 
     @Test
-    void categoryManagementShouldRemainAdminOnly() {
+    void categoryManagementShouldAllowAllCourseAuthoringRoles() {
         assertThat(preAuthorizeValue(AdminCategoryController.class))
-                .isEqualTo("hasRole('ADMIN')");
+                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
     }
 
     private String preAuthorizeValue(Class<?> controllerClass) {

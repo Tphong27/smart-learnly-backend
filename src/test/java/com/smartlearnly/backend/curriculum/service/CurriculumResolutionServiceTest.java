@@ -18,6 +18,7 @@ import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepositor
 import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
+import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -42,13 +43,15 @@ class CurriculumResolutionServiceTest {
     @Mock
     private ClassEnrollmentRepository classEnrollmentRepository;
     @Mock
+    private CourseEnrollmentRepository courseEnrollmentRepository;
+    @Mock
     private AuthenticatedUserResolver authenticatedUserResolver;
 
     @InjectMocks
     private CurriculumResolutionService curriculumResolutionService;
 
     @Test
-    void traineeLearningFallsBackToPublishedMasterWhenClassHasNoPublishedVersion() {
+    void traineeLearningUsesCurrentPublishedMasterWhenClassHasNoPublishedVersion() {
         UUID courseId = UUID.randomUUID();
         UUID classId = UUID.randomUUID();
         UUID studentId = UUID.randomUUID();
@@ -59,13 +62,10 @@ class CurriculumResolutionServiceTest {
         when(classEnrollmentRepository.findByClassIdAndStudentId(classId, studentId))
                 .thenReturn(Optional.of(enrollment(EnrollmentStatus.ACTIVE)));
 
-        // Binding has no published class version; base master points to a DRAFT so the resolver must
-        // fall back to the latest PUBLISHED master version.
+        // The binding's base version is only lineage for class-draft initialization. An inherited
+        // class must resolve the current published master instead of remaining pinned to that base.
         ClassCurriculumBinding binding = binding(classId, courseId, baseMasterVersionId, null, null);
         when(bindingRepository.findByClassIdAndCourseId(classId, courseId)).thenReturn(Optional.of(binding));
-
-        CurriculumVersion draftMaster = version(courseId, null, CurriculumScope.MASTER, CurriculumStatus.DRAFT);
-        when(curriculumVersionRepository.findById(baseMasterVersionId)).thenReturn(Optional.of(draftMaster));
 
         CurriculumVersion publishedMaster = version(courseId, null, CurriculumScope.MASTER, CurriculumStatus.PUBLISHED);
         when(curriculumVersionRepository
@@ -124,6 +124,32 @@ class CurriculumResolutionServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void trainerEditingInheritedClassUsesCurrentPublishedMaster() {
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        UUID trainerId = UUID.randomUUID();
+
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId))
+                .thenReturn(Optional.of(classOffering(courseId, trainerId)));
+        when(bindingRepository.findByClassIdAndCourseId(classId, courseId))
+                .thenReturn(Optional.of(binding(classId, courseId, UUID.randomUUID(), null, null)));
+
+        CurriculumVersion publishedMaster = version(
+                courseId, null, CurriculumScope.MASTER, CurriculumStatus.PUBLISHED);
+        when(curriculumVersionRepository
+                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                        courseId, CurriculumScope.MASTER, CurriculumStatus.PUBLISHED))
+                .thenReturn(Optional.of(publishedMaster));
+
+        CurriculumResolution resolution = curriculumResolutionService
+                .resolveTrainerEditing(courseId, classId, trainerId);
+
+        assertThat(resolution.version()).isSameAs(publishedMaster);
+        assertThat(resolution.customized()).isFalse();
+        assertThat(resolution.source()).isEqualTo(CurriculumResolutionService.SOURCE_MASTER_INHERITED);
     }
 
     private ClassOffering classOffering(UUID courseId, UUID trainerId) {

@@ -175,6 +175,43 @@ class FlashcardLearningServiceTest {
     }
 
     @Test
+    void getLessonFlashcardsShouldSupportOnlineCourseWithoutClassId() {
+        UUID studentId = UUID.randomUUID();
+        UUID lessonReferenceId = UUID.randomUUID();
+        UserAccount student = new UserAccount();
+        student.setId(studentId);
+        FlashcardSet flashcardSet = flashcardSet();
+        Course course = flashcardSet.getCourse();
+        CurriculumVersion version = version(course.getId());
+        CurriculumSection section = curriculumSection(version);
+        CurriculumLesson lesson = curriculumLesson(section, lessonReferenceId);
+        lesson.setId(lessonReferenceId);
+        flashcardSet.setCurriculumLessonId(lesson.getId());
+        FlashcardCard card = card(flashcardSet, 0);
+
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+        when(curriculumLessonRepository.findById(lessonReferenceId)).thenReturn(Optional.of(lesson));
+        when(curriculumResolutionService.resolveOnlineLearning(course.getId(), studentId))
+                .thenReturn(new CurriculumResolution(version, null, null, false,
+                        CurriculumResolutionService.SOURCE_MASTER_PUBLIC));
+        when(curriculumLessonRepository.findEffectiveLessonReference(version.getId(), lessonReferenceId))
+                .thenReturn(Optional.of(lesson));
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(card));
+        when(flashcardProgressRepository.findByStudentIdAndCardIds(studentId, List.of(card.getId())))
+                .thenReturn(List.of());
+
+        FlashcardPracticeSetResponse response = flashcardLearningService
+                .getLessonFlashcards(lessonReferenceId, null);
+
+        assertThat(response.lessonId()).isEqualTo(lessonReferenceId);
+        assertThat(response.courseId()).isEqualTo(course.getId());
+        assertThat(response.cards()).hasSize(1);
+    }
+
+    @Test
     void submitKnownProgressShouldUpdateExistingProgress() {
         UUID studentId = UUID.randomUUID();
         FlashcardCard card = card(flashcardSet(), 0);

@@ -9,6 +9,7 @@ import com.smartlearnly.backend.hls.dto.HlsProcessingCallbackRequest;
 import com.smartlearnly.backend.hls.entity.HlsLesson;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
+import com.smartlearnly.backend.videoai.service.VideoAiAutoPreparationService;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class HlsProcessingStateService {
     private final CurriculumLessonRepository curriculumLessonRepository;
     private final HlsProperties properties;
     private final CloudflareR2StorageClient r2StorageClient;
+    private final VideoAiAutoPreparationService videoAiAutoPreparationService;
 
     public record ProcessingReservation(boolean started, UUID jobId, String sourceKey,
             String outputPrefix, String status, String activePath, String message) {
@@ -138,6 +140,8 @@ public class HlsProcessingStateService {
             l.setVideoUrl(masterPlaylist);
             curriculumLessonRepository.save(l);
         });
+        afterCommit(() -> videoAiAutoPreparationService.enqueueAfterVideoReady(
+                request.lessonId(), request.jobId()));
     }
 
     private void fail(HlsLesson hls, String error) {

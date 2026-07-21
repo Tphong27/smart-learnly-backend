@@ -37,9 +37,10 @@ public class GeminiVideoLearningAidGenerationService implements VideoLearningAid
                 You create study aids grounded only in a timestamped video transcript.
                 The transcript's detected language is %s. Write in that language.
                 Return strict JSON only, without markdown or code fences, with this shape:
-                {"summary":"...","keyPoints":["..."],"chapters":[{"startSegmentIndex":0,"endSegmentIndex":3,"title":"...","summary":"..."}]}
+                {"suggestedTitle":"...","summary":"...","keyPoints":["..."],"chapters":[{"startSegmentIndex":0,"endSegmentIndex":3,"title":"...","summary":"..."}]}
                 Rules:
                 - Do not add facts that are absent from the transcript.
+                - Produce one concise, specific lesson title with at most 100 characters.
                 - Produce 3-10 concise key points.
                 - Produce 1-20 non-overlapping chapters ordered by segment index.
                 - Every chapter must refer to valid segment indexes from the supplied transcript.
@@ -99,19 +100,24 @@ public class GeminiVideoLearningAidGenerationService implements VideoLearningAid
         return Map.of(
                 "type", "object",
                 "properties", Map.of(
+                        "suggestedTitle", Map.of("type", "string"),
                         "summary", Map.of("type", "string"),
                         "keyPoints", Map.of("type", "array", "items", Map.of("type", "string")),
                         "chapters", Map.of("type", "array", "items", chapter)),
-                "required", List.of("summary", "keyPoints", "chapters"),
+                "required", List.of("suggestedTitle", "summary", "keyPoints", "chapters"),
                 "additionalProperties", false);
     }
 
     private LearningAidResult parse(String output, int segmentCount) throws IOException {
         String json = stripFence(output == null ? "" : output.trim());
         Payload payload = objectMapper.readValue(json, Payload.class);
+        String suggestedTitle = normalize(payload.suggestedTitle());
         String summary = normalize(payload.summary());
-        if (summary == null) {
-            throw new IOException("Missing summary");
+        if (suggestedTitle == null || summary == null) {
+            throw new IOException("Missing lesson metadata");
+        }
+        if (suggestedTitle.length() > 255) {
+            suggestedTitle = suggestedTitle.substring(0, 255).trim();
         }
         List<String> keyPoints = payload.keyPoints() == null ? List.of() : payload.keyPoints().stream()
                 .map(this::normalize).filter(value -> value != null).limit(30).toList();
@@ -137,7 +143,7 @@ public class GeminiVideoLearningAidGenerationService implements VideoLearningAid
         if (chapters.isEmpty()) {
             chapters.add(new GeneratedChapter(0, segmentCount - 1, "Video overview", summary));
         }
-        return new LearningAidResult(summary, keyPoints, List.copyOf(chapters));
+        return new LearningAidResult(suggestedTitle, summary, keyPoints, List.copyOf(chapters));
     }
 
     private String transcriptForPrompt(List<TranscriptionSegment> segments) {
@@ -199,7 +205,12 @@ public class GeminiVideoLearningAidGenerationService implements VideoLearningAid
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private record Payload(String summary, List<String> keyPoints, List<ChapterPayload> chapters) {
+    private record Payload(
+            String suggestedTitle,
+            String summary,
+            List<String> keyPoints,
+            List<ChapterPayload> chapters
+    ) {
     }
 
     private record ChapterPayload(int startSegmentIndex, int endSegmentIndex, String title, String summary) {

@@ -11,6 +11,6 @@ public class VideoAiJacksonConfig {
     @Bean
     @ConditionalOnMissingBean(ObjectMapper.class)
     ObjectMapper videoAiObjectMapper() {
-        return new ObjectMapper();
+        return new ObjectMapper().findAndRegisterModules();
     }
 }

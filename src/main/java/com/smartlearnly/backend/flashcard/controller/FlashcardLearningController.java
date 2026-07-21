@@ -46,7 +46,7 @@ public class FlashcardLearningController {
     @Operation(summary = "Get flashcards for a class curriculum lesson")
     public ApiResponse<FlashcardPracticeSetResponse> getLessonFlashcards(
             @PathVariable UUID lessonId,
-            @RequestParam UUID classId) {
+            @RequestParam(required = false) UUID classId) {
         return ApiResponse.success("Flashcards loaded successfully",flashcardLearningService.getLessonFlashcards(lessonId, classId));
     }
 

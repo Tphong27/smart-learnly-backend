@@ -322,6 +322,7 @@ public class VideoAiJobWorker {
         VideoAiJob job = requireOwnedJob(jobId, leaseOwner);
         requireCurrentHls(job);
         VideoAiContent content = contentRepository.findById(job.getContentId()).orElseThrow();
+        content.setSuggestedTitle(result.suggestedTitle());
         content.setSummary(result.summary());
         try {
             content.setKeyPointsJson(objectMapper.writeValueAsString(
@@ -344,6 +345,9 @@ public class VideoAiJobWorker {
         }).toList();
         for (int index = 0; index < chapters.size(); index++) chapters.get(index).setChapterIndex(index);
         content.replaceChapters(chapters);
+        content.setStatus("published");
+        content.setPublishedBy(job.getRequestedBy());
+        content.setPublishedAt(Instant.now());
         contentRepository.save(content);
         job.setStatus("completed");
         job.setStage("draft_ready");
