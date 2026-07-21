@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,11 +14,16 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.dto.CourseResponse;
 import com.smartlearnly.backend.course.dto.CreateCourseRequest;
+import com.smartlearnly.backend.course.dto.UpdateCourseRequest;
 import com.smartlearnly.backend.course.entity.Category;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CategoryRepository;
 import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
@@ -47,6 +53,8 @@ class CourseAdminServiceTest {
     private AuditLogService auditLogService;
     @Mock
     private CourseAccessService courseAccessService;
+    @Mock
+    private CurriculumVersionRepository curriculumVersionRepository;
 
     private CourseAdminService courseAdminService;
     private StorageProperties storageProperties;
@@ -62,7 +70,8 @@ class CourseAdminServiceTest {
                 currentUserService,
                 auditLogService,
                 storageProperties,
-                courseAccessService
+                courseAccessService,
+                curriculumVersionRepository
         );
     }
 
@@ -104,6 +113,60 @@ class CourseAdminServiceTest {
         assertThat(courseCaptor.getValue().getCreator()).isEqualTo(admin);
         assertThat(courseCaptor.getValue().getStatus()).isEqualTo(CourseStatus.DRAFT);
         verify(auditLogService).record(admin.getEmail(), "COURSE_CREATED", "COURSE", response.id().toString());
+    }
+
+    @Test
+    void createPublishedCourseShouldAlsoCreatePublishedMasterCurriculum() {
+        UUID categoryId = UUID.randomUUID();
+        UserAccount admin = admin();
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+        when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("published-course")).thenReturn(false);
+        when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> persist(invocation.getArgument(0)));
+        when(curriculumVersionRepository
+                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
+                        any(UUID.class), org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER)))
+                .thenReturn(Optional.empty());
+        when(curriculumVersionRepository.findMaxMasterVersionNumber(
+                any(UUID.class), org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER)))
+                .thenReturn(0);
+        when(curriculumVersionRepository.save(any(CurriculumVersion.class))).thenAnswer(invocation -> {
+            CurriculumVersion version = invocation.getArgument(0);
+            if (version.getId() == null) {
+                version.setId(UUID.randomUUID());
+            }
+            return version;
+        });
+        when(curriculumVersionRepository
+                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                        any(UUID.class),
+                        org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER),
+                        org.mockito.ArgumentMatchers.eq(CurriculumStatus.PUBLISHED)))
+                .thenReturn(Optional.empty());
+
+        courseAdminService.create(new CreateCourseRequest(
+                categoryId,
+                "Published course",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                BigDecimal.ZERO,
+                null,
+                true,
+                "published"
+        ));
+
+        ArgumentCaptor<CurriculumVersion> versionCaptor = ArgumentCaptor.forClass(CurriculumVersion.class);
+        verify(curriculumVersionRepository, times(2)).save(versionCaptor.capture());
+        CurriculumVersion published = versionCaptor.getAllValues().get(1);
+        assertThat(published.getStatus()).isEqualTo(CurriculumStatus.PUBLISHED);
+        assertThat(published.getPublishedAt()).isNotNull();
+        assertThat(published.getCreatedBy()).isEqualTo(admin.getId());
     }
 
     @Test
@@ -269,8 +332,58 @@ class CourseAdminServiceTest {
         verify(courseRepository, never()).save(any());
     }
 
+    @Test
+    void updateShouldPublishLatestMasterCurriculumWhenCourseIsPublished() {
+        Course course = existingCourse(CourseStatus.DRAFT);
+        CurriculumVersion draft = new CurriculumVersion();
+        draft.setId(UUID.randomUUID());
+        draft.setCourseId(course.getId());
+        draft.setScope(CurriculumScope.MASTER);
+        draft.setStatus(CurriculumStatus.DRAFT);
+        draft.setVersionNumber(2);
+        draft.setTitle(course.getTitle());
+        UserAccount actor = admin();
+        UpdateCourseRequest request = new UpdateCourseRequest();
+        request.setStatus("published");
+
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(courseRepository.save(course)).thenReturn(course);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+        when(curriculumVersionRepository
+                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
+                        course.getId(), CurriculumScope.MASTER))
+                .thenReturn(Optional.of(draft));
+        when(curriculumVersionRepository
+                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                        course.getId(), CurriculumScope.MASTER, CurriculumStatus.PUBLISHED))
+                .thenReturn(Optional.empty());
+
+        CourseResponse response = courseAdminService.update(course.getId(), request);
+
+        assertThat(response.status()).isEqualTo("published");
+        assertThat(draft.getStatus()).isEqualTo(CurriculumStatus.PUBLISHED);
+        assertThat(draft.getPublishedAt()).isNotNull();
+        verify(curriculumVersionRepository).save(draft);
+    }
+
     private Course persist(Course course) {
         course.setId(UUID.randomUUID());
+        course.setCreatedAt(Instant.now());
+        course.setUpdatedAt(Instant.now());
+        return course;
+    }
+
+    private Course existingCourse(CourseStatus status) {
+        Course course = new Course();
+        course.setId(UUID.randomUUID());
+        course.setCategory(category(UUID.randomUUID()));
+        course.setCreator(admin());
+        course.setTitle("Course");
+        course.setSlug("course");
+        course.setPrice(BigDecimal.ZERO);
+        course.setFree(true);
+        course.setFeatured(false);
+        course.setStatus(status);
         course.setCreatedAt(Instant.now());
         course.setUpdatedAt(Instant.now());
         return course;

@@ -17,6 +17,10 @@ import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CategoryRepository;
 import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.course.service.CourseAccessService;
@@ -46,6 +50,7 @@ public class CourseAdminService {
     private final AuditLogService auditLogService;
     private final StorageProperties storageProperties;
     private final CourseAccessService courseAccessService;
+    private final CurriculumVersionRepository curriculumVersionRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<CourseResponse> list(
@@ -159,6 +164,9 @@ public class CourseAdminService {
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
+        if (saved.getStatus() == CourseStatus.PUBLISHED) {
+            publishLatestMasterCurriculum(saved, creator);
+        }
         auditLogService.record(creator.getEmail(), "COURSE_CREATED", "COURSE", saved.getId().toString());
         return CourseDtoMapper.toCourseResponse(saved);
     }
@@ -224,6 +232,9 @@ public class CourseAdminService {
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
+        if (saved.getStatus() == CourseStatus.PUBLISHED) {
+            publishLatestMasterCurriculum(saved, currentUserService.requireAuthenticatedUser());
+        }
         if (previousStatus != saved.getStatus()) {
             AuditAction action = saved.getStatus() == CourseStatus.PUBLISHED
                     ? AuditAction.COURSE_PUBLISHED
@@ -241,6 +252,52 @@ public class CourseAdminService {
             audit("COURSE_UPDATED", saved.getId());
         }
         return CourseDtoMapper.toCourseResponse(saved);
+    }
+
+    /**
+     * Keeps the learner-facing curriculum in sync with the course status. The admin UI exposes one
+     * publish action for a course, so leaving its latest MASTER version in DRAFT makes the course
+     * visible while its lessons disappear from Learning Workspace.
+     */
+    private void publishLatestMasterCurriculum(Course course, UserAccount actor) {
+        CurriculumVersion latest = curriculumVersionRepository
+                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
+                        course.getId(), CurriculumScope.MASTER)
+                .orElseGet(() -> createInitialMasterCurriculum(course, actor));
+
+        if (latest.getStatus() == CurriculumStatus.PUBLISHED) {
+            return;
+        }
+
+        Instant now = Instant.now();
+        curriculumVersionRepository
+                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                        course.getId(), CurriculumScope.MASTER, CurriculumStatus.PUBLISHED)
+                .filter(published -> !published.getId().equals(latest.getId()))
+                .ifPresent(published -> {
+                    published.setStatus(CurriculumStatus.ARCHIVED);
+                    published.setArchivedAt(now);
+                    curriculumVersionRepository.save(published);
+                    curriculumVersionRepository.flush();
+                });
+
+        latest.setStatus(CurriculumStatus.PUBLISHED);
+        latest.setPublishedAt(now);
+        latest.setArchivedAt(null);
+        latest.setTitle(course.getTitle());
+        curriculumVersionRepository.save(latest);
+    }
+
+    private CurriculumVersion createInitialMasterCurriculum(Course course, UserAccount actor) {
+        CurriculumVersion version = new CurriculumVersion();
+        version.setCourseId(course.getId());
+        version.setScope(CurriculumScope.MASTER);
+        version.setStatus(CurriculumStatus.DRAFT);
+        version.setVersionNumber(curriculumVersionRepository.findMaxMasterVersionNumber(
+                course.getId(), CurriculumScope.MASTER) + 1);
+        version.setTitle(course.getTitle());
+        version.setCreatedBy(actor.getId());
+        return curriculumVersionRepository.save(version);
     }
 
     @Transactional
