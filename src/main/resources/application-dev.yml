@@ -17,6 +17,10 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 2
+    # Shared dev DB: teammates may apply/edit the same version files with different
+    # content, leaving flyway_schema_history checksums out of sync. Repair before
+    # migrate so local startup is not blocked by checksum mismatch (e.g. V51/V52).
+    repair-on-migrate: true
     # The shared development database contains migrations (e.g. V6/V7 and newer
     # versions applied by other teammates) whose source files are not present in
     # this local checkout. Ignore both missing (older) and future (newer) ones so
