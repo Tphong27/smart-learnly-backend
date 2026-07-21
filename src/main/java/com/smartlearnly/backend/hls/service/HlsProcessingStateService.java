@@ -13,6 +13,7 @@ import com.smartlearnly.backend.videoai.service.VideoAiAutoPreparationService;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class HlsProcessingStateService {
     private final HlsLessonRepository hlsRepository;
@@ -140,8 +142,7 @@ public class HlsProcessingStateService {
             l.setVideoUrl(masterPlaylist);
             curriculumLessonRepository.save(l);
         });
-        afterCommit(() -> videoAiAutoPreparationService.enqueueAfterVideoReady(
-                request.lessonId(), request.jobId()));
+        afterCommit(() -> enqueueVideoAiBestEffort(request.lessonId(), request.jobId()));
     }
 
     private void fail(HlsLesson hls, String error) {
@@ -194,6 +195,19 @@ public class HlsProcessingStateService {
         } catch (RuntimeException ignored) {
             // The new video is already ready. Orphan cleanup can be retried operationally
             // and must not turn a successful signed callback into a failure.
+        }
+    }
+
+    private void enqueueVideoAiBestEffort(UUID lessonId, UUID jobId) {
+        try {
+            videoAiAutoPreparationService.enqueueAfterVideoReady(lessonId, jobId);
+        } catch (RuntimeException exception) {
+            // HLS has already been committed as ready. AI preparation can be reconciled later and
+            // must never turn a successful, signed HLS callback into an HTTP 500 response.
+            log.warn(
+                    "HLS is ready, but automatic AI preparation could not be queued for lesson {}",
+                    lessonId,
+                    exception);
         }
     }
 
