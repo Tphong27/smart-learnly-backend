@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +21,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @Validated
 @RestController
@@ -38,13 +41,31 @@ public class AdminAiQuestionDraftController {
         return ApiResponse.success("AI generation sources loaded successfully", aiQuestionDraftService.listSources(bankId));
     }
 
-    @PostMapping
+    @GetMapping("/source-capabilities")
+    @Operation(summary = "Get supported AI question generation source limits")
+    public ApiResponse<AiQuestionDraftDtos.SourceCapabilitiesResponse> sourceCapabilities(@PathVariable UUID bankId) {
+        return ApiResponse.success("AI generation source capabilities loaded successfully", aiQuestionDraftService.sourceCapabilities(bankId));
+    }
+
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Create an AI question generation batch")
     public ResponseEntity<ApiResponse<AiQuestionDraftDtos.BatchResponse>> create(
             @PathVariable UUID bankId,
             @Valid @RequestBody AiQuestionDraftDtos.CreateBatchRequest request
     ) {
         AiQuestionDraftDtos.BatchResponse batch = aiQuestionDraftService.createBatch(bankId, request);
+        return ResponseEntity.created(URI.create("/api/v1/admin/question-banks/" + bankId + "/ai-drafts/" + batch.batchId()))
+                .body(ApiResponse.success("AI question generation batch created successfully", batch));
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Create an AI question generation batch from mixed source types")
+    public ResponseEntity<ApiResponse<AiQuestionDraftDtos.BatchResponse>> createMultipart(
+            @PathVariable UUID bankId,
+            @Valid @RequestPart("request") AiQuestionDraftDtos.CreateBatchRequest request,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files
+    ) {
+        AiQuestionDraftDtos.BatchResponse batch = aiQuestionDraftService.createBatch(bankId, request, files == null ? List.of() : files);
         return ResponseEntity.created(URI.create("/api/v1/admin/question-banks/" + bankId + "/ai-drafts/" + batch.batchId()))
                 .body(ApiResponse.success("AI question generation batch created successfully", batch));
     }
@@ -59,6 +80,16 @@ public class AdminAiQuestionDraftController {
     @Operation(summary = "Get an AI question generation batch")
     public ApiResponse<AiQuestionDraftDtos.BatchResponse> get(@PathVariable UUID bankId, @PathVariable UUID batchId) {
         return ApiResponse.success("AI question generation batch loaded successfully", aiQuestionDraftService.getBatch(bankId, batchId));
+    }
+
+    @PostMapping("/{batchId}/sources/{sourceId}/download-url")
+    @Operation(summary = "Create a short-lived audit download URL for an AI generation source")
+    public ApiResponse<AiQuestionDraftDtos.SourceDownloadUrlResponse> sourceDownloadUrl(
+            @PathVariable UUID bankId,
+            @PathVariable UUID batchId,
+            @PathVariable UUID sourceId
+    ) {
+        return ApiResponse.success("AI generation source download URL created successfully", aiQuestionDraftService.sourceDownloadUrl(bankId, batchId, sourceId));
     }
 
     @GetMapping("/{batchId}/items")
