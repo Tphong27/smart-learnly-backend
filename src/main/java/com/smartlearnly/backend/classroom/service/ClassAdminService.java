@@ -92,13 +92,13 @@ public class ClassAdminService {
         ClassOffering classOffering = new ClassOffering();
         classOffering.setCourseId(course.getId());
         classOffering.setClassName(normalizeRequired(request.className(), "Class name is required"));
-        classOffering.setTrainerId(trainer == null ? null : trainer.getId());
+        classOffering.setTrainerId(trainer.getId());
+
         classOffering.setScheduleDescription(normalizeNullable(request.scheduleDescription()));
         classOffering.setPrice(request.price());
         classOffering.setStartDate(request.startDate());
         classOffering.setEndDate(request.endDate());
         classOffering.setMaxStudents(request.maxStudents());
-        classOffering.setPrice(request.price());
         classOffering.setStatus(ClassStatus.UPCOMING);
         classOffering.setCreatedBy(actor.getId());
 
@@ -141,7 +141,7 @@ public class ClassAdminService {
         }
         if (request.isTrainerIdProvided()) {
             UserAccount trainer = requireTrainer(request.getTrainerId());
-            classOffering.setTrainerId(trainer == null ? null : trainer.getId());
+            classOffering.setTrainerId(trainer.getId());
         }
         if (request.isScheduleDescriptionProvided()) {
             classOffering.setScheduleDescription(normalizeNullable(request.getScheduleDescription()));
@@ -192,6 +192,12 @@ public class ClassAdminService {
                         previousTrainerId,
                         classOffering.getTrainerId());
 
+        if (scheduleDefinitionChanged && classOffering.getTrainerId() == null) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_TRAINER,
+                    "Please select a trainer before updating the class schedule");
+        }
+
         classOfferingRepository.saveAndFlush(classOffering);
         if (scheduleDefinitionChanged) {
             classSessionScheduleService.synchronizeFutureSessions(classOffering);
@@ -238,8 +244,11 @@ public class ClassAdminService {
 
     private UserAccount requireTrainer(UUID trainerId) {
         if (trainerId == null) {
-            return null;
+            throw new BusinessException(
+                    ErrorCode.INVALID_TRAINER,
+                    "Please select a trainer");
         }
+
         return userRepository.findActiveUserByIdAndRole(
                 trainerId,
                 "TRAINER",

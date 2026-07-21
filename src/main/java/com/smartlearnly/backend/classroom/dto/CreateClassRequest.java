@@ -12,7 +12,7 @@ import java.util.UUID;
 public record CreateClassRequest(
         @NotNull UUID courseId,
         @NotBlank @Size(max = 255) String className,
-        UUID trainerId,
+        @NotNull UUID trainerId,
         @NotBlank @Size(max = 2000) String scheduleDescription,
         LocalDate startDate,
         LocalDate endDate,

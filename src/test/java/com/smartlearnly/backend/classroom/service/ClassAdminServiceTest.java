@@ -82,11 +82,12 @@ class ClassAdminServiceTest {
                                 trainer.getId(),
                                 "TRAINER",
                                 "active")).thenReturn(Optional.of(trainer));
-                when(classOfferingRepository.save(any(ClassOffering.class))).thenAnswer(invocation -> {
-                        ClassOffering saved = invocation.getArgument(0);
-                        saved.setId(UUID.randomUUID());
-                        return saved;
-                });
+                when(classOfferingRepository.saveAndFlush(any(ClassOffering.class)))
+                                .thenAnswer(invocation -> {
+                                        ClassOffering saved = invocation.getArgument(0);
+                                        saved.setId(UUID.randomUUID());
+                                        return saved;
+                                });
 
                 ClassResponse response = service.create(request);
 
@@ -99,6 +100,60 @@ class ClassAdminServiceTest {
                                 "CLASS_CREATED",
                                 "CLASS",
                                 response.id().toString());
+        }
+
+        @Test
+        void createShouldRejectMissingTrainerBeforeSavingClass() {
+                UserAccount actor = user("admin@smartlearnly.dev");
+                Course course = course();
+
+                CreateClassRequest request = new CreateClassRequest(
+                                course.getId(),
+                                "Spring Cohort",
+                                null,
+                                """
+                                                [
+                                                  {
+                                                    "dayOfWeek": "MONDAY",
+                                                    "slots": [
+                                                      {
+                                                        "startTime": "19:00",
+                                                        "endTime": "21:00"
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                                """,
+                                LocalDate.of(2026, 7, 25),
+                                LocalDate.of(2026, 8, 25),
+                                30,
+                                new BigDecimal("4000000"));
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(actor);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                                .thenReturn(Optional.of(course));
+
+                assertThatThrownBy(() -> service.create(request))
+                                .isInstanceOfSatisfying(
+                                                BusinessException.class,
+                                                exception -> {
+                                                        assertThat(exception.errorCode())
+                                                                        .isEqualTo(ErrorCode.INVALID_TRAINER);
+
+                                                        assertThat(exception.getMessage())
+                                                                        .isEqualTo("Please select a trainer");
+                                                });
+
+                verify(classOfferingRepository, never())
+                                .saveAndFlush(any(ClassOffering.class));
+
+                verify(classSessionScheduleService, never())
+                                .synchronizeFutureSessions(any(ClassOffering.class));
+
+                verify(auditLogService, never())
+                                .record(any(), any(), any(), any());
         }
 
         @Test

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -14,6 +15,7 @@ public class UpdateClassRequest {
     @Size(max = 255)
     private String className;
 
+    @NotNull
     private UUID trainerId;
 
     @Size(max = 2000)
