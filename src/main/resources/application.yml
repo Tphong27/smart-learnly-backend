@@ -108,6 +108,14 @@ app:
         max-files: ${APP_QUESTION_IMAGE_IMPORT_MAX_FILES:5}
         
         preview-concurrency: ${APP_QUESTION_IMAGE_IMPORT_PREVIEW_CONCURRENCY:3}
+    question-ai-generation:
+        enabled: ${APP_QUESTION_AI_GENERATION_ENABLED:true}
+        provider: ${APP_QUESTION_AI_GENERATION_PROVIDER:gemini}
+        api-key: ${GEMINI_API_KEY:}
+        api-base-url: ${GEMINI_API_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+        model: ${APP_QUESTION_AI_GENERATION_MODEL:${GEMINI_MODEL:gemini-3.5-flash}}
+        timeout: ${APP_QUESTION_AI_GENERATION_TIMEOUT:PT60S}
+        max-batches-per-user-day: ${APP_QUESTION_AI_GENERATION_MAX_BATCHES_PER_USER_DAY:5}
     flashcard-document-generation:
         enabled: ${APP_FLASHCARD_DOCUMENT_GENERATION_ENABLED:true}
         provider: ${APP_FLASHCARD_DOCUMENT_GENERATION_PROVIDER:gemini}
