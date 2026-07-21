@@ -513,7 +513,8 @@ public class VideoAiAuthoringService {
     public ContentResponse toContent(VideoAiContent content) {
         return new ContentResponse(
                 content.getId(), content.getLessonId(), content.getSourceVersion(), content.getLanguage(),
-                content.getTranscriptText(), content.getSummary(), readKeyPoints(content.getKeyPointsJson()),
+                content.getTranscriptText(), content.getSuggestedTitle(), content.getSummary(),
+                readKeyPoints(content.getKeyPointsJson()),
                 content.getStatus(), content.getRevision(),
                 content.getSegments().stream().map(segment -> new TranscriptSegmentResponse(
                         segment.getSegmentIndex(), segment.getStartMs(), segment.getEndMs(), segment.getText())).toList(),

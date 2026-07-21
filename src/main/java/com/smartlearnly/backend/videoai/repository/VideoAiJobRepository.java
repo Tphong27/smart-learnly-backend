@@ -34,6 +34,16 @@ public interface VideoAiJobRepository extends JpaRepository<VideoAiJob, UUID> {
             @Param("jobType") String jobType,
             Pageable pageable);
 
+    @Query("select count(job) from VideoAiJob job where job.lessonId = :lessonId and job.lessonScope = :scope "
+            + "and ((:classId is null and job.classId is null) or job.classId = :classId) "
+            + "and job.sourceVersion = :sourceVersion and job.jobType = :jobType")
+    long countForSource(
+            @Param("lessonId") UUID lessonId,
+            @Param("scope") String scope,
+            @Param("classId") UUID classId,
+            @Param("sourceVersion") UUID sourceVersion,
+            @Param("jobType") String jobType);
+
     @Query("select job from VideoAiJob job where job.lessonId = :lessonId and job.lessonScope = :scope "
             + "and ((:classId is null and job.classId is null) or job.classId = :classId) "
             + "and job.sourceVersion = :sourceVersion and job.jobType = :jobType "
