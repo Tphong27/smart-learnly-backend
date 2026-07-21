@@ -39,5 +39,6 @@ public class StorageProperties {
     private DataSize questionImageMaxSize = DataSize.ofMegabytes(5);
     private DataSize questionAudioMaxSize = DataSize.ofMegabytes(20);
     private DataSize questionVideoMaxSize = DataSize.ofMegabytes(100);
+    private String aiQuestionSourceFileBucket = "ai-question-source-files";
+    private DataSize aiQuestionSourceFileMaxSize = DataSize.ofMegabytes(25);
 }
-
