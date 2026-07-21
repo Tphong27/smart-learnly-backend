@@ -19,6 +19,9 @@ import lombok.Setter;
 @Table(name = "ai_question_generation_sources", schema = "public")
 public class AiQuestionGenerationSource {
     public static final String KIND_MATERIAL = "material";
+    public static final String KIND_PASTED_TEXT = "pasted_text";
+    public static final String KIND_TEMPORARY_FILE = "temporary_file";
+    public static final String KIND_TRANSCRIPT = "transcript";
 
     @Id
     @GeneratedValue
@@ -39,6 +42,24 @@ public class AiQuestionGenerationSource {
     @Column(name = "source_payload_ref", columnDefinition = "TEXT")
     private String sourcePayloadRef;
 
+    @Column(name = "mime_type", length = 128)
+    private String mimeType;
+
+    @Column(name = "file_size_bytes")
+    private Long fileSizeBytes;
+
+    @Column(name = "normalized_char_count")
+    private Integer normalizedCharCount;
+
+    @Column(name = "transcript_content_id")
+    private UUID transcriptContentId;
+
+    @Column(name = "lesson_id")
+    private UUID lessonId;
+
+    @Column(name = "downloadable", nullable = false)
+    private Boolean downloadable;
+
     @Column(name = "source_name", nullable = false)
     private String sourceName;
 
@@ -57,6 +78,7 @@ public class AiQuestionGenerationSource {
     @PrePersist
     void prePersist() {
         if (sourceKind == null) sourceKind = KIND_MATERIAL;
+        if (downloadable == null) downloadable = false;
         if (createdAt == null) createdAt = Instant.now();
     }
 }
