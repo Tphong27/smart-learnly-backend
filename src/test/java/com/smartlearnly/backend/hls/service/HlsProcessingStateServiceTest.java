@@ -15,6 +15,7 @@ import com.smartlearnly.backend.hls.entity.HlsLesson;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
+import com.smartlearnly.backend.videoai.service.VideoAiAutoPreparationService;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,6 +36,8 @@ class HlsProcessingStateServiceTest {
     CurriculumLessonRepository curriculumLessonRepository;
     @Mock
     CloudflareR2StorageClient r2StorageClient;
+    @Mock
+    VideoAiAutoPreparationService videoAiAutoPreparationService;
 
     HlsProperties properties;
     HlsProcessingStateService service;
@@ -48,7 +51,8 @@ class HlsProcessingStateServiceTest {
                 lessonRepository,
                 curriculumLessonRepository,
                 properties,
-                r2StorageClient
+                r2StorageClient,
+                videoAiAutoPreparationService
         );
     }
 
@@ -79,6 +83,7 @@ class HlsProcessingStateServiceTest {
         assertThat(hls.getAiAudioDurationMs()).isEqualTo(123_456L);
         assertThat(hls.getProcessingCompletedAt()).isNotNull();
         verify(hlsRepository).save(hls);
+        verify(videoAiAutoPreparationService).enqueueAfterVideoReady(lessonId, jobId);
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.smartlearnly.backend.hls.entity.HlsLesson;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
+import com.smartlearnly.backend.videoai.service.VideoAiAutoPreparationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -43,6 +44,7 @@ public class HlsUploadService {
     private final HlsWorkflowDispatcher workflowDispatcher;
     private final HlsProcessingStateService processingStateService;
     private final HlsLessonAccessService lessonAccessService;
+    private final VideoAiAutoPreparationService videoAiAutoPreparationService;
 
     private static final long MAX_VIDEO_SIZE = 500L * 1024 * 1024; // 500MB
 
@@ -323,6 +325,7 @@ public class HlsUploadService {
         if (previousAiAudioKey != null && !previousAiAudioKey.equals(result.aiAudioObjectKey())) {
             afterCommit(() -> deleteAiAudioBestEffort(previousAiAudioKey));
         }
+        afterCommit(() -> videoAiAutoPreparationService.enqueueAfterVideoReady(lessonId, jobId));
         return true;
     }
 
