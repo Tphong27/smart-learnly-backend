@@ -111,20 +111,13 @@ class CheckoutServiceTest {
         void checkoutShouldCreateOrderSnapshotPendingTransactionAndSePayOrder() {
                 UserAccount user = user();
                 Course course = paidPublishedCourse();
-                ClassOffering classOffering = classOffering(course.getId());
 
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
 
                 when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
                                 .thenReturn(Optional.of(course));
 
-                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                                .thenReturn(Optional.of(classOffering));
-
                 when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                                .thenReturn(Optional.empty());
-
-                when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
                                 .thenReturn(Optional.empty());
 
                 when(orderRepository.existsByOrderCode(anyString()))
@@ -202,7 +195,6 @@ class CheckoutServiceTest {
         void checkoutShouldRejectCourseThatAlreadyHasActiveEnrollment() {
                 UserAccount user = user();
                 Course course = paidPublishedCourse();
-                ClassOffering classOffering = classOffering(course.getId());
 
                 CourseEnrollment enrollment = new CourseEnrollment();
                 enrollment.setStatus(EnrollmentStatus.ACTIVE);
@@ -212,9 +204,6 @@ class CheckoutServiceTest {
 
                 when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
                                 .thenReturn(Optional.of(course));
-
-                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                                .thenReturn(Optional.of(classOffering));
 
                 when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
                                 .thenReturn(Optional.of(enrollment));
@@ -237,7 +226,6 @@ class CheckoutServiceTest {
         void checkoutShouldUseCoursePrice() {
                 UserAccount user = user();
                 Course course = paidPublishedCourse();
-                ClassOffering classOffering = classOffering(course.getId());
 
                 when(currentUserService.requireAuthenticatedUser())
                                 .thenReturn(user);
@@ -245,13 +233,7 @@ class CheckoutServiceTest {
                 when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
                                 .thenReturn(Optional.of(course));
 
-                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                                .thenReturn(Optional.of(classOffering));
-
                 when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                                .thenReturn(Optional.empty());
-
-                when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
                                 .thenReturn(Optional.empty());
 
                 when(orderRepository.existsByOrderCode(anyString()))

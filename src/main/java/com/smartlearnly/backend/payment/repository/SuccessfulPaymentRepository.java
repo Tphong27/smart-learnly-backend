@@ -17,7 +17,7 @@ public class SuccessfulPaymentRepository {
                     FROM public.transactions tx
                     WHERE tx.id = ?
                       AND tx.user_id = ?
-                      AND tx.status = 'SUCCESS'::public.tx_status
+                      AND tx.status = 'SUCCESS'
                       AND (
                           tx.course_id = ?
                           OR EXISTS (
@@ -59,7 +59,7 @@ public class SuccessfulPaymentRepository {
                     FROM public.transactions tx
                     WHERE tx.id = ?
                       AND tx.user_id = ?
-                      AND tx.status = 'SUCCESS'::public.tx_status
+                      AND tx.status = 'SUCCESS'
                       AND (
                           tx.class_id = ?
                           OR EXISTS (

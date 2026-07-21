@@ -14,7 +14,6 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.ColumnTransformer;
 
 @Getter
 @Setter
@@ -44,14 +43,14 @@ public class PaymentTransaction {
     @Column(nullable = false)
     private String currency;
 
+    // Dùng varchar + converter để Hibernate bind string trong WHERE (tránh
+    // Postgres "operator does not exist: tx_status = character varying").
     @Convert(converter = TransactionStatusConverter.class)
-    @Column(nullable = false, columnDefinition = "tx_status")
-    @ColumnTransformer(write = "?::tx_status")
+    @Column(nullable = false, length = 32)
     private TransactionStatus status;
 
     @Convert(converter = PaymentGatewayConverter.class)
-    @Column(name = "payment_gateway", columnDefinition = "payment_gw")
-    @ColumnTransformer(write = "?::payment_gw")
+    @Column(name = "payment_gateway", length = 32)
     private PaymentGateway paymentGateway;
 
     @Column(name = "gateway_event_id")
