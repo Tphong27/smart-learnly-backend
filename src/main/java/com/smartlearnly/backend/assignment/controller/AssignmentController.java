@@ -9,10 +9,12 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/assignments")
+@PreAuthorize("isAuthenticated()")
 public class AssignmentController {
 
     private final AssignmentService assignmentService;
@@ -49,18 +51,21 @@ public class AssignmentController {
     // }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> create(@Valid @RequestBody AssignmentModel.CreateRequest request) {
         AssignmentModel.Response response = assignmentService.createAssignment(request);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.Response>> getAll() {
         List<AssignmentModel.Response> responses = assignmentService.getAllAssignments();
         return ResponseEntity.ok(responses);
     }
 
     @GetMapping("/mine")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.Response>> getMine(
             @RequestParam(required = false) UUID courseId,
             @RequestParam(required = false) Boolean isFlashtest) {
@@ -76,6 +81,7 @@ public class AssignmentController {
     // }
 
     @GetMapping("/available")
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<List<AssignmentModel.Response>> getAvailable(
             @RequestParam(required = false) UUID courseId,
             @RequestParam(required = false) UUID classId,
@@ -85,6 +91,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/classes")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.ClassOptionResponse>> getAssignableClasses(
             @RequestParam(required = false) UUID courseId) {
         return ResponseEntity.ok(assignmentService.getAssignableClasses(courseId));
@@ -106,6 +113,7 @@ public class AssignmentController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> update(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentModel.UpdateRequest request) {
@@ -114,6 +122,7 @@ public class AssignmentController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         assignmentService.deleteAssignment(id);
         return ResponseEntity.noContent().build();

@@ -82,7 +82,7 @@ class ClassAdminServiceTest {
                                 trainer.getId(),
                                 "TRAINER",
                                 "active")).thenReturn(Optional.of(trainer));
-                when(classOfferingRepository.save(any(ClassOffering.class))).thenAnswer(invocation -> {
+                when(classOfferingRepository.saveAndFlush(any(ClassOffering.class))).thenAnswer(invocation -> {
                         ClassOffering saved = invocation.getArgument(0);
                         saved.setId(UUID.randomUUID());
                         return saved;

@@ -112,6 +112,14 @@ class CourseAdminServiceTest {
         verify(courseRepository).save(courseCaptor.capture());
         assertThat(courseCaptor.getValue().getCreator()).isEqualTo(admin);
         assertThat(courseCaptor.getValue().getStatus()).isEqualTo(CourseStatus.DRAFT);
+
+        ArgumentCaptor<CurriculumVersion> curriculumCaptor = ArgumentCaptor.forClass(CurriculumVersion.class);
+        verify(curriculumVersionRepository).save(curriculumCaptor.capture());
+        assertThat(curriculumCaptor.getValue().getCourseId()).isEqualTo(response.id());
+        assertThat(curriculumCaptor.getValue().getScope()).isEqualTo(CurriculumScope.MASTER);
+        assertThat(curriculumCaptor.getValue().getStatus()).isEqualTo(CurriculumStatus.DRAFT);
+        assertThat(curriculumCaptor.getValue().getVersionNumber()).isEqualTo(1);
+        assertThat(curriculumCaptor.getValue().getCreatedBy()).isEqualTo(admin.getId());
         verify(auditLogService).record(admin.getEmail(), "COURSE_CREATED", "COURSE", response.id().toString());
     }
 

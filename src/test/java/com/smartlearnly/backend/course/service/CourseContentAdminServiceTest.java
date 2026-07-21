@@ -206,6 +206,62 @@ class CourseContentAdminServiceTest {
     }
 
     @Test
+    void createLessonShouldSupportEveryAdminCurriculumLessonType() {
+        Course course = course();
+        CurriculumVersion version = version(course);
+        CurriculumSection section = section(version, 0);
+        UserAccount actor = new UserAccount();
+        actor.setEmail("admin@smartlearnly.dev");
+        String quizContent = """
+                {"questions":[{"question":"2 + 2?","options":["3","4"],"correctIndex":1}]}
+                """;
+
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(curriculumSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(0);
+        when(curriculumLessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {
+            CurriculumLesson saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            saved.setCreatedAt(Instant.now());
+            saved.setUpdatedAt(Instant.now());
+            return saved;
+        });
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+        record LessonCase(String type, String content, String videoUrl) {}
+        List<LessonCase> cases = List.of(
+                new LessonCase("VIDEO", "Video summary", "https://storage.test/video.mp4"),
+                new LessonCase("RICH_TEXT", "<p>Text lesson</p>", null),
+                new LessonCase("QUIZ", quizContent, null),
+                new LessonCase("FLASHCARD", null, null),
+                new LessonCase("ESSAY", "Assignment instructions", null));
+
+        List<LessonResponse> responses = cases.stream()
+                .map(testCase -> courseContentAdminService.createLesson(
+                        section.getId(),
+                        new LessonRequest(
+                                testCase.type() + " lesson",
+                                testCase.type(),
+                                null,
+                                testCase.videoUrl(),
+                                testCase.content(),
+                                null,
+                                60,
+                                false,
+                                "PUBLISHED",
+                                List.of(),
+                                null)))
+                .toList();
+
+        assertThat(responses)
+                .extracting(LessonResponse::lessonType)
+                .containsExactly("VIDEO", "RICH_TEXT", "QUIZ", "FLASHCARD", "ESSAY");
+        assertThat(responses).allMatch(response -> "published".equals(response.status()));
+        assertThat(responses).allMatch(response -> response.id() != null);
+        verify(quizContentValidator).validate(quizContent.trim());
+    }
+
+    @Test
     void createSectionShouldCreatePublishedMasterForPublishedCourse() {
         Course course = course();
         course.setStatus(CourseStatus.PUBLISHED);

@@ -89,18 +89,30 @@ public class FlashcardLearningService {
             UUID classId) {
         UserAccount student = currentUserService.requireAuthenticatedUser();
 
-        ClassOffering classOffering = classOfferingRepository
-                .findByIdAndDeletedAtIsNull(classId)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.RESOURCE_NOT_FOUND,
-                        "Class was not found"));
-
-        UUID courseId = classOffering.getCourseId();
-
-        CurriculumResolution resolution = curriculumResolutionService.resolveTraineeLearning(
-                courseId,
-                classId,
-                student.getId());
+        UUID courseId;
+        CurriculumResolution resolution;
+        if (classId == null) {
+            CurriculumLesson requestedLesson = curriculumLessonRepository
+                    .findById(lessonReferenceId)
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.RESOURCE_NOT_FOUND,
+                            "Flashcard lesson was not found"));
+            courseId = requestedLesson.getSection().getCurriculumVersion().getCourseId();
+            resolution = curriculumResolutionService.resolveOnlineLearning(
+                    courseId,
+                    student.getId());
+        } else {
+            ClassOffering classOffering = classOfferingRepository
+                    .findByIdAndDeletedAtIsNull(classId)
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.RESOURCE_NOT_FOUND,
+                            "Class was not found"));
+            courseId = classOffering.getCourseId();
+            resolution = curriculumResolutionService.resolveTraineeLearning(
+                    courseId,
+                    classId,
+                    student.getId());
+        }
 
         CurriculumLesson curriculumLesson = curriculumLessonRepository
                 .findEffectiveLessonReference(
@@ -238,7 +250,7 @@ public class FlashcardLearningService {
                     "Lesson is not a flashcard lesson");
         }
 
-        if (lesson.getStatus() == LessonStatus.INACTIVE) {
+        if (lesson.getStatus() != LessonStatus.PUBLISHED) {
             throw new BusinessException(
                     ErrorCode.RESOURCE_NOT_FOUND,
                     "Flashcard lesson was not found");

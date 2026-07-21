@@ -25,11 +25,6 @@ import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository
 import com.smartlearnly.backend.enrollment.repository.EnrollmentHistoryProjection;
 import com.smartlearnly.backend.enrollment.repository.EnrollmentStatusHistoryRepository;
 import com.smartlearnly.backend.enrollment.repository.MyCourseProjection;
-import com.smartlearnly.backend.classroom.entity.ClassOffering;
-import com.smartlearnly.backend.classroom.entity.ClassStatus;
-import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
-import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
-import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.payment.repository.SuccessfulPaymentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
@@ -47,8 +42,6 @@ public class CourseEnrollmentService {
         private static final int MAX_PAGE_SIZE = 100;
 
         private final CourseRepository courseRepository;
-        private final ClassOfferingRepository classOfferingRepository;
-        private final ClassEnrollmentRepository classEnrollmentRepository;
         private final CourseEnrollmentRepository courseEnrollmentRepository;
         private final EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
         private final SuccessfulPaymentRepository successfulPaymentRepository;

@@ -164,8 +164,9 @@ public class CourseAdminService {
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
+        CurriculumVersion masterCurriculum = findOrCreateLatestMasterCurriculum(saved, creator);
         if (saved.getStatus() == CourseStatus.PUBLISHED) {
-            publishLatestMasterCurriculum(saved, creator);
+            publishMasterCurriculum(saved, masterCurriculum);
         }
         auditLogService.record(creator.getEmail(), "COURSE_CREATED", "COURSE", saved.getId().toString());
         return CourseDtoMapper.toCourseResponse(saved);
@@ -260,11 +261,18 @@ public class CourseAdminService {
      * visible while its lessons disappear from Learning Workspace.
      */
     private void publishLatestMasterCurriculum(Course course, UserAccount actor) {
-        CurriculumVersion latest = curriculumVersionRepository
+        CurriculumVersion latest = findOrCreateLatestMasterCurriculum(course, actor);
+        publishMasterCurriculum(course, latest);
+    }
+
+    private CurriculumVersion findOrCreateLatestMasterCurriculum(Course course, UserAccount actor) {
+        return curriculumVersionRepository
                 .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
                         course.getId(), CurriculumScope.MASTER)
                 .orElseGet(() -> createInitialMasterCurriculum(course, actor));
+    }
 
+    private void publishMasterCurriculum(Course course, CurriculumVersion latest) {
         if (latest.getStatus() == CurriculumStatus.PUBLISHED) {
             return;
         }

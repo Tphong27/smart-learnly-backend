@@ -8,7 +8,9 @@ import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
 import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
+import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
@@ -29,16 +31,19 @@ public class AssignmentSubmissionService {
     private final AssignmentRepository assignmentRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CurrentUserService currentUserService;
 
     @Transactional
     public AssignmentSubmissionModel.Response startAssignment(
             AssignmentSubmissionModel.StartRequest request) {
+        UUID studentId = required(request.getStudentId(), "studentId");
+        requireSelfIfTrainee(studentId);
         Assignment assignment = loadAssignment(required(request.getAssignmentId(), "assignmentId"));
 
         AssignmentSubmission submission = repository
                 .findByAssignmentIdAndStudentId(
                         request.getAssignmentId(),
-                        required(request.getStudentId(), "studentId"))
+                        studentId)
                 .orElseGet(AssignmentSubmission::new);
         if (isFinalStatus(submission.getStatus())
                 && !canReopenExpiredSubmission(submission, assignment)) {
@@ -62,6 +67,8 @@ public class AssignmentSubmissionService {
     @Transactional
     public AssignmentSubmissionModel.Response submitAssignment(
             AssignmentSubmissionModel.CreateRequest request) {
+        UUID studentId = required(request.getStudentId(), "studentId");
+        requireSelfIfTrainee(studentId);
         Assignment assignment = loadAssignment(required(request.getAssignmentId(), "assignmentId"));
         AssignmentSubmission submission = repository
                 .findByAssignmentIdAndStudentId(request.getAssignmentId(), request.getStudentId())
@@ -118,6 +125,7 @@ public class AssignmentSubmissionService {
             AssignmentSubmissionModel.UpdateRequest request) {
         AssignmentSubmission submission = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Submission not found"));
+        requireSelfIfTrainee(submission.getStudentId());
         Assignment assignment = loadAssignment(submission.getAssignmentId());
         assertAssignmentOpen(assignment);
 
@@ -166,6 +174,7 @@ public class AssignmentSubmissionService {
     public AssignmentSubmissionModel.Response getSubmissionByAssignmentAndStudent(
             UUID assignmentId,
             UUID studentId) {
+        requireSelfIfTrainee(studentId);
         return repository.findByAssignmentIdAndStudentId(assignmentId, studentId)
                 .map(this::mapToResponse)
                 .orElse(null);
@@ -285,5 +294,15 @@ public class AssignmentSubmissionService {
             throw new IllegalArgumentException(field + " is required");
         }
         return value;
+    }
+
+    private void requireSelfIfTrainee(UUID studentId) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        if ("TRAINEE".equalsIgnoreCase(actor.getRole())
+                && !actor.getId().equals(studentId)) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "You can only access your own assignment submission");
+        }
     }
 }
