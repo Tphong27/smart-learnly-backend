@@ -17,20 +17,31 @@ public final class AiQuestionDraftDtos {
             UUID generationSourceId,
             UUID materialSnapshotId,
             UUID materialId,
+            UUID transcriptContentId,
             UUID courseId,
             UUID lessonId,
             UUID curriculumLessonId,
+            String sourceKind,
             String sourceName,
+            String lessonTitle,
+            String language,
+            Long durationSeconds,
             String checksum,
             String version,
             String ragStatus,
+            Integer chunkCount,
+            Integer normalizedCharCount,
             Instant updatedAt
     ) {
     }
 
     public record CreateBatchRequest(
-            @NotEmpty(message = "At least one generation source is required")
             List<UUID> generationSourceIds,
+
+            List<UUID> transcriptContentIds,
+
+            @Valid
+            List<PastedTextSourceRequest> pastedTextSources,
 
             @NotEmpty(message = "At least one question type is required")
             List<String> questionTypes,
@@ -52,6 +63,26 @@ public final class AiQuestionDraftDtos {
     ) {
     }
 
+    public record PastedTextSourceRequest(
+            @Size(max = 255, message = "Source name must not exceed 255 characters")
+            String sourceName,
+            @NotBlank(message = "Pasted text is required")
+            String text
+    ) {
+    }
+
+    public record SourceCapabilitiesResponse(
+            int minTextCharacters,
+            int maxPastedTextCharacters,
+            long maxDocumentBytes,
+            int maxTranscriptCharacters,
+            int maxSourcesPerBatch,
+            int maxNormalizedCharactersPerBatch,
+            List<String> acceptedDocumentMimeTypes,
+            List<String> acceptedDocumentExtensions
+    ) {
+    }
+
     public record AnswerPayload(
             @NotBlank(message = "Answer text is required")
             @Size(max = 4000, message = "Answer text must not exceed 4000 characters")
@@ -68,8 +99,11 @@ public final class AiQuestionDraftDtos {
             UUID evidenceId,
             UUID generationSourceId,
             UUID materialChunkId,
+            UUID sourceChunkId,
             String chunkReference,
             String sourceExcerpt,
+            Long startMs,
+            Long endMs,
             boolean supportsCorrectAnswer,
             String evidenceStatus,
             UUID reviewerConfirmedBy,
@@ -139,10 +173,25 @@ public final class AiQuestionDraftDtos {
             String sourceKind,
             UUID materialId,
             UUID materialSnapshotId,
+            UUID transcriptContentId,
+            UUID lessonId,
             String sourceName,
             String sourceChecksum,
             String sourceVersion,
-            String ragStatus
+            String ragStatus,
+            String mimeType,
+            Long fileSizeBytes,
+            Integer normalizedCharCount,
+            boolean downloadable
+    ) {
+    }
+
+    public record SourceDownloadUrlResponse(
+            String url,
+            Instant expiresAt,
+            String fileName,
+            String mimeType,
+            Long fileSizeBytes
     ) {
     }
 

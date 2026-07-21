@@ -34,4 +34,13 @@ public interface VideoAiContentRepository extends JpaRepository<VideoAiContent, 
             @Param("lessonId") UUID lessonId,
             @Param("scope") String scope,
             @Param("classId") UUID classId);
+
+    @Query("select content from VideoAiContent content "
+            + "where content.courseId = :courseId "
+            + "and content.lessonScope = 'MASTER' "
+            + "and content.classId is null "
+            + "and content.status = 'published' "
+            + "and content.transcriptText is not null "
+            + "order by content.updatedAt desc")
+    List<VideoAiContent> findPublishedMasterTranscriptsByCourseId(@Param("courseId") UUID courseId);
 }
