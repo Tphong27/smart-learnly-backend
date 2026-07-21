@@ -71,4 +71,31 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
     long countByQuestionBankIdAndQuestionTextIgnoreCase(UUID questionBankId, String questionText);
 
     boolean existsByQuestionBankIdAndQuestionTextIgnoreCase(UUID questionBankId, String questionText);
+
+    @Query(value = """
+            SELECT EXISTS (
+                SELECT 1
+                FROM public.questions q
+                WHERE q.question_bank_id = :questionBankId
+                  AND LOWER(q.question_text) = LOWER(:questionText)
+                  AND q.status::text <> 'archived'
+            )
+            """, nativeQuery = true)
+    boolean existsActiveDuplicate(
+            @Param("questionBankId") UUID questionBankId,
+            @Param("questionText") String questionText
+    );
+
+    @Query(value = """
+            SELECT q.*
+            FROM public.questions q
+            WHERE q.question_bank_id = :questionBankId
+              AND LOWER(q.question_text) = LOWER(:questionText)
+            ORDER BY CASE WHEN q.status::text = 'archived' THEN 1 ELSE 0 END, q.updated_at DESC
+            LIMIT 3
+            """, nativeQuery = true)
+    List<Question> findExactDuplicateCandidates(
+            @Param("questionBankId") UUID questionBankId,
+            @Param("questionText") String questionText
+    );
 }
