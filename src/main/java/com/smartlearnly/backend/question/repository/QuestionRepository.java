@@ -87,6 +87,35 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
     );
 
     @Query(value = """
+            SELECT EXISTS (
+                SELECT 1
+                FROM public.questions q
+                WHERE q.course_id = :courseId
+                  AND LOWER(q.question_text) = LOWER(:questionText)
+                  AND q.status::text <> 'archived'
+                  AND (CAST(:excludedQuestionId AS uuid) IS NULL OR q.id <> CAST(:excludedQuestionId AS uuid))
+            )
+            """, nativeQuery = true)
+    boolean existsActiveDuplicateInCourse(
+            @Param("courseId") UUID courseId,
+            @Param("questionText") String questionText,
+            @Param("excludedQuestionId") UUID excludedQuestionId
+    );
+
+    @Query(value = """
+            SELECT q.*
+            FROM public.questions q
+            WHERE q.course_id = :courseId
+              AND LOWER(q.question_text) = LOWER(:questionText)
+            ORDER BY CASE WHEN q.status::text = 'archived' THEN 1 ELSE 0 END, q.updated_at DESC
+            LIMIT 3
+            """, nativeQuery = true)
+    List<Question> findExactDuplicateCandidatesInCourse(
+            @Param("courseId") UUID courseId,
+            @Param("questionText") String questionText
+    );
+
+    @Query(value = """
             SELECT q.*
             FROM public.questions q
             WHERE q.question_bank_id = :questionBankId

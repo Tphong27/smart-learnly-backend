@@ -11,7 +11,6 @@ import com.smartlearnly.backend.file.service.FileStorageService.StoredFile;
 import com.smartlearnly.backend.file.service.SupabaseStorageClient;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
 import com.smartlearnly.backend.question.ai.entity.AiQuestionGenerationBatch;
 import com.smartlearnly.backend.question.ai.entity.AiQuestionGenerationDraft;
@@ -88,7 +87,7 @@ public class AiQuestionDraftService {
 
     private final QuestionBankService questionBankService;
     private final CurrentUserService currentUserService;
-    private final CourseSectionRepository courseSectionRepository;
+    private final com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository curriculumSectionRepository;
     private final RagMaterialSnapshotRepository snapshotRepository;
     private final RagMaterialChunkRepository chunkRepository;
     private final AiQuestionGenerationBatchRepository batchRepository;
@@ -1085,7 +1084,7 @@ public class AiQuestionDraftService {
 
     private UUID validateModuleId(UUID courseId, UUID moduleId) {
         if (moduleId == null) return null;
-        boolean exists = courseSectionRepository.findByIdAndCourseId(moduleId, courseId).isPresent();
+        boolean exists = curriculumSectionRepository.existsMasterModuleByIdAndCourseId(moduleId, courseId);
         if (!exists) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module must belong to the selected course");
         }

@@ -2,6 +2,7 @@ package com.smartlearnly.backend.curriculum.service;
 
 import com.smartlearnly.backend.course.dto.LessonResourceResponse;
 import com.smartlearnly.backend.course.dto.LessonResponse;
+import com.smartlearnly.backend.course.dto.ModuleResponse;
 import com.smartlearnly.backend.course.dto.SectionResponse;
 import com.smartlearnly.backend.curriculum.dto.ClassCurriculumBindingResponse;
 import com.smartlearnly.backend.curriculum.dto.CurriculumLessonResponse;
@@ -126,11 +127,25 @@ public class CurriculumDtoMapper {
         );
     }
 
+    public ModuleResponse toModuleResponse(CurriculumSection section) {
+        CurriculumVersion version = section.getCurriculumVersion();
+        return new ModuleResponse(
+                section.getId(),
+                section.getId(),
+                version == null ? null : version.getCourseId(),
+                section.getTitle(),
+                section.getSortOrder(),
+                section.getCreatedAt(),
+                section.getUpdatedAt()
+        );
+    }
+
     public LessonResponse toLessonResponse(CurriculumLesson lesson) {
         CurriculumVersion version = lesson.getSection().getCurriculumVersion();
         return new LessonResponse(
                 lesson.getId(),
                 version.getCourseId(),
+                lesson.getSection().getId(),
                 lesson.getSection().getId(),
                 lesson.getTitle(),
                 enumUpper(lesson.getType()),
