@@ -59,6 +59,7 @@ final class CourseDtoMapper {
                 lesson.getId(),
                 lesson.getCourse().getId(),
                 lesson.getSection().getId(),
+                lesson.getSection().getId(),
                 lesson.getTitle(),
                 lessonTypeValue(lesson.getType()),
                 lesson.getVideoUrl(),
