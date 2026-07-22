@@ -38,6 +38,7 @@ public class StudentTestAnswerModel {
         private UUID attemptId;
         private UUID questionId;
         private UUID selectedAnswerId;
+        private UUID correctAnswerId;
         private String essayAnswer;
         private Boolean isCorrect;
         private BigDecimal scoreAwarded;

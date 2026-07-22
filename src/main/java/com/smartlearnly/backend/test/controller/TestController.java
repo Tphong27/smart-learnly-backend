@@ -38,10 +38,11 @@ public class TestController {
     }
 
     @GetMapping("/mine")
-    public ResponseEntity<List<TestModel.Response>> getMine() {
+    public ResponseEntity<List<TestModel.Response>> getMine(
+            @RequestParam(required = false) UUID courseId) {
 
         return ResponseEntity.ok(
-                testService.getMyTests());
+                testService.getMyTests(courseId));
     }
 
     @GetMapping("/{id}")

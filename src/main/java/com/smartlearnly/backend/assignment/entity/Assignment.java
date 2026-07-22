@@ -38,6 +38,9 @@ public class Assignment {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(columnDefinition = "TEXT")
+    private String rubric;
+
     @Column(name = "instruction_file_url", columnDefinition = "TEXT")
     private String instructionFileUrl;
 

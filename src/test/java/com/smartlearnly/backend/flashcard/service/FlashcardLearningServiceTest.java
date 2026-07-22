@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
@@ -30,7 +31,6 @@ import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardProgressRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository.LearningFlashcardSetProjection;
-import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
@@ -322,8 +322,10 @@ class FlashcardLearningServiceTest {
     private CurriculumLesson curriculumLesson(CurriculumSection section, UUID lessonReferenceId) {
         CurriculumLesson lesson = new CurriculumLesson();
         lesson.setId(UUID.randomUUID());
+        lesson.setCurriculumVersionId(section.getCurriculumVersion().getId());
         lesson.setSection(section);
         lesson.setLessonIdentityId(lessonReferenceId);
+        lesson.setSourceLessonId(lessonReferenceId);
         lesson.setTitle("Flashcards");
         lesson.setType(LessonType.FLASHCARD);
         lesson.setStatus(LessonStatus.PUBLISHED);
@@ -343,6 +345,14 @@ class FlashcardLearningServiceTest {
         lesson.setPreview(false);
         lesson.setSortOrder(0);
         return lesson;
+    }
+
+    private ClassOffering classOffering(UUID classId, UUID courseId) {
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(classId);
+        classOffering.setCourseId(courseId);
+        classOffering.setClassName("Class");
+        return classOffering;
     }
 
     private FlashcardSet flashcardSet() {
@@ -389,10 +399,4 @@ class FlashcardLearningServiceTest {
         return enrollment;
     }
 
-    private ClassOffering classOffering(UUID classId, UUID courseId) {
-        ClassOffering classOffering = new ClassOffering();
-        classOffering.setId(classId);
-        classOffering.setCourseId(courseId);
-        return classOffering;
-    }
 }
