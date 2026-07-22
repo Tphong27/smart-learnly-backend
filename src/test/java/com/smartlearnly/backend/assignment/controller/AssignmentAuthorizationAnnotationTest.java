@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.multipart.MultipartFile;
 
 class AssignmentAuthorizationAnnotationTest {
 
@@ -19,10 +20,28 @@ class AssignmentAuthorizationAnnotationTest {
         Method update = AssignmentController.class.getMethod(
                 "update", UUID.class, AssignmentModel.UpdateRequest.class);
         Method delete = AssignmentController.class.getMethod("delete", UUID.class);
+        Method aiDraft = AssignmentController.class.getMethod(
+                "generateAiDraft",
+                String.class,
+                String.class,
+                String.class,
+                String.class,
+                String.class,
+                MultipartFile.class);
 
         assertThat(preAuthorizeValue(create)).contains("ADMIN", "TMO", "SME", "TRAINER");
         assertThat(preAuthorizeValue(update)).contains("ADMIN", "TMO", "SME", "TRAINER");
         assertThat(preAuthorizeValue(delete)).contains("ADMIN", "TMO", "SME", "TRAINER");
+        assertThat(preAuthorizeValue(aiDraft)).contains("ADMIN", "TMO", "SME", "TRAINER");
+    }
+
+    @Test
+    void assignmentFilesCanBeUploadedByStaffAndTrainees() throws Exception {
+        Method upload = AssignmentSubmissionController.class.getMethod(
+                "uploadSubmissionFile", MultipartFile.class);
+
+        assertThat(preAuthorizeValue(upload))
+                .contains("ADMIN", "TMO", "SME", "TRAINER", "TRAINEE");
     }
 
     @Test

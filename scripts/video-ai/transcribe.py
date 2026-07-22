@@ -11,6 +11,26 @@ from pathlib import Path
 import sys
 import tempfile
 
+
+_DLL_DIRECTORY_HANDLES: list[object] = []
+
+
+def configure_windows_nvidia_runtime() -> None:
+    """Expose CUDA DLLs installed by NVIDIA's Windows Python wheels."""
+    if os.name != "nt" or not hasattr(os, "add_dll_directory"):
+        return
+
+    nvidia_root = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+    for package in ("cublas", "cudnn", "cuda_nvrtc"):
+        binary_directory = nvidia_root / package / "bin"
+        if not binary_directory.is_dir():
+            continue
+        _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(str(binary_directory)))
+        os.environ["PATH"] = f"{binary_directory}{os.pathsep}{os.environ.get('PATH', '')}"
+
+
+configure_windows_nvidia_runtime()
+
 from faster_whisper import WhisperModel
 
 

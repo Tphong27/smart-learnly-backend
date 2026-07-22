@@ -16,8 +16,10 @@ import com.smartlearnly.backend.hls.entity.HlsLesson;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.videoai.config.VideoAiProperties;
+import com.smartlearnly.backend.videoai.entity.VideoAiContent;
 import com.smartlearnly.backend.videoai.entity.VideoAiJob;
-import com.smartlearnly.backend.videoai.generation.VideoAiGenerationProperties;
+import com.smartlearnly.backend.videoai.entity.VideoAiTranscriptSegment;
+import com.smartlearnly.backend.videoai.repository.VideoAiContentRepository;
 import com.smartlearnly.backend.videoai.repository.VideoAiJobRepository;
 import com.smartlearnly.backend.videoai.transcription.FasterWhisperProperties;
 import java.util.List;
@@ -29,6 +31,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class VideoAiAutoPreparationServiceTest {
@@ -38,6 +42,7 @@ class VideoAiAutoPreparationServiceTest {
     @Mock CourseRepository courseRepository;
     @Mock ClassOfferingRepository classOfferingRepository;
     @Mock VideoAiJobRepository jobRepository;
+    @Mock VideoAiContentRepository contentRepository;
 
     private VideoAiAutoPreparationService service;
 
@@ -47,23 +52,30 @@ class VideoAiAutoPreparationServiceTest {
         videoAi.setEnabled(true);
         FasterWhisperProperties transcription = new FasterWhisperProperties();
         transcription.setEnabled(true);
-        VideoAiGenerationProperties generation = new VideoAiGenerationProperties();
-        generation.setEnabled(true);
-        generation.setApiKey("configured");
         service = new VideoAiAutoPreparationService(
                 videoAi,
                 transcription,
-                generation,
                 hlsLessonRepository,
                 lessonRepository,
                 versionRepository,
                 courseRepository,
                 classOfferingRepository,
-                jobRepository);
+                jobRepository,
+                contentRepository);
     }
 
     @Test
-    void queuesTranscriptAndLearningAidJobWhenVideoBecomesReady() {
+    void startsANewTransactionWhenCalledAfterHlsCommit() throws NoSuchMethodException {
+        Transactional transactional = VideoAiAutoPreparationService.class
+                .getMethod("enqueueAfterVideoReady", UUID.class, UUID.class)
+                .getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.propagation()).isEqualTo(Propagation.REQUIRES_NEW);
+    }
+
+    @Test
+    void queuesTranscriptJobWhenVideoBecomesReady() {
         UUID lessonId = UUID.randomUUID();
         UUID sourceVersion = UUID.randomUUID();
         UUID curriculumVersionId = UUID.randomUUID();
@@ -89,7 +101,7 @@ class VideoAiAutoPreparationServiceTest {
         when(lessonRepository.findById(lessonId)).thenReturn(Optional.of(lesson));
         when(versionRepository.findById(curriculumVersionId)).thenReturn(Optional.of(version));
         when(jobRepository.findLatestForSource(
-                lessonId, "MASTER", null, sourceVersion, "VIDEO_ARTIFACTS",
+                lessonId, "MASTER", null, sourceVersion, "VIDEO_TRANSCRIPT",
                 org.springframework.data.domain.PageRequest.of(0, 1)))
                 .thenReturn(List.of());
 
@@ -100,7 +112,7 @@ class VideoAiAutoPreparationServiceTest {
         assertThat(captor.getValue().getLessonId()).isEqualTo(lessonId);
         assertThat(captor.getValue().getSourceVersion()).isEqualTo(sourceVersion);
         assertThat(captor.getValue().getRequestedBy()).isEqualTo(requestedBy);
-        assertThat(captor.getValue().getJobType()).isEqualTo("VIDEO_ARTIFACTS");
+        assertThat(captor.getValue().getJobType()).isEqualTo("VIDEO_TRANSCRIPT");
     }
 
     @Test
@@ -121,11 +133,11 @@ class VideoAiAutoPreparationServiceTest {
         when(lessonRepository.findById(lessonId)).thenReturn(Optional.of(lesson));
         when(versionRepository.findById(curriculumVersionId)).thenReturn(Optional.of(version));
         when(jobRepository.findLatestForSource(
-                lessonId, "MASTER", null, sourceVersion, "VIDEO_ARTIFACTS",
+                lessonId, "MASTER", null, sourceVersion, "VIDEO_TRANSCRIPT",
                 org.springframework.data.domain.PageRequest.of(0, 1)))
                 .thenReturn(List.of(failed));
         when(jobRepository.countForSource(
-                lessonId, "MASTER", null, sourceVersion, "VIDEO_ARTIFACTS"))
+                lessonId, "MASTER", null, sourceVersion, "VIDEO_TRANSCRIPT"))
                 .thenReturn(1L);
 
         service.enqueueAfterVideoReady(lessonId, sourceVersion);
@@ -151,12 +163,44 @@ class VideoAiAutoPreparationServiceTest {
         when(lessonRepository.findById(lessonId)).thenReturn(Optional.of(lesson));
         when(versionRepository.findById(curriculumVersionId)).thenReturn(Optional.of(version));
         when(jobRepository.findLatestForSource(
-                lessonId, "MASTER", null, sourceVersion, "VIDEO_ARTIFACTS",
+                lessonId, "MASTER", null, sourceVersion, "VIDEO_TRANSCRIPT",
                 org.springframework.data.domain.PageRequest.of(0, 1)))
                 .thenReturn(List.of(failed));
         when(jobRepository.countForSource(
-                lessonId, "MASTER", null, sourceVersion, "VIDEO_ARTIFACTS"))
+                lessonId, "MASTER", null, sourceVersion, "VIDEO_TRANSCRIPT"))
                 .thenReturn(3L);
+
+        service.enqueueAfterVideoReady(lessonId, sourceVersion);
+
+        verify(jobRepository, never()).saveAndFlush(org.mockito.ArgumentMatchers.any(VideoAiJob.class));
+    }
+
+    @Test
+    void doesNotQueueAnotherTranscriptWhenCurrentVideoAlreadyHasOne() {
+        UUID lessonId = UUID.randomUUID();
+        UUID sourceVersion = UUID.randomUUID();
+        UUID curriculumVersionId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID requestedBy = UUID.randomUUID();
+        VideoAiContent content = new VideoAiContent();
+        content.setTranscriptText("The existing transcript is ready.");
+        VideoAiTranscriptSegment segment = new VideoAiTranscriptSegment();
+        segment.setSegmentIndex(0);
+        segment.setStartMs(0L);
+        segment.setEndMs(1_000L);
+        segment.setText("The existing transcript is ready.");
+        content.addSegment(segment);
+
+        when(hlsLessonRepository.findByLessonId(lessonId))
+                .thenReturn(Optional.of(readyHls(lessonId, sourceVersion)));
+        when(lessonRepository.findById(lessonId))
+                .thenReturn(Optional.of(videoLesson(lessonId, curriculumVersionId)));
+        when(versionRepository.findById(curriculumVersionId))
+                .thenReturn(Optional.of(masterVersion(curriculumVersionId, courseId, requestedBy)));
+        when(contentRepository
+                .findFirstByLessonIdAndLessonScopeAndClassIdIsNullAndSourceVersionOrderByUpdatedAtDesc(
+                        lessonId, "MASTER", sourceVersion))
+                .thenReturn(Optional.of(content));
 
         service.enqueueAfterVideoReady(lessonId, sourceVersion);
 

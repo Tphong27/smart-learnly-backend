@@ -1,7 +1,11 @@
 package com.smartlearnly.backend.assignment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.assignment.dto.AssignmentModel;
@@ -19,6 +23,7 @@ import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -94,5 +99,31 @@ class AssignmentServiceTest {
         assertThat(response.getCourseId()).isEqualTo(courseId);
         assertThat(response.getCreatedBy()).isEqualTo(admin.getId());
         assertThat(response.getTitle()).isEqualTo("Final project");
+    }
+
+    @Test
+    void deleteAssignmentShouldRemoveSubmissionsBeforeParent() {
+        UUID assignmentId = UUID.randomUUID();
+        when(assignmentRepository.existsById(assignmentId)).thenReturn(true);
+
+        service.deleteAssignment(assignmentId);
+
+        var ordered = inOrder(assignmentSubmissionRepository, assignmentRepository);
+        ordered.verify(assignmentSubmissionRepository).deleteByAssignmentId(assignmentId);
+        ordered.verify(assignmentSubmissionRepository).flush();
+        ordered.verify(assignmentRepository).deleteById(assignmentId);
+    }
+
+    @Test
+    void deleteAssignmentShouldRejectUnknownAssignmentWithoutDeletingChildren() {
+        UUID assignmentId = UUID.randomUUID();
+        when(assignmentRepository.existsById(assignmentId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteAssignment(assignmentId))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessage("Assignment not found");
+
+        verify(assignmentSubmissionRepository, never()).deleteByAssignmentId(assignmentId);
+        verify(assignmentRepository, never()).deleteById(assignmentId);
     }
 }

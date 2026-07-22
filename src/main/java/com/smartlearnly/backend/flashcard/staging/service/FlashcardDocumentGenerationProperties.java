@@ -18,6 +18,7 @@ public class FlashcardDocumentGenerationProperties {
     private String apiKey;
     private String apiBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
     private String model = "gemini-3.5-flash";
+    private String fallbackModel = "gemini-3.1-flash-lite";
     private Duration timeout = Duration.ofSeconds(60);
     private int maxEmbeddedImages = 2;
     private DataSize maxEmbeddedImageSize = DataSize.ofMegabytes(10);

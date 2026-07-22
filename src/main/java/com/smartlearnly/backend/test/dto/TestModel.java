@@ -28,6 +28,8 @@ public class TestModel {
         private Boolean shuffleAnswers;
         private Boolean showAnswersAfter;
         private Boolean isFlashtest;
+        private Instant opensAt;
+        private Instant closesAt;
     }
 
     @Getter
@@ -49,6 +51,8 @@ public class TestModel {
         private Boolean isPublished;
         private Boolean isArchived;
         private Boolean isFlashtest;
+        private Instant opensAt;
+        private Instant closesAt;
     }
 
     @Getter
@@ -76,6 +80,8 @@ public class TestModel {
         private Instant updatedAt;
         private String accessCode;
         private Instant accessCodeExpiresAt;
+        private Instant opensAt;
+        private Instant closesAt;
     }
 
     @Getter

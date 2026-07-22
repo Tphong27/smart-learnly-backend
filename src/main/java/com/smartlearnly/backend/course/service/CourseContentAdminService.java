@@ -307,10 +307,11 @@ public class CourseContentAdminService {
         CurriculumLesson lesson = findUpdatableLesson(lessonId);
 
         lesson.setStatus(LessonStatus.INACTIVE);
+        lesson.setDeletedAt(Instant.now());
         lessonRepository.save(lesson);
 
         audit(
-                "LESSON_DEACTIVATED",
+                "LESSON_DELETED",
                 "CURRICULUM_LESSON",
                 lesson.getId()
         );

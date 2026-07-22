@@ -26,12 +26,14 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.ColumnTransformer;
+import org.hibernate.annotations.SQLRestriction;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
 @Table(name = "curriculum_lessons", schema = "public")
+@SQLRestriction("deleted_at IS NULL")
 public class CurriculumLesson {
     @Id
     @GeneratedValue
@@ -99,6 +101,9 @@ public class CurriculumLesson {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     @PrePersist
     void prePersist() {

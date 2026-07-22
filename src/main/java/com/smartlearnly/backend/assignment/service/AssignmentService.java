@@ -260,12 +260,17 @@ public class AssignmentService {
         return mapToResponse(updated);
     }
 
+    @Transactional
     public void deleteAssignment(UUID id) {
 
         if (!assignmentRepository.existsById(id)) {
             throw new EntityNotFoundException("Assignment not found");
         }
 
+        // A completed assignment owns submission rows. Delete those children
+        // first so the supported staff delete action works after grading too.
+        assignmentSubmissionRepository.deleteByAssignmentId(id);
+        assignmentSubmissionRepository.flush();
         assignmentRepository.deleteById(id);
     }
 

@@ -10,20 +10,37 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class GeminiVideoLearningAidGenerationService implements VideoLearningAidGenerationService {
     private final VideoAiGenerationProperties properties;
     private final ObjectMapper objectMapper;
+    private final RestClient restClient;
+
+    @Autowired
+    public GeminiVideoLearningAidGenerationService(
+            VideoAiGenerationProperties properties,
+            ObjectMapper objectMapper) {
+        this(properties, objectMapper, createRestClient(properties));
+    }
+
+    GeminiVideoLearningAidGenerationService(
+            VideoAiGenerationProperties properties,
+            ObjectMapper objectMapper,
+            RestClient restClient) {
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+        this.restClient = restClient;
+    }
 
     @Override
     public LearningAidResult generate(String language, List<TranscriptionSegment> segments) {
@@ -50,37 +67,110 @@ public class GeminiVideoLearningAidGenerationService implements VideoLearningAid
                 %s
                 """.formatted(normalizeLanguage(language), transcript);
         try {
-            Map<String, Object> responseFormat = new LinkedHashMap<>();
-            responseFormat.put("type", "text");
-            responseFormat.put("mime_type", "application/json");
-            responseFormat.put("schema", responseSchema());
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("model", properties.getModel());
-            body.put("input", prompt);
-            body.put("response_format", responseFormat);
-            body.put("store", false);
-
-            String response = restClient().post()
-                    .uri("/interactions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("x-goog-api-key", properties.getApiKey())
-                    .header("Api-Revision", "2026-05-20")
-                    .body(body)
-                    .retrieve()
-                    .body(String.class);
+            String response = sendWithFallback(prompt);
             String output = extractOutputText(objectMapper.readTree(response == null ? "{}" : response));
             return parse(output, safeSegments.size());
         } catch (BusinessException exception) {
             throw exception;
+        } catch (RestClientResponseException exception) {
+            log.warn("Gemini video learning-aid generation exhausted provider options: status={} configuredModel={}",
+                    exception.getStatusCode().value(), modelName(properties.getModel()));
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "AI study-aid generation is temporarily unavailable");
         } catch (IOException | RestClientException | IllegalArgumentException exception) {
             log.warn("Gemini video learning-aid generation failed: model={} errorType={}",
-                    properties.getModel(), exception.getClass().getSimpleName());
+                    modelName(properties.getModel()), exception.getClass().getSimpleName());
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
                     "AI study-aid generation is temporarily unavailable");
         }
     }
 
-    private RestClient restClient() {
+    private String sendWithFallback(String prompt) {
+        List<String> models = candidateModels();
+        RestClientResponseException lastHttpException = null;
+        for (int modelIndex = 0; modelIndex < models.size(); modelIndex++) {
+            String model = models.get(modelIndex);
+            int attempts = modelIndex == 0 && models.size() > 1 ? 1 : 2;
+            for (int attempt = 1; attempt <= attempts; attempt++) {
+                try {
+                    String response = sendGenerateContent(prompt, model);
+                    if (modelIndex > 0 || attempt > 1) {
+                        log.info("Gemini video learning-aid generation recovered: effectiveModel={} attempt={}",
+                                model, attempt);
+                    }
+                    return response;
+                } catch (RestClientResponseException exception) {
+                    lastHttpException = exception;
+                    int status = exception.getStatusCode().value();
+                    log.warn("Gemini video learning-aid request failed: status={} model={} attempt={}",
+                            status, model, attempt);
+                    if (!isRetryable(exception)) throw exception;
+                    if (attempt < attempts) sleepBeforeRetry(attempt);
+                }
+            }
+            if (modelIndex + 1 < models.size()) {
+                log.warn("Falling back Gemini video learning-aid model: from={} to={}",
+                        model, models.get(modelIndex + 1));
+            }
+        }
+        if (lastHttpException != null) throw lastHttpException;
+        throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                "AI study-aid generation is temporarily unavailable");
+    }
+
+    private String sendGenerateContent(String prompt, String model) {
+        return restClient.post()
+                .uri("/models/" + model + ":generateContent")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("x-goog-api-key", properties.getApiKey())
+                .body(generateContentBody(prompt))
+                .retrieve()
+                .body(String.class);
+    }
+
+    private Map<String, Object> generateContentBody(String prompt) {
+        Map<String, Object> generationConfig = new LinkedHashMap<>();
+        generationConfig.put("responseMimeType", "application/json");
+        generationConfig.put("responseJsonSchema", responseSchema());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("contents", List.of(Map.of(
+                "role", "user",
+                "parts", List.of(Map.of("text", prompt)))));
+        body.put("generationConfig", generationConfig);
+        body.put("store", false);
+        return body;
+    }
+
+    private List<String> candidateModels() {
+        String primary = modelName(properties.getModel());
+        if (primary == null) primary = "gemini-3.5-flash";
+        String fallback = modelName(properties.getFallbackModel());
+        if (fallback == null || fallback.equals(primary)) return List.of(primary);
+        return List.of(primary, fallback);
+    }
+
+    private String modelName(String value) {
+        String model = normalize(value);
+        if (model == null) return null;
+        return model.startsWith("models/") ? model.substring("models/".length()) : model;
+    }
+
+    private boolean isRetryable(RestClientResponseException exception) {
+        int status = exception.getStatusCode().value();
+        return status == 408 || status == 429 || status >= 500;
+    }
+
+    private void sleepBeforeRetry(int attempt) {
+        try {
+            Thread.sleep(Math.min(2_000L, 500L * (1L << Math.max(0, attempt - 1))));
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "AI study-aid generation was interrupted");
+        }
+    }
+
+    private static RestClient createRestClient(VideoAiGenerationProperties properties) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(properties.getTimeout());
         factory.setReadTimeout(properties.getTimeout());

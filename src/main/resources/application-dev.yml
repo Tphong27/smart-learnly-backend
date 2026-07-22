@@ -6,6 +6,11 @@ spring:
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
+      connection-timeout: 10000
+      validation-timeout: 5000
+      idle-timeout: 120000
+      keepalive-time: 60000
+      max-lifetime: 240000
 
   jpa:
     hibernate:
@@ -24,6 +29,15 @@ spring:
     ignore-migration-patterns: "*:missing,*:future"
 
 app:
+  # Local E2E exercises several dedicated roles from one loopback IP. Production
+  # keeps the global auth limiter enabled through application.yml.
+  rate-limit:
+    auth:
+      enabled: ${APP_RATE_LIMIT_AUTH_ENABLED:false}
+  auth:
+    # A complete local E2E run can exceed the production 15-minute access-token
+    # lifetime. Keep this override confined to the dev profile.
+    access-token-ttl: ${APP_AUTH_ACCESS_TOKEN_TTL:PT2H}
   seed:
     auth-users-enabled: ${APP_SEED_AUTH_USERS_ENABLED:true}
     categories-enabled: ${APP_SEED_CATEGORIES_ENABLED:false}

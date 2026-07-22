@@ -10,8 +10,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -21,27 +21,34 @@ import org.springframework.web.client.RestClientResponseException;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class GeminiQuestionGenerationProvider implements QuestionGenerationProvider {
     private static final String PROVIDER_NAME = "gemini";
     private static final String PROMPT_VERSION = "question-ai-generation-v1";
 
     private final QuestionAiGenerationProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestClient restClient;
+
+    @Autowired
+    public GeminiQuestionGenerationProvider(QuestionAiGenerationProperties properties) {
+        this(properties, createRestClient(properties));
+    }
+
+    GeminiQuestionGenerationProvider(
+            QuestionAiGenerationProperties properties,
+            RestClient restClient) {
+        this.properties = properties;
+        this.restClient = restClient;
+    }
 
     @Override
     public GenerationResult generate(GenerationRequest request) {
         ensureAvailable();
         try {
-            String response = restClient()
-                    .post()
-                    .uri("/interactions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("x-goog-api-key", properties.getApiKey())
-                    .body(buildRequestBody(request))
-                    .retrieve()
-                    .body(String.class);
+            String response = sendWithFallback(request);
             return parseResponse(response);
+        } catch (BusinessException exception) {
+            throw exception;
         } catch (RestClientResponseException exception) {
             log.warn(
                     "Gemini question generation HTTP error: status={} model={} endpoint={} responseBody={}",
@@ -99,7 +106,76 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
         }
     }
 
-    private RestClient restClient() {
+    private String sendWithFallback(GenerationRequest request) {
+        RestClientException lastException = null;
+        List<String> models = candidateModels();
+        for (int index = 0; index < models.size(); index++) {
+            String model = models.get(index);
+            try {
+                String response = restClient
+                        .post()
+                        .uri("/interactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-goog-api-key", properties.getApiKey())
+                        .header("Api-Revision", "2026-05-20")
+                        .body(buildRequestBody(request, model))
+                        .retrieve()
+                        .body(String.class);
+                if (index > 0) {
+                    log.info("Gemini question generation recovered with fallback model={}", model);
+                }
+                return response;
+            } catch (RestClientResponseException exception) {
+                lastException = exception;
+                log.warn(
+                        "Gemini question generation attempt failed: status={} model={}",
+                        exception.getStatusCode().value(),
+                        model);
+                if (!canTryFallback(exception) || index + 1 >= models.size()) {
+                    throw exception;
+                }
+            } catch (RestClientException exception) {
+                lastException = exception;
+                log.warn(
+                        "Gemini question generation transport attempt failed: model={} errorType={}",
+                        model,
+                        exception.getClass().getSimpleName());
+                if (index + 1 >= models.size()) {
+                    throw exception;
+                }
+            }
+        }
+        if (lastException != null) {
+            throw lastException;
+        }
+        throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI provider request failed");
+    }
+
+    private List<String> candidateModels() {
+        String primary = normalizeModel(properties.getModel());
+        String fallback = normalizeModel(properties.getFallbackModel());
+        if (fallback == null || fallback.equals(primary)) {
+            return List.of(primary);
+        }
+        return List.of(primary, fallback);
+    }
+
+    private String normalizeModel(String value) {
+        if (value == null || value.isBlank()) {
+            return "gemini-3.5-flash";
+        }
+        String normalized = value.trim();
+        return normalized.startsWith("models/")
+                ? normalized.substring("models/".length())
+                : normalized;
+    }
+
+    private boolean canTryFallback(RestClientResponseException exception) {
+        int status = exception.getStatusCode().value();
+        return status == 400 || status == 404 || status == 408 || status == 429 || status >= 500;
+    }
+
+    private static RestClient createRestClient(QuestionAiGenerationProperties properties) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(properties.getTimeout());
         requestFactory.setReadTimeout(properties.getTimeout());
@@ -109,7 +185,7 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                 .build();
     }
 
-    private Map<String, Object> buildRequestBody(GenerationRequest request) {
+    private Map<String, Object> buildRequestBody(GenerationRequest request, String model) {
         List<Map<String, Object>> input = new ArrayList<>();
         input.add(Map.of("type", "text", "text", buildPrompt(request)));
 
@@ -118,7 +194,7 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
         responseFormat.put("mime_type", "application/json");
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", properties.getModel());
+        body.put("model", model);
         body.put("input", input);
         body.put("response_format", responseFormat);
         return body;

@@ -40,6 +40,7 @@ import com.smartlearnly.backend.videoai.repository.VideoAiContentRepository;
 import com.smartlearnly.backend.videoai.repository.VideoAiJobRepository;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -55,6 +56,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class VideoAiAuthoringService {
     private static final String MASTER = "MASTER";
     private static final String CLASS = "CLASS";
+    private static final String VIDEO_TRANSCRIPT = "VIDEO_TRANSCRIPT";
     private static final String VIDEO_ARTIFACTS = "VIDEO_ARTIFACTS";
 
     private final VideoAiProperties properties;
@@ -169,14 +171,23 @@ public class VideoAiAuthoringService {
         UUID sourceVersion = hls.map(HlsLesson::getProcessingJobId).orElse(null);
         boolean audioReady = hls.map(value -> value.getAiAudioObjectKey() != null
                 && !value.getAiAudioObjectKey().isBlank()).orElse(false);
-        String reason = availabilityReason();
-        if (reason == null && !ready) reason = "HLS_NOT_READY";
-        else if (reason == null && sourceVersion == null) reason = "SOURCE_VERSION_MISSING";
-        else if (reason == null && !audioReady) reason = "AI_AUDIO_NOT_READY";
-        VideoAiJob job = sourceVersion == null ? null : latestJob(context, sourceVersion).orElse(null);
         VideoAiContent content = sourceVersion == null ? null : current(context, sourceVersion).orElse(null);
+        boolean transcriptReady = hasTranscript(content);
+        boolean suggestionsReady = transcriptReady && normalize(content.getSummary()) != null;
+        String reason = null;
+        if (!properties.isEnabled()) reason = "VIDEO_AI_DISABLED";
+        else if (!ready) reason = "HLS_NOT_READY";
+        else if (sourceVersion == null) reason = "SOURCE_VERSION_MISSING";
+        else if (!audioReady) reason = "AI_AUDIO_NOT_READY";
+        else if (!transcriptReady && !transcriptionConfigured()) reason = "TRANSCRIPTION_NOT_CONFIGURED";
+        else if (!transcriptReady) reason = "TRANSCRIPT_NOT_READY";
+        else reason = generationAvailabilityReason();
+        VideoAiJob job = sourceVersion == null
+                ? null
+                : latestPreparationJob(context, sourceVersion).orElse(null);
         return new StatusResponse(
-                properties.isEnabled(), reason == null, reason, ready, sourceVersion,
+                properties.isEnabled(), reason == null && transcriptReady, reason, ready,
+                transcriptReady, suggestionsReady, sourceVersion,
                 job == null ? null : toJob(job),
                 content == null ? null : content.getId(),
                 content == null ? null : content.getStatus(),
@@ -184,11 +195,16 @@ public class VideoAiAuthoringService {
     }
 
     private JobResponse createJob(LessonContext context, GenerateJobRequest request) {
-        String unavailable = availabilityReason();
+        String unavailable = generationAvailabilityReason();
         if (unavailable != null) {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "Video AI is not configured: " + unavailable);
         }
         HlsLesson hls = requireEligibleHls(context.lesson().getId());
+        VideoAiContent content = current(context, hls.getProcessingJobId())
+                .filter(this::hasTranscript)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.CONFLICT,
+                        "The video transcript is still being prepared"));
         Optional<VideoAiJob> active = activeJob(context, hls.getProcessingJobId());
         if (active.isPresent()) return toJob(active.get());
         VideoAiJob job = new VideoAiJob();
@@ -198,6 +214,7 @@ public class VideoAiAuthoringService {
         job.setClassId(context.classId());
         job.setSourceVersion(hls.getProcessingJobId());
         job.setJobType(VIDEO_ARTIFACTS);
+        job.setContentId(content.getId());
         job.setSourceLanguage(normalizeLanguage(request == null ? null : request.sourceLanguage()));
         job.setRequestedBy(currentUserService.requireAuthenticatedUser().getId());
         try {
@@ -400,24 +417,41 @@ public class VideoAiAuthoringService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Video AI content was not found"));
     }
 
-    private Optional<VideoAiJob> latestJob(LessonContext context, UUID sourceVersion) {
+    private Optional<VideoAiJob> latestJob(
+            LessonContext context, UUID sourceVersion, String jobType) {
         return jobRepository.findLatestForSource(context.lesson().getId(), context.scope(), context.classId(), sourceVersion,
-                VIDEO_ARTIFACTS,
+                jobType,
                 PageRequest.of(0, 1)).stream().findFirst();
     }
 
-    private String availabilityReason() {
+    private Optional<VideoAiJob> latestPreparationJob(LessonContext context, UUID sourceVersion) {
+        List<VideoAiJob> jobs = new ArrayList<>();
+        latestJob(context, sourceVersion, VIDEO_TRANSCRIPT).ifPresent(jobs::add);
+        latestJob(context, sourceVersion, VIDEO_ARTIFACTS).ifPresent(jobs::add);
+        return jobs.stream().max(Comparator.comparing(
+                VideoAiJob::getCreatedAt,
+                Comparator.nullsFirst(Comparator.naturalOrder())));
+    }
+
+    private String generationAvailabilityReason() {
         if (!properties.isEnabled()) return "VIDEO_AI_DISABLED";
-        if (!transcriptionProperties.isEnabled()
-                || !"faster-whisper".equalsIgnoreCase(transcriptionProperties.getProvider())) {
-            return "TRANSCRIPTION_NOT_CONFIGURED";
-        }
         if (!generationProperties.isEnabled()
                 || generationProperties.getApiKey() == null
                 || generationProperties.getApiKey().isBlank()) {
             return "GENERATION_NOT_CONFIGURED";
         }
         return null;
+    }
+
+    private boolean transcriptionConfigured() {
+        return transcriptionProperties.isEnabled()
+                && "faster-whisper".equalsIgnoreCase(transcriptionProperties.getProvider());
+    }
+
+    private boolean hasTranscript(VideoAiContent content) {
+        return content != null
+                && normalize(content.getTranscriptText()) != null
+                && !content.getSegments().isEmpty();
     }
 
     private Optional<VideoAiJob> activeJob(LessonContext context, UUID sourceVersion) {

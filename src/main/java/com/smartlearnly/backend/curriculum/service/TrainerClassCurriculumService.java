@@ -55,6 +55,7 @@ public class TrainerClassCurriculumService {
     private final CurriculumSectionRepository sectionRepository;
     private final CurriculumLessonRepository lessonRepository;
     private final CurriculumResolutionService resolutionService;
+    private final ClassCurriculumBindingProvisioningService bindingProvisioningService;
     private final CurriculumCloningService cloningService;
     private final CurriculumDtoMapper mapper;
     private final CurrentUserService currentUserService;
@@ -375,7 +376,13 @@ public class TrainerClassCurriculumService {
 
     private ClassCurriculumBinding requireBindingForUpdate(UUID classId, UUID courseId) {
         ClassCurriculumBinding binding = bindingRepository.findByClassIdForUpdate(classId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class curriculum binding not found"));
+                .orElseGet(() -> {
+                    bindingProvisioningService.ensureBinding(classId, courseId);
+                    return bindingRepository.findByClassIdForUpdate(classId)
+                            .orElseThrow(() -> new BusinessException(
+                                    ErrorCode.RESOURCE_NOT_FOUND,
+                                    "Class curriculum binding could not be initialized"));
+                });
         if (!courseId.equals(binding.getCourseId())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Class curriculum binding is inconsistent");
         }

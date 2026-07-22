@@ -57,6 +57,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Component
 @EnableScheduling
 public class VideoAiJobWorker {
+    private static final String VIDEO_TRANSCRIPT = "VIDEO_TRANSCRIPT";
     private final VideoAiProperties properties;
     private final HlsProperties hlsProperties;
     private final VideoAiJobRepository jobRepository;
@@ -179,7 +180,6 @@ public class VideoAiJobWorker {
                 processFlashcards(snapshot, lease);
                 return;
             }
-            GenerationInput input;
             if (snapshot.getContentId() == null) {
                 tempDir = Files.createTempDirectory("smart-learnly-video-ai-");
                 Path audio = tempDir.resolve("source.mp3");
@@ -188,12 +188,15 @@ public class VideoAiJobWorker {
                 lease.assertOwned();
                 TranscriptionResult transcription = transcriptionService.transcribe(audio, snapshot.getSourceLanguage());
                 lease.assertOwned();
-                input = transactions.execute(status -> toGenerationInput(
-                        saveTranscript(jobId, leaseOwner, transcription)));
-            } else {
-                input = transactions.execute(status -> toGenerationInput(
-                        requireOwnedContent(jobId, leaseOwner)));
+                transactions.execute(status ->
+                        saveTranscript(jobId, leaseOwner, transcription));
             }
+            if (VIDEO_TRANSCRIPT.equals(snapshot.getJobType())) {
+                transactions.executeWithoutResult(status -> completeTranscript(jobId, leaseOwner));
+                return;
+            }
+            GenerationInput input = transactions.execute(status -> toGenerationInput(
+                    requireOwnedContent(jobId, leaseOwner)));
             LearningAidResult aids = generationService.generate(input.language(), input.segments());
             lease.assertOwned();
             transactions.executeWithoutResult(status -> complete(jobId, leaseOwner, aids));
@@ -304,10 +307,28 @@ public class VideoAiJobWorker {
         if (content.getSegments().isEmpty()) throw new IllegalStateException("Transcription returned no segments");
         VideoAiContent saved = contentRepository.saveAndFlush(content);
         job.setContentId(saved.getId());
-        job.setStage("generating");
-        job.setProgressPercent(65);
+        if (VIDEO_TRANSCRIPT.equals(job.getJobType())) {
+            job.setStage("transcript_ready");
+            job.setProgressPercent(100);
+        } else {
+            job.setStage("generating");
+            job.setProgressPercent(65);
+        }
         jobRepository.save(job);
         return saved;
+    }
+
+    private void completeTranscript(UUID jobId, UUID leaseOwner) {
+        VideoAiJob job = requireOwnedJob(jobId, leaseOwner);
+        requireCurrentHls(job);
+        requireOwnedContent(jobId, leaseOwner);
+        job.setStatus("completed");
+        job.setStage("transcript_ready");
+        job.setProgressPercent(100);
+        job.setCompletedAt(Instant.now());
+        clearLease(job);
+        job.setErrorMessage(null);
+        jobRepository.save(job);
     }
 
     private GenerationInput toGenerationInput(VideoAiContent content) {

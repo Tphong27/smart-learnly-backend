@@ -16,8 +16,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,6 @@ import org.springframework.web.client.RestClientResponseException;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class GeminiFlashcardDocumentGenerationService implements FlashcardDocumentGenerationService {
     private static final String PROVIDER_NAME = "gemini";
     private static final String SOURCE_TYPE_TEXT = "TEXT";
@@ -43,6 +42,20 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
 
     private final FlashcardDocumentGenerationProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestClient restClient;
+
+    @Autowired
+    public GeminiFlashcardDocumentGenerationService(
+            FlashcardDocumentGenerationProperties properties) {
+        this(properties, createRestClient(properties));
+    }
+
+    GeminiFlashcardDocumentGenerationService(
+            FlashcardDocumentGenerationProperties properties,
+            RestClient restClient) {
+        this.properties = properties;
+        this.restClient = restClient;
+    }
 
     @Override
     public GenerationResult generate(DocumentGenerationRequest request) {
@@ -304,15 +317,66 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
                 """;
     }
 
-    private String sendGeminiInput(List<Map<String, Object>> input, String operation) {
+    String sendGeminiInput(List<Map<String, Object>> input, String operation) {
+        RestClientException lastException = null;
+        List<String> models = candidateModels();
+        for (int index = 0; index < models.size(); index++) {
+            String model = models.get(index);
+            try {
+                String output = sendGeminiInputOnce(input, model, operation);
+                if (index > 0) {
+                    log.info(
+                            "Gemini flashcard document {} recovered with fallback model={}",
+                            operation,
+                            model);
+                }
+                return output;
+            }
+            catch (RestClientResponseException exception) {
+                lastException = exception;
+                log.warn(
+                        "Gemini flashcard document {} attempt failed: status={} model={}",
+                        operation,
+                        exception.getStatusCode().value(),
+                        model);
+                if (!canTryFallback(exception) || index + 1 >= models.size()) {
+                    throw toProviderHttpException(exception);
+                }
+            }
+            catch (RestClientException exception) {
+                lastException = exception;
+                log.warn(
+                        "Gemini flashcard document {} transport attempt failed: model={} errorType={}",
+                        operation,
+                        model,
+                        exception.getClass().getSimpleName());
+                if (index + 1 >= models.size()) {
+                    throw new BusinessException(
+                            ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                            "Document could not be processed right now. Please try again later.");
+                }
+            }
+        }
+        if (lastException instanceof RestClientResponseException responseException) {
+            throw toProviderHttpException(responseException);
+        }
+        throw new BusinessException(
+                ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                "Document could not be processed right now. Please try again later.");
+    }
+
+    private String sendGeminiInputOnce(
+            List<Map<String, Object>> input,
+            String model,
+            String operation) {
         try {
-            String response = restClient()
+            String response = restClient
                     .post()
                     .uri("/interactions")
                     .contentType(MediaType.APPLICATION_JSON)
                     .header("x-goog-api-key", properties.getApiKey())
                     .header("Api-Revision", "2026-05-20")
-                    .body(buildRequestBody(input))
+                    .body(buildRequestBody(input, model))
                     .retrieve()
                     .body(String.class);
             String outputText = extractOutputText(objectMapper.readTree(response == null ? "{}" : response));
@@ -321,21 +385,11 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
             }
             return outputText;
         }
-        catch (RestClientResponseException exception) {
-            log.warn(
-                    "Gemini flashcard document {} HTTP error: status={} model={} endpoint={}",
-                    operation,
-                    exception.getStatusCode().value(),
-                    properties.getModel(),
-                    sanitizeEndpoint(properties.getApiBaseUrl())
-            );
-            throw toProviderHttpException(exception);
-        }
         catch (IOException | IllegalArgumentException exception) {
             log.warn(
                     "Gemini flashcard document {} response parse error: model={} endpoint={} errorType={}",
                     operation,
-                    properties.getModel(),
+                    model,
                     sanitizeEndpoint(properties.getApiBaseUrl()),
                     exception.getClass().getSimpleName()
             );
@@ -344,35 +398,46 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
                     "Document generation returned an invalid response. Please try again."
             );
         }
-        catch (RestClientException exception) {
-            log.warn(
-                    "Gemini flashcard document {} request error: model={} endpoint={} errorType={}",
-                    operation,
-                    properties.getModel(),
-                    sanitizeEndpoint(properties.getApiBaseUrl()),
-                    exception.getClass().getSimpleName()
-            );
-            throw new BusinessException(
-                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "Document could not be processed right now. Please try again later."
-            );
-        }
     }
 
-    private Map<String, Object> buildRequestBody(List<Map<String, Object>> input) {
+    private Map<String, Object> buildRequestBody(List<Map<String, Object>> input, String model) {
         Map<String, Object> responseFormat = new LinkedHashMap<>();
         responseFormat.put("type", "text");
         responseFormat.put("mime_type", "application/json");
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", properties.getModel());
+        body.put("model", model);
         body.put("input", input == null ? List.of() : input);
         body.put("response_format", responseFormat);
         body.put("store", false);
         return body;
     }
 
-    private RestClient restClient() {
+    private List<String> candidateModels() {
+        String primary = normalizeModel(properties.getModel(), "gemini-3.5-flash");
+        String fallback = normalizeModel(properties.getFallbackModel(), null);
+        if (fallback == null || fallback.equals(primary)) {
+            return List.of(primary);
+        }
+        return List.of(primary, fallback);
+    }
+
+    private String normalizeModel(String value, String defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        String normalized = value.trim();
+        return normalized.startsWith("models/")
+                ? normalized.substring("models/".length())
+                : normalized;
+    }
+
+    private boolean canTryFallback(RestClientResponseException exception) {
+        int status = exception.getStatusCode().value();
+        return status == 400 || status == 404 || status == 408 || status == 429 || status >= 500;
+    }
+
+    private static RestClient createRestClient(FlashcardDocumentGenerationProperties properties) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(properties.getTimeout());
         requestFactory.setReadTimeout(properties.getTimeout());

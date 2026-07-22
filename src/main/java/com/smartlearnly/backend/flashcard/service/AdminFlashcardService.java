@@ -369,6 +369,7 @@ public class AdminFlashcardService {
 
         CurriculumLesson lesson = requireLinkedCurriculumLesson(flashcardSet);
         lesson.setStatus(LessonStatus.INACTIVE);
+        lesson.setDeletedAt(Instant.now());
         curriculumLessonRepository.save(lesson);
     }
 

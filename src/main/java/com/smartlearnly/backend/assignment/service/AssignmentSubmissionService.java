@@ -157,7 +157,9 @@ public class AssignmentSubmissionService {
         submission.setAiFeedback(request.getAiFeedback());
         submission.setTrainerFeedback(request.getTrainerFeedback());
         submission.setStatus(request.getStatus());
-        submission.setGradedBy(request.getGradedBy());
+        // The grader identity must come from the authenticated session, never
+        // from a client-controlled request field.
+        submission.setGradedBy(currentUserService.requireAuthenticatedUser().getId());
         submission.setGradedAt(Instant.now());
 
         AssignmentSubmission updated = repository.save(submission);

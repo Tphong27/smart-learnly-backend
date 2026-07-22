@@ -81,6 +81,12 @@ public class Test {
     @Column(name = "access_code_expires_at")
     private Instant accessCodeExpiresAt;
 
+    @Column(name = "opens_at")
+    private Instant opensAt;
+
+    @Column(name = "closes_at")
+    private Instant closesAt;
+
     @Column(name = "created_by")
     private UUID createdBy;
 

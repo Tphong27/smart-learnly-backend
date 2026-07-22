@@ -33,6 +33,7 @@ public class CurriculumResolutionService {
 
     private final CurriculumVersionRepository curriculumVersionRepository;
     private final ClassCurriculumBindingRepository bindingRepository;
+    private final ClassCurriculumBindingProvisioningService bindingProvisioningService;
     private final ClassOfferingRepository classOfferingRepository;
     private final ClassEnrollmentRepository classEnrollmentRepository;
     private final AuthenticatedUserResolver authenticatedUserResolver;
@@ -194,9 +195,7 @@ public class CurriculumResolutionService {
 
     private ClassCurriculumBinding requireBinding(UUID classId, UUID courseId) {
         return bindingRepository.findByClassIdAndCourseId(classId, courseId)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.RESOURCE_NOT_FOUND,
-                        "Class curriculum binding not found"));
+                .orElseGet(() -> bindingProvisioningService.ensureBinding(classId, courseId));
     }
 
     private ClassOffering requireClassForCourse(UUID courseId, UUID classId) {

@@ -13,8 +13,9 @@ import com.smartlearnly.backend.hls.entity.HlsLesson;
 import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.videoai.config.VideoAiProperties;
+import com.smartlearnly.backend.videoai.entity.VideoAiContent;
 import com.smartlearnly.backend.videoai.entity.VideoAiJob;
-import com.smartlearnly.backend.videoai.generation.VideoAiGenerationProperties;
+import com.smartlearnly.backend.videoai.repository.VideoAiContentRepository;
 import com.smartlearnly.backend.videoai.repository.VideoAiJobRepository;
 import com.smartlearnly.backend.videoai.transcription.FasterWhisperProperties;
 import java.util.Optional;
@@ -24,29 +25,30 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class VideoAiAutoPreparationService {
-    private static final String VIDEO_ARTIFACTS = "VIDEO_ARTIFACTS";
+    private static final String VIDEO_TRANSCRIPT = "VIDEO_TRANSCRIPT";
     private static final long MAX_AUTOMATIC_ATTEMPTS_PER_SOURCE = 3;
 
     private final VideoAiProperties videoAiProperties;
     private final FasterWhisperProperties transcriptionProperties;
-    private final VideoAiGenerationProperties generationProperties;
     private final HlsLessonRepository hlsLessonRepository;
     private final CurriculumLessonRepository lessonRepository;
     private final CurriculumVersionRepository versionRepository;
     private final CourseRepository courseRepository;
     private final ClassOfferingRepository classOfferingRepository;
     private final VideoAiJobRepository jobRepository;
+    private final VideoAiContentRepository contentRepository;
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void enqueueAfterVideoReady(UUID lessonId, UUID sourceVersion) {
         if (!runtimeReady()) {
-            log.info("Skipping automatic AI preparation because the AI runtime is not configured");
+            log.info("Skipping automatic transcript because the transcription runtime is not configured");
             return;
         }
 
@@ -67,22 +69,32 @@ public class VideoAiAutoPreparationService {
 
         UUID classId = version.getScope() == CurriculumScope.CLASS ? version.getClassId() : null;
         String scope = classId == null ? "MASTER" : "CLASS";
+        Optional<VideoAiContent> currentContent = classId == null
+                ? contentRepository
+                        .findFirstByLessonIdAndLessonScopeAndClassIdIsNullAndSourceVersionOrderByUpdatedAtDesc(
+                                lessonId, scope, sourceVersion)
+                : contentRepository
+                        .findFirstByLessonIdAndLessonScopeAndClassIdAndSourceVersionOrderByUpdatedAtDesc(
+                                lessonId, scope, classId, sourceVersion);
+        if (currentContent.filter(this::hasTranscript).isPresent()) {
+            return;
+        }
         Optional<VideoAiJob> latest = jobRepository.findLatestForSource(
-                lessonId, scope, classId, sourceVersion, VIDEO_ARTIFACTS, PageRequest.of(0, 1))
+                lessonId, scope, classId, sourceVersion, VIDEO_TRANSCRIPT, PageRequest.of(0, 1))
                 .stream().findFirst();
         if (latest.isPresent()) {
             if (!"failed".equals(latest.get().getStatus())) return;
             long previousAttempts = jobRepository.countForSource(
-                    lessonId, scope, classId, sourceVersion, VIDEO_ARTIFACTS);
+                    lessonId, scope, classId, sourceVersion, VIDEO_TRANSCRIPT);
             if (previousAttempts >= MAX_AUTOMATIC_ATTEMPTS_PER_SOURCE) {
-                log.warn("Automatic AI preparation retry limit reached for lesson {}", lessonId);
+                log.warn("Automatic transcript retry limit reached for lesson {}", lessonId);
                 return;
             }
         }
 
         UUID requestedBy = resolveRequester(version);
         if (requestedBy == null) {
-            log.warn("Could not determine an owner for automatic AI preparation of lesson {}", lessonId);
+            log.warn("Could not determine an owner for automatic transcript of lesson {}", lessonId);
             return;
         }
 
@@ -92,14 +104,14 @@ public class VideoAiAutoPreparationService {
         job.setCourseId(version.getCourseId());
         job.setClassId(classId);
         job.setSourceVersion(sourceVersion);
-        job.setJobType(VIDEO_ARTIFACTS);
+        job.setJobType(VIDEO_TRANSCRIPT);
         job.setSourceLanguage("auto");
         job.setRequestedBy(requestedBy);
         try {
             jobRepository.saveAndFlush(job);
-            log.info("Queued automatic AI preparation for lesson {} and source {}", lessonId, sourceVersion);
+            log.info("Queued automatic transcript for lesson {} and source {}", lessonId, sourceVersion);
         } catch (DataIntegrityViolationException conflict) {
-            log.info("Automatic AI preparation is already queued for lesson {}", lessonId);
+            log.info("Automatic transcript is already queued for lesson {}", lessonId);
         }
     }
 
@@ -117,9 +129,12 @@ public class VideoAiAutoPreparationService {
     private boolean runtimeReady() {
         return videoAiProperties.isEnabled()
                 && transcriptionProperties.isEnabled()
-                && "faster-whisper".equalsIgnoreCase(transcriptionProperties.getProvider())
-                && generationProperties.isEnabled()
-                && generationProperties.getApiKey() != null
-                && !generationProperties.getApiKey().isBlank();
+                && "faster-whisper".equalsIgnoreCase(transcriptionProperties.getProvider());
+    }
+
+    private boolean hasTranscript(VideoAiContent content) {
+        return content.getTranscriptText() != null
+                && !content.getTranscriptText().isBlank()
+                && !content.getSegments().isEmpty();
     }
 }

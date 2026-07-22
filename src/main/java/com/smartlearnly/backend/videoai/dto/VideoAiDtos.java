@@ -43,6 +43,8 @@ public final class VideoAiDtos {
             boolean eligible,
             String reason,
             boolean hlsReady,
+            boolean transcriptReady,
+            boolean suggestionsReady,
             UUID sourceVersion,
             JobResponse activeJob,
             UUID contentId,

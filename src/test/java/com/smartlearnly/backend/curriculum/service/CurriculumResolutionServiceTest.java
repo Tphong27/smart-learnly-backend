@@ -39,6 +39,8 @@ class CurriculumResolutionServiceTest {
     @Mock
     private ClassCurriculumBindingRepository bindingRepository;
     @Mock
+    private ClassCurriculumBindingProvisioningService bindingProvisioningService;
+    @Mock
     private ClassOfferingRepository classOfferingRepository;
     @Mock
     private ClassEnrollmentRepository classEnrollmentRepository;
@@ -150,6 +152,38 @@ class CurriculumResolutionServiceTest {
         assertThat(resolution.version()).isSameAs(publishedMaster);
         assertThat(resolution.customized()).isFalse();
         assertThat(resolution.source()).isEqualTo(CurriculumResolutionService.SOURCE_MASTER_INHERITED);
+    }
+
+    @Test
+    void trainerEditingRepairsBindingMissingFromNewClass() {
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        UUID trainerId = UUID.randomUUID();
+
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId))
+                .thenReturn(Optional.of(classOffering(courseId, trainerId)));
+        when(bindingRepository.findByClassIdAndCourseId(classId, courseId))
+                .thenReturn(Optional.empty());
+
+        ClassCurriculumBinding repaired = binding(
+                classId, courseId, UUID.randomUUID(), null, null);
+        when(bindingProvisioningService.ensureBinding(classId, courseId))
+                .thenReturn(repaired);
+
+        CurriculumVersion publishedMaster = version(
+                courseId, null, CurriculumScope.MASTER, CurriculumStatus.PUBLISHED);
+        when(curriculumVersionRepository
+                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                        courseId, CurriculumScope.MASTER, CurriculumStatus.PUBLISHED))
+                .thenReturn(Optional.of(publishedMaster));
+
+        CurriculumResolution resolution = curriculumResolutionService
+                .resolveTrainerEditing(courseId, classId, trainerId);
+
+        assertThat(resolution.binding()).isSameAs(repaired);
+        assertThat(resolution.version()).isSameAs(publishedMaster);
+        assertThat(resolution.source())
+                .isEqualTo(CurriculumResolutionService.SOURCE_MASTER_INHERITED);
     }
 
     private ClassOffering classOffering(UUID courseId, UUID trainerId) {

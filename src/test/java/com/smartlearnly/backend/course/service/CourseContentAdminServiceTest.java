@@ -45,6 +45,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.hibernate.annotations.SQLRestriction;
 
 /**
  * The admin content service now authors MASTER {@link CurriculumVersion} data instead of the legacy
@@ -131,6 +132,38 @@ class CourseContentAdminServiceTest {
 
         assertThat(response).hasSize(2);
         assertThat(response).extracting(LessonResponse::status).containsExactly("draft", "inactive");
+    }
+
+    @Test
+    void deleteLessonShouldMarkItDeletedInsteadOfLeavingAnInactiveRowVisible() {
+        Course course = course();
+        CurriculumVersion version = version(course);
+        CurriculumSection section = section(version, 0);
+        CurriculumLesson lesson = lesson(section);
+        UserAccount actor = new UserAccount();
+        actor.setEmail("admin@smartlearnly.dev");
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(curriculumLessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(curriculumLessonRepository.save(lesson)).thenReturn(lesson);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+        courseContentAdminService.deleteLesson(lesson.getId());
+
+        assertThat(lesson.getStatus()).isEqualTo(LessonStatus.INACTIVE);
+        assertThat(lesson.getDeletedAt()).isNotNull();
+        verify(auditLogService).record(
+                actor.getEmail(),
+                "LESSON_DELETED",
+                "CURRICULUM_LESSON",
+                lesson.getId().toString());
+    }
+
+    @Test
+    void curriculumLessonQueriesShouldExcludeSoftDeletedRows() {
+        SQLRestriction restriction = CurriculumLesson.class.getAnnotation(SQLRestriction.class);
+
+        assertThat(restriction).isNotNull();
+        assertThat(restriction.value()).isEqualTo("deleted_at IS NULL");
     }
 
     @Test

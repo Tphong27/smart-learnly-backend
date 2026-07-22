@@ -46,6 +46,11 @@ public class TestAttemptService {
         Test test = testRepository.findById(required(request.getTestId(), "testId"))
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
         UUID studentId = required(request.getStudentId(), "studentId");
+        if (!testService.isWithinSchedule(test, Instant.now())) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "This test is not open for attempts right now");
+        }
         if (!testService.accessCodeMatches(test, request.getAccessCode())) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_RULE_VIOLATION,

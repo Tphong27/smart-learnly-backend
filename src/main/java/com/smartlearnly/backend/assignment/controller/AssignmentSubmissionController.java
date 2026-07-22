@@ -54,7 +54,7 @@ public class AssignmentSubmissionController {
     }
 
     @PostMapping(value = "/upload-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('TRAINEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER', 'TRAINEE')")
     public ResponseEntity<Map<String, String>> uploadSubmissionFile(
             @RequestPart("file") MultipartFile file) throws IOException {
         if (file.isEmpty()) {
