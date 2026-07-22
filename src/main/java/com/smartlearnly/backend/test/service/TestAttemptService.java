@@ -115,6 +115,7 @@ public class TestAttemptService {
         return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId)
                 .stream()
                 .map(this::expireIfOverdue)
+                .map(this::refreshFinalGrade)
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -124,8 +125,16 @@ public class TestAttemptService {
         return repository.findByTestIdOrderByStartTimeAsc(testId)
                 .stream()
                 .map(this::expireIfOverdue)
+                .map(this::refreshFinalGrade)
                 .map(this::mapToResponse)
                 .toList();
+    }
+
+    @Transactional
+    public TestAttemptModel.Response getAttemptById(UUID attemptId) {
+        TestAttempt attempt = repository.findById(attemptId)
+                .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
+        return mapToResponse(refreshFinalGrade(expireIfOverdue(attempt)));
     }
 
     @Transactional
@@ -161,6 +170,7 @@ public class TestAttemptService {
         for (StudentTestAnswer answer : answers) {
             boolean correct = answer.getSelectedAnswerId() != null
                     && questionAnswerRepository.findById(answer.getSelectedAnswerId())
+                            .filter(selected -> selected.getQuestionId().equals(answer.getQuestionId()))
                             .map(QuestionAnswer::getIsCorrect)
                             .orElse(false);
             BigDecimal marks = testQuestions.stream()
@@ -181,6 +191,20 @@ public class TestAttemptService {
                 : score.multiply(BigDecimal.valueOf(100))
                         .divide(total, 2, RoundingMode.HALF_UP);
         return new GradeResult(score, percentage);
+    }
+
+    private TestAttempt refreshFinalGrade(TestAttempt attempt) {
+        if (attempt.getStatus() != AttemptStatus.SUBMITTED
+                && attempt.getStatus() != AttemptStatus.GRADED
+                && attempt.getStatus() != AttemptStatus.EXPIRED) {
+            return attempt;
+        }
+        GradeResult grade = gradeAttempt(attempt);
+        if (attempt.getScore() == null || attempt.getScore().compareTo(grade.score()) != 0) {
+            attempt.setScore(grade.score());
+            return repository.save(attempt);
+        }
+        return attempt;
     }
 
     private TestAttempt expireIfOverdue(TestAttempt attempt) {
@@ -226,7 +250,16 @@ public class TestAttemptService {
         response.setStartTime(attempt.getStartTime());
         response.setEndTime(attempt.getEndTime());
         response.setScore(attempt.getScore());
-        response.setPercentage(null);
+        List<TestQuestion> testQuestions = testQuestionRepository.findByIdTestId(attempt.getTestId());
+        response.setTotalQuestions(testQuestions.size());
+        BigDecimal totalMarks = testQuestions.stream()
+                .map(TestQuestion::getMarks)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        response.setPercentage(attempt.getScore() == null || totalMarks.compareTo(BigDecimal.ZERO) == 0
+                ? null
+                : attempt.getScore()
+                        .multiply(BigDecimal.valueOf(100))
+                        .divide(totalMarks, 2, RoundingMode.HALF_UP));
         response.setStatus(attempt.getStatus());
         response.setCreatedAt(attempt.getCreatedAt());
         response.setAssignmentId(attempt.getAssignmentId());

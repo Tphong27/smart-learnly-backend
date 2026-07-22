@@ -19,6 +19,7 @@ public class AssignmentModel {
         private UUID lessonId;
         private String title;
         private String description;
+        private String rubric;
         private String instructionFileUrl;
         private String instructionFileName;
         private Instant dueDate;
@@ -37,6 +38,7 @@ public class AssignmentModel {
         private String title;
         private UUID lessonId;
         private String description;
+        private String rubric;
         private String instructionFileUrl;
         private String instructionFileName;
         private Instant dueDate;
@@ -59,6 +61,7 @@ public class AssignmentModel {
         private UUID lessonId;
         private String title;
         private String description;
+        private String rubric;
         private String instructionFileUrl;
         private String instructionFileName;
         private Instant dueDate;

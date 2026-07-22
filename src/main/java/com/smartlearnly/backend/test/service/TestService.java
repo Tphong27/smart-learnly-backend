@@ -4,6 +4,7 @@ package com.smartlearnly.backend.test.service;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.test.dto.TestModel;
 import com.smartlearnly.backend.test.entity.Test;
 import com.smartlearnly.backend.test.entity.TestAttempt;
@@ -33,6 +34,7 @@ public class TestService {
     private final CurrentUserService currentUserService;
     private final TestAttemptRepository testAttemptRepository;
     private final StudentTestAnswerRepository studentTestAnswerRepository;
+    private final CurriculumSectionRepository curriculumSectionRepository;
 
     public TestModel.Response createTest(
             TestModel.CreateRequest request) {
@@ -42,6 +44,8 @@ public class TestService {
         Test test = new Test();
 
         test.setModuleId(request.getModuleId());
+        validateCurriculumSection(request.getCourseId(), request.getCurriculumSectionId());
+        test.setCurriculumSectionId(request.getCurriculumSectionId());
         test.setClassId(request.getClassId());
         test.setCourseId(request.getCourseId());
         test.setTitle(request.getTitle());
@@ -59,6 +63,7 @@ public class TestService {
                 request.getShuffleAnswers());
         test.setShowAnswersAfter(
                 request.getShowAnswersAfter());
+        test.setIsPublished(request.getIsPublished());
         test.setIsFlashtest(
                 request.getIsFlashtest());
         test.setOpensAt(request.getOpensAt());
@@ -90,12 +95,14 @@ public class TestService {
         return responses;
     }
 
-    public List<TestModel.Response> getMyTests() {
+    public List<TestModel.Response> getMyTests(UUID courseId) {
 
         UUID currentUserId =
                 currentUserService.requireAuthenticatedUser().getId();
         List<Test> tests =
-                testRepository.findByCreatedBy(currentUserId);
+                courseId == null
+                        ? testRepository.findByCreatedBy(currentUserId)
+                        : testRepository.findByCreatedByAndCourseId(currentUserId, courseId);
 
         List<TestModel.Response> responses =
                 new ArrayList<>();
@@ -169,6 +176,11 @@ public class TestService {
         }
 
         if (request.getModuleId() != null) test.setModuleId(request.getModuleId());
+        if (request.getCurriculumSectionId() != null) {
+            UUID nextCourseId = request.getCourseId() != null ? request.getCourseId() : test.getCourseId();
+            validateCurriculumSection(nextCourseId, request.getCurriculumSectionId());
+            test.setCurriculumSectionId(request.getCurriculumSectionId());
+        }
         if (request.getClassId() != null) test.setClassId(request.getClassId());
         if (request.getCourseId() != null) test.setCourseId(request.getCourseId());
         if (request.getTitle() != null) test.setTitle(request.getTitle());
@@ -240,6 +252,7 @@ public class TestService {
 
         response.setId(test.getId());
         response.setModuleId(test.getModuleId());
+        response.setCurriculumSectionId(test.getCurriculumSectionId());
         response.setClassId(test.getClassId());
         response.setCourseId(test.getCourseId());
         response.setTitle(test.getTitle());
@@ -318,6 +331,22 @@ public class TestService {
             throw new BusinessException(
                     ErrorCode.BUSINESS_RULE_VIOLATION,
                     "Test closing time must be after its opening time");
+        }
+    }
+
+    private void validateCurriculumSection(UUID courseId, UUID sectionId) {
+        if (sectionId == null) {
+            return;
+        }
+        if (!curriculumSectionRepository.existsById(sectionId)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Selected module was not found");
+        }
+        if (courseId == null || !curriculumSectionRepository.existsByIdAndCourseId(sectionId, courseId)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Selected module does not belong to this course");
         }
     }
 

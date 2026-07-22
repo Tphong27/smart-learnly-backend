@@ -173,13 +173,6 @@ public class AssignmentAiDraftService {
             "kiem thu",
             "bai code"
     );
-    private static final List<String> BLOCKED_UNRELATED_TOPIC_KEYWORDS = List.of(
-            "cat",
-            "cats",
-            "meo",
-            "con meo"
-    );
-
     private final FlashcardDocumentGenerationProperties properties;
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -219,8 +212,10 @@ public class AssignmentAiDraftService {
                 source
         );
         String output = sendGeminiInput(List.of(Map.of("type", "text", "text", prompt)));
+        DraftParts draft = splitDraftOutput(output);
         return new AssignmentAiDraftModel.Response(
-                trimToMax(output, MAX_REPLY_LENGTH),
+                trimToMax(draft.content(), MAX_REPLY_LENGTH),
+                trimToMax(draft.rubric(), MAX_REPLY_LENGTH),
                 source.name(),
                 source.text().isBlank() ? 0 : source.text().length(),
                 source.cacheKey()
@@ -368,12 +363,17 @@ public class AssignmentAiDraftService {
                 If any request asks for unrelated help, refuse briefly and redirect to assignment/essay drafting.
                 Return copy-ready content in the same primary language as the trainer request. If the trainer writes Vietnamese, answer in Vietnamese. If the trainer writes English, answer in English.
                 Use section headings in that same language. Do not create anything in the product.
-                For every requested draft, include these sections:
+                For every requested draft, include these sections in the assignment content:
                 1. Tieu de goi y
                 2. Noi dung giao bai
                 3. Yeu cau nop bai
-                4. Tieu chi cham diem
-                5. Goi y thoi luong hoac deadline
+                4. Goi y thoi luong hoac deadline
+
+                Put all grading criteria in a separate rubric section. End the response using exactly these markers:
+                ===ASSIGNMENT_CONTENT===
+                [all assignment content, without grading criteria]
+                ===ASSIGNMENT_RUBRIC===
+                [all grading criteria and scoring guidance]
 
                 Rules:
                 - Produce the number of drafts requested by the trainer, in the same order as the trainer listed them, but never more than 5 drafts per response.
@@ -405,6 +405,20 @@ public class AssignmentAiDraftService {
             builder.append(":\n").append(source.text());
         }
         return builder.toString();
+    }
+
+    private DraftParts splitDraftOutput(String output) {
+        String normalized = output == null ? "" : output.trim();
+        String contentMarker = "===ASSIGNMENT_CONTENT===";
+        String rubricMarker = "===ASSIGNMENT_RUBRIC===";
+        int contentStart = normalized.indexOf(contentMarker);
+        int rubricStart = normalized.indexOf(rubricMarker);
+        if (contentStart >= 0 && rubricStart > contentStart) {
+            String content = normalized.substring(contentStart + contentMarker.length(), rubricStart).trim();
+            String rubric = normalized.substring(rubricStart + rubricMarker.length()).trim();
+            return new DraftParts(content, rubric);
+        }
+        return new DraftParts(normalized, "");
     }
 
     private String sendGeminiInput(List<Map<String, Object>> input) {
@@ -863,10 +877,6 @@ public class AssignmentAiDraftService {
             boolean sourceAttached
     ) {
         String normalizedMessage = normalizeForScope(message);
-        if (containsBlockedUnrelatedTopic(normalizedMessage)
-                && !containsEducationalTopicKeyword(normalizedMessage)) {
-            return false;
-        }
         if (looksLikeDraftAction(normalizedMessage)
                 && (containsAssignmentIntentKeyword(normalizedMessage)
                 || containsEducationalTopicKeyword(normalizedMessage))) {
@@ -907,10 +917,6 @@ public class AssignmentAiDraftService {
 
     private boolean containsEducationalTopicKeyword(String normalizedText) {
         return containsKeyword(normalizedText, EDUCATIONAL_TOPIC_KEYWORDS);
-    }
-
-    private boolean containsBlockedUnrelatedTopic(String normalizedText) {
-        return containsKeyword(normalizedText, BLOCKED_UNRELATED_TOPIC_KEYWORDS);
     }
 
     private boolean containsKeyword(String normalizedText, List<String> keywords) {
@@ -959,12 +965,13 @@ public class AssignmentAiDraftService {
         String content = isLikelyVietnamese(message)
                 ? OUT_OF_SCOPE_RESPONSE_VI
                 : OUT_OF_SCOPE_RESPONSE_EN;
-        return new AssignmentAiDraftModel.Response(content.trim(), null, 0, null);
+        return new AssignmentAiDraftModel.Response(content.trim(), "", null, 0, null);
     }
 
     private AssignmentAiDraftModel.Response unsupportedLanguageResponse() {
         return new AssignmentAiDraftModel.Response(
                 UNSUPPORTED_LANGUAGE_RESPONSE_EN.trim(),
+                "",
                 null,
                 0,
                 null
@@ -1110,6 +1117,9 @@ public class AssignmentAiDraftService {
         private SourceContent {
             text = text == null ? "" : text;
         }
+    }
+
+    private record DraftParts(String content, String rubric) {
     }
 
     private record SourceIndex(String lead, List<String> chunks, int originalCharacters) {

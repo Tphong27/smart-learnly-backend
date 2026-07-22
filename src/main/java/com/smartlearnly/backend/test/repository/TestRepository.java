@@ -16,5 +16,7 @@ public interface TestRepository
     List<Test> findByModuleId(UUID moduleId);
 
     List<Test> findByCreatedBy(UUID createdBy);
+
+    List<Test> findByCreatedByAndCourseId(UUID createdBy, UUID courseId);
 }
 

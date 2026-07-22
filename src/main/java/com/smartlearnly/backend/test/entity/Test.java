@@ -31,6 +31,9 @@ public class Test {
     @Column(name = "module_id")
     private UUID moduleId;
 
+    @Column(name = "curriculum_section_id")
+    private UUID curriculumSectionId;
+
     @Column(name = "class_id")
     private UUID classId;
 
