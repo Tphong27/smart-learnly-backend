@@ -29,7 +29,7 @@ public interface ClassSessionRepository
                     class_offering.trainer_id
                 ) AS "trainerId",
                 trainer.full_name AS "trainerName",
-                class_session.meeting_url AS "meetingUrl"
+                class_offering.meeting_url AS "meetingUrl"
             FROM public.class_sessions class_session
             JOIN public.classes class_offering
                 ON class_offering.id = class_session.class_id
@@ -76,7 +76,7 @@ public interface ClassSessionRepository
                 class_session.end_time AS "endTime",
                 class_session.trainer_id AS "trainerId",
                 trainer.full_name AS "trainerName",
-                class_session.meeting_url AS "meetingUrl"
+                class_offering.meeting_url AS "meetingUrl"
             FROM public.class_sessions class_session
             JOIN public.classes class_offering
                 ON class_offering.id = class_session.class_id

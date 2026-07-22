@@ -40,9 +40,6 @@ public class ClassSession {
     @Column(name = "trainer_id")
     private UUID trainerId;
 
-    @Column(name = "meeting_url")
-    private String meetingUrl;
-
     @Column(
             name = "created_at",
             nullable = false,

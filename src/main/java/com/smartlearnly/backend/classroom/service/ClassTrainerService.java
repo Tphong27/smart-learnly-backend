@@ -30,8 +30,7 @@ public class ClassTrainerService {
             String status,
             String keyword,
             int page,
-            int size
-    ) {
+            int size) {
         UserAccount trainer = currentUserService.requireAuthenticatedUser();
 
         String normalizedStatus = normalizeStatusFilter(status);
@@ -41,16 +40,14 @@ public class ClassTrainerService {
                 trainer.getId(),
                 normalizedStatus,
                 keywordPattern,
-                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE))
-        );
+                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
 
         return new PageResponse<>(
                 result.stream().map(this::toResponse).toList(),
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
-                result.getTotalPages()
-        );
+                result.getTotalPages());
     }
 
     @Transactional(readOnly = true)
@@ -61,8 +58,7 @@ public class ClassTrainerService {
                 .findTrainerAssignedClassDetail(classId, trainer.getId())
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
-                        "Assigned class was not found"
-                ));
+                        "Assigned class was not found"));
 
         return toResponse(classDetail);
     }
@@ -83,6 +79,7 @@ public class ClassTrainerService {
                 classOffering.getClassName(),
                 classOffering.getTrainerId(),
                 classOffering.getTrainerName(),
+                classOffering.getMeetingUrl(),
                 classOffering.getScheduleDescription(),
                 classOffering.getPrice(),
                 classOffering.getStartDate(),
@@ -92,8 +89,7 @@ public class ClassTrainerService {
                 Math.max(0, (long) maxStudents - activeCount),
                 classOffering.getStatus(),
                 classOffering.getCreatedAt(),
-                classOffering.getUpdatedAt()
-        );
+                classOffering.getUpdatedAt());
     }
 
     private String normalizeStatusFilter(String status) {
@@ -109,8 +105,7 @@ public class ClassTrainerService {
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    "Class status must be upcoming, ongoing, completed, or cancelled"
-            );
+                    "Class status must be upcoming, ongoing, completed, or cancelled");
         }
     }
 

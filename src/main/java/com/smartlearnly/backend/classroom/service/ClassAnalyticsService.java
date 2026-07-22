@@ -90,8 +90,7 @@ public class ClassAnalyticsService {
         BigDecimal averageProgress = calculateAverageProgress(students);
 
         long inactiveStudents = students.stream()
-                .filter(
-                        StudentPerformanceResponse::inactive)
+                .filter(StudentPerformanceResponse::inactive)
                 .count();
 
         ClassAnalyticsRepository.TestStatistics testStatistics = classAnalyticsRepository
@@ -179,8 +178,7 @@ public class ClassAnalyticsService {
         }
 
         double average = students.stream()
-                .mapToInt(
-                        StudentPerformanceResponse::progressPercent)
+                .mapToInt(StudentPerformanceResponse::progressPercent)
                 .average()
                 .orElse(0);
 

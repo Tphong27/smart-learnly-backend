@@ -33,9 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-// Class-level: chỉ cho staff (ADMIN, TMO, SME, TRAINER) — trainee/khách bị chặn ngay tại đây;
-// role write cụ thể (ADMIN/TMO) được siết thêm ở từng method.
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
 @RequestMapping("/api/v1/admin/classes")
 @Tag(name = "Admin Classes", description = "Admin and TMO class management APIs")
 @SecurityRequirement(name = "bearerAuth")

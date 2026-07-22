@@ -71,6 +71,7 @@ class ClassAdminServiceTest {
                                 course.getId(),
                                 "Spring Cohort",
                                 trainer.getId(),
+                                "https://meet.google.com/abc-defg-hij",
                                 "Mon/Wed 19:00",
                                 LocalDate.of(2026, 7, 1),
                                 LocalDate.of(2026, 8, 1),
@@ -91,6 +92,8 @@ class ClassAdminServiceTest {
 
                 ClassResponse response = service.create(request);
 
+                assertThat(response.meetingUrl())
+                                .isEqualTo("https://meet.google.com/abc-defg-hij");
                 assertThat(response.className()).isEqualTo("Spring Cohort");
                 assertThat(response.maxStudents()).isEqualTo(25);
                 assertThat(response.availableSeats()).isEqualTo(25);
@@ -111,6 +114,7 @@ class ClassAdminServiceTest {
                                 course.getId(),
                                 "Spring Cohort",
                                 null,
+                                "https://meet.google.com/abc-defg-hij",
                                 """
                                                 [
                                                   {

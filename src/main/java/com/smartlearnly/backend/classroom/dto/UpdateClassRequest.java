@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -15,8 +14,10 @@ public class UpdateClassRequest {
     @Size(max = 255)
     private String className;
 
-    @NotNull
     private UUID trainerId;
+
+    @Size(max = 255)
+    private String meetingUrl;
 
     @Size(max = 2000)
     private String scheduleDescription;
@@ -33,6 +34,7 @@ public class UpdateClassRequest {
     private boolean courseIdProvided;
     private boolean classNameProvided;
     private boolean trainerIdProvided;
+    private boolean meetingUrlProvided;
     private boolean scheduleDescriptionProvided;
     private boolean startDateProvided;
     private boolean endDateProvided;
@@ -65,6 +67,15 @@ public class UpdateClassRequest {
     public void setTrainerId(UUID trainerId) {
         this.trainerId = trainerId;
         this.trainerIdProvided = true;
+    }
+
+    public String getMeetingUrl() {
+        return meetingUrl;
+    }
+
+    public void setMeetingUrl(String meetingUrl) {
+        this.meetingUrl = meetingUrl;
+        this.meetingUrlProvided = true;
     }
 
     public String getScheduleDescription() {
@@ -134,10 +145,14 @@ public class UpdateClassRequest {
         return trainerIdProvided;
     }
 
+    public boolean isMeetingUrlProvided() {
+        return meetingUrlProvided;
+    }
+
     public boolean isScheduleDescriptionProvided() {
         return scheduleDescriptionProvided;
     }
-    
+
     public boolean isStartDateProvided() {
         return startDateProvided;
     }
@@ -163,6 +178,7 @@ public class UpdateClassRequest {
         return courseIdProvided
                 || classNameProvided
                 || trainerIdProvided
+                || meetingUrlProvided
                 || scheduleDescriptionProvided
                 || startDateProvided
                 || endDateProvided

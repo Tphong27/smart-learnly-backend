@@ -65,50 +65,27 @@ public class ClassSessionScheduleService {
             ClassSession existing = existingByKey.remove(key);
 
             if (existing != null) {
-                /*
-                 * Keep meetingUrl because it may have been assigned
-                 * specifically to this session.
-                 */
-                existing.setTrainerId(
-                        desired.trainerId());
-
+                existing.setTrainerId(desired.trainerId());
                 sessionsToSave.add(existing);
                 continue;
             }
 
             ClassSession newSession = new ClassSession();
-            newSession.setClassId(
-                    classOffering.getId());
-            newSession.setSessionDate(
-                    desired.sessionDate());
-            newSession.setStartTime(
-                    desired.startTime());
-            newSession.setEndTime(
-                    desired.endTime());
-            newSession.setTrainerId(
-                    desired.trainerId());
-
-            /*
-             * WeeklySchedulePicker currently does not collect
-             * meeting URLs. They can be assigned later.
-             */
-            newSession.setMeetingUrl(null);
+            newSession.setClassId(classOffering.getId());
+            newSession.setSessionDate(desired.sessionDate());
+            newSession.setStartTime(desired.startTime());
+            newSession.setEndTime(desired.endTime());
+            newSession.setTrainerId(desired.trainerId());
 
             sessionsToSave.add(newSession);
         }
 
-        /*
-         * Sessions remaining in existingByKey no longer appear
-         * in the updated weekly schedule.
-         */
         if (!existingByKey.isEmpty()) {
-            classSessionRepository.deleteAll(
-                    existingByKey.values());
+            classSessionRepository.deleteAll(existingByKey.values());
         }
 
         if (!sessionsToSave.isEmpty()) {
-            classSessionRepository.saveAll(
-                    sessionsToSave);
+            classSessionRepository.saveAll(sessionsToSave);
         }
     }
 
@@ -118,21 +95,14 @@ public class ClassSessionScheduleService {
             LocalDate today) {
 
         Map<SessionKey, DesiredSession> desired = new HashMap<>();
-
         LocalDate startDate = classOffering.getStartDate();
-
         LocalDate endDate = classOffering.getEndDate();
 
-        if (startDate == null
-                || endDate == null
-                || weeklySchedule.isEmpty()) {
-
+        if (startDate == null || endDate == null || weeklySchedule.isEmpty()) {
             return desired;
         }
 
-        LocalDate generationStart = startDate.isBefore(today)
-                ? today
-                : startDate;
+        LocalDate generationStart = startDate.isBefore(today) ? today : startDate;
 
         if (generationStart.isAfter(endDate)) {
             return desired;

@@ -24,6 +24,8 @@ import java.util.Locale;
 import java.util.List;
 import java.util.UUID;
 import java.util.Objects;
+import java.util.regex.Pattern;
+import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -34,7 +36,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ClassAdminService {
     private static final int MAX_PAGE_SIZE = 100;
-
     private final ClassOfferingRepository classOfferingRepository;
     private final ClassEnrollmentRepository classEnrollmentRepository;
     private final CourseRepository courseRepository;
@@ -42,6 +43,7 @@ public class ClassAdminService {
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final ClassSessionScheduleService classSessionScheduleService;
+    private static final Pattern GOOGLE_MEET_PATH_PATTERN = Pattern.compile("^/[a-z]{3}-[a-z]{4}-[a-z]{3}/?$");
 
     @Transactional(readOnly = true)
     public List<ClassStatusOptionResponse> listStatusOptions() {
@@ -93,7 +95,7 @@ public class ClassAdminService {
         classOffering.setCourseId(course.getId());
         classOffering.setClassName(normalizeRequired(request.className(), "Class name is required"));
         classOffering.setTrainerId(trainer.getId());
-
+        classOffering.setMeetingUrl(normalizeMeetingUrl(request.meetingUrl()));
         classOffering.setScheduleDescription(normalizeNullable(request.scheduleDescription()));
         classOffering.setPrice(request.price());
         classOffering.setStartDate(request.startDate());
@@ -142,6 +144,9 @@ public class ClassAdminService {
         if (request.isTrainerIdProvided()) {
             UserAccount trainer = requireTrainer(request.getTrainerId());
             classOffering.setTrainerId(trainer.getId());
+        }
+        if (request.isMeetingUrlProvided()) {
+            classOffering.setMeetingUrl(normalizeMeetingUrl(request.getMeetingUrl()));
         }
         if (request.isScheduleDescriptionProvided()) {
             classOffering.setScheduleDescription(normalizeNullable(request.getScheduleDescription()));
@@ -226,12 +231,6 @@ public class ClassAdminService {
         audit("CLASS_DELETED", classId);
     }
 
-    // private ClassOffering findClass(UUID classId) {
-    // return classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
-    // .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class
-    // was not found"));
-    // }
-
     private ClassOffering findClassForUpdate(UUID classId) {
         return classOfferingRepository.findByIdForUpdate(classId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
@@ -278,6 +277,7 @@ public class ClassAdminService {
                 classOffering.getClassName(),
                 classOffering.getTrainerId(),
                 trainer == null ? null : trainer.getFullName(),
+                classOffering.getMeetingUrl(),
                 classOffering.getScheduleDescription(),
                 classOffering.getPrice(),
                 classOffering.getStartDate(),
@@ -301,6 +301,7 @@ public class ClassAdminService {
                 classOffering.getClassName(),
                 classOffering.getTrainerId(),
                 classOffering.getTrainerName(),
+                classOffering.getMeetingUrl(),
                 classOffering.getScheduleDescription(),
                 classOffering.getPrice(),
                 classOffering.getStartDate(),
@@ -364,6 +365,44 @@ public class ClassAdminService {
                 .replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_") + "%";
+    }
+
+    private String normalizeMeetingUrl(String value) {
+        String normalized = normalizeNullable(value);
+
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Google Meet URL is required");
+        }
+
+        if (normalized.length() > 255) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Google Meet URL must not exceed 255 characters");
+        }
+
+        try {
+            URI uri = URI.create(normalized);
+            boolean valid = "https".equalsIgnoreCase(uri.getScheme())
+                    && "meet.google.com".equalsIgnoreCase(uri.getHost())
+                    && uri.getPort() == -1
+                    && uri.getRawUserInfo() == null
+                    && uri.getRawFragment() == null
+                    && uri.getPath() != null
+                    && GOOGLE_MEET_PATH_PATTERN.matcher(uri.getPath()).matches();
+
+            if (!valid) {
+                throw invalidMeetingUrl();
+            }
+
+            return normalized;
+        } catch (IllegalArgumentException exception) {
+            throw invalidMeetingUrl();
+        }
+    }
+
+    private BusinessException invalidMeetingUrl() {
+        return new BusinessException(
+                ErrorCode.INVALID_REQUEST,
+                "Meeting URL must use the format "
+                        + "https://meet.google.com/abc-defg-hij");
     }
 
     private String normalizeRequired(String value, String message) {
