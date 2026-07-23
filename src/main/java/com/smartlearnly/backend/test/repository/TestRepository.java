@@ -18,5 +18,7 @@ public interface TestRepository
     List<Test> findByCreatedBy(UUID createdBy);
 
     List<Test> findByCreatedByAndCourseId(UUID createdBy, UUID courseId);
+
+    List<Test> findByIsPublishedTrueAndIsArchivedFalse();
 }
 

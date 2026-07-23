@@ -80,7 +80,7 @@ public class TestService {
     public List<TestModel.Response> getAllTests() {
 
         List<Test> tests =
-                testRepository.findAll();
+                testRepository.findByIsPublishedTrueAndIsArchivedFalse();
 
         List<TestModel.Response> responses =
                 new ArrayList<>();
