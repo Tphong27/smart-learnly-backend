@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlearnly.backend.assignment.dto.AssignmentAiDraftModel;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
-import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationProperties;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
@@ -54,7 +53,6 @@ public class AssignmentAiDraftService {
     private static final int MAX_REPLY_LENGTH = 20000;
     private static final int MAX_DRAFT_COUNT = 5;
     private static final String UNSUPPORTED_SOURCE_MESSAGE = "Only PDF or DOCX files can be uploaded.";
-    private static final String FALLBACK_MODEL = "gemini-2.0-flash";
     private static final Pattern DRAFT_COUNT_PATTERN = Pattern.compile(
             "\\b(\\d{1,2}|mot|one|hai|two|ba|three|bon|four|nam|five|sau|six|bay|seven|tam|eight|chin|nine|muoi|ten)\\b\\s+(?:bai|assignment|assignments|essay|essays|de|task|tasks|exercise|exercises)"
     );
@@ -173,7 +171,7 @@ public class AssignmentAiDraftService {
             "kiem thu",
             "bai code"
     );
-    private final FlashcardDocumentGenerationProperties properties;
+    private final AssignmentAiDraftProperties properties;
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, CachedSource> sourceCache = new ConcurrentHashMap<>();
@@ -214,8 +212,8 @@ public class AssignmentAiDraftService {
         String output = sendGeminiInput(List.of(Map.of("type", "text", "text", prompt)));
         DraftParts draft = splitDraftOutput(output);
         return new AssignmentAiDraftModel.Response(
-                trimToMax(draft.content(), MAX_REPLY_LENGTH),
-                trimToMax(draft.rubric(), MAX_REPLY_LENGTH),
+                trimToMax(toPlainText(draft.content()), MAX_REPLY_LENGTH),
+                trimToMax(toPlainText(draft.rubric()), MAX_REPLY_LENGTH),
                 source.name(),
                 source.text().isBlank() ? 0 : source.text().length(),
                 source.cacheKey()
@@ -359,15 +357,13 @@ public class AssignmentAiDraftService {
         StringBuilder builder = new StringBuilder();
         builder.append("""
                 You are a narrow AI assistant inside Smart Learnly.
-                Your only job is helping trainers draft student-facing assignment or essay lesson content, submission requirements, and grading criteria.
+                Your only job is helping trainers draft student-facing assignment or essay lesson content and grading criteria.
                 If any request asks for unrelated help, refuse briefly and redirect to assignment/essay drafting.
-                Return copy-ready content in the same primary language as the trainer request. If the trainer writes Vietnamese, answer in Vietnamese. If the trainer writes English, answer in English.
+                Return copy-ready content in the same primary language as the trainer request. If the trainer writes Vietnamese, answer in natural Vietnamese with complete and correct Vietnamese diacritics. Never return unaccented Vietnamese. If the trainer writes English, answer in English.
                 Use section headings in that same language. Do not create anything in the product.
-                For every requested draft, include these sections in the assignment content:
-                1. Tieu de goi y
-                2. Noi dung giao bai
-                3. Yeu cau nop bai
-                4. Goi y thoi luong hoac deadline
+                For every requested draft, include only this section in the assignment content:
+                Nội dung giao bài (Vietnamese) or Assignment content (English)
+                Do not generate a suggested title, submission requirements, duration, due date, or deadline section.
 
                 Put all grading criteria in a separate rubric section. End the response using exactly these markers:
                 ===ASSIGNMENT_CONTENT===
@@ -376,10 +372,15 @@ public class AssignmentAiDraftService {
                 [all grading criteria and scoring guidance]
 
                 Rules:
+                - Return plain text only. Do not use Markdown formatting of any kind, including # headings, bullet markers, numbered-list syntax, emphasis markers, block quotes, links, or tables.
+                - Write headings as normal text and separate sections with line breaks. Write list items as standalone sentences without bullets or Markdown numbering.
                 - Produce the number of drafts requested by the trainer, in the same order as the trainer listed them, but never more than 5 drafts per response.
                 - If the trainer asks for more than 5 drafts, create only the first 5 and briefly note that the response is limited to 5.
                 - Do not merge, skip, replace, or summarize requested draft items.
                 - Each draft must contain a concrete student-facing assignment prompt, not only a fragment or outline.
+                - Create a separate rubric for every generated draft. Never use one shared rubric for multiple drafts.
+                - In the rubric section, label every rubric with the matching draft number and draft name, in the same order as the assignment content. For example: "Rubric bài 1: [tên bài]" in Vietnamese or "Rubric for assignment 1: [assignment name]" in English.
+                - Every rubric must contain criteria and scoring guidance specific to its matching draft. The number of clearly labelled rubrics must equal the number of generated drafts.
                 - Be concise but complete for each requested draft.
                 - Ground the draft only in the provided source/context and trainer request.
                 - Preserve important formulas, equations, symbols, code snippets, and programming terminology from the source when they are relevant to the assignment.
@@ -421,6 +422,25 @@ public class AssignmentAiDraftService {
         return new DraftParts(normalized, "");
     }
 
+    private String toPlainText(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value
+                .replaceAll("(?m)^\\s{0,3}(?:#{1,6}|>|[-*+])\\s+", "")
+                .replaceAll("(?m)^\\s*\\d+[.)]\\s+", "")
+                .replaceAll("(?m)^\\s*`{3,}[^\\r\\n]*$", "")
+                .replaceAll("!?(?:\\[([^]\\r\\n]+)])\\([^)\\r\\n]+\\)", "$1")
+                .replaceAll("(\\*\\*|__|~~)(.*?)\\1", "$2")
+                .replaceAll("(?<!\\*)\\*([^*\\r\\n]+)\\*(?!\\*)", "$1")
+                .replaceAll("(?<!_)_([^_\\r\\n]+)_(?!_)", "$1")
+                .replace("`", "")
+                .replaceAll("(?m)^\\s*[-*_](?:\\s*[-*_]){2,}\\s*$", "")
+                .replaceAll("[ \\t]+(?=\\r?$)", "")
+                .replaceAll("(?:\\r?\\n){3,}", "\n\n")
+                .trim();
+    }
+
     private String sendGeminiInput(List<Map<String, Object>> input) {
         RestClientResponseException lastHttpException = null;
         for (String model : candidateModels()) {
@@ -456,12 +476,12 @@ public class AssignmentAiDraftService {
             if (!isRetryableProviderException(lastHttpException)) {
                 break;
             }
-            if (!model.equals(FALLBACK_MODEL)) {
+            if (!model.equals(fallbackModel())) {
                 log.warn(
                         "Falling back Gemini assignment draft model after HTTP {}: from={} to={}",
                         lastHttpException.getStatusCode().value(),
                         model,
-                        FALLBACK_MODEL
+                        fallbackModel()
                 );
             }
         }
@@ -476,10 +496,8 @@ public class AssignmentAiDraftService {
         try {
             String response = restClient()
                     .post()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/models/" + model + ":generateContent")
-                            .queryParam("key", properties.getApiKey())
-                            .build())
+                    .uri("/models/" + model + ":generateContent")
+                    .header("x-goog-api-key", assignmentApiKey())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(buildRequestBody(input))
                     .retrieve()
@@ -556,7 +574,6 @@ public class AssignmentAiDraftService {
         content.put("parts", List.of(part));
 
         Map<String, Object> generationConfig = new LinkedHashMap<>();
-        generationConfig.put("temperature", 0.25);
         generationConfig.put("maxOutputTokens", 7000);
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -568,7 +585,7 @@ public class AssignmentAiDraftService {
     private String modelName() {
         String configured = normalizeNullable(properties.getModel());
         if (configured == null) {
-            return "gemini-3.5-flash";
+            return "gemini-flash-latest";
         }
         return configured.startsWith("models/")
                 ? configured.substring("models/".length())
@@ -577,10 +594,21 @@ public class AssignmentAiDraftService {
 
     private List<String> candidateModels() {
         String primary = modelName();
-        if (FALLBACK_MODEL.equals(primary)) {
+        String fallback = fallbackModel();
+        if (fallback.equals(primary)) {
             return List.of(primary);
         }
-        return List.of(primary, FALLBACK_MODEL);
+        return List.of(primary, fallback);
+    }
+
+    private String fallbackModel() {
+        String configured = normalizeNullable(properties.getFallbackModel());
+        if (configured == null) {
+            return "gemini-flash-lite-latest";
+        }
+        return configured.startsWith("models/")
+                ? configured.substring("models/".length())
+                : configured;
     }
 
     private RestClient restClient() {
@@ -600,6 +628,16 @@ public class AssignmentAiDraftService {
                 || properties.getApiKey().isBlank()) {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "AI draft generation is not configured.");
         }
+        String apiKey = properties.getApiKey().trim();
+        if (apiKey.startsWith("<") || apiKey.endsWith(">")) {
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Assignment AI API key must not include placeholder angle brackets.");
+        }
+    }
+
+    private String assignmentApiKey() {
+        return properties.getApiKey().trim();
     }
 
     private boolean isProviderLimitException(RestClientResponseException exception) {
@@ -619,10 +657,10 @@ public class AssignmentAiDraftService {
         }
         int status = exception.getStatusCode().value();
         if (status == 400 || status == 404) {
-            return "AI draft provider rejected the request. Please check GEMINI_MODEL and Gemini API configuration.";
+            return "AI draft provider rejected the request. Please check APP_ASSIGNMENT_AI_MODEL and Assignment Gemini API configuration.";
         }
         if (status == 401 || status == 403) {
-            return "AI draft provider rejected the API key. Please check GEMINI_API_KEY.";
+            return "AI draft provider rejected the API key. Please check ASSIGNMENT_AI_GEMINI_API_KEY.";
         }
         return "AI draft provider returned HTTP " + status + ". Please check backend logs for Gemini response body.";
     }

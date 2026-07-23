@@ -117,6 +117,14 @@ app:
         fallback-model: ${APP_QUESTION_AI_GENERATION_FALLBACK_MODEL:gemini-3.1-flash-lite}
         timeout: ${APP_QUESTION_AI_GENERATION_TIMEOUT:PT60S}
         max-batches-per-user-day: ${APP_QUESTION_AI_GENERATION_MAX_BATCHES_PER_USER_DAY:5}
+    assignment-ai:
+        enabled: ${APP_ASSIGNMENT_AI_ENABLED:true}
+        provider: ${APP_ASSIGNMENT_AI_PROVIDER:gemini}
+        api-key: ${ASSIGNMENT_AI_GEMINI_API_KEY:}
+        api-base-url: ${APP_ASSIGNMENT_AI_API_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+        model: ${APP_ASSIGNMENT_AI_MODEL:gemini-flash-latest}
+        fallback-model: ${APP_ASSIGNMENT_AI_FALLBACK_MODEL:gemini-flash-lite-latest}
+        timeout: ${APP_ASSIGNMENT_AI_TIMEOUT:PT60S}
     flashcard-document-generation:
         enabled: ${APP_FLASHCARD_DOCUMENT_GENERATION_ENABLED:true}
         provider: ${APP_FLASHCARD_DOCUMENT_GENERATION_PROVIDER:gemini}
