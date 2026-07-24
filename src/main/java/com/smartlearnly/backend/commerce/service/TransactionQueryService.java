@@ -11,6 +11,9 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
+import com.smartlearnly.backend.commerce.dto.TransactionFilterOptionsResponse;
+import com.smartlearnly.backend.commerce.entity.PaymentGateway;
+import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,12 +35,17 @@ public class TransactionQueryService {
             int page,
             int size,
             String keyword,
-            TransactionStatus status) {
+            TransactionStatus status,
+            PaymentGateway paymentGateway,
+            String currency) {
         UUID userId = currentUserService.requireAuthenticatedUser().getId();
+
         Page<PaymentTransaction> transactions = paymentTransactionRepository.searchByUserId(
                 userId,
                 normalizeKeyword(keyword),
                 status == null ? null : status.name(),
+                paymentGateway == null ? null : paymentGateway.name(),
+                normalizeCurrency(currency),
                 createPageRequest(page, size));
 
         return toPageResponse(transactions);
@@ -48,14 +56,22 @@ public class TransactionQueryService {
             int page,
             int size,
             String keyword,
-            TransactionStatus status) {
+            TransactionStatus status,
+            PaymentGateway paymentGateway,
+            String currency) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
+
         if (!isAdminOrTmo(actor)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "Only Admin or TMO can view all transactions");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "Only Admin or TMO can view all transactions");
         }
+
         Page<PaymentTransaction> transactions = paymentTransactionRepository.searchAll(
                 normalizeKeyword(keyword),
                 status == null ? null : status.name(),
+                paymentGateway == null ? null : paymentGateway.name(),
+                normalizeCurrency(currency),
                 createPageRequest(page, size));
 
         return toPageResponse(transactions);
@@ -90,6 +106,30 @@ public class TransactionQueryService {
                 trainee == null ? null : trainee.getFullName(),
                 trainee == null ? null : trainee.getEmail(),
                 trainee == null ? null : trainee.getPhoneNumber());
+    }
+
+    @Transactional(readOnly = true)
+    public TransactionFilterOptionsResponse getFilterOptions() {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+
+        if (!isAdminOrTmo(actor)) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "Only Admin or TMO can view transaction filter options");
+        }
+
+        return new TransactionFilterOptionsResponse(
+                paymentTransactionRepository.findDistinctStatuses(),
+                paymentTransactionRepository.findDistinctPaymentGateways(),
+                paymentTransactionRepository.findDistinctCurrencies());
+    }
+
+    private String normalizeCurrency(String currency) {
+        if (currency == null || currency.isBlank()) {
+            return null;
+        }
+
+        return currency.trim().toUpperCase(Locale.ROOT);
     }
 
     private PageResponse<TransactionResponse> toPageResponse(Page<PaymentTransaction> transactions) {

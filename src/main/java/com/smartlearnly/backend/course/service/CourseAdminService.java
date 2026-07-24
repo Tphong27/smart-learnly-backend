@@ -23,7 +23,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.user.entity.UserAccount;
-import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.time.Instant;
@@ -46,6 +46,7 @@ public class CourseAdminService {
 
     private final CourseRepository courseRepository;
     private final CategoryRepository categoryRepository;
+    private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final StorageProperties storageProperties;
@@ -59,8 +60,7 @@ public class CourseAdminService {
             String keyword,
             String status,
             UUID categoryId,
-            String level
-    ) {
+            String level) {
         CourseStatus resolvedStatus = parseCourseStatus(status, null);
         String resolvedKeyword = normalizeNullable(keyword);
         String resolvedLevel = normalizeNullable(level);
@@ -70,9 +70,14 @@ public class CourseAdminService {
                 categoryId,
                 resolvedLevel);
 
-        if (courseAccessService.isCurrentUserTrainer()) {
-            UUID trainerId = courseAccessService.getCurrentUserId();
-            filters = filters.and(assignedToTrainer(trainerId));
+        if (!courseAccessService.isCurrentUserCourseManager()) {
+            UUID currentUserId = courseAccessService.getCurrentUserId();
+
+            if (courseAccessService.isCurrentUserSme()) {
+                filters = filters.and(assignedToSme(currentUserId));
+            } else if (courseAccessService.isCurrentUserTrainer()) {
+                filters = filters.and(assignedToTrainer(currentUserId));
+            }
         }
 
         Page<Course> coursePage = courseRepository.findAll(
@@ -91,10 +96,8 @@ public class CourseAdminService {
             String keyword,
             CourseStatus status,
             UUID categoryId,
-            String level
-    ) {
-        Specification<Course> filters = (root, query, criteriaBuilder) ->
-                criteriaBuilder.isNull(root.get("deletedAt"));
+            String level) {
+        Specification<Course> filters = (root, query, criteriaBuilder) -> criteriaBuilder.isNull(root.get("deletedAt"));
 
         if (keyword != null) {
             String pattern = "%" + keyword.toLowerCase(Locale.ROOT) + "%";
@@ -104,22 +107,26 @@ public class CourseAdminService {
                     criteriaBuilder.like(criteriaBuilder.lower(root.get("shortDescription")), pattern)));
         }
         if (status != null) {
-            filters = filters.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.equal(
-                            root.get("status").cast(String.class),
-                            status.name().toLowerCase(Locale.ROOT)));
+            filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder.equal(
+                    root.get("status").cast(String.class),
+                    status.name().toLowerCase(Locale.ROOT)));
         }
         if (categoryId != null) {
-            filters = filters.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.equal(root.get("category").get("id"), categoryId));
+            filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder
+                    .equal(root.get("category").get("id"), categoryId));
         }
         if (level != null) {
-            filters = filters.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.equal(
-                            criteriaBuilder.lower(root.get("level")),
-                            level.toLowerCase(Locale.ROOT)));
+            filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder.equal(
+                    criteriaBuilder.lower(root.get("level")),
+                    level.toLowerCase(Locale.ROOT)));
         }
         return filters;
+    }
+
+    private Specification<Course> assignedToSme(UUID smeId) {
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(
+                root.get("assignedSme").get("id"),
+                smeId);
     }
 
     private Specification<Course> assignedToTrainer(UUID trainerId) {
@@ -144,10 +151,12 @@ public class CourseAdminService {
 
     @Transactional
     public CourseResponse create(CreateCourseRequest request) {
+        courseAccessService.requireCourseManager();
         UserAccount creator = currentUserService.requireAuthenticatedUser();
         Course course = new Course();
         course.setCategory(findCategory(request.categoryId()));
         course.setCreator(creator);
+        course.setAssignedSme(findAssignedSme(request.assignedSmeId()));
         course.setTitle(normalizeRequired(request.title(), "Course title is required"));
         course.setSlug(resolveCreateSlug(request.slug(), course.getTitle()));
         course.setShortDescription(normalizeNullable(request.shortDescription()));
@@ -187,6 +196,10 @@ public class CourseAdminService {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST, "Category is required");
             }
             course.setCategory(findCategory(request.getCategoryId()));
+        }
+        if (request.isAssignedSmeIdProvided()) {
+            courseAccessService.requireCourseManager();
+            course.setAssignedSme(findAssignedSme(request.getAssignedSmeId()));
         }
         if (request.isTitleProvided()) {
             course.setTitle(normalizeRequired(request.getTitle(), "Course title must not be blank"));
@@ -256,8 +269,10 @@ public class CourseAdminService {
     }
 
     /**
-     * Keeps the learner-facing curriculum in sync with the course status. The admin UI exposes one
-     * publish action for a course, so leaving its latest MASTER version in DRAFT makes the course
+     * Keeps the learner-facing curriculum in sync with the course status. The admin
+     * UI exposes one
+     * publish action for a course, so leaving its latest MASTER version in DRAFT
+     * makes the course
      * visible while its lessons disappear from Learning Workspace.
      */
     private void publishLatestMasterCurriculum(Course course, UserAccount actor) {
@@ -310,6 +325,7 @@ public class CourseAdminService {
 
     @Transactional
     public void delete(UUID courseId) {
+        courseAccessService.requireCourseManager();
         Course course = findCourse(courseId);
         course.setStatus(CourseStatus.INACTIVE);
         course.setDeletedAt(Instant.now());
@@ -320,6 +336,20 @@ public class CourseAdminService {
     private Course findCourse(UUID courseId) {
         return courseRepository.findByIdAndDeletedAtIsNull(courseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
+    }
+
+    private UserAccount findAssignedSme(UUID assignedSmeId) {
+        if (assignedSmeId == null) {
+            return null;
+        }
+
+        return userRepository.findActiveUserByIdAndRole(
+                assignedSmeId,
+                "SME",
+                "active")
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Assigned SME must be an active SME account"));
     }
 
     private Category findCategory(UUID categoryId) {

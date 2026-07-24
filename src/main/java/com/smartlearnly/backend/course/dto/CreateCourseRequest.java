@@ -49,6 +49,8 @@ public record CreateCourseRequest(
         Boolean isFree,
 
         @Pattern(regexp = "(?i)draft|published|inactive", message = "Course status must be draft, published, or inactive")
-        String status
+        String status,
+
+        UUID assignedSmeId
 ) {
 }

@@ -20,6 +20,7 @@ final class CourseDtoMapper {
 
     static CourseResponse toCourseResponse(Course course) {
         UUID creatorId = course.getCreator() == null ? null : course.getCreator().getId();
+        UUID assignedSmeId = course.getAssignedSme() == null ? null : course.getAssignedSme().getId();
         return new CourseResponse(
                 course.getId(),
                 course.getCategory().getId(),
@@ -39,8 +40,8 @@ final class CourseDtoMapper {
                 Boolean.TRUE.equals(course.getFree()),
                 enumValue(course.getStatus()),
                 course.getCreatedAt(),
-                course.getUpdatedAt()
-        );
+                course.getUpdatedAt(),
+                assignedSmeId);
     }
 
     static SectionResponse toSectionResponse(CourseSection section) {
@@ -50,8 +51,7 @@ final class CourseDtoMapper {
                 section.getTitle(),
                 section.getSortOrder(),
                 section.getCreatedAt(),
-                section.getUpdatedAt()
-        );
+                section.getUpdatedAt());
     }
 
     static LessonResponse toLessonResponse(Lesson lesson) {
@@ -75,8 +75,7 @@ final class CourseDtoMapper {
                         .toList(),
                 lesson.getSortOrder(),
                 lesson.getCreatedAt(),
-                lesson.getUpdatedAt()
-        );
+                lesson.getUpdatedAt());
     }
 
     static PreviewLessonResponse toPreviewLessonResponse(Lesson lesson) {
@@ -91,8 +90,7 @@ final class CourseDtoMapper {
                 lesson.getAttachmentUrl(),
                 lesson.getDurationSeconds(),
                 lesson.getSection().getSortOrder(),
-                lesson.getSortOrder()
-        );
+                lesson.getSortOrder());
     }
 
     static PreviewLessonResponse toPreviewLessonResponse(PreviewLessonProjection lesson) {
@@ -107,8 +105,7 @@ final class CourseDtoMapper {
                 lesson.getAttachmentUrl(),
                 lesson.getDurationSeconds(),
                 lesson.getSectionSortOrder(),
-                lesson.getLessonSortOrder()
-        );
+                lesson.getLessonSortOrder());
     }
 
     private static LessonResourceResponse toLessonResourceResponse(LessonResource resource) {
@@ -119,8 +116,7 @@ final class CourseDtoMapper {
                 resource.getName(),
                 resource.getFileSize(),
                 resource.getContentType(),
-                resource.getSortOrder()
-        );
+                resource.getSortOrder());
     }
 
     private static String enumValue(Enum<?> value) {
