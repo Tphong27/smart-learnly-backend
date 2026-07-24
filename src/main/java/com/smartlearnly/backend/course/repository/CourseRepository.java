@@ -364,6 +364,8 @@ public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecif
                         @Param("trainerId") UUID trainerId,
                         Pageable pageable);
 
+        boolean existsByIdAndAssignedSme_IdAndDeletedAtIsNull(UUID courseId, UUID smeId);
+
         @Query(value = """
                         SELECT EXISTS (
                             SELECT 1

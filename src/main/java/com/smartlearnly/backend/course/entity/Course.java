@@ -62,6 +62,10 @@ public class Course {
     @JoinColumn(name = "creator_id")
     private UserAccount creator;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_sme_id")
+    private UserAccount assignedSme;
+
     @Column(name = "thumbnail_url")
     private String thumbnailUrl;
 

@@ -18,54 +18,79 @@ public class CourseAccessService {
     private final CourseRepository courseRepository;
     private final CurrentUserService currentUserService;
 
+    public boolean isCurrentUserCourseManager() {
+        return hasRole("ADMIN") || hasRole("TMO");
+    }
+
+    public boolean isCurrentUserSme() {
+        return hasRole("SME");
+    }
+
     public boolean isCurrentUserTrainer() {
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null) {
-            return false;
-        }
-
-        return authentication.getAuthorities()
-                .stream()
-                .anyMatch(authority ->
-                        "ROLE_TRAINER".equals(authority.getAuthority())
-                );
+        return hasRole("TRAINER");
     }
 
     public UUID getCurrentUserId() {
-        UserAccount currentUser =
-                currentUserService.requireAuthenticatedUser();
+        UserAccount currentUser = currentUserService.requireAuthenticatedUser();
 
         return currentUser.getId();
     }
 
+    public void requireCourseManager() {
+        if (!isCurrentUserCourseManager()) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "Only Admin or TMO can manage course assignment");
+        }
+    }
+
     public void requireReadableCourse(UUID courseId) {
-        requireTrainerAssignmentWhenNecessary(courseId);
+        requireAssignmentWhenNecessary(courseId);
     }
 
     public void requireUpdatableCourse(UUID courseId) {
-        requireTrainerAssignmentWhenNecessary(courseId);
+        requireAssignmentWhenNecessary(courseId);
     }
 
-    private void requireTrainerAssignmentWhenNecessary(UUID courseId) {
-        if (!isCurrentUserTrainer()) {
+    private void requireAssignmentWhenNecessary(UUID courseId) {
+        if (isCurrentUserCourseManager()) {
             return;
         }
 
-        UUID trainerId = getCurrentUserId();
+        UUID currentUserId = getCurrentUserId();
+        boolean assigned;
 
-        boolean assigned =
-                courseRepository.existsTrainerAssignment(
-                        courseId,
-                        trainerId
-                );
+        if (isCurrentUserSme()) {
+            assigned = courseRepository
+                    .existsByIdAndAssignedSme_IdAndDeletedAtIsNull(
+                            courseId,
+                            currentUserId);
+        } else if (isCurrentUserTrainer()) {
+            assigned = courseRepository.existsTrainerAssignment(
+                    courseId,
+                    currentUserId);
+        } else {
+            assigned = false;
+        }
 
         if (!assigned) {
             throw new BusinessException(
                     ErrorCode.RESOURCE_NOT_FOUND,
-                    "Course was not found"
-            );
+                    "Course was not found");
         }
+    }
+
+    private boolean hasRole(String role) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return false;
+        }
+
+        String expectedAuthority = "ROLE_" + role;
+
+        return authentication.getAuthorities()
+                .stream()
+                .anyMatch(authority -> expectedAuthority.equals(authority.getAuthority()));
     }
 }

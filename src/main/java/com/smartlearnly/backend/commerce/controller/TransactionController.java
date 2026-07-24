@@ -7,6 +7,8 @@ import com.smartlearnly.backend.commerce.service.TransactionQueryService;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.commerce.dto.TransactionFilterOptionsResponse;
+import com.smartlearnly.backend.commerce.entity.PaymentGateway;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -41,14 +43,36 @@ public class TransactionController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(required = false) @Size(max = 100) String keyword,
-            @RequestParam(required = false) TransactionStatus status) {
+            @RequestParam(required = false) TransactionStatus status,
+            @RequestParam(required = false) PaymentGateway paymentGateway,
+            @RequestParam(required = false) @Size(max = 10) String currency) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 
         PageResponse<TransactionResponse> result = isAdminOrTmo(actor)
-                ? transactionQueryService.listAllTransactions(page, size, keyword, status)
-                : transactionQueryService.listMyTransactions(page, size, keyword, status);
-
+                ? transactionQueryService.listAllTransactions(
+                        page,
+                        size,
+                        keyword,
+                        status,
+                        paymentGateway,
+                        currency)
+                : transactionQueryService.listMyTransactions(
+                        page,
+                        size,
+                        keyword,
+                        status,
+                        paymentGateway,
+                        currency);
         return ApiResponse.success("Transactions loaded successfully", result);
+    }
+
+    @GetMapping("/filter-options")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @Operation(summary = "Get transaction filter options from existing data")
+    public ApiResponse<TransactionFilterOptionsResponse> getFilterOptions() {
+        return ApiResponse.success(
+                "Transaction filter options loaded successfully",
+                transactionQueryService.getFilterOptions());
     }
 
     @GetMapping("/{transactionId}/invoice")

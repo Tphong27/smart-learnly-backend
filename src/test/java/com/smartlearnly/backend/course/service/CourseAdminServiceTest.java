@@ -26,6 +26,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
@@ -43,379 +44,388 @@ import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class CourseAdminServiceTest {
-    @Mock
-    private CourseRepository courseRepository;
-    @Mock
-    private CategoryRepository categoryRepository;
-    @Mock
-    private CurrentUserService currentUserService;
-    @Mock
-    private AuditLogService auditLogService;
-    @Mock
-    private CourseAccessService courseAccessService;
-    @Mock
-    private CurriculumVersionRepository curriculumVersionRepository;
+        @Mock
+        private CourseRepository courseRepository;
+        @Mock
+        private CategoryRepository categoryRepository;
+        @Mock
+        private CurrentUserService currentUserService;
+        @Mock
+        private AuditLogService auditLogService;
+        @Mock
+        private CourseAccessService courseAccessService;
+        @Mock
+        private CurriculumVersionRepository curriculumVersionRepository;
 
-    private CourseAdminService courseAdminService;
-    private StorageProperties storageProperties;
+        @Mock
+        private UserRepository userRepository;
 
-    @BeforeEach
-    void setUp() {
-        storageProperties = new StorageProperties();
-        storageProperties.setSupabaseUrl("https://project.supabase.co");
-        storageProperties.setCourseThumbnailBucket("course-thumbnails");
-        courseAdminService = new CourseAdminService(
-                courseRepository,
-                categoryRepository,
-                currentUserService,
-                auditLogService,
-                storageProperties,
-                courseAccessService,
-                curriculumVersionRepository
-        );
-    }
+        private CourseAdminService courseAdminService;
+        private StorageProperties storageProperties;
 
-    @Test
-    void createShouldUseDevASchemaFieldsAndAuthenticatedCreator() {
-        UUID categoryId = UUID.randomUUID();
-        UserAccount admin = admin();
-        Category category = category(categoryId);
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
-        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
-        when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("java-backend-co-ban")).thenReturn(false);
-        when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> persist(invocation.getArgument(0)));
+        @BeforeEach
+        void setUp() {
+                storageProperties = new StorageProperties();
+                storageProperties.setSupabaseUrl("https://project.supabase.co");
+                storageProperties.setCourseThumbnailBucket("course-thumbnails");
+                courseAdminService = new CourseAdminService(
+                                courseRepository,
+                                categoryRepository,
+                                userRepository,
+                                currentUserService,
+                                auditLogService,
+                                storageProperties,
+                                courseAccessService,
+                                curriculumVersionRepository);
+        }
 
-        CourseResponse response = courseAdminService.create(new CreateCourseRequest(
-                categoryId,
-                "Java Backend cơ bản",
-                null,
-                "Short",
-                "Long description",
-                "Outcomes",
-                "Requirements",
-                "vi",
-                "beginner",
-                "https://project.supabase.co/storage/v1/object/public/course-thumbnails/2026/06/thumb.webp",
-                BigDecimal.ZERO,
-                null,
-                true,
-                "draft"
-        ));
+        @Test
+        void createShouldUseDevASchemaFieldsAndAuthenticatedCreator() {
+                UUID categoryId = UUID.randomUUID();
+                UserAccount admin = admin();
+                Category category = category(categoryId);
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+                when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
+                when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("java-backend-co-ban"))
+                                .thenReturn(false);
+                when(courseRepository.save(any(Course.class)))
+                                .thenAnswer(invocation -> persist(invocation.getArgument(0)));
 
-        assertThat(response.slug()).isEqualTo("java-backend-co-ban");
-        assertThat(response.categoryId()).isEqualTo(categoryId);
-        assertThat(response.creatorId()).isEqualTo(admin.getId());
-        assertThat(response.thumbnailUrl()).contains("course-thumbnails");
-        assertThat(response.status()).isEqualTo("draft");
+                CourseResponse response = courseAdminService.create(new CreateCourseRequest(
+                                categoryId,
+                                "Java Backend cơ bản",
+                                null,
+                                "Short",
+                                "Long description",
+                                "Outcomes",
+                                "Requirements",
+                                "vi",
+                                "beginner",
+                                "https://project.supabase.co/storage/v1/object/public/course-thumbnails/2026/06/thumb.webp",
+                                BigDecimal.ZERO,
+                                null,
+                                true,
+                                "draft",
+                                null));
 
-        ArgumentCaptor<Course> courseCaptor = ArgumentCaptor.forClass(Course.class);
-        verify(courseRepository).save(courseCaptor.capture());
-        assertThat(courseCaptor.getValue().getCreator()).isEqualTo(admin);
-        assertThat(courseCaptor.getValue().getStatus()).isEqualTo(CourseStatus.DRAFT);
+                assertThat(response.slug()).isEqualTo("java-backend-co-ban");
+                assertThat(response.categoryId()).isEqualTo(categoryId);
+                assertThat(response.creatorId()).isEqualTo(admin.getId());
+                assertThat(response.thumbnailUrl()).contains("course-thumbnails");
+                assertThat(response.status()).isEqualTo("draft");
 
-        ArgumentCaptor<CurriculumVersion> curriculumCaptor = ArgumentCaptor.forClass(CurriculumVersion.class);
-        verify(curriculumVersionRepository).save(curriculumCaptor.capture());
-        assertThat(curriculumCaptor.getValue().getCourseId()).isEqualTo(response.id());
-        assertThat(curriculumCaptor.getValue().getScope()).isEqualTo(CurriculumScope.MASTER);
-        assertThat(curriculumCaptor.getValue().getStatus()).isEqualTo(CurriculumStatus.DRAFT);
-        assertThat(curriculumCaptor.getValue().getVersionNumber()).isEqualTo(1);
-        assertThat(curriculumCaptor.getValue().getCreatedBy()).isEqualTo(admin.getId());
-        verify(auditLogService).record(admin.getEmail(), "COURSE_CREATED", "COURSE", response.id().toString());
-    }
+                ArgumentCaptor<Course> courseCaptor = ArgumentCaptor.forClass(Course.class);
+                verify(courseRepository).save(courseCaptor.capture());
+                assertThat(courseCaptor.getValue().getCreator()).isEqualTo(admin);
+                assertThat(courseCaptor.getValue().getStatus()).isEqualTo(CourseStatus.DRAFT);
 
-    @Test
-    void createPublishedCourseShouldAlsoCreatePublishedMasterCurriculum() {
-        UUID categoryId = UUID.randomUUID();
-        UserAccount admin = admin();
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
-        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
-        when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("published-course")).thenReturn(false);
-        when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> persist(invocation.getArgument(0)));
-        when(curriculumVersionRepository
-                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
-                        any(UUID.class), org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER)))
-                .thenReturn(Optional.empty());
-        when(curriculumVersionRepository.findMaxMasterVersionNumber(
-                any(UUID.class), org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER)))
-                .thenReturn(0);
-        when(curriculumVersionRepository.save(any(CurriculumVersion.class))).thenAnswer(invocation -> {
-            CurriculumVersion version = invocation.getArgument(0);
-            if (version.getId() == null) {
-                version.setId(UUID.randomUUID());
-            }
-            return version;
-        });
-        when(curriculumVersionRepository
-                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
-                        any(UUID.class),
-                        org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER),
-                        org.mockito.ArgumentMatchers.eq(CurriculumStatus.PUBLISHED)))
-                .thenReturn(Optional.empty());
+                ArgumentCaptor<CurriculumVersion> curriculumCaptor = ArgumentCaptor.forClass(CurriculumVersion.class);
+                verify(curriculumVersionRepository).save(curriculumCaptor.capture());
+                assertThat(curriculumCaptor.getValue().getCourseId()).isEqualTo(response.id());
+                assertThat(curriculumCaptor.getValue().getScope()).isEqualTo(CurriculumScope.MASTER);
+                assertThat(curriculumCaptor.getValue().getStatus()).isEqualTo(CurriculumStatus.DRAFT);
+                assertThat(curriculumCaptor.getValue().getVersionNumber()).isEqualTo(1);
+                assertThat(curriculumCaptor.getValue().getCreatedBy()).isEqualTo(admin.getId());
+                verify(auditLogService).record(admin.getEmail(), "COURSE_CREATED", "COURSE", response.id().toString());
+        }
 
-        courseAdminService.create(new CreateCourseRequest(
-                categoryId,
-                "Published course",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                BigDecimal.ZERO,
-                null,
-                true,
-                "published"
-        ));
+        @Test
+        void createPublishedCourseShouldAlsoCreatePublishedMasterCurriculum() {
+                UUID categoryId = UUID.randomUUID();
+                UserAccount admin = admin();
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+                when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+                when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("published-course")).thenReturn(false);
+                when(courseRepository.save(any(Course.class)))
+                                .thenAnswer(invocation -> persist(invocation.getArgument(0)));
+                when(curriculumVersionRepository
+                                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
+                                                any(UUID.class),
+                                                org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER)))
+                                .thenReturn(Optional.empty());
+                when(curriculumVersionRepository.findMaxMasterVersionNumber(
+                                any(UUID.class), org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER)))
+                                .thenReturn(0);
+                when(curriculumVersionRepository.save(any(CurriculumVersion.class))).thenAnswer(invocation -> {
+                        CurriculumVersion version = invocation.getArgument(0);
+                        if (version.getId() == null) {
+                                version.setId(UUID.randomUUID());
+                        }
+                        return version;
+                });
+                when(curriculumVersionRepository
+                                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                                                any(UUID.class),
+                                                org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER),
+                                                org.mockito.ArgumentMatchers.eq(CurriculumStatus.PUBLISHED)))
+                                .thenReturn(Optional.empty());
 
-        ArgumentCaptor<CurriculumVersion> versionCaptor = ArgumentCaptor.forClass(CurriculumVersion.class);
-        verify(curriculumVersionRepository, times(2)).save(versionCaptor.capture());
-        CurriculumVersion published = versionCaptor.getAllValues().get(1);
-        assertThat(published.getStatus()).isEqualTo(CurriculumStatus.PUBLISHED);
-        assertThat(published.getPublishedAt()).isNotNull();
-        assertThat(published.getCreatedBy()).isEqualTo(admin.getId());
-    }
+                courseAdminService.create(new CreateCourseRequest(
+                                categoryId,
+                                "Published course",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                BigDecimal.ZERO,
+                                null,
+                                true,
+                                "published",
+                                null));
 
-    @Test
-    void listShouldApplyServerSideFiltersBeforePagination() {
-        UUID categoryId = UUID.randomUUID();
-        when(courseAccessService.isCurrentUserTrainer()).thenReturn(false);
-        when(courseRepository.findAll(
-                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
-                any(Pageable.class)))
-                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+                ArgumentCaptor<CurriculumVersion> versionCaptor = ArgumentCaptor.forClass(CurriculumVersion.class);
+                verify(curriculumVersionRepository, times(2)).save(versionCaptor.capture());
+                CurriculumVersion published = versionCaptor.getAllValues().get(1);
+                assertThat(published.getStatus()).isEqualTo(CurriculumStatus.PUBLISHED);
+                assertThat(published.getPublishedAt()).isNotNull();
+                assertThat(published.getCreatedBy()).isEqualTo(admin.getId());
+        }
 
-        var response = courseAdminService.list(
-                0,
-                20,
-                "  react  ",
-                "published",
-                categoryId,
-                "beginner");
+        @Test
+        void listShouldApplyServerSideFiltersBeforePagination() {
+                UUID categoryId = UUID.randomUUID();
+                when(courseAccessService.isCurrentUserTrainer()).thenReturn(false);
+                when(courseRepository.findAll(
+                                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
+                                any(Pageable.class)))
+                                .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
-        assertThat(response.totalItems()).isZero();
-        assertThat(response.page()).isZero();
-        verify(courseRepository).findAll(
-                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
-                any(Pageable.class));
-    }
+                var response = courseAdminService.list(
+                                0,
+                                20,
+                                "  react  ",
+                                "published",
+                                categoryId,
+                                "beginner");
 
-    @Test
-    void listShouldRejectUnknownStatus() {
-        assertThatThrownBy(() -> courseAdminService.list(
-                0,
-                20,
-                null,
-                "archived",
-                null,
-                null))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_REQUEST);
+                assertThat(response.totalItems()).isZero();
+                assertThat(response.page()).isZero();
+                verify(courseRepository).findAll(
+                                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
+                                any(Pageable.class));
+        }
 
-        verify(courseRepository, never()).findAll(
-                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
-                any(Pageable.class));
-    }
+        @Test
+        void listShouldRejectUnknownStatus() {
+                assertThatThrownBy(() -> courseAdminService.list(
+                                0,
+                                20,
+                                null,
+                                "archived",
+                                null,
+                                null))
+                                .isInstanceOf(BusinessException.class)
+                                .extracting("errorCode")
+                                .isEqualTo(ErrorCode.INVALID_REQUEST);
 
-    @Test
-    void createShouldRejectFreeCourseWithPositivePrice() {
-        UUID categoryId = UUID.randomUUID();
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
-        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+                verify(courseRepository, never()).findAll(
+                                org.mockito.ArgumentMatchers.<Specification<Course>>any(),
+                                any(Pageable.class));
+        }
 
-        assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
-                categoryId,
-                "Paid Free Course",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                BigDecimal.TEN,
-                null,
-                true,
-                null
-        )))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        @Test
+        void createShouldRejectFreeCourseWithPositivePrice() {
+                UUID categoryId = UUID.randomUUID();
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
+                when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
 
-        verify(courseRepository, never()).save(any());
-    }
+                assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
+                                categoryId,
+                                "Paid Free Course",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                BigDecimal.TEN,
+                                null,
+                                true,
+                                null,
+                                null)))
+                                .isInstanceOf(BusinessException.class)
+                                .extracting("errorCode")
+                                .isEqualTo(ErrorCode.INVALID_REQUEST);
 
-    @Test
-    void createShouldRejectThumbnailOutsideConfiguredBucket() {
-        UUID categoryId = UUID.randomUUID();
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
-        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+                verify(courseRepository, never()).save(any());
+        }
 
-        assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
-                categoryId,
-                "Course",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                "https://cdn.example.com/image.webp",
-                BigDecimal.ZERO,
-                null,
-                false,
-                null
-        )))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        @Test
+        void createShouldRejectThumbnailOutsideConfiguredBucket() {
+                UUID categoryId = UUID.randomUUID();
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
+                when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
 
-        verify(courseRepository, never()).save(any());
-    }
+                assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
+                                categoryId,
+                                "Course",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                "https://cdn.example.com/image.webp",
+                                BigDecimal.ZERO,
+                                null,
+                                false,
+                                null,
+                                null)))
+                                .isInstanceOf(BusinessException.class)
+                                .extracting("errorCode")
+                                .isEqualTo(ErrorCode.INVALID_REQUEST);
 
-    @Test
-    void createShouldAcceptR2ThumbnailFromConfiguredBucketPublicUrl() {
-        storageProperties.setProvider("r2");
-        storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
-        UUID categoryId = UUID.randomUUID();
-        UserAccount admin = admin();
-        Category category = category(categoryId);
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
-        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
-        when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("r2-course")).thenReturn(false);
-        when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> persist(invocation.getArgument(0)));
+                verify(courseRepository, never()).save(any());
+        }
 
-        CourseResponse response = courseAdminService.create(new CreateCourseRequest(
-                categoryId,
-                "R2 Course",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                "https://course-thumbnails.example.com/2026/06/thumb.webp",
-                BigDecimal.ZERO,
-                null,
-                false,
-                null
-        ));
+        @Test
+        void createShouldAcceptR2ThumbnailFromConfiguredBucketPublicUrl() {
+                storageProperties.setProvider("r2");
+                storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
+                UUID categoryId = UUID.randomUUID();
+                UserAccount admin = admin();
+                Category category = category(categoryId);
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+                when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
+                when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("r2-course")).thenReturn(false);
+                when(courseRepository.save(any(Course.class)))
+                                .thenAnswer(invocation -> persist(invocation.getArgument(0)));
 
-        assertThat(response.thumbnailUrl()).isEqualTo("https://course-thumbnails.example.com/2026/06/thumb.webp");
-    }
+                CourseResponse response = courseAdminService.create(new CreateCourseRequest(
+                                categoryId,
+                                "R2 Course",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                "https://course-thumbnails.example.com/2026/06/thumb.webp",
+                                BigDecimal.ZERO,
+                                null,
+                                false,
+                                null,
+                                null));
 
-    @Test
-    void createShouldRejectR2ThumbnailOutsideConfiguredBucketPublicUrl() {
-        storageProperties.setProvider("r2");
-        storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
-        UUID categoryId = UUID.randomUUID();
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
-        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+                assertThat(response.thumbnailUrl())
+                                .isEqualTo("https://course-thumbnails.example.com/2026/06/thumb.webp");
+        }
 
-        assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
-                categoryId,
-                "Course",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                "https://lesson-materials.example.com/2026/06/thumb.webp",
-                BigDecimal.ZERO,
-                null,
-                false,
-                null
-        )))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        @Test
+        void createShouldRejectR2ThumbnailOutsideConfiguredBucketPublicUrl() {
+                storageProperties.setProvider("r2");
+                storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
+                UUID categoryId = UUID.randomUUID();
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
+                when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
 
-        verify(courseRepository, never()).save(any());
-    }
+                assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
+                                categoryId,
+                                "Course",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                "https://lesson-materials.example.com/2026/06/thumb.webp",
+                                BigDecimal.ZERO,
+                                null,
+                                false,
+                                null,
+                                null)))
+                                .isInstanceOf(BusinessException.class)
+                                .extracting("errorCode")
+                                .isEqualTo(ErrorCode.INVALID_REQUEST);
 
-    @Test
-    void updateShouldPublishLatestMasterCurriculumWhenCourseIsPublished() {
-        Course course = existingCourse(CourseStatus.DRAFT);
-        CurriculumVersion draft = new CurriculumVersion();
-        draft.setId(UUID.randomUUID());
-        draft.setCourseId(course.getId());
-        draft.setScope(CurriculumScope.MASTER);
-        draft.setStatus(CurriculumStatus.DRAFT);
-        draft.setVersionNumber(2);
-        draft.setTitle(course.getTitle());
-        UserAccount actor = admin();
-        UpdateCourseRequest request = new UpdateCourseRequest();
-        request.setStatus("published");
+                verify(courseRepository, never()).save(any());
+        }
 
-        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(courseRepository.save(course)).thenReturn(course);
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(curriculumVersionRepository
-                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
-                        course.getId(), CurriculumScope.MASTER))
-                .thenReturn(Optional.of(draft));
-        when(curriculumVersionRepository
-                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
-                        course.getId(), CurriculumScope.MASTER, CurriculumStatus.PUBLISHED))
-                .thenReturn(Optional.empty());
+        @Test
+        void updateShouldPublishLatestMasterCurriculumWhenCourseIsPublished() {
+                Course course = existingCourse(CourseStatus.DRAFT);
+                CurriculumVersion draft = new CurriculumVersion();
+                draft.setId(UUID.randomUUID());
+                draft.setCourseId(course.getId());
+                draft.setScope(CurriculumScope.MASTER);
+                draft.setStatus(CurriculumStatus.DRAFT);
+                draft.setVersionNumber(2);
+                draft.setTitle(course.getTitle());
+                UserAccount actor = admin();
+                UpdateCourseRequest request = new UpdateCourseRequest();
+                request.setStatus("published");
 
-        CourseResponse response = courseAdminService.update(course.getId(), request);
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+                when(courseRepository.save(course)).thenReturn(course);
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+                when(curriculumVersionRepository
+                                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
+                                                course.getId(), CurriculumScope.MASTER))
+                                .thenReturn(Optional.of(draft));
+                when(curriculumVersionRepository
+                                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                                                course.getId(), CurriculumScope.MASTER, CurriculumStatus.PUBLISHED))
+                                .thenReturn(Optional.empty());
 
-        assertThat(response.status()).isEqualTo("published");
-        assertThat(draft.getStatus()).isEqualTo(CurriculumStatus.PUBLISHED);
-        assertThat(draft.getPublishedAt()).isNotNull();
-        verify(curriculumVersionRepository).save(draft);
-    }
+                CourseResponse response = courseAdminService.update(course.getId(), request);
 
-    private Course persist(Course course) {
-        course.setId(UUID.randomUUID());
-        course.setCreatedAt(Instant.now());
-        course.setUpdatedAt(Instant.now());
-        return course;
-    }
+                assertThat(response.status()).isEqualTo("published");
+                assertThat(draft.getStatus()).isEqualTo(CurriculumStatus.PUBLISHED);
+                assertThat(draft.getPublishedAt()).isNotNull();
+                verify(curriculumVersionRepository).save(draft);
+        }
 
-    private Course existingCourse(CourseStatus status) {
-        Course course = new Course();
-        course.setId(UUID.randomUUID());
-        course.setCategory(category(UUID.randomUUID()));
-        course.setCreator(admin());
-        course.setTitle("Course");
-        course.setSlug("course");
-        course.setPrice(BigDecimal.ZERO);
-        course.setFree(true);
-        course.setFeatured(false);
-        course.setStatus(status);
-        course.setCreatedAt(Instant.now());
-        course.setUpdatedAt(Instant.now());
-        return course;
-    }
+        private Course persist(Course course) {
+                course.setId(UUID.randomUUID());
+                course.setCreatedAt(Instant.now());
+                course.setUpdatedAt(Instant.now());
+                return course;
+        }
 
-    private Category category(UUID id) {
-        Category category = new Category();
-        category.setId(id);
-        category.setName("Programming");
-        category.setSlug("programming");
-        category.setActive(true);
-        category.setSortOrder(0);
-        category.setCreatedAt(Instant.now());
-        category.setUpdatedAt(Instant.now());
-        return category;
-    }
+        private Course existingCourse(CourseStatus status) {
+                Course course = new Course();
+                course.setId(UUID.randomUUID());
+                course.setCategory(category(UUID.randomUUID()));
+                course.setCreator(admin());
+                course.setTitle("Course");
+                course.setSlug("course");
+                course.setPrice(BigDecimal.ZERO);
+                course.setFree(true);
+                course.setFeatured(false);
+                course.setStatus(status);
+                course.setCreatedAt(Instant.now());
+                course.setUpdatedAt(Instant.now());
+                return course;
+        }
 
-    private UserAccount admin() {
-        UserAccount admin = new UserAccount();
-        admin.setId(UUID.randomUUID());
-        admin.setEmail("admin@slp.vn");
-        admin.setFullName("Admin");
-        admin.setRole("ADMIN");
-        admin.setStatus("active");
-        return admin;
-    }
+        private Category category(UUID id) {
+                Category category = new Category();
+                category.setId(id);
+                category.setName("Programming");
+                category.setSlug("programming");
+                category.setActive(true);
+                category.setSortOrder(0);
+                category.setCreatedAt(Instant.now());
+                category.setUpdatedAt(Instant.now());
+                return category;
+        }
+
+        private UserAccount admin() {
+                UserAccount admin = new UserAccount();
+                admin.setId(UUID.randomUUID());
+                admin.setEmail("admin@slp.vn");
+                admin.setFullName("Admin");
+                admin.setRole("ADMIN");
+                admin.setStatus("active");
+                return admin;
+        }
 }
