@@ -6,8 +6,11 @@ import com.smartlearnly.backend.classroom.dto.CreateClassRequest;
 import com.smartlearnly.backend.classroom.dto.UpdateClassRequest;
 import com.smartlearnly.backend.classroom.service.ClassAdminService;
 import com.smartlearnly.backend.classroom.service.ClassTrainerService;
+import com.smartlearnly.backend.classroom.service.GoogleMeetService;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.classroom.dto.MeetingUrlResponse;
+import com.smartlearnly.backend.classroom.service.GoogleMeetService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
@@ -39,6 +42,7 @@ public class ClassController {
 
     private final ClassAdminService classAdminService;
     private final ClassTrainerService classTrainerService;
+    private final GoogleMeetService googleMeetService;
 
     /*
      * Admin/TMO endpoints
@@ -49,6 +53,13 @@ public class ClassController {
     @Operation(summary = "List class status options", tags = { "Admin Classes" })
     public ApiResponse<List<ClassStatusOptionResponse>> listStatusOptions() {
         return ApiResponse.success("Class statuses loaded successfully", classAdminService.listStatusOptions());
+    }
+
+    @PostMapping("/admin/classes/meeting-links")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @Operation(summary = "Generate a Google Meet link", tags = { "Admin Classes" })
+    public ApiResponse<MeetingUrlResponse> generateMeetingUrl() {
+        return ApiResponse.success("Google Meet link generated successfully", googleMeetService.createMeetingUrl());
     }
 
     @GetMapping("/admin/classes")

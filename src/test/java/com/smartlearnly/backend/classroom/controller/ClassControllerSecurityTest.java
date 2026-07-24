@@ -39,4 +39,12 @@ class ClassControllerSecurityTest {
                 20))
                 .isInstanceOf(AccessDeniedException.class);
     }
+
+    @Test
+    @WithMockUser(username = "trainer@smartlearnly.dev", roles = "TRAINER")
+    void generateMeetingUrlShouldRejectTrainer() {
+        assertThatThrownBy(() -> classController.generateMeetingUrl())
+                .isInstanceOf(
+                        AccessDeniedException.class);
+    }
 }

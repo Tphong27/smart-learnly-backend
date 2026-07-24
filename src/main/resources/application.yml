@@ -43,6 +43,7 @@ app:
         login-max-failures: ${APP_AUTH_LOGIN_MAX_FAILURES:5}
         login-lock-duration: ${APP_AUTH_LOGIN_LOCK_DURATION:PT30M}
         google-client-id: ${GOOGLE_CLIENT_ID:}
+        google-client-secret: ${GOOGLE_CLIENT_SECRET:}
         debug-log-tokens: ${APP_AUTH_DEBUG_LOG_TOKENS:false}
     seed:
         auth-users-enabled: ${APP_SEED_AUTH_USERS_ENABLED:false}
@@ -63,6 +64,12 @@ app:
     integrations:
         ai-provider: ${AI_PROVIDER:none}
         payment-provider: ${PAYMENT_PROVIDER:none}
+        google-meet:
+            enabled: ${APP_GOOGLE_MEET_ENABLED:false}
+            refresh-token: ${APP_GOOGLE_MEET_REFRESH_TOKEN:}
+            token-base-url: ${APP_GOOGLE_MEET_TOKEN_BASE_URL:https://oauth2.googleapis.com}
+            api-base-url: ${APP_GOOGLE_MEET_API_BASE_URL:https://meet.googleapis.com}
+            timeout: ${APP_GOOGLE_MEET_TIMEOUT:PT20S}
     payment:
         sepay:
             webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
