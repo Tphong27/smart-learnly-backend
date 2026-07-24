@@ -11,15 +11,32 @@ import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class AdminClassControllerSecurityTest {
+class ClassControllerSecurityTest {
+
     @Autowired
-    private AdminClassController adminClassController;
+    private ClassController classController;
 
     @Test
     @WithMockUser(username = "trainee@smartlearnly.dev", roles = "TRAINEE")
-    void listShouldRejectTrainee() {
-        assertThatThrownBy(() ->
-                adminClassController.list(null, null, null, null, 0, 20))
+    void listAdminClassesShouldRejectTrainee() {
+        assertThatThrownBy(() -> classController.listAdminClasses(
+                null,
+                null,
+                null,
+                null,
+                0,
+                20))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @WithMockUser(username = "admin@smartlearnly.dev", roles = "ADMIN")
+    void listTrainerClassesShouldRejectAdmin() {
+        assertThatThrownBy(() -> classController.listMyAssignedClasses(
+                null,
+                null,
+                0,
+                20))
                 .isInstanceOf(AccessDeniedException.class);
     }
 }
