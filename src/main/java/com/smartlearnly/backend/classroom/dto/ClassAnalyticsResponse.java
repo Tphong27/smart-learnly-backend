@@ -1,7 +1,7 @@
 package com.smartlearnly.backend.classroom.dto;
 
+import com.smartlearnly.backend.common.api.PageResponse;
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.UUID;
 
 public record ClassAnalyticsResponse(
@@ -24,6 +24,6 @@ public record ClassAnalyticsResponse(
         long inactiveStudents,
         long pendingGrading,
 
-        List<StudentPerformanceResponse> students
+        PageResponse<StudentPerformanceResponse> students
 ) {
 }
