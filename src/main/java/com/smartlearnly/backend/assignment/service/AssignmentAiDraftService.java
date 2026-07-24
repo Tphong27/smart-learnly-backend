@@ -69,7 +69,7 @@ public class AssignmentAiDraftService {
             Tôi chỉ hỗ trợ trainer tạo nội dung bài, bài tập hoặc bài luận, yêu cầu nộp bài và tiêu chí chấm điểm.
             Hãy nhập yêu cầu liên quan đến học tập và nêu số lượng bài muốn tạo, từ 1 đến 5.
             Nếu yêu cầu hơn 5 bài, AI sẽ chỉ tạo tối đa 5 bài.
-            Gợi ý từ khóa: bài, bài tập, bài luận, yêu cầu nộp bài, tiêu chí chấm điểm, thang điểm.
+            Gợi ý từ khóa: bài, bài tập, bài luận, yêu cầu nộp bài, tiêu chí đánh giá.
             """;
     private static final String UNSUPPORTED_LANGUAGE_RESPONSE_EN = """
             Please use English for this AI draft request.
@@ -369,7 +369,7 @@ public class AssignmentAiDraftService {
                 ===ASSIGNMENT_CONTENT===
                 [all assignment content, without grading criteria]
                 ===ASSIGNMENT_RUBRIC===
-                [all grading criteria and scoring guidance]
+                [all qualitative grading criteria, without scores or a grading scale]
 
                 Rules:
                 - Return plain text only. Do not use Markdown formatting of any kind, including # headings, bullet markers, numbered-list syntax, emphasis markers, block quotes, links, or tables.
@@ -380,7 +380,11 @@ public class AssignmentAiDraftService {
                 - Each draft must contain a concrete student-facing assignment prompt, not only a fragment or outline.
                 - Create a separate rubric for every generated draft. Never use one shared rubric for multiple drafts.
                 - In the rubric section, label every rubric with the matching draft number and draft name, in the same order as the assignment content. For example: "Rubric bài 1: [tên bài]" in Vietnamese or "Rubric for assignment 1: [assignment name]" in English.
-                - Every rubric must contain criteria and scoring guidance specific to its matching draft. The number of clearly labelled rubrics must equal the number of generated drafts.
+                - Every rubric must contain qualitative evaluation criteria specific to its matching draft. The number of clearly labelled rubrics must equal the number of generated drafts.
+                - Never suggest or include a scoring scale in any language.
+                - Do not include points, point allocations, numeric scores, percentages, score ranges, totals, weights, grading bands, performance levels tied to scores, or examples such as "/10", "/100", "10 diem", "100 diem", or "20%".
+                - In Vietnamese rubrics, provide only qualitative "tieu chi danh gia"; never provide "thang diem", "phan bo diem", "trong so", or any scored achievement level.
+                - In English rubrics, provide only qualitative evaluation criteria; never provide a score scale, points, marks, weighting, or score-based achievement levels.
                 - Be concise but complete for each requested draft.
                 - Ground the draft only in the provided source/context and trainer request.
                 - Preserve important formulas, equations, symbols, code snippets, and programming terminology from the source when they are relevant to the assignment.
