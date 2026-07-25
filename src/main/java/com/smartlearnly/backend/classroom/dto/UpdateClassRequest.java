@@ -4,6 +4,10 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -11,24 +15,30 @@ import java.util.UUID;
 public class UpdateClassRequest {
     private UUID courseId;
 
-    @Size(max = 255)
+    @Size(min = 3, max = 255, message = "Class name must contain between 3 and 255 characters")
     private String className;
 
     private UUID trainerId;
 
-    @Size(max = 255)
+    @Size(max = 255, message = "Google Meet URL must not exceed 255 characters")
     private String meetingUrl;
 
-    @Size(max = 2000)
+    @Size(max = 2000, message = "Class schedule must not exceed 2000 characters")
     private String scheduleDescription;
 
     private LocalDate startDate;
     private LocalDate endDate;
 
-    @Positive
+    @Positive(message = "Capacity must be greater than 0")
+    @Max(value = 500, message = "Capacity must not exceed 500")
     private Integer maxStudents;
+
+    @Pattern(regexp = "(?i)upcoming|ongoing|completed|cancelled", message = "Class status must be upcoming, ongoing, completed, or cancelled")
     private String status;
-    @DecimalMin(value = "0.0", inclusive = true)
+
+    @DecimalMin(value = "0.0", inclusive = true, message = "Class price must be greater than or equal to 0")
+    @DecimalMax(value = "9999999999.99", message = "Class price is too large")
+    @Digits(integer = 10, fraction = 2, message = "Class price must contain at most 2 decimal places")
     private BigDecimal price;
 
     private boolean courseIdProvided;

@@ -7,62 +7,61 @@ import com.smartlearnly.backend.classroom.entity.ClassSession;
 import com.smartlearnly.backend.classroom.repository.ClassSessionRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.*;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 public class ClassSessionScheduleService {
-
+    private static final Pattern TIME_PATTERN = Pattern.compile("^(?:[01]\\d|2[0-3]):[0-5]\\d$");
     private final ClassSessionRepository classSessionRepository;
     private final ObjectMapper objectMapper;
 
-    public void synchronizeFutureSessions(
-            ClassOffering classOffering) {
-        LocalDate today = LocalDate.now();
+    public void synchronizeFutureSessions(ClassOffering classOffering) {
+        LocalDateTime now = LocalDateTime.now();
+        Map<DayOfWeek, List<TimeRange>> weeklySchedule = parseSchedule(classOffering.getScheduleDescription());
+        Map<SessionKey, DesiredSession> desiredSessions = buildDesiredSessions(classOffering, weeklySchedule, now);
 
-        Map<DayOfWeek, List<TimeRange>> weeklySchedule = parseSchedule(
-                classOffering.getScheduleDescription());
+        if (desiredSessions.isEmpty()) {
+            throw invalidSchedule("The schedule must create at least one future class session");
+        }
 
-        Map<SessionKey, DesiredSession> desiredSessions = buildDesiredSessions(
-                classOffering,
-                weeklySchedule,
-                today);
+        validateTrainerAvailability(classOffering, desiredSessions);
 
         List<ClassSession> existingSessions = classSessionRepository
                 .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
                         classOffering.getId(),
-                        today);
+                        now.toLocalDate());
 
-        Map<SessionKey, ClassSession> existingByKey = new HashMap<>();
+        Map<SessionKey, ClassSession> mutableExistingByKey = new HashMap<>();
 
         for (ClassSession existing : existingSessions) {
+            LocalDateTime sessionStart = LocalDateTime.of(existing.getSessionDate(), existing.getStartTime());
+
+            // Session đã bắt đầu hoặc đang diễn ra là lịch sử, không sửa/xóa.
+            if (!sessionStart.isAfter(now)) {
+                continue;
+            }
+
             SessionKey key = new SessionKey(
                     existing.getSessionDate(),
                     existing.getStartTime(),
                     existing.getEndTime());
 
-            existingByKey.put(key, existing);
+            mutableExistingByKey.put(key, existing);
         }
 
         List<ClassSession> sessionsToSave = new ArrayList<>();
 
         for (Map.Entry<SessionKey, DesiredSession> entry : desiredSessions.entrySet()) {
-
             SessionKey key = entry.getKey();
             DesiredSession desired = entry.getValue();
 
-            ClassSession existing = existingByKey.remove(key);
+            ClassSession existing = mutableExistingByKey.remove(key);
 
             if (existing != null) {
                 existing.setTrainerId(desired.trainerId());
@@ -80,8 +79,8 @@ public class ClassSessionScheduleService {
             sessionsToSave.add(newSession);
         }
 
-        if (!existingByKey.isEmpty()) {
-            classSessionRepository.deleteAll(existingByKey.values());
+        if (!mutableExistingByKey.isEmpty()) {
+            classSessionRepository.deleteAll(mutableExistingByKey.values());
         }
 
         if (!sessionsToSave.isEmpty()) {
@@ -92,9 +91,9 @@ public class ClassSessionScheduleService {
     private Map<SessionKey, DesiredSession> buildDesiredSessions(
             ClassOffering classOffering,
             Map<DayOfWeek, List<TimeRange>> weeklySchedule,
-            LocalDate today) {
-
+            LocalDateTime cutoff) {
         Map<SessionKey, DesiredSession> desired = new HashMap<>();
+
         LocalDate startDate = classOffering.getStartDate();
         LocalDate endDate = classOffering.getEndDate();
 
@@ -102,7 +101,7 @@ public class ClassSessionScheduleService {
             return desired;
         }
 
-        LocalDate generationStart = startDate.isBefore(today) ? today : startDate;
+        LocalDate generationStart = startDate.isBefore(cutoff.toLocalDate()) ? cutoff.toLocalDate() : startDate;
 
         if (generationStart.isAfter(endDate)) {
             return desired;
@@ -111,23 +110,19 @@ public class ClassSessionScheduleService {
         LocalDate currentDate = generationStart;
 
         while (!currentDate.isAfter(endDate)) {
-            List<TimeRange> ranges = weeklySchedule.getOrDefault(
-                    currentDate.getDayOfWeek(),
-                    List.of());
+            List<TimeRange> ranges = weeklySchedule.getOrDefault(currentDate.getDayOfWeek(), List.of());
 
             for (TimeRange range : ranges) {
-                SessionKey key = new SessionKey(
-                        currentDate,
-                        range.startTime(),
-                        range.endTime());
+                LocalDateTime sessionStart = LocalDateTime.of(currentDate, range.startTime());
 
-                desired.put(
-                        key,
-                        new DesiredSession(
-                                currentDate,
-                                range.startTime(),
-                                range.endTime(),
-                                classOffering.getTrainerId()));
+                if (!sessionStart.isAfter(cutoff)) {
+                    continue;
+                }
+
+                SessionKey key = new SessionKey(currentDate, range.startTime(), range.endTime());
+
+                desired.put(key, new DesiredSession(currentDate, range.startTime(), range.endTime(),
+                        classOffering.getTrainerId()));
             }
 
             currentDate = currentDate.plusDays(1);
@@ -137,82 +132,90 @@ public class ClassSessionScheduleService {
     }
 
     private Map<DayOfWeek, List<TimeRange>> parseSchedule(String scheduleDescription) {
-
-        Map<DayOfWeek, List<TimeRange>> result = new EnumMap<>(DayOfWeek.class);
-
-        if (scheduleDescription == null
-                || scheduleDescription.isBlank()) {
-
-            return result;
+        if (scheduleDescription == null || scheduleDescription.isBlank()) {
+            throw invalidSchedule("Class schedule is required");
         }
 
         final JsonNode root;
 
         try {
-            root = objectMapper.readTree(
-                    scheduleDescription);
+            root = objectMapper.readTree(scheduleDescription);
         } catch (Exception exception) {
-            throw invalidSchedule(
-                    "Schedule must be valid JSON");
+            throw invalidSchedule("Schedule must be valid JSON");
         }
 
         if (!root.isArray()) {
-            throw invalidSchedule(
-                    "Schedule must be a JSON array");
+            throw invalidSchedule("Schedule must be a JSON array");
         }
 
+        if (root.isEmpty()) {
+            throw invalidSchedule("Please select at least one class schedule");
+        }
+
+        Map<DayOfWeek, List<TimeRange>> result = new EnumMap<>(DayOfWeek.class);
+        Set<DayOfWeek> configuredDays = new HashSet<>();
+
         for (JsonNode dayNode : root) {
+            if (!dayNode.isObject()) {
+                throw invalidSchedule("Each schedule day must be a JSON object");
+            }
+
             String dayValue = dayNode.path("dayOfWeek").asText("");
 
             final DayOfWeek dayOfWeek;
 
             try {
-                dayOfWeek = DayOfWeek.valueOf(
-                        dayValue);
+                dayOfWeek = DayOfWeek.valueOf( dayValue);
             } catch (IllegalArgumentException exception) {
-                throw invalidSchedule(
-                        "Invalid schedule day: " + dayValue);
+                throw invalidSchedule("Invalid schedule day: " + dayValue);
+            }
+
+            if (!configuredDays.add(dayOfWeek)) {
+                throw invalidSchedule("Schedule contains duplicate day: " + dayOfWeek);
             }
 
             JsonNode slotsNode = dayNode.path("slots");
 
             if (!slotsNode.isArray()) {
-                throw invalidSchedule(
-                        "Schedule slots must be an array");
+                throw invalidSchedule("Schedule slots must be an array");
             }
 
-            List<TimeRange> ranges = result.computeIfAbsent(
-                    dayOfWeek,
-                    ignored -> new ArrayList<>());
+            if (slotsNode.isEmpty()) {
+                throw invalidSchedule("Each selected schedule day must contain at least one time slot");
+            }
+
+            List<TimeRange> ranges = new ArrayList<>();
 
             for (JsonNode slotNode : slotsNode) {
-                String startValue = slotNode.path("startTime").asText("");
+                if (!slotNode.isObject()) {
+                    throw invalidSchedule( "Each schedule slot must be a JSON object");
+                }
 
+                String startValue = slotNode.path("startTime").asText("");
                 String endValue = slotNode.path("endTime").asText("");
+
+                if (!TIME_PATTERN.matcher(startValue).matches() || !TIME_PATTERN.matcher(endValue).matches()) {
+                    throw invalidSchedule("Schedule time must use HH:mm format");
+                }
 
                 final LocalTime startTime;
                 final LocalTime endTime;
 
                 try {
-                    startTime = LocalTime.parse(
-                            startValue);
-                    endTime = LocalTime.parse(
-                            endValue);
+                    startTime = LocalTime.parse(startValue);
+                    endTime = LocalTime.parse(endValue);
                 } catch (DateTimeParseException exception) {
-                    throw invalidSchedule(
-                            "Schedule time must use HH:mm format");
+                    throw invalidSchedule("Schedule time must use HH:mm format");
                 }
 
                 if (!endTime.isAfter(startTime)) {
-                    throw invalidSchedule(
-                            "Schedule end time must be after start time");
+                    throw invalidSchedule("Schedule end time must be after start time");
                 }
 
-                ranges.add(
-                        new TimeRange(
-                                startTime,
-                                endTime));
+                ranges.add(new TimeRange(startTime, endTime));
             }
+
+            result.put(dayOfWeek, ranges);
         }
 
         validateNoOverlaps(result);
@@ -220,10 +223,8 @@ public class ClassSessionScheduleService {
         return result;
     }
 
-    private void validateNoOverlaps(
-            Map<DayOfWeek, List<TimeRange>> schedule) {
+    private void validateNoOverlaps(Map<DayOfWeek, List<TimeRange>> schedule) {
         for (Map.Entry<DayOfWeek, List<TimeRange>> entry : schedule.entrySet()) {
-
             List<TimeRange> ranges = new ArrayList<>(entry.getValue());
 
             ranges.sort(Comparator.comparing(TimeRange::startTime));
@@ -257,6 +258,91 @@ public class ClassSessionScheduleService {
     private record SessionKey(LocalDate sessionDate, LocalTime startTime, LocalTime endTime) {
     }
 
-    private record DesiredSession(LocalDate sessionDate, LocalTime startTime, LocalTime endTime, java.util.UUID trainerId) {
+    private record DesiredSession(LocalDate sessionDate, LocalTime startTime, LocalTime endTime,
+            java.util.UUID trainerId) {
+    }
+
+    public void validateScheduleDefinition(ClassOffering classOffering) {
+        if (classOffering.getTrainerId() == null) {
+            throw invalidSchedule("Please select a trainer");
+        }
+
+        if (classOffering.getStartDate() == null) {
+            throw invalidSchedule("Start date is required");
+        }
+
+        if (classOffering.getEndDate() == null) {
+            throw invalidSchedule("End date is required");
+        }
+
+        Map<DayOfWeek, List<TimeRange>> weeklySchedule = parseSchedule(classOffering.getScheduleDescription());
+
+        Map<SessionKey, DesiredSession> desiredSessions = buildDesiredSessions(
+                classOffering,
+                weeklySchedule,
+                LocalDateTime.now());
+
+        if (desiredSessions.isEmpty()) {
+            throw invalidSchedule(
+                    "The schedule must create at least one future class session");
+        }
+    }
+
+    public void deleteFutureSessions(UUID classId) {
+        LocalDateTime now = LocalDateTime.now();
+        List<ClassSession> sessions = classSessionRepository
+                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(classId,
+                        now.toLocalDate());
+        List<ClassSession> mutableSessions = sessions.stream()
+                .filter(session -> LocalDateTime.of(
+                        session.getSessionDate(),
+                        session.getStartTime()).isAfter(now))
+                .toList();
+
+        if (!mutableSessions.isEmpty()) {
+            classSessionRepository.deleteAll(mutableSessions);
+        }
+    }
+
+    private void validateTrainerAvailability(ClassOffering classOffering,
+            Map<SessionKey, DesiredSession> desiredSessions) {
+        LocalDate fromDate = desiredSessions.values()
+                .stream()
+                .map(DesiredSession::sessionDate)
+                .min(LocalDate::compareTo)
+                .orElseThrow();
+
+        LocalDate toDate = desiredSessions.values()
+                .stream()
+                .map(DesiredSession::sessionDate)
+                .max(LocalDate::compareTo)
+                .orElseThrow();
+
+        List<ClassSession> trainerSessions = classSessionRepository.findTrainerSessionsForConflictCheck(
+                classOffering.getTrainerId(),
+                classOffering.getId(),
+                fromDate,
+                toDate);
+
+        for (DesiredSession desired : desiredSessions.values()) {
+            for (ClassSession existing : trainerSessions) {
+                if (!desired.sessionDate().equals(existing.getSessionDate())) {
+                    continue;
+                }
+
+                boolean overlaps = desired.startTime().isBefore(existing.getEndTime())
+                        && existing.getStartTime().isBefore(desired.endTime());
+
+                if (overlaps) {
+                    throw invalidSchedule(
+                            "Trainer already has another class on "
+                                    + desired.sessionDate()
+                                    + " from "
+                                    + existing.getStartTime()
+                                    + " to "
+                                    + existing.getEndTime());
+                }
+            }
+        }
     }
 }

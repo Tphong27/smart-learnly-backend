@@ -15,6 +15,7 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
@@ -26,6 +27,7 @@ import java.util.UUID;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.net.URI;
+import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -87,7 +89,7 @@ public class ClassAdminService {
     @Transactional
     public ClassResponse create(CreateClassRequest request) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        Course course = requireCourse(request.courseId());
+        Course course = requirePublishedCourse(request.courseId());
         UserAccount trainer = requireTrainer(request.trainerId());
         validateDates(request.startDate(), request.endDate());
 
@@ -104,6 +106,9 @@ public class ClassAdminService {
         classOffering.setStatus(ClassStatus.UPCOMING);
         classOffering.setCreatedBy(actor.getId());
 
+        validateDatesForStatus(classOffering.getStatus(), classOffering.getStartDate(), classOffering.getEndDate());
+        classSessionScheduleService.validateScheduleDefinition(classOffering);
+
         ClassOffering saved = classOfferingRepository.saveAndFlush(classOffering);
         classSessionScheduleService.synchronizeFutureSessions(saved);
         auditLogService.record(actor.getEmail(), "CLASS_CREATED", "CLASS", saved.getId().toString());
@@ -112,63 +117,116 @@ public class ClassAdminService {
 
     @Transactional
     public ClassResponse update(UUID classId, UpdateClassRequest request) {
+
         if (!request.hasAnyField()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one class field must be provided");
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "At least one class field must be provided");
         }
 
         ClassOffering classOffering = findClassForUpdate(classId);
+        ClassStatus previousStatus = classOffering.getStatus();
+        ClassStatus requestedStatus = request.isStatusProvided()
+                ? normalizeClassStatus(request.getStatus())
+                : previousStatus;
+
+        validateStatusTransition(previousStatus, requestedStatus);
+        validateUpdatePermissions(classOffering, request);
+
         String previousScheduleDescription = classOffering.getScheduleDescription();
         LocalDate previousStartDate = classOffering.getStartDate();
         LocalDate previousEndDate = classOffering.getEndDate();
         UUID previousTrainerId = classOffering.getTrainerId();
 
-        if (classOffering.getStatus() == ClassStatus.CANCELLED && !request.isStatusProvided()) {
-            throw new BusinessException(ErrorCode.CLASS_NOT_AVAILABLE, "Cancelled classes cannot be updated");
-        }
-
+        /*
+         * Course
+         */
         if (request.isCourseIdProvided()) {
-            if (request.getCourseId() == null) {
+            UUID requestedCourseId = request.getCourseId();
+
+            if (requestedCourseId == null) {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST, "Course is required");
             }
-            if (!request.getCourseId().equals(classOffering.getCourseId())
-                    && classOfferingRepository.hasCommercialHistory(classId)) {
-                throw new BusinessException(
-                        ErrorCode.CONFLICT,
-                        "Course cannot be changed after the class has enrollment or commercial history");
+
+            boolean courseChanged = !Objects.equals(classOffering.getCourseId(), requestedCourseId);
+
+            if (courseChanged) {
+                if (classOfferingRepository.hasCommercialHistory(classId)) {
+                    throw new BusinessException(
+                            ErrorCode.CONFLICT,
+                            "Course cannot be changed after the class has enrollment or commercial history");
+                }
+
+                Course course = requirePublishedCourse(requestedCourseId);
+                classOffering.setCourseId(course.getId());
             }
-            classOffering.setCourseId(requireCourse(request.getCourseId()).getId());
         }
+
+        /*
+         * Class name
+         */
         if (request.isClassNameProvided()) {
-            classOffering.setClassName(normalizeRequired(request.getClassName(), "Class name must not be blank"));
+            classOffering.setClassName(normalizeRequired(request.getClassName(), "Class name is required"));
         }
+
+        /*
+         * Trainer
+         */
         if (request.isTrainerIdProvided()) {
             UserAccount trainer = requireTrainer(request.getTrainerId());
             classOffering.setTrainerId(trainer.getId());
         }
+
+        /*
+         * Google Meet URL
+         */
         if (request.isMeetingUrlProvided()) {
             classOffering.setMeetingUrl(normalizeMeetingUrl(request.getMeetingUrl()));
         }
+
+        /*
+         * Weekly schedule
+         */
         if (request.isScheduleDescriptionProvided()) {
-            classOffering.setScheduleDescription(normalizeNullable(request.getScheduleDescription()));
+            classOffering.setScheduleDescription(
+                    normalizeRequired(request.getScheduleDescription(), "Class schedule is required"));
         }
+
+        /*
+         * Start and end dates
+         */
         if (request.isStartDateProvided()) {
             classOffering.setStartDate(request.getStartDate());
         }
+
         if (request.isEndDateProvided()) {
             classOffering.setEndDate(request.getEndDate());
         }
+
+        /*
+         * Capacity
+         */
         if (request.isMaxStudentsProvided()) {
-            if (request.getMaxStudents() == null) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Maximum students is required");
+            Integer requestedMaxStudents = request.getMaxStudents();
+
+            if (requestedMaxStudents == null) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Capacity is required");
             }
+
             long activeCount = activeEnrollmentCount(classId);
-            if (request.getMaxStudents() < activeCount) {
+
+            if (requestedMaxStudents < activeCount) {
                 throw new BusinessException(
                         ErrorCode.CLASS_CAPACITY_INVALID,
-                        "Maximum students cannot be lower than the active enrollment count");
+                        "Capacity cannot be lower than the active enrollment count");
             }
-            classOffering.setMaxStudents(request.getMaxStudents());
+
+            classOffering.setMaxStudents(requestedMaxStudents);
         }
+
+        /*
+         * Class price
+         */
         if (request.isPriceProvided()) {
             if (request.getPrice() == null) {
                 throw new BusinessException(
@@ -176,13 +234,30 @@ public class ClassAdminService {
                         "Class price is required");
             }
 
-            classOffering.setPrice(
-                    request.getPrice());
+            boolean priceChanged = classOffering.getPrice() == null
+                    || classOffering.getPrice().compareTo(request.getPrice()) != 0;
+
+            if (priceChanged && classOfferingRepository.hasCommercialHistory(classId)) {
+                throw new BusinessException(
+                        ErrorCode.CONFLICT,
+                        "Class price cannot be changed after enrollment or payment history exists");
+            }
+
+            classOffering.setPrice(request.getPrice());
         }
-        if (request.isStatusProvided()) {
-            classOffering.setStatus(normalizeClassStatus(request.getStatus()));
-        }
-        validateDates(classOffering.getStartDate(), classOffering.getEndDate());
+
+        /*
+         * Apply the already validated target status.
+         */
+        classOffering.setStatus(requestedStatus);
+
+        /*
+         * Validate final state after applying every provided field.
+         */
+        validateDatesForStatus(
+                classOffering.getStatus(),
+                classOffering.getStartDate(),
+                classOffering.getEndDate());
 
         boolean scheduleDefinitionChanged = !Objects.equals(
                 previousScheduleDescription,
@@ -197,26 +272,48 @@ public class ClassAdminService {
                         previousTrainerId,
                         classOffering.getTrainerId());
 
-        if (scheduleDefinitionChanged && classOffering.getTrainerId() == null) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_TRAINER,
-                    "Please select a trainer before updating the class schedule");
+        boolean terminalTransition = previousStatus != classOffering.getStatus()
+                && (classOffering.getStatus() == ClassStatus.COMPLETED
+                        || classOffering.getStatus() == ClassStatus.CANCELLED);
+
+        /*
+         * Validate before saving so an invalid definition never reaches
+         * class_sessions.
+         *
+         * A terminal transition does not need a new future schedule because
+         * all not-yet-started sessions will be deleted.
+         */
+        if (scheduleDefinitionChanged && !terminalTransition) {
+            classSessionScheduleService.validateScheduleDefinition(classOffering);
         }
 
+        /*
+         * saveAndFlush is still inside the transaction. If session
+         * synchronization fails, the complete update is rolled back.
+         */
         classOfferingRepository.saveAndFlush(classOffering);
-        if (scheduleDefinitionChanged) {
+
+        if (terminalTransition) {
+            classSessionScheduleService.deleteFutureSessions(classId);
+        } else if (scheduleDefinitionChanged) {
             classSessionScheduleService.synchronizeFutureSessions(classOffering);
         }
+
         audit("CLASS_UPDATED", classId);
+
         return getClassDetailResponse(classId);
     }
 
     @Transactional
     public ClassResponse cancel(UUID classId) {
         ClassOffering classOffering = findClassForUpdate(classId);
+        if (classOffering.getStatus() == ClassStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "A completed class cannot be cancelled");
+        }
         if (classOffering.getStatus() != ClassStatus.CANCELLED) {
             classOffering.setStatus(ClassStatus.CANCELLED);
-            classOfferingRepository.save(classOffering);
+            classOfferingRepository.saveAndFlush(classOffering);
+            classSessionScheduleService.deleteFutureSessions(classId);
             audit("CLASS_CANCELLED", classId);
         }
         return toResponse(classOffering);
@@ -290,6 +387,18 @@ public class ClassAdminService {
                 classOffering.getUpdatedAt());
     }
 
+    private Course requirePublishedCourse(UUID courseId) {
+        Course course = requireCourse(courseId);
+
+        if (course.getStatus() != CourseStatus.PUBLISHED) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Only a published course can be assigned to a class");
+        }
+
+        return course;
+    }
+
     private ClassResponse toResponse(ClassAdminProjection classOffering) {
         long activeCount = classOffering.getActiveEnrollmentCount() == null
                 ? 0
@@ -322,6 +431,123 @@ public class ClassAdminService {
         if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "End date must not be before start date");
         }
+    }
+
+    private void validateDatesForStatus(
+            ClassStatus status,
+            LocalDate startDate,
+            LocalDate endDate) {
+        if (startDate == null) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Start date is required");
+        }
+
+        if (endDate == null) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "End date is required");
+        }
+
+        if (endDate.isBefore(startDate)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "End date must not be before start date");
+        }
+
+        LocalDate today = LocalDate.now();
+
+        if (status == ClassStatus.UPCOMING && startDate.isBefore(today)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "An upcoming class cannot start in the past");
+        }
+
+        if (status == ClassStatus.ONGOING
+                && (startDate.isAfter(today) || endDate.isBefore(today))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "An ongoing class must include the current date");
+        }
+    }
+
+    private void validateStatusTransition(ClassStatus currentStatus, ClassStatus requestedStatus) {
+        if (currentStatus == requestedStatus) {
+            return;
+        }
+
+        boolean allowed = switch (currentStatus) {
+            case UPCOMING ->
+                requestedStatus == ClassStatus.ONGOING
+                        || requestedStatus == ClassStatus.CANCELLED;
+
+            case ONGOING ->
+                requestedStatus == ClassStatus.COMPLETED
+                        || requestedStatus == ClassStatus.CANCELLED;
+
+            case COMPLETED, CANCELLED -> false;
+        };
+
+        if (!allowed) {
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "Invalid class status transition: "
+                            + currentStatus.name().toLowerCase(Locale.ROOT)
+                            + " -> "
+                            + requestedStatus.name().toLowerCase(Locale.ROOT));
+        }
+    }
+
+    private void validateUpdatePermissions(
+            ClassOffering current,
+            UpdateClassRequest request) {
+        ClassStatus status = current.getStatus();
+
+        if (status == ClassStatus.COMPLETED
+                || status == ClassStatus.CANCELLED) {
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "Completed or cancelled classes are read-only");
+        }
+
+        if (status != ClassStatus.ONGOING) {
+            return;
+        }
+
+        if (request.isCourseIdProvided()
+                && !Objects.equals(
+                        current.getCourseId(),
+                        request.getCourseId())) {
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "Course cannot be changed while the class is ongoing");
+        }
+
+        if (request.isStartDateProvided()
+                && !Objects.equals(
+                        current.getStartDate(),
+                        request.getStartDate())) {
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "Start date cannot be changed while the class is ongoing");
+        }
+
+        if (request.isPriceProvided()
+                && !samePrice(
+                        current.getPrice(),
+                        request.getPrice())) {
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "Class price cannot be changed while the class is ongoing");
+        }
+    }
+
+    private boolean samePrice(BigDecimal first, BigDecimal second) {
+        if (first == null || second == null) {
+            return first == second;
+        }
+
+        return first.compareTo(second) == 0;
     }
 
     private String normalizeStatusFilter(String status) {

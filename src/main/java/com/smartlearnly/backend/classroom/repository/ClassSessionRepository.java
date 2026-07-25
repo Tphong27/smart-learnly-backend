@@ -106,4 +106,28 @@ public interface ClassSessionRepository
             @Param("trainerId") UUID trainerId,
             @Param("weekStart") LocalDate weekStart,
             @Param("weekEnd") LocalDate weekEnd);
+
+    @Query(value = """
+            SELECT class_session.*
+            FROM public.class_sessions class_session
+            JOIN public.classes class_offering
+                ON class_offering.id = class_session.class_id
+            WHERE class_session.trainer_id = :trainerId
+              AND class_session.class_id <> :classId
+              AND class_session.session_date BETWEEN :fromDate AND :toDate
+              AND class_offering.deleted_at IS NULL
+              AND class_offering.status IN (
+                    'upcoming'::public.class_status,
+                    'ongoing'::public.class_status
+              )
+            ORDER BY
+                class_session.session_date,
+                class_session.start_time,
+                class_session.end_time
+            """, nativeQuery = true)
+    List<ClassSession> findTrainerSessionsForConflictCheck(
+            @Param("trainerId") UUID trainerId,
+            @Param("classId") UUID classId,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate);
 }
