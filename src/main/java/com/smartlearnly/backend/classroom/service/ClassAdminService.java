@@ -3,6 +3,7 @@ package com.smartlearnly.backend.classroom.service;
 import com.smartlearnly.backend.classroom.dto.ClassResponse;
 import com.smartlearnly.backend.classroom.dto.CreateClassRequest;
 import com.smartlearnly.backend.classroom.dto.UpdateClassRequest;
+import com.smartlearnly.backend.classroom.dto.RestoreClassRequest;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.entity.ClassStatus;
 import com.smartlearnly.backend.classroom.entity.ClassLifecycle;
@@ -306,16 +307,92 @@ public class ClassAdminService {
     @Transactional
     public ClassResponse cancel(UUID classId) {
         ClassOffering classOffering = findClassForUpdate(classId);
-        if (classOffering.getStatus() == ClassStatus.COMPLETED) {
+        ClassStatus effectiveStatus = ClassLifecycle.resolveStatus(
+                classOffering.getStartDate(),
+                classOffering.getEndDate(),
+                classOffering.getStatus());
+
+        if (effectiveStatus == ClassStatus.COMPLETED) {
             throw new BusinessException(ErrorCode.CONFLICT, "A completed class cannot be cancelled");
         }
-        if (classOffering.getStatus() != ClassStatus.CANCELLED) {
-            classOffering.setStatus(ClassStatus.CANCELLED);
-            classOfferingRepository.saveAndFlush(classOffering);
-            classSessionScheduleService.deleteFutureSessions(classId);
-            audit("CLASS_CANCELLED", classId);
+
+        if (effectiveStatus == ClassStatus.CANCELLED) {
+            return toResponse(classOffering);
         }
+
+        classOffering.setStatus(ClassStatus.CANCELLED);
+        classOfferingRepository.saveAndFlush(classOffering);
+
+        classSessionScheduleService.deleteFutureSessions(classId);
+
+        audit("CLASS_CANCELLED", classId);
+
         return toResponse(classOffering);
+    }
+
+    @Transactional
+    public ClassResponse restore(UUID classId, RestoreClassRequest request) {
+        ClassOffering classOffering = findClassForUpdate(classId);
+
+        if (classOffering.getStatus() != ClassStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Only a cancelled class can be restored");
+        }
+
+        validateRequiredDates(request.startDate(), request.endDate());
+        classOffering.setStartDate(request.startDate());
+        classOffering.setEndDate(request.endDate());
+
+        ClassStatus restoredStatus = ClassLifecycle.resolveStatus(classOffering.getStartDate(),
+                classOffering.getEndDate(), null);
+
+        long activeCount = activeEnrollmentCount(classId);
+
+        if (classOffering.getMaxStudents() == null || classOffering.getMaxStudents() < activeCount) {
+            throw new BusinessException(
+                    ErrorCode.CLASS_CAPACITY_INVALID,
+                    "Capacity cannot be lower than the active enrollment count");
+        }
+
+        Course course = requireCourse(classOffering.getCourseId());
+
+        UserAccount trainer = classOffering.getTrainerId() == null
+                ? null
+                : userRepository
+                        .findByIdAndDeletedAtIsNull(classOffering.getTrainerId())
+                        .orElse(null);
+
+        boolean activeLifecycle = restoredStatus == ClassStatus.UPCOMING || restoredStatus == ClassStatus.ONGOING;
+
+        if (activeLifecycle) {
+            course = requirePublishedCourse(classOffering.getCourseId());
+            trainer = requireTrainer(classOffering.getTrainerId());
+            classOffering.setMeetingUrl(normalizeMeetingUrl(classOffering.getMeetingUrl()));
+
+            classOffering.setScheduleDescription(normalizeRequired(
+                    classOffering.getScheduleDescription(),
+                    "Class schedule is required before restoring"));
+
+            if (classOffering.getPrice() == null) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Class price is required before restoring");
+            }
+
+            classSessionScheduleService.validateScheduleDefinition(classOffering);
+        }
+        classOffering.setStatus(restoredStatus);
+        classOfferingRepository.saveAndFlush(classOffering);
+
+        if (activeLifecycle) {
+            classSessionScheduleService.synchronizeFutureSessions(
+                    classOffering);
+        } else {
+            classSessionScheduleService.deleteFutureSessions(classId);
+        }
+
+        audit("CLASS_RESTORED", classId);
+
+        return toResponse(classOffering, course, trainer, activeCount);
     }
 
     @Transactional

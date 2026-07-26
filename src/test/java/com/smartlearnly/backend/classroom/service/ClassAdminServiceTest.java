@@ -12,6 +12,10 @@ import com.smartlearnly.backend.classroom.dto.CreateClassRequest;
 import com.smartlearnly.backend.classroom.dto.UpdateClassRequest;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.classroom.dto.RestoreClassRequest;
+import com.smartlearnly.backend.classroom.entity.ClassLifecycle;
+import com.smartlearnly.backend.classroom.entity.ClassStatus;
+import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -67,6 +71,8 @@ class ClassAdminServiceTest {
                 UserAccount actor = user("admin@smartlearnly.dev");
                 UserAccount trainer = user("trainer@smartlearnly.dev");
                 Course course = course();
+                LocalDate startDate = ClassLifecycle.today().plusDays(1);
+                LocalDate endDate = startDate.plusMonths(1);
                 CreateClassRequest request = new CreateClassRequest(
                                 course.getId(),
                                 "Spring Cohort",
@@ -110,6 +116,8 @@ class ClassAdminServiceTest {
                 UserAccount actor = user("admin@smartlearnly.dev");
                 Course course = course();
 
+                LocalDate startDate = ClassLifecycle.today().plusDays(1);
+                LocalDate endDate = startDate.plusMonths(1);
                 CreateClassRequest request = new CreateClassRequest(
                                 course.getId(),
                                 "Spring Cohort",
@@ -210,20 +218,154 @@ class ClassAdminServiceTest {
                 verify(courseRepository, never()).findByIdAndDeletedAtIsNull(any());
         }
 
+        @Test
+        void cancelShouldCancelClassAndDeleteFutureSessions() {
+                ClassOffering classOffering = classOffering();
+                UserAccount actor = user("admin@smartlearnly.dev");
+
+                when(classOfferingRepository.findByIdForUpdate(
+                                classOffering.getId()))
+                                .thenReturn(Optional.of(classOffering));
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(actor);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(
+                                classOffering.getCourseId()))
+                                .thenReturn(Optional.of(course()));
+
+                when(userRepository.findByIdAndDeletedAtIsNull(
+                                classOffering.getTrainerId()))
+                                .thenReturn(Optional.empty());
+
+                when(classEnrollmentRepository.countByClassIdAndStatus(
+                                classOffering.getId(),
+                                "active"))
+                                .thenReturn(0L);
+
+                ClassResponse response = service.cancel(classOffering.getId());
+
+                assertThat(response.status()).isEqualTo("cancelled");
+
+                verify(classOfferingRepository)
+                                .saveAndFlush(classOffering);
+
+                verify(classSessionScheduleService)
+                                .deleteFutureSessions(classOffering.getId());
+
+                verify(auditLogService).record(
+                                actor.getEmail(),
+                                "CLASS_CANCELLED",
+                                "CLASS",
+                                classOffering.getId().toString());
+        }
+
+        @Test
+        void restoreShouldRestoreCancelledClassAndRebuildSessions() {
+                ClassOffering classOffering = classOffering();
+                classOffering.setStatus(ClassStatus.CANCELLED);
+
+                LocalDate newStartDate = ClassLifecycle.today().plusDays(2);
+
+                RestoreClassRequest request = new RestoreClassRequest(
+                                newStartDate,
+                                newStartDate.plusMonths(1));
+
+                Course course = course();
+                course.setId(classOffering.getCourseId());
+
+                UserAccount trainer = user(
+                                "trainer@smartlearnly.dev");
+                trainer.setId(classOffering.getTrainerId());
+
+                UserAccount actor = user(
+                                "admin@smartlearnly.dev");
+
+                when(classOfferingRepository.findByIdForUpdate(
+                                classOffering.getId()))
+                                .thenReturn(Optional.of(classOffering));
+
+                when(classEnrollmentRepository.countByClassIdAndStatus(
+                                classOffering.getId(),
+                                "active"))
+                                .thenReturn(0L);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(
+                                classOffering.getCourseId()))
+                                .thenReturn(Optional.of(course));
+
+                when(userRepository.findActiveUserByIdAndRole(
+                                classOffering.getTrainerId(),
+                                "TRAINER",
+                                "active"))
+                                .thenReturn(Optional.of(trainer));
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(actor);
+
+                ClassResponse response = service.restore(
+                                classOffering.getId(),
+                                request);
+
+                assertThat(response.status()).isEqualTo("upcoming");
+                assertThat(response.startDate()).isEqualTo(newStartDate);
+                assertThat(response.endDate())
+                                .isEqualTo(newStartDate.plusMonths(1));
+
+                verify(classOfferingRepository)
+                                .saveAndFlush(classOffering);
+
+                verify(classSessionScheduleService)
+                                .validateScheduleDefinition(classOffering);
+
+                verify(classSessionScheduleService)
+                                .synchronizeFutureSessions(classOffering);
+
+                verify(auditLogService).record(
+                                actor.getEmail(),
+                                "CLASS_STATUS_RESTORED",
+                                "CLASS",
+                                classOffering.getId().toString());
+        }
+
         private Course course() {
                 Course course = new Course();
                 course.setId(UUID.randomUUID());
                 course.setTitle("Course title");
+                course.setStatus(CourseStatus.PUBLISHED);
                 return course;
         }
 
         private ClassOffering classOffering() {
+                LocalDate startDate = ClassLifecycle.today().plusDays(1);
+
                 ClassOffering classOffering = new ClassOffering();
                 classOffering.setId(UUID.randomUUID());
                 classOffering.setCourseId(UUID.randomUUID());
                 classOffering.setClassName("Existing class");
+                classOffering.setTrainerId(UUID.randomUUID());
+                classOffering.setMeetingUrl(
+                                "https://meet.google.com/abc-defg-hij");
+                classOffering.setScheduleDescription(
+                                """
+                                                [
+                                                  {
+                                                    "dayOfWeek": "MONDAY",
+                                                    "slots": [
+                                                      {
+                                                        "startTime": "19:00",
+                                                        "endTime": "21:00"
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                                """);
+                classOffering.setStartDate(startDate);
+                classOffering.setEndDate(startDate.plusMonths(1));
                 classOffering.setMaxStudents(30);
-                classOffering.setStatus(com.smartlearnly.backend.classroom.entity.ClassStatus.UPCOMING);
+                classOffering.setPrice(new BigDecimal("500000"));
+                classOffering.setStatus(ClassStatus.UPCOMING);
+
                 return classOffering;
         }
 
