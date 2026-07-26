@@ -21,6 +21,10 @@ server:
     port: ${SERVER_PORT:8080}
 
 app:
+    classroom:
+        lifecycle:
+            cron: ${APP_CLASSROOM_LIFECYCLE_CRON:0 0 0 * * *}
+            zone: ${APP_CLASSROOM_LIFECYCLE_ZONE:Asia/Ho_Chi_Minh}
     email:
         from: "${RESEND_FROM_EMAIL:Smart Learnly <no-reply@mail.smartlearnly.online>}"
     cors:
