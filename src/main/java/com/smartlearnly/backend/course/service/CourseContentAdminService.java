@@ -7,10 +7,13 @@ import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.dto.LessonRequest;
 import com.smartlearnly.backend.course.dto.LessonResourceRequest;
 import com.smartlearnly.backend.course.dto.LessonResponse;
+import com.smartlearnly.backend.course.dto.ModuleRequest;
+import com.smartlearnly.backend.course.dto.ModuleResponse;
 import com.smartlearnly.backend.course.dto.ReorderRequest;
 import com.smartlearnly.backend.course.dto.SectionRequest;
 import com.smartlearnly.backend.course.dto.SectionResponse;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLessonResource;
@@ -26,6 +29,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -68,12 +72,31 @@ public class CourseContentAdminService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ModuleResponse> listModules(UUID courseId) {
+        courseAccessService.requireReadableCourse(courseId);
+
+        CurriculumVersion version = findMasterAuthoringVersion(courseId);
+
+        return orderedSections(version)
+                .stream()
+                .map(curriculumDtoMapper::toModuleResponse)
+                .toList();
+    }
+
     //Lấy chi tiết một section.
     @Transactional(readOnly = true)
     public SectionResponse getSection(UUID sectionId) {
         CurriculumSection section = findReadableSection(sectionId);
 
         return curriculumDtoMapper.toSectionResponse(section);
+    }
+
+    @Transactional(readOnly = true)
+    public ModuleResponse getModule(UUID moduleId) {
+        CurriculumSection module = findReadableSection(moduleId);
+
+        return curriculumDtoMapper.toModuleResponse(module);
     }
 
     // SECTION WRITE OPERATIONS
@@ -115,6 +138,13 @@ public class CourseContentAdminService {
         return curriculumDtoMapper.toSectionResponse(saved);
     }
 
+    @Transactional
+    public ModuleResponse createModule(UUID courseId, ModuleRequest request) {
+        SectionResponse section = createSection(courseId, request.toSectionRequest());
+
+        return toModuleResponse(section);
+    }
+
     // Cập nhật section.
     @Transactional
     public SectionResponse updateSection(
@@ -145,6 +175,13 @@ public class CourseContentAdminService {
         return curriculumDtoMapper.toSectionResponse(saved);
     }
 
+    @Transactional
+    public ModuleResponse updateModule(UUID moduleId, ModuleRequest request) {
+        SectionResponse section = updateSection(moduleId, request.toSectionRequest());
+
+        return toModuleResponse(section);
+    }
+
     // Xóa section và tất cả lesson của nó.
     @Transactional
     public void deleteSection(UUID sectionId) {
@@ -157,6 +194,11 @@ public class CourseContentAdminService {
                 "CURRICULUM_SECTION",
                 section.getId()
         );
+    }
+
+    @Transactional
+    public void deleteModule(UUID moduleId) {
+        deleteSection(moduleId);
     }
 
     // Sắp xếp lại toàn bộ section của course.
@@ -217,6 +259,13 @@ public class CourseContentAdminService {
                 .toList();
     }
 
+    @Transactional
+    public List<ModuleResponse> reorderModules(UUID courseId, ReorderRequest request) {
+        reorderSections(courseId, request);
+
+        return listModules(courseId);
+    }
+
     // LESSON READ OPERATIONS
 
     // Danh sách lesson của section.
@@ -231,6 +280,11 @@ public class CourseContentAdminService {
                 .stream()
                 .map(curriculumDtoMapper::toLessonResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LessonResponse> listModuleLessons(UUID moduleId) {
+        return listLessons(moduleId);
     }
 
     // Lấy chi tiết một lesson.
@@ -274,6 +328,11 @@ public class CourseContentAdminService {
         return curriculumDtoMapper.toLessonResponse(saved);
     }
 
+    @Transactional
+    public LessonResponse createModuleLesson(UUID moduleId, LessonRequest request) {
+        return createLesson(moduleId, request);
+    }
+
     // Cập nhật lesson.
     @Transactional
     public LessonResponse updateLesson(
@@ -305,10 +364,11 @@ public class CourseContentAdminService {
         CurriculumLesson lesson = findUpdatableLesson(lessonId);
 
         lesson.setStatus(LessonStatus.INACTIVE);
+        lesson.setDeletedAt(Instant.now());
         lessonRepository.save(lesson);
 
         audit(
-                "LESSON_DEACTIVATED",
+                "LESSON_DELETED",
                 "CURRICULUM_LESSON",
                 lesson.getId()
         );
@@ -367,6 +427,11 @@ public class CourseContentAdminService {
                 )
                 .map(curriculumDtoMapper::toLessonResponse)
                 .toList();
+    }
+
+    @Transactional
+    public List<LessonResponse> reorderModuleLessons(UUID moduleId, ReorderRequest request) {
+        return reorderLessons(moduleId, request);
     }
 
     // LESSON REQUEST MAPPING
@@ -511,18 +576,22 @@ public class CourseContentAdminService {
                         CurriculumScope.MASTER
                 )
                 .orElseGet(() ->
-                        createInitialMasterDraft(course)
+                        createInitialMasterVersion(course)
                 );
     }
 
-    private CurriculumVersion createInitialMasterDraft(
+    private CurriculumVersion createInitialMasterVersion(
             Course course
     ) {
         CurriculumVersion version = new CurriculumVersion();
 
         version.setCourseId(course.getId());
         version.setScope(CurriculumScope.MASTER);
-        version.setStatus(CurriculumStatus.DRAFT);
+        boolean courseIsPublished = course.getStatus() == CourseStatus.PUBLISHED;
+        version.setStatus(courseIsPublished ? CurriculumStatus.PUBLISHED : CurriculumStatus.DRAFT);
+        if (courseIsPublished) {
+            version.setPublishedAt(Instant.now());
+        }
 
         int nextVersionNumber =
                 curriculumVersionRepository
@@ -843,6 +912,18 @@ public class CourseContentAdminService {
         return normalized.isEmpty()
                 ? null
                 : normalized;
+    }
+
+    private ModuleResponse toModuleResponse(SectionResponse section) {
+        return new ModuleResponse(
+                section.id(),
+                section.id(),
+                section.courseId(),
+                section.title(),
+                section.sortOrder(),
+                section.createdAt(),
+                section.updatedAt()
+        );
     }
 
     // LESSON RESOURCE MAPPING

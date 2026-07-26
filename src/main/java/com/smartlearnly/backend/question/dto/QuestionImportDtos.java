@@ -54,7 +54,6 @@ public final class QuestionImportDtos {
     }
 
     public record ImportBatchRequest(
-            @NotNull(message = "Bank ID is required")
             UUID bankId,
 
             @NotNull(message = "Rows are required")

@@ -15,10 +15,7 @@ public class UpdateCourseRequest {
     private String title;
 
     @Size(max = 280, message = "Course slug must not exceed 280 characters")
-    @Pattern(
-            regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-            message = "Course slug can contain lowercase letters, numbers, and hyphens only"
-    )
+    @Pattern(regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$", message = "Course slug can contain lowercase letters, numbers, and hyphens only")
     private String slug;
 
     private String shortDescription;
@@ -47,6 +44,8 @@ public class UpdateCourseRequest {
     @Pattern(regexp = "(?i)draft|published|inactive", message = "Course status must be draft, published, or inactive")
     private String status;
 
+    private UUID assignedSmeId;
+
     private boolean categoryIdProvided;
     private boolean titleProvided;
     private boolean slugProvided;
@@ -61,6 +60,7 @@ public class UpdateCourseRequest {
     private boolean discountedPriceProvided;
     private boolean freeProvided;
     private boolean statusProvided;
+    private boolean assignedSmeIdProvided;
 
     public UUID getCategoryId() {
         return categoryId;
@@ -188,6 +188,15 @@ public class UpdateCourseRequest {
         this.statusProvided = true;
     }
 
+    public UUID getAssignedSmeId() {
+        return assignedSmeId;
+    }
+
+    public void setAssignedSmeId(UUID assignedSmeId) {
+        this.assignedSmeId = assignedSmeId;
+        this.assignedSmeIdProvided = true;
+    }
+
     public boolean isCategoryIdProvided() {
         return categoryIdProvided;
     }
@@ -244,11 +253,26 @@ public class UpdateCourseRequest {
         return statusProvided;
     }
 
+    public boolean isAssignedSmeIdProvided() {
+        return assignedSmeIdProvided;
+    }
+
     @JsonIgnore
     public boolean hasAnyField() {
-        return categoryIdProvided || titleProvided || slugProvided || shortDescriptionProvided
-                || descriptionProvided || outcomesProvided || requirementsProvided || languageProvided
-                || levelProvided || thumbnailUrlProvided || priceProvided || discountedPriceProvided
-                || freeProvided || statusProvided;
+        return categoryIdProvided
+                || titleProvided
+                || slugProvided
+                || shortDescriptionProvided
+                || descriptionProvided
+                || outcomesProvided
+                || requirementsProvided
+                || languageProvided
+                || levelProvided
+                || thumbnailUrlProvided
+                || priceProvided
+                || discountedPriceProvided
+                || freeProvided
+                || statusProvided
+                || assignedSmeIdProvided;
     }
 }

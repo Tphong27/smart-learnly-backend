@@ -8,8 +8,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.smartlearnly.backend.classroom.entity.ClassOffering;
-import com.smartlearnly.backend.classroom.entity.ClassStatus;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.commerce.dto.CheckoutResponse;
 import com.smartlearnly.backend.commerce.entity.OrderItem;
@@ -111,20 +109,13 @@ class CheckoutServiceTest {
         void checkoutShouldCreateOrderSnapshotPendingTransactionAndSePayOrder() {
                 UserAccount user = user();
                 Course course = paidPublishedCourse();
-                ClassOffering classOffering = classOffering(course.getId());
 
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
 
                 when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
                                 .thenReturn(Optional.of(course));
 
-                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                                .thenReturn(Optional.of(classOffering));
-
                 when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                                .thenReturn(Optional.empty());
-
-                when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
                                 .thenReturn(Optional.empty());
 
                 when(orderRepository.existsByOrderCode(anyString()))
@@ -202,7 +193,6 @@ class CheckoutServiceTest {
         void checkoutShouldRejectCourseThatAlreadyHasActiveEnrollment() {
                 UserAccount user = user();
                 Course course = paidPublishedCourse();
-                ClassOffering classOffering = classOffering(course.getId());
 
                 CourseEnrollment enrollment = new CourseEnrollment();
                 enrollment.setStatus(EnrollmentStatus.ACTIVE);
@@ -212,9 +202,6 @@ class CheckoutServiceTest {
 
                 when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
                                 .thenReturn(Optional.of(course));
-
-                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                                .thenReturn(Optional.of(classOffering));
 
                 when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
                                 .thenReturn(Optional.of(enrollment));
@@ -237,7 +224,6 @@ class CheckoutServiceTest {
         void checkoutShouldUseCoursePrice() {
                 UserAccount user = user();
                 Course course = paidPublishedCourse();
-                ClassOffering classOffering = classOffering(course.getId());
 
                 when(currentUserService.requireAuthenticatedUser())
                                 .thenReturn(user);
@@ -245,13 +231,7 @@ class CheckoutServiceTest {
                 when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
                                 .thenReturn(Optional.of(course));
 
-                when(classOfferingRepository.findByIdAndDeletedAtIsNull(classOffering.getId()))
-                                .thenReturn(Optional.of(classOffering));
-
                 when(courseEnrollmentRepository.findByCourseIdAndStudentId(course.getId(), user.getId()))
-                                .thenReturn(Optional.empty());
-
-                when(classEnrollmentRepository.findByClassIdAndStudentId(classOffering.getId(), user.getId()))
                                 .thenReturn(Optional.empty());
 
                 when(orderRepository.existsByOrderCode(anyString()))
@@ -367,7 +347,6 @@ class CheckoutServiceTest {
         void checkoutShouldRollbackBeforePersistingSePayOrderWhenAdapterMissing() {
                 UserAccount user = user();
                 Course course = paidPublishedCourse();
-                ClassOffering classOffering = classOffering(course.getId());
 
                 when(currentUserService.requireAuthenticatedUser())
                                 .thenReturn(user);
@@ -426,12 +405,4 @@ class CheckoutServiceTest {
                 return course;
         }
 
-        private ClassOffering classOffering(UUID courseId) {
-                ClassOffering classOffering = new ClassOffering();
-                classOffering.setId(UUID.randomUUID());
-                classOffering.setCourseId(courseId);
-                classOffering.setClassName("Java Backend - K01");
-                classOffering.setStatus(ClassStatus.UPCOMING);
-                return classOffering;
-        }
 }

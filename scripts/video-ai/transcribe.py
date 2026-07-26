@@ -11,6 +11,26 @@ from pathlib import Path
 import sys
 import tempfile
 
+
+_DLL_DIRECTORY_HANDLES: list[object] = []
+
+
+def configure_windows_nvidia_runtime() -> None:
+    """Expose CUDA DLLs installed by NVIDIA's Windows Python wheels."""
+    if os.name != "nt" or not hasattr(os, "add_dll_directory"):
+        return
+
+    nvidia_root = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+    for package in ("cublas", "cudnn", "cuda_nvrtc"):
+        binary_directory = nvidia_root / package / "bin"
+        if not binary_directory.is_dir():
+            continue
+        _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(str(binary_directory)))
+        os.environ["PATH"] = f"{binary_directory}{os.pathsep}{os.environ.get('PATH', '')}"
+
+
+configure_windows_nvidia_runtime()
+
 from faster_whisper import WhisperModel
 
 
@@ -82,6 +102,20 @@ def atomic_write_json(output_path: Path, payload: dict) -> None:
         raise
 
 
+def collect_segments(segments_iterator) -> list[dict]:
+    segments = []
+    for segment in segments_iterator:
+        text = segment.text.strip()
+        if not text:
+            continue
+        start = finite_seconds(segment.start, "segment start")
+        end = finite_seconds(segment.end, "segment end")
+        if end <= start:
+            continue
+        segments.append({"index": len(segments), "start": start, "end": end, "text": text})
+    return segments
+
+
 def main() -> int:
     args = parse_args()
     input_path, output_path = validate_args(args)
@@ -101,16 +135,20 @@ def main() -> int:
         vad_parameters={"min_silence_duration_ms": 500},
         condition_on_previous_text=False,
     )
-    segments = []
-    for segment in segments_iterator:
-        text = segment.text.strip()
-        if not text:
-            continue
-        start = finite_seconds(segment.start, "segment start")
-        end = finite_seconds(segment.end, "segment end")
-        if end <= start:
-            continue
-        segments.append({"index": len(segments), "start": start, "end": end, "text": text})
+    segments = collect_segments(segments_iterator)
+    if not segments:
+        print(
+            "voice activity detection found no speech; retrying the full audio",
+            file=sys.stderr,
+        )
+        segments_iterator, info = model.transcribe(
+            str(input_path),
+            language=language,
+            beam_size=args.beam_size,
+            vad_filter=False,
+            condition_on_previous_text=False,
+        )
+        segments = collect_segments(segments_iterator)
 
     duration = finite_seconds(info.duration, "duration")
     detected_language = (info.language or language or "unknown").lower()

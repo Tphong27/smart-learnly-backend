@@ -44,6 +44,8 @@ class ClassAdminServiceTest {
         @Mock
         private CurrentUserService currentUserService;
         @Mock
+        private ClassSessionScheduleService classSessionScheduleService;
+        @Mock
         private AuditLogService auditLogService;
 
         private ClassAdminService service;
@@ -56,7 +58,8 @@ class ClassAdminServiceTest {
                                 courseRepository,
                                 userRepository,
                                 currentUserService,
-                                auditLogService);
+                                auditLogService,
+                                classSessionScheduleService);
         }
 
         @Test
@@ -68,6 +71,7 @@ class ClassAdminServiceTest {
                                 course.getId(),
                                 "Spring Cohort",
                                 trainer.getId(),
+                                "https://meet.google.com/abc-defg-hij",
                                 "Mon/Wed 19:00",
                                 LocalDate.of(2026, 7, 1),
                                 LocalDate.of(2026, 8, 1),
@@ -79,14 +83,17 @@ class ClassAdminServiceTest {
                                 trainer.getId(),
                                 "TRAINER",
                                 "active")).thenReturn(Optional.of(trainer));
-                when(classOfferingRepository.save(any(ClassOffering.class))).thenAnswer(invocation -> {
-                        ClassOffering saved = invocation.getArgument(0);
-                        saved.setId(UUID.randomUUID());
-                        return saved;
-                });
+                when(classOfferingRepository.saveAndFlush(any(ClassOffering.class)))
+                                .thenAnswer(invocation -> {
+                                        ClassOffering saved = invocation.getArgument(0);
+                                        saved.setId(UUID.randomUUID());
+                                        return saved;
+                                });
 
                 ClassResponse response = service.create(request);
 
+                assertThat(response.meetingUrl())
+                                .isEqualTo("https://meet.google.com/abc-defg-hij");
                 assertThat(response.className()).isEqualTo("Spring Cohort");
                 assertThat(response.maxStudents()).isEqualTo(25);
                 assertThat(response.availableSeats()).isEqualTo(25);
@@ -96,6 +103,61 @@ class ClassAdminServiceTest {
                                 "CLASS_CREATED",
                                 "CLASS",
                                 response.id().toString());
+        }
+
+        @Test
+        void createShouldRejectMissingTrainerBeforeSavingClass() {
+                UserAccount actor = user("admin@smartlearnly.dev");
+                Course course = course();
+
+                CreateClassRequest request = new CreateClassRequest(
+                                course.getId(),
+                                "Spring Cohort",
+                                null,
+                                "https://meet.google.com/abc-defg-hij",
+                                """
+                                                [
+                                                  {
+                                                    "dayOfWeek": "MONDAY",
+                                                    "slots": [
+                                                      {
+                                                        "startTime": "19:00",
+                                                        "endTime": "21:00"
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                                """,
+                                LocalDate.of(2026, 7, 25),
+                                LocalDate.of(2026, 8, 25),
+                                30,
+                                new BigDecimal("4000000"));
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(actor);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                                .thenReturn(Optional.of(course));
+
+                assertThatThrownBy(() -> service.create(request))
+                                .isInstanceOfSatisfying(
+                                                BusinessException.class,
+                                                exception -> {
+                                                        assertThat(exception.errorCode())
+                                                                        .isEqualTo(ErrorCode.INVALID_TRAINER);
+
+                                                        assertThat(exception.getMessage())
+                                                                        .isEqualTo("Please select a trainer");
+                                                });
+
+                verify(classOfferingRepository, never())
+                                .saveAndFlush(any(ClassOffering.class));
+
+                verify(classSessionScheduleService, never())
+                                .synchronizeFutureSessions(any(ClassOffering.class));
+
+                verify(auditLogService, never())
+                                .record(any(), any(), any(), any());
         }
 
         @Test

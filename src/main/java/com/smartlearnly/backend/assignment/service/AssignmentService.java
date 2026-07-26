@@ -51,6 +51,7 @@ public class AssignmentService {
         assignment.setLessonId(request.getLessonId());
         assignment.setTitle(request.getTitle());
         assignment.setDescription(request.getDescription());
+        assignment.setRubric(request.getRubric());
         assignment.setInstructionFileUrl(request.getInstructionFileUrl());
         assignment.setInstructionFileName(request.getInstructionFileName());
         assignment.setDueDate(request.getDueDate());
@@ -234,6 +235,8 @@ public class AssignmentService {
         }
         if (request.getDescription() != null)
             assignment.setDescription(request.getDescription());
+        if (request.getRubric() != null)
+            assignment.setRubric(request.getRubric());
         assignment.setInstructionFileUrl(request.getInstructionFileUrl());
         assignment.setInstructionFileName(request.getInstructionFileName());
         if (request.getDueDate() != null)
@@ -260,12 +263,17 @@ public class AssignmentService {
         return mapToResponse(updated);
     }
 
+    @Transactional
     public void deleteAssignment(UUID id) {
 
         if (!assignmentRepository.existsById(id)) {
             throw new EntityNotFoundException("Assignment not found");
         }
 
+        // A completed assignment owns submission rows. Delete those children
+        // first so the supported staff delete action works after grading too.
+        assignmentSubmissionRepository.deleteByAssignmentId(id);
+        assignmentSubmissionRepository.flush();
         assignmentRepository.deleteById(id);
     }
 
@@ -280,6 +288,7 @@ public class AssignmentService {
         response.setLessonId(assignment.getLessonId());
         response.setTitle(assignment.getTitle());
         response.setDescription(assignment.getDescription());
+        response.setRubric(assignment.getRubric());
         response.setInstructionFileUrl(
                 assignment.getInstructionFileUrl());
         response.setInstructionFileName(

@@ -15,7 +15,9 @@ import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.course.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
@@ -63,7 +65,6 @@ class AdminFlashcardServiceTest {
     private AdminFlashcardService adminFlashcardService;
     @Mock
     private CurriculumLessonRepository curriculumLessonRepository;
-
     @Mock
     private CurriculumSectionRepository curriculumSectionRepository;
 
@@ -86,13 +87,13 @@ class AdminFlashcardServiceTest {
     @Test
     void createFlashcardLessonShouldCreateLessonAndLinkedSet() {
         Course course = course();
-        CurriculumSection section = curriculumSection(course);
+        CurriculumVersion version = curriculumVersion(course.getId());
+        CurriculumSection section = curriculumSection(version);
         UserAccount actor = actor();
         UUID lessonId = UUID.randomUUID();
         UUID setId = UUID.randomUUID();
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(curriculumSectionRepository.findById(section.getId()))
-                .thenReturn(Optional.of(section));
+        when(curriculumSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(4);
         when(curriculumLessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {
@@ -368,11 +369,17 @@ class AdminFlashcardServiceTest {
         return section;
     }
 
-    private CurriculumSection curriculumSection(Course course) {
+    private CurriculumVersion curriculumVersion(UUID courseId) {
         CurriculumVersion version = new CurriculumVersion();
         version.setId(UUID.randomUUID());
-        version.setCourseId(course.getId());
+        version.setCourseId(courseId);
+        version.setScope(CurriculumScope.MASTER);
+        version.setStatus(CurriculumStatus.DRAFT);
+        version.setVersionNumber(1);
+        return version;
+    }
 
+    private CurriculumSection curriculumSection(CurriculumVersion version) {
         CurriculumSection section = new CurriculumSection();
         section.setId(UUID.randomUUID());
         section.setCurriculumVersion(version);
@@ -401,6 +408,7 @@ class AdminFlashcardServiceTest {
         flashcardSet.setId(UUID.randomUUID());
         flashcardSet.setCourse(course);
         flashcardSet.setLesson(lesson(course, section));
+        flashcardSet.setCourse(course);
         flashcardSet.setTitle("Flashcards");
         flashcardSet.setCreatedAt(Instant.now());
         flashcardSet.setUpdatedAt(Instant.now());

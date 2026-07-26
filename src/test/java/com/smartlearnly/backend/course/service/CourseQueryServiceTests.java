@@ -234,7 +234,12 @@ class CourseQueryServiceTests {
 				.contains("category.slug = :categorySlug")
 				.contains("c.discounted_price < c.price")
 				.contains("CASE WHEN :sort = 'PRICE_ASC'")
-				.contains("CASE WHEN :sort = 'PRICE_DESC'");
+				.contains("CASE WHEN :sort = 'PRICE_DESC'")
+				.contains("CASE WHEN :sort = 'POPULAR'")
+				.contains("FROM public.course_enrollments enrollment")
+				.contains("enrollment.course_id = c.id")
+				.contains("'active'::public.enroll_status")
+				.contains("'completed'::public.enroll_status");
 		assertThat(query.countQuery())
 				.contains("c.status = 'published'::public.course_status")
 				.contains("c.deleted_at IS NULL")
@@ -341,11 +346,14 @@ class CourseQueryServiceTests {
 		when(courseRepository.findLearningObjectivesByCourseId(courseId))
 				.thenReturn(List.of(objectiveProjection));
 
-		// Course detail now derives its curriculum preview from the resolved public MASTER version.
-		// The "Advanced Topics" module has no PUBLISHED lessons, mirroring the original empty-module case.
+		// Course detail now derives its curriculum preview from the resolved public
+		// MASTER version.
+		// The "Advanced Topics" module has no PUBLISHED lessons, mirroring the original
+		// empty-module case.
 		CurriculumVersion version = version(courseId);
 		CurriculumSection firstModule = section(version, firstModuleId, "Getting Started", 0);
-		firstModule.getLessons().add(publishedLesson(firstModule, firstLessonId, "Introduction", LessonType.VIDEO, 0, true));
+		firstModule.getLessons()
+				.add(publishedLesson(firstModule, firstLessonId, "Introduction", LessonType.VIDEO, 0, true));
 		firstModule.getLessons().add(publishedLesson(firstModule, secondLessonId, "Project Setup", null, 1, false));
 		CurriculumSection secondModule = section(version, secondModuleId, "Advanced Topics", 1);
 		version.getSections().add(firstModule);

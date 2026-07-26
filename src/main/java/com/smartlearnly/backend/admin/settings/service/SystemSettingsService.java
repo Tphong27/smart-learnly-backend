@@ -12,7 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Central read/write access to {@code system_settings}.
  *
- * <p>Values are cached in-memory and the cache is evicted on every write so that
+ * <p>
+ * Values are cached in-memory and the cache is evicted on every write so that
  * configuration changes take effect immediately without an application restart.
  * Secret values are encrypted at rest via {@link SettingsCipherService}.
  */
@@ -31,6 +32,7 @@ public class SystemSettingsService {
     private final String envResendApiKey;
     private final String envResendFromEmail;
     private final String envGoogleClientId;
+    private final String envGoogleClientSecret;
 
     public SystemSettingsService(
             SystemSettingRepository repository,
@@ -38,14 +40,15 @@ public class SystemSettingsService {
             @Value("${app.resend.api-url:https://api.resend.com}") String envResendApiUrl,
             @Value("${app.resend.api-key:}") String envResendApiKey,
             @Value("${app.resend.from-email:Smart Learnly <no-reply@mail.smartlearnly.online>}") String envResendFromEmail,
-            @Value("${app.auth.google-client-id:}") String envGoogleClientId
-    ) {
+            @Value("${app.auth.google-client-id:}") String envGoogleClientId,
+            @Value("${app.auth.google-client-secret:}") String envGoogleClientSecret) {
         this.repository = repository;
         this.cipher = cipher;
         this.envResendApiUrl = envResendApiUrl;
         this.envResendApiKey = envResendApiKey;
         this.envResendFromEmail = envResendFromEmail;
         this.envGoogleClientId = envGoogleClientId;
+        this.envGoogleClientSecret = envGoogleClientSecret;
     }
 
     public boolean secretStorageEnabled() {
@@ -67,7 +70,10 @@ public class SystemSettingsService {
         return value != null && !value.isBlank();
     }
 
-    /** Returns the stored value if present and non-blank, otherwise {@code fallback}. */
+    /**
+     * Returns the stored value if present and non-blank, otherwise
+     * {@code fallback}.
+     */
     public String getOrDefault(String key, String fallback) {
         String value = getRawValue(key);
         return (value == null || value.isBlank()) ? fallback : value;
@@ -104,17 +110,15 @@ public class SystemSettingsService {
                 getOrDefault(SettingKeys.EMAIL_FROM_NAME, null),
                 getOrDefault(SettingKeys.EMAIL_FROM_EMAIL, null),
                 getOrDefault(SettingKeys.EMAIL_REPLY_TO, null),
-                envResendFromEmail
-        );
+                envResendFromEmail);
     }
 
     /** Resolve effective Google OAuth settings (DB first, env fallback). */
     public GoogleOAuthSettings resolveGoogleSettings() {
         return new GoogleOAuthSettings(
                 getOrDefault(SettingKeys.GOOGLE_CLIENT_ID, envGoogleClientId),
-                getRawValue(SettingKeys.GOOGLE_CLIENT_SECRET),
-                getOrDefault(SettingKeys.GOOGLE_SCOPE, "openid,profile,email")
-        );
+                getOrDefault(SettingKeys.GOOGLE_CLIENT_SECRET, envGoogleClientSecret),
+                getOrDefault(SettingKeys.GOOGLE_SCOPE, "openid,profile,email"));
     }
 
     private synchronized void ensureCacheLoaded() {
@@ -145,8 +149,7 @@ public class SystemSettingsService {
             String fromName,
             String fromEmail,
             String replyTo,
-            String envFromAddress
-    ) {
+            String envFromAddress) {
         public String fromAddress() {
             if (fromEmail != null && !fromEmail.isBlank()) {
                 if (fromName != null && !fromName.isBlank()) {

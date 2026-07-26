@@ -36,6 +36,9 @@ public class ClassOffering {
     @Column(name = "trainer_id")
     private UUID trainerId;
 
+    @Column(name = "meeting_url", length = 255)
+    private String meetingUrl;
+
     @Column(name = "start_date")
     private LocalDate startDate;
 

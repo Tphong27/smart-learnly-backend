@@ -27,7 +27,7 @@ public class Question {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "question_bank_id", nullable = false)
+    @Column(name = "question_bank_id")
     private UUID questionBankId;
 
     @Column(name = "course_id", nullable = false)

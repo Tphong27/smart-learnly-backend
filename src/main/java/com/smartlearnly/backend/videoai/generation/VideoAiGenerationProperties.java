@@ -15,6 +15,7 @@ public class VideoAiGenerationProperties {
     private String apiKey;
     private String apiBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
     private String model = "gemini-3.5-flash";
+    private String fallbackModel = "gemini-3.1-flash-lite";
     private Duration timeout = Duration.ofSeconds(90);
     private int maxTranscriptCharacters = 120000;
 }

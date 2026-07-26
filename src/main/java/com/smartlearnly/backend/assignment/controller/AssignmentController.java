@@ -1,66 +1,69 @@
 package com.smartlearnly.backend.assignment.controller;
 
 import com.smartlearnly.backend.assignment.dto.AssignmentModel;
-// import com.smartlearnly.backend.assignment.dto.AssignmentAiDraftModel;
-// import com.smartlearnly.backend.assignment.service.AssignmentAiDraftService;
+import com.smartlearnly.backend.assignment.dto.AssignmentAiDraftModel;
+import com.smartlearnly.backend.assignment.service.AssignmentAiDraftService;
 import com.smartlearnly.backend.assignment.service.AssignmentService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/assignments")
+@PreAuthorize("isAuthenticated()")
 public class AssignmentController {
 
     private final AssignmentService assignmentService;
-    // private final AssignmentAiDraftService assignmentAiDraftService;
+    private final AssignmentAiDraftService assignmentAiDraftService;
 
-    // public AssignmentController(
-    // AssignmentService assignmentService,
-    // AssignmentAiDraftService assignmentAiDraftService) {
-    // this.assignmentService = assignmentService;
-    // this.assignmentAiDraftService = assignmentAiDraftService;
-    // }
-    public AssignmentController(AssignmentService assignmentService) {
+    public AssignmentController(
+            AssignmentService assignmentService,
+            AssignmentAiDraftService assignmentAiDraftService) {
         this.assignmentService = assignmentService;
+        this.assignmentAiDraftService = assignmentAiDraftService;
     }
 
-    // @PostMapping(value = "/ai-draft", consumes =
-    // MediaType.MULTIPART_FORM_DATA_VALUE)
-    // public ResponseEntity<AssignmentAiDraftModel.Response> generateAiDraft(
-    // @RequestParam String message,
-    // @RequestParam(required = false) String mode,
-    // @RequestParam(required = false) String currentTitle,
-    // @RequestParam(required = false) String currentDescription,
-    // @RequestParam(required = false) String sourceCacheKey,
-    // @RequestPart(value = "file", required = false) MultipartFile file) {
-    // AssignmentAiDraftModel.Response response =
-    // assignmentAiDraftService.generateDraft(
-    // message,
-    // mode,
-    // currentTitle,
-    // currentDescription,
-    // sourceCacheKey,
-    // file);
-    // return ResponseEntity.ok(response);
-    // }
+    @PostMapping(value = "/ai-draft", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    public ResponseEntity<AssignmentAiDraftModel.Response> generateAiDraft(
+            @RequestParam String message,
+            @RequestParam(required = false) String mode,
+            @RequestParam(required = false) String currentTitle,
+            @RequestParam(required = false) String currentDescription,
+            @RequestParam(required = false) String sourceCacheKey,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+        AssignmentAiDraftModel.Response response = assignmentAiDraftService.generateDraft(
+                message,
+                mode,
+                currentTitle,
+                currentDescription,
+                sourceCacheKey,
+                file);
+        return ResponseEntity.ok(response);
+    }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> create(@Valid @RequestBody AssignmentModel.CreateRequest request) {
         AssignmentModel.Response response = assignmentService.createAssignment(request);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.Response>> getAll() {
         List<AssignmentModel.Response> responses = assignmentService.getAllAssignments();
         return ResponseEntity.ok(responses);
     }
 
     @GetMapping("/mine")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.Response>> getMine(
             @RequestParam(required = false) UUID courseId,
             @RequestParam(required = false) Boolean isFlashtest) {
@@ -76,6 +79,7 @@ public class AssignmentController {
     // }
 
     @GetMapping("/available")
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<List<AssignmentModel.Response>> getAvailable(
             @RequestParam(required = false) UUID courseId,
             @RequestParam(required = false) UUID classId,
@@ -85,6 +89,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/classes")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.ClassOptionResponse>> getAssignableClasses(
             @RequestParam(required = false) UUID courseId) {
         return ResponseEntity.ok(assignmentService.getAssignableClasses(courseId));
@@ -106,6 +111,7 @@ public class AssignmentController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> update(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentModel.UpdateRequest request) {
@@ -114,6 +120,7 @@ public class AssignmentController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         assignmentService.deleteAssignment(id);
         return ResponseEntity.noContent().build();

@@ -46,6 +46,7 @@ class ClassEnrollmentServiceTest {
     private AuditLogService auditLogService;
     @Mock
     private CurrentUserService currentUserService;
+    private ClassEnrollmentService service;
 
     private ClassEnrollmentService service;
 

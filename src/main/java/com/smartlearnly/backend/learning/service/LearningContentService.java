@@ -4,8 +4,10 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.curriculum.dto.CurriculumMetadataResponse;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
@@ -108,13 +110,15 @@ public class LearningContentService {
                                 resolution.version(),
                                 resolution.classId(),
                                 resolution.source());
+                Set<UUID> hlsReadyLessonIds = readyHlsLessonIds(resolution.version());
 
                 return curriculumDtoMapper.toLearningContentResponse(
                                 resolution.version(),
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
                                 completedLessonIdentityIds,
-                                metadata);
+                                metadata,
+                                hlsReadyLessonIds);
         }
 
         @Transactional(readOnly = true)
@@ -126,16 +130,18 @@ public class LearningContentService {
                                 resolution.version(),
                                 resolution.classId(),
                                 resolution.source());
+                Set<UUID> hlsReadyLessonIds = readyHlsLessonIds(resolution.version());
 
                 return curriculumDtoMapper.toPreviewLearningContentResponse(
                                 resolution.version(),
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
-                                metadata);
+                                metadata,
+                                hlsReadyLessonIds);
         }
 
         @Transactional(readOnly = true)
-        public LearningContentResponse getAdminPreviewContent(UUID courseId) {
+        public LearningContentResponse getAdminPreviewContent(UUID courseId, UUID classId) {
                 courseAccessService.requireReadableCourse(courseId);
 
                 Course course = courseRepository
@@ -144,20 +150,52 @@ public class LearningContentService {
                                                 ErrorCode.RESOURCE_NOT_FOUND,
                                                 "Course was not found"));
 
-                CurriculumResolution resolution = curriculumResolutionService
-                                .resolveMasterAuthoring(courseId);
+                CurriculumResolution resolution;
+                if (classId != null) {
+                        // A class preview must use the same effective published curriculum that
+                        // enrolled trainees receive, without requiring an enrollment for staff.
+                        resolution = curriculumResolutionService.resolveClassEffectivePublished(courseId, classId);
+                } else if (course.getStatus() == CourseStatus.PUBLISHED) {
+                        // Keep "View as trainee" truthful for published courses.
+                        resolution = curriculumResolutionService.resolvePublicMaster(courseId);
+                } else {
+                        // Draft courses have no learner-facing published version yet, so retain an
+                        // authoring preview and expose that distinction through curriculum.source.
+                        resolution = curriculumResolutionService.resolveMasterAuthoring(courseId);
+                }
 
                 CurriculumMetadataResponse metadata = curriculumDtoMapper.toMetadata(
                                 resolution.version(),
                                 resolution.classId(),
                                 resolution.source());
+                Set<UUID> hlsReadyLessonIds = readyHlsLessonIds(resolution.version());
 
                 return curriculumDtoMapper.toLearningContentResponse(
                                 resolution.version(),
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
                                 Set.of(),
-                                metadata);
+                                metadata,
+                                hlsReadyLessonIds);
+        }
+
+        private Set<UUID> readyHlsLessonIds(CurriculumVersion version) {
+                List<UUID> lessonIds = version.getSections().stream()
+                                .filter(Objects::nonNull)
+                                .flatMap(section -> section.getLessons().stream())
+                                .filter(Objects::nonNull)
+                                .map(lesson -> lesson.getId())
+                                .filter(Objects::nonNull)
+                                .toList();
+
+                if (lessonIds.isEmpty()) {
+                        return Set.of();
+                }
+
+                return hlsLessonRepository.findAllById(lessonIds).stream()
+                                .filter(HlsLesson::isReady)
+                                .map(HlsLesson::getLessonId)
+                                .collect(Collectors.toSet());
         }
 
         private LearningSectionResponse toSectionResponseWithoutProgress(CourseSection section) {

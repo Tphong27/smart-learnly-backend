@@ -23,6 +23,7 @@ public record CourseResponse(
         boolean isFree,
         String status,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        UUID assignedSmeId
 ) {
 }

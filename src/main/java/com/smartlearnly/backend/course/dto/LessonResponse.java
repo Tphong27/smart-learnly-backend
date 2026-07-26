@@ -8,6 +8,7 @@ public record LessonResponse(
         UUID id,
         UUID courseId,
         UUID sectionId,
+        UUID moduleId,
         String title,
         String lessonType,
         String videoUrl,

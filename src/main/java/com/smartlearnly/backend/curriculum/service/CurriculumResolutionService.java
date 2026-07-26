@@ -33,6 +33,7 @@ public class CurriculumResolutionService {
 
     private final CurriculumVersionRepository curriculumVersionRepository;
     private final ClassCurriculumBindingRepository bindingRepository;
+    private final ClassCurriculumBindingProvisioningService bindingProvisioningService;
     private final ClassOfferingRepository classOfferingRepository;
     private final ClassEnrollmentRepository classEnrollmentRepository;
     private final AuthenticatedUserResolver authenticatedUserResolver;
@@ -70,7 +71,7 @@ public class CurriculumResolutionService {
             return new CurriculumResolution(published, binding, classId, true, SOURCE_CLASS_PUBLISHED);
         }
 
-        CurriculumVersion inherited = findVersion(binding.getBaseMasterVersionId());
+        CurriculumVersion inherited = findPublishedMaster(courseId);
         return new CurriculumResolution(inherited, binding, classId, false, SOURCE_MASTER_INHERITED);
     }
 
@@ -129,10 +130,10 @@ public class CurriculumResolutionService {
             }
         }
 
-        CurriculumVersion inherited = findVersion(binding.getBaseMasterVersionId());
-        if (inherited.getStatus() != CurriculumStatus.PUBLISHED) {
-            inherited = findPublishedMaster(courseId);
-        }
+        // An inherited class follows the current published master curriculum.
+        // baseMasterVersionId records lineage; using it for inherited reads can pin
+        // the class to an older master version indefinitely.
+        CurriculumVersion inherited = findPublishedMaster(courseId);
         return new CurriculumResolution(inherited, binding, classId, false, SOURCE_MASTER_INHERITED);
     }
 
@@ -148,7 +149,7 @@ public class CurriculumResolutionService {
         if (binding.getPublishedVersionId() != null) {
             return findClassVersion(binding.getPublishedVersionId(), classId);
         }
-        return findVersion(binding.getBaseMasterVersionId());
+        return findPublishedMaster(courseId);
     }
 
     private void requireCourseEnrollment(UUID courseId, UUID studentId) {
@@ -194,9 +195,7 @@ public class CurriculumResolutionService {
 
     private ClassCurriculumBinding requireBinding(UUID classId, UUID courseId) {
         return bindingRepository.findByClassIdAndCourseId(classId, courseId)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.RESOURCE_NOT_FOUND,
-                        "Class curriculum binding not found"));
+                .orElseGet(() -> bindingProvisioningService.ensureBinding(classId, courseId));
     }
 
     private ClassOffering requireClassForCourse(UUID courseId, UUID classId) {

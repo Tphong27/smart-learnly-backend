@@ -4,6 +4,7 @@ import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.service.CourseAccessService;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.question.dto.QuestionAnswerMediaResponse;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
@@ -51,8 +52,10 @@ public class QuestionService {
     private final QuestionMediaAttachmentRepository mediaAttachmentRepository;
     private final QuestionBankService questionBankService;
     private final CourseSectionRepository courseSectionRepository;
+    private final com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository curriculumSectionRepository;
     private final CurrentUserService currentUserService;
     private final QuestionMediaImportService questionMediaImportService;
+    private final CourseAccessService courseAccessService;
 
     @Transactional(readOnly = true)
     public PageResponse<QuestionModel.Response> list(UUID bankId, UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
@@ -77,8 +80,24 @@ public class QuestionService {
     }
 
     @Transactional(readOnly = true)
+    public PageResponse<QuestionModel.Response> listByCourse(UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
+        courseAccessService.requireReadableCourse(courseId);
+
+        return list(null, courseId, moduleId, search, type, status, difficulty, page, size);
+    }
+
+    @Transactional(readOnly = true)
     public QuestionModel.Response get(UUID questionId) {
         return toResponse(findQuestion(questionId));
+    }
+
+    @Transactional(readOnly = true)
+    public QuestionModel.Response getInCourse(UUID courseId, UUID questionId) {
+        courseAccessService.requireReadableCourse(courseId);
+        Question question = findQuestion(questionId);
+        assertQuestionBelongsToCourse(question, courseId);
+
+        return toResponse(question);
     }
 
     @Transactional
@@ -101,6 +120,35 @@ public class QuestionService {
         question.setCreatedBy(actor.getId());
         Question saved = questionRepository.save(question);
         replaceAnswers(saved.getId(), request.answers());
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public QuestionModel.Response createForCourse(UUID courseId, QuestionModel.CreateRequest request) {
+        courseAccessService.requireUpdatableCourse(courseId);
+        QuestionType questionType = parseSupportedQuestionType(request.questionType());
+        validateAnswers(questionType, request.answers());
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        String questionText = normalizeRequired(request.questionText(), "Question text is required");
+        if (questionRepository.existsActiveDuplicateInCourse(courseId, questionText, null)) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A question with the same text already exists in this course");
+        }
+
+        Question question = new Question();
+        question.setCourseId(courseId);
+        question.setModuleId(validateRequiredCourseModuleId(courseId, request.moduleId()));
+        question.setQuestionText(questionText);
+        question.setQuestionType(questionType);
+        question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
+        question.setDifficulty(request.difficulty());
+        question.setExplanation(normalizeNullable(request.explanation()));
+        question.setIsAiGenerated(false);
+        question.setStatus(parseQuestionStatus(request.status(), QuestionStatus.DRAFT));
+        question.setCreatedBy(actor.getId());
+
+        Question saved = questionRepository.save(question);
+        replaceAnswers(saved.getId(), request.answers());
+
         return toResponse(saved);
     }
 
@@ -129,12 +177,53 @@ public class QuestionService {
     }
 
     @Transactional
+    public QuestionModel.Response updateInCourse(UUID courseId, UUID questionId, QuestionModel.UpdateRequest request) {
+        courseAccessService.requireUpdatableCourse(courseId);
+        Question question = findQuestion(questionId);
+        assertQuestionBelongsToCourse(question, courseId);
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question");
+        }
+        QuestionType questionType = parseSupportedQuestionType(request.questionType());
+        validateAnswers(questionType, request.answers());
+        String questionText = normalizeRequired(request.questionText(), "Question text is required");
+        if (questionRepository.existsActiveDuplicateInCourse(courseId, questionText, question.getId())) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A question with the same text already exists in this course");
+        }
+
+        question.setModuleId(validateRequiredCourseModuleId(courseId, request.moduleId()));
+        question.setQuestionText(questionText);
+        question.setQuestionType(questionType);
+        question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
+        question.setDifficulty(request.difficulty());
+        question.setExplanation(normalizeNullable(request.explanation()));
+        question.setStatus(parseQuestionStatus(request.status(), question.getStatus()));
+
+        Question saved = questionRepository.save(question);
+        replaceAnswers(saved.getId(), request.answers());
+
+        return toResponse(saved);
+    }
+
+    @Transactional
     public void archive(UUID questionId) {
         Question question = findQuestion(questionId);
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
         }
         questionBankService.findActiveBankEntity(question.getQuestionBankId());
+        question.setStatus(QuestionStatus.ARCHIVED);
+        questionRepository.save(question);
+    }
+
+    @Transactional
+    public void archiveInCourse(UUID courseId, UUID questionId) {
+        courseAccessService.requireUpdatableCourse(courseId);
+        Question question = findQuestion(questionId);
+        assertQuestionBelongsToCourse(question, courseId);
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
+        }
         question.setStatus(QuestionStatus.ARCHIVED);
         questionRepository.save(question);
     }
@@ -175,11 +264,72 @@ public class QuestionService {
         return moduleId;
     }
 
+    private UUID validateRequiredCourseModuleId(UUID courseId, UUID moduleId) {
+        if (moduleId == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module is required");
+        }
+        boolean exists = curriculumSectionRepository.existsMasterModuleByIdAndCourseId(moduleId, courseId);
+        if (!exists) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module must belong to the selected course");
+        }
+        return moduleId;
+    }
+
     @Transactional
     public QuestionImportDtos.ImportBatchResponse importBatch(QuestionImportDtos.ImportBatchRequest request) {
         List<Question> savedQuestions = importReviewedRows(request.bankId(), request.rows(), false, null, normalizeImportMediaSource(request.importSource()));
         List<UUID> createdIds = savedQuestions.stream().map(Question::getId).toList();
         return new QuestionImportDtos.ImportBatchResponse(request.rows().size(), createdIds.size(), createdIds, List.of());
+    }
+
+    @Transactional
+    public QuestionImportDtos.ImportBatchResponse importBatchForCourse(UUID courseId, QuestionImportDtos.ImportBatchRequest request) {
+        courseAccessService.requireUpdatableCourse(courseId);
+        List<Question> savedQuestions = importReviewedRowsForCourse(courseId, request.rows(), false, null, normalizeImportMediaSource(request.importSource()));
+        List<UUID> createdIds = savedQuestions.stream().map(Question::getId).toList();
+        return new QuestionImportDtos.ImportBatchResponse(request.rows().size(), createdIds.size(), createdIds, List.of());
+    }
+
+    @Transactional
+    public List<Question> importReviewedRowsForCourse(UUID courseId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource) {
+        return importReviewedRowsForCourse(courseId, rows, aiGenerated, importSource, importSource == null ? null : importSource);
+    }
+
+    private List<Question> importReviewedRowsForCourse(UUID courseId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource, String mediaImportSource) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one question row is required");
+        }
+
+        List<QuestionImportDtos.ImportRowError> errors = new ArrayList<>();
+        List<QuestionImportDtos.ImportRow> validatedRows = new ArrayList<>();
+        for (QuestionImportDtos.ImportRow row : rows) {
+            List<String> rowErrors = validateImportRowForCourse(courseId, row);
+            if (!rowErrors.isEmpty()) {
+                errors.add(new QuestionImportDtos.ImportRowError(row.rowNumber(), rowErrors));
+            } else {
+                validatedRows.add(row);
+            }
+        }
+
+        for (QuestionImportDtos.ImportRow row : validatedRows) {
+            String normalizedText = normalizeRequired(row.questionText(), "Question text is required");
+            if (questionRepository.existsActiveDuplicateInCourse(courseId, normalizedText, null)) {
+                errors.add(new QuestionImportDtos.ImportRowError(row.rowNumber(), List.of("A question with the same text already exists in this course")));
+            }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, buildImportErrorSummary(errors));
+        }
+
+        List<Question> savedQuestions = new ArrayList<>();
+        for (QuestionImportDtos.ImportRow row : validatedRows) {
+            Question savedQuestion = persistImportedQuestionForCourse(courseId, row, actor, aiGenerated, importSource);
+            questionMediaImportService.attachImportedMedia(savedQuestion, row.imageFiles(), row.audioFiles(), mediaImportSource);
+            savedQuestions.add(savedQuestion);
+        }
+        return savedQuestions;
     }
 
     @Transactional
@@ -243,6 +393,27 @@ public class QuestionService {
         question.setQuestionBankId(bank.getId());
         question.setCourseId(bank.getCourseId());
         question.setModuleId(validateModuleId(bank.getCourseId(), row.moduleId()));
+        question.setQuestionText(normalizeRequired(row.questionText(), "Question text is required"));
+        question.setQuestionType(questionType);
+        question.setBloomLevel(parseBloomLevel(row.bloomLevel()));
+        question.setDifficulty(row.difficulty());
+        question.setExplanation(normalizeNullable(row.explanation()));
+        question.setIsAiGenerated(aiGenerated);
+        question.setImportSource(normalizeNullable(importSource));
+        question.setStatus(QuestionStatus.DRAFT);
+        question.setCreatedBy(actor.getId());
+        Question saved = questionRepository.save(question);
+
+        List<QuestionModel.AnswerRequest> answers = buildAnswersForImport(row, questionType);
+        replaceAnswers(saved.getId(), answers);
+        return saved;
+    }
+
+    private Question persistImportedQuestionForCourse(UUID courseId, QuestionImportDtos.ImportRow row, UserAccount actor, boolean aiGenerated, String importSource) {
+        QuestionType questionType = parseSupportedQuestionType(row.questionType());
+        Question question = new Question();
+        question.setCourseId(courseId);
+        question.setModuleId(validateRequiredCourseModuleId(courseId, row.moduleId()));
         question.setQuestionText(normalizeRequired(row.questionText(), "Question text is required"));
         question.setQuestionType(questionType);
         question.setBloomLevel(parseBloomLevel(row.bloomLevel()));
@@ -418,6 +589,124 @@ public class QuestionService {
         return rowErrors;
     }
 
+    private List<String> validateImportRowForCourse(UUID courseId, QuestionImportDtos.ImportRow row) {
+        List<String> rowErrors = validateImportRowContent(row);
+
+        if (row.moduleId() == null) {
+            rowErrors.add("Question module is required");
+        } else {
+            boolean moduleExists = curriculumSectionRepository.existsMasterModuleByIdAndCourseId(row.moduleId(), courseId);
+            if (!moduleExists) {
+                rowErrors.add("Question module must belong to the selected course");
+            }
+        }
+
+        rowErrors.addAll(questionMediaImportService.validateMediaReferences(row.imageFiles(), row.audioFiles()));
+
+        return rowErrors;
+    }
+
+    private List<String> validateImportRowContent(QuestionImportDtos.ImportRow row) {
+        List<String> rowErrors = new ArrayList<>();
+        if (row.questionText() == null || row.questionText().isBlank()) {
+            rowErrors.add("Question text is required");
+        } else if (row.questionText().length() > 10000) {
+            rowErrors.add("Question text must not exceed 10000 characters");
+        }
+
+        QuestionType type = null;
+        String rawType = row.questionType();
+        if (rawType == null || rawType.isBlank()) {
+            rowErrors.add("Question type is required");
+        } else {
+            String normalizedType = rawType.trim().replace('-', '_').toUpperCase(Locale.ROOT);
+            try {
+                type = QuestionType.valueOf(normalizedType);
+            } catch (IllegalArgumentException exception) {
+                rowErrors.add("Question type must be multiple_choice or true_false");
+            }
+            if (type != null && type != QuestionType.MULTIPLE_CHOICE && type != QuestionType.TRUE_FALSE) {
+                rowErrors.add("Question type must be multiple_choice or true_false");
+                type = null;
+            }
+        }
+
+        List<String> options = row.options();
+        if (options == null || options.size() < 2) {
+            rowErrors.add("At least two answers are required");
+        } else if (options.size() > 6) {
+            rowErrors.add("Multiple choice questions support 2 to 6 answers");
+        } else {
+            for (int index = 0; index < options.size(); index += 1) {
+                String option = options.get(index);
+                if (option == null || option.isBlank()) {
+                    rowErrors.add("Answer " + (char) ('A' + index) + " is required");
+                } else if (option.length() > 4000) {
+                    rowErrors.add("Answer " + (char) ('A' + index) + " must not exceed 4000 characters");
+                }
+            }
+        }
+
+        if (options != null && type == QuestionType.TRUE_FALSE && options.size() != 2) {
+            rowErrors.add("True/false questions must have exactly two answers");
+        }
+
+        if (options != null && type == QuestionType.TRUE_FALSE) {
+            boolean hasTrue = false;
+            boolean hasFalse = false;
+            for (String option : options) {
+                if (option == null) continue;
+                String text = option.trim().toLowerCase(Locale.ROOT);
+                if ("true".equals(text)) hasTrue = true;
+                if ("false".equals(text)) hasFalse = true;
+            }
+            if (!hasTrue || !hasFalse) {
+                rowErrors.add("True/false answers must be True and False");
+            }
+        }
+
+        String correctAnswer = row.correctAnswer();
+        if (correctAnswer == null || correctAnswer.isBlank()) {
+            rowErrors.add("Correct answer is required");
+        } else if (type == QuestionType.TRUE_FALSE) {
+            String normalized = correctAnswer.trim();
+            if (!"true".equalsIgnoreCase(normalized) && !"false".equalsIgnoreCase(normalized)) {
+                rowErrors.add("Correct answer for true/false must be True or False");
+            }
+        } else if (type == QuestionType.MULTIPLE_CHOICE) {
+            String normalized = correctAnswer.trim();
+            if (normalized.length() != 1) {
+                rowErrors.add("Correct answer must be a single letter A-F");
+            } else {
+                char letter = Character.toUpperCase(normalized.charAt(0));
+                if (letter < 'A' || letter > 'F') {
+                    rowErrors.add("Correct answer must be A, B, C, D, E, or F");
+                } else if (options != null && (letter - 'A') >= options.size()) {
+                    rowErrors.add("Correct answer refers to an option that was not provided");
+                }
+            }
+        }
+
+        if (row.difficulty() != null && (row.difficulty() < 1 || row.difficulty() > 5)) {
+            rowErrors.add("Difficulty must be between 1 and 5");
+        }
+
+        if (row.bloomLevel() != null && !row.bloomLevel().isBlank()) {
+            String normalized = row.bloomLevel().trim().replace('-', '_').toUpperCase(Locale.ROOT);
+            try {
+                BloomLevel.valueOf(normalized);
+            } catch (IllegalArgumentException exception) {
+                rowErrors.add("Bloom level is invalid");
+            }
+        }
+
+        if (row.explanation() != null && row.explanation().length() > 10000) {
+            rowErrors.add("Explanation must not exceed 10000 characters");
+        }
+
+        return rowErrors;
+    }
+
     private String normalizeImportMediaSource(String value) {
         String normalized = normalizeNullable(value);
         if (normalized == null) return "excel_import";
@@ -443,6 +732,12 @@ public class QuestionService {
 
     private Question findQuestion(UUID questionId) {
         return questionRepository.findById(questionId).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question not found"));
+    }
+
+    private void assertQuestionBelongsToCourse(Question question, UUID courseId) {
+        if (!courseId.equals(question.getCourseId())) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question not found");
+        }
     }
 
     private void replaceAnswers(UUID questionId, List<QuestionModel.AnswerRequest> answers) {

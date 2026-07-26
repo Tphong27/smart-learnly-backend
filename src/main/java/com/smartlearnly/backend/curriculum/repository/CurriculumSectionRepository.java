@@ -13,7 +13,26 @@ public interface CurriculumSectionRepository extends JpaRepository<CurriculumSec
 
     Optional<CurriculumSection> findByIdAndCurriculumVersionId(UUID id, UUID curriculumVersionId);
 
+    @Query("select (count(section) > 0) from CurriculumSection section "
+            + "where section.id = :sectionId and section.curriculumVersion.courseId = :courseId")
+    boolean existsByIdAndCourseId(
+            @Param("sectionId") UUID sectionId,
+            @Param("courseId") UUID courseId);
+
     @Query("select coalesce(max(section.sortOrder), -1) from CurriculumSection section "
             + "where section.curriculumVersion.id = :curriculumVersionId")
     int findMaxSortOrderByCurriculumVersionId(@Param("curriculumVersionId") UUID curriculumVersionId);
+
+    @Query("""
+            select count(section) > 0
+            from CurriculumSection section
+            join section.curriculumVersion version
+            where section.id = :moduleId
+              and version.courseId = :courseId
+              and version.scope = com.smartlearnly.backend.curriculum.entity.CurriculumScope.MASTER
+            """)
+    boolean existsMasterModuleByIdAndCourseId(
+            @Param("moduleId") UUID moduleId,
+            @Param("courseId") UUID courseId
+    );
 }

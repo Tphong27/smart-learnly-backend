@@ -12,6 +12,7 @@ public record ClassResponse(
         String className,
         UUID trainerId,
         String trainerName,
+        String meetingUrl,
         String scheduleDescription,
         BigDecimal price,
         LocalDate startDate,

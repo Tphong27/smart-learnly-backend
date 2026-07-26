@@ -4,12 +4,14 @@ package com.smartlearnly.backend.test.service;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.test.dto.TestModel;
 import com.smartlearnly.backend.test.entity.Test;
 import com.smartlearnly.backend.test.entity.TestAttempt;
 import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
 import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
+import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -32,13 +34,18 @@ public class TestService {
     private final CurrentUserService currentUserService;
     private final TestAttemptRepository testAttemptRepository;
     private final StudentTestAnswerRepository studentTestAnswerRepository;
+    private final CurriculumSectionRepository curriculumSectionRepository;
 
     public TestModel.Response createTest(
             TestModel.CreateRequest request) {
 
+        validateSchedule(request.getOpensAt(), request.getClosesAt());
+
         Test test = new Test();
 
         test.setModuleId(request.getModuleId());
+        validateCurriculumSection(request.getCourseId(), request.getCurriculumSectionId());
+        test.setCurriculumSectionId(request.getCurriculumSectionId());
         test.setClassId(request.getClassId());
         test.setCourseId(request.getCourseId());
         test.setTitle(request.getTitle());
@@ -56,8 +63,11 @@ public class TestService {
                 request.getShuffleAnswers());
         test.setShowAnswersAfter(
                 request.getShowAnswersAfter());
+        test.setIsPublished(request.getIsPublished());
         test.setIsFlashtest(
                 request.getIsFlashtest());
+        test.setOpensAt(request.getOpensAt());
+        test.setClosesAt(request.getClosesAt());
         ensureAccessCode(test);
         test.setCreatedBy(
                 currentUserService.requireAuthenticatedUser().getId());
@@ -70,30 +80,35 @@ public class TestService {
     public List<TestModel.Response> getAllTests() {
 
         List<Test> tests =
-                testRepository.findAll();
+                testRepository.findByIsPublishedTrueAndIsArchivedFalse();
 
         List<TestModel.Response> responses =
                 new ArrayList<>();
 
         for (Test test : tests) {
-            responses.add(mapToResponse(ensureAccessCode(test)));
+            // This endpoint powers the trainee catalogue. Listing tests must be
+            // read-only: rotating every expired code here caused an N+1 write
+            // burst and leaked the active access code to learners.
+            responses.add(mapToResponse(test, false));
         }
 
         return responses;
     }
 
-    public List<TestModel.Response> getMyTests() {
+    public List<TestModel.Response> getMyTests(UUID courseId) {
 
         UUID currentUserId =
                 currentUserService.requireAuthenticatedUser().getId();
         List<Test> tests =
-                testRepository.findByCreatedBy(currentUserId);
+                courseId == null
+                        ? testRepository.findByCreatedBy(currentUserId)
+                        : testRepository.findByCreatedByAndCourseId(currentUserId, courseId);
 
         List<TestModel.Response> responses =
                 new ArrayList<>();
 
         for (Test test : tests) {
-            responses.add(mapToResponse(ensureAccessCode(test)));
+            responses.add(mapToResponse(test, true));
         }
 
         return responses;
@@ -106,7 +121,11 @@ public class TestService {
                         new EntityNotFoundException(
                                 "Test not found"));
 
-        return mapToResponse(ensureAccessCode(test));
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        boolean includeAccessCode = canManageTests(actor);
+        return mapToResponse(
+                includeAccessCode ? ensureAccessCode(test) : test,
+                includeAccessCode);
     }
 
     public TestModel.AccessCodeVerifyResponse verifyAccessCode(
@@ -121,7 +140,8 @@ public class TestService {
 
         TestModel.AccessCodeVerifyResponse response =
                 new TestModel.AccessCodeVerifyResponse();
-        response.setValid(accessCodeMatches(test, request.getAccessCode()));
+        response.setValid(isWithinSchedule(test, Instant.now()) &&
+                accessCodeMatches(test, request.getAccessCode()));
         response.setExpiresAt(test.getAccessCodeExpiresAt());
         return response;
     }
@@ -136,6 +156,14 @@ public class TestService {
                         new EntityNotFoundException(
                                 "Test not found"));
 
+        Instant nextOpensAt = request.getOpensAt() != null
+                ? request.getOpensAt()
+                : test.getOpensAt();
+        Instant nextClosesAt = request.getClosesAt() != null
+                ? request.getClosesAt()
+                : test.getClosesAt();
+        validateSchedule(nextOpensAt, nextClosesAt);
+
         boolean isFlashTest = Boolean.TRUE.equals(test.getIsFlashtest()) ||
                 Boolean.TRUE.equals(request.getIsFlashtest());
         if (isFlashTest) {
@@ -148,6 +176,11 @@ public class TestService {
         }
 
         if (request.getModuleId() != null) test.setModuleId(request.getModuleId());
+        if (request.getCurriculumSectionId() != null) {
+            UUID nextCourseId = request.getCourseId() != null ? request.getCourseId() : test.getCourseId();
+            validateCurriculumSection(nextCourseId, request.getCurriculumSectionId());
+            test.setCurriculumSectionId(request.getCurriculumSectionId());
+        }
         if (request.getClassId() != null) test.setClassId(request.getClassId());
         if (request.getCourseId() != null) test.setCourseId(request.getCourseId());
         if (request.getTitle() != null) test.setTitle(request.getTitle());
@@ -162,6 +195,8 @@ public class TestService {
         if (request.getIsPublished() != null) test.setIsPublished(request.getIsPublished());
         if (request.getIsArchived() != null) test.setIsArchived(request.getIsArchived());
         if (request.getIsFlashtest() != null) test.setIsFlashtest(request.getIsFlashtest());
+        if (request.getOpensAt() != null) test.setOpensAt(request.getOpensAt());
+        if (request.getClosesAt() != null) test.setClosesAt(request.getClosesAt());
         ensureAccessCode(test);
 
         Test updated = testRepository.save(test);
@@ -172,6 +207,7 @@ public class TestService {
         return mapToResponse(updated);
     }
 
+    @Transactional
     public void deleteTest(UUID id) {
 
         if (!testRepository.existsById(id)) {
@@ -179,6 +215,10 @@ public class TestService {
                     "Test not found");
         }
 
+        // Attempts and their answers reference the test without database-level
+        // cascading. Remove those dependants first so staff can delete a test
+        // after it has been taken.
+        resetAttempts(id);
         testRepository.deleteById(id);
     }
 
@@ -194,16 +234,25 @@ public class TestService {
                 .toList();
         studentTestAnswerRepository.deleteByAttemptIds(attemptIds);
         testAttemptRepository.deleteAll(attempts);
+        testAttemptRepository.flush();
     }
 
     private TestModel.Response mapToResponse(
             Test test) {
+
+        return mapToResponse(test, true);
+    }
+
+    private TestModel.Response mapToResponse(
+            Test test,
+            boolean includeAccessCode) {
 
         TestModel.Response response =
                 new TestModel.Response();
 
         response.setId(test.getId());
         response.setModuleId(test.getModuleId());
+        response.setCurriculumSectionId(test.getCurriculumSectionId());
         response.setClassId(test.getClassId());
         response.setCourseId(test.getCourseId());
         response.setTitle(test.getTitle());
@@ -235,10 +284,22 @@ public class TestService {
                 test.getCreatedAt());
         response.setUpdatedAt(
                 test.getUpdatedAt());
-        response.setAccessCode(test.getAccessCode());
-        response.setAccessCodeExpiresAt(test.getAccessCodeExpiresAt());
+        if (includeAccessCode) {
+            response.setAccessCode(test.getAccessCode());
+            response.setAccessCodeExpiresAt(test.getAccessCodeExpiresAt());
+        }
+        response.setOpensAt(test.getOpensAt());
+        response.setClosesAt(test.getClosesAt());
 
         return response;
+    }
+
+    private boolean canManageTests(UserAccount actor) {
+        String role = actor.getRole();
+        return role != null && switch (role.toUpperCase()) {
+            case "ADMIN", "TMO", "SME", "TRAINER" -> true;
+            default -> false;
+        };
     }
 
     private Test ensureAccessCode(Test test) {
@@ -258,6 +319,35 @@ public class TestService {
         String expected = current.getAccessCode();
         return expected != null &&
                 expected.equals(String.valueOf(accessCode == null ? "" : accessCode).trim());
+    }
+
+    public boolean isWithinSchedule(Test test, Instant now) {
+        return (test.getOpensAt() == null || !now.isBefore(test.getOpensAt())) &&
+                (test.getClosesAt() == null || now.isBefore(test.getClosesAt()));
+    }
+
+    private void validateSchedule(Instant opensAt, Instant closesAt) {
+        if (opensAt != null && closesAt != null && !opensAt.isBefore(closesAt)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Test closing time must be after its opening time");
+        }
+    }
+
+    private void validateCurriculumSection(UUID courseId, UUID sectionId) {
+        if (sectionId == null) {
+            return;
+        }
+        if (!curriculumSectionRepository.existsById(sectionId)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Selected module was not found");
+        }
+        if (courseId == null || !curriculumSectionRepository.existsByIdAndCourseId(sectionId, courseId)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Selected module does not belong to this course");
+        }
     }
 
     private String generateAccessCode() {

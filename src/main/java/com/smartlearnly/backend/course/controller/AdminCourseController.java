@@ -56,7 +56,7 @@ public class AdminCourseController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     @Operation(summary = "Create a course")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Course created"),
@@ -85,7 +85,7 @@ public class AdminCourseController {
     }
 
     @DeleteMapping("/{courseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     @Operation(summary = "Soft delete a course")
     public ApiResponse<Void> delete(@PathVariable UUID courseId) {
         courseAdminService.delete(courseId);

@@ -12,6 +12,7 @@ public interface ClassAdminProjection {
     String getClassName();
     UUID getTrainerId();
     String getTrainerName();
+    String getMeetingUrl();
     String getScheduleDescription();
     BigDecimal getPrice();
     LocalDate getStartDate();

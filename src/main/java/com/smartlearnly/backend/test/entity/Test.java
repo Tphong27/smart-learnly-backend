@@ -31,6 +31,9 @@ public class Test {
     @Column(name = "module_id")
     private UUID moduleId;
 
+    @Column(name = "curriculum_section_id")
+    private UUID curriculumSectionId;
+
     @Column(name = "class_id")
     private UUID classId;
 
@@ -80,6 +83,12 @@ public class Test {
 
     @Column(name = "access_code_expires_at")
     private Instant accessCodeExpiresAt;
+
+    @Column(name = "opens_at")
+    private Instant opensAt;
+
+    @Column(name = "closes_at")
+    private Instant closesAt;
 
     @Column(name = "created_by")
     private UUID createdBy;

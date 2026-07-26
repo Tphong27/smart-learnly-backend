@@ -2,6 +2,10 @@ package com.smartlearnly.backend.flashcard.staging.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -9,12 +13,43 @@ import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGener
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 class GeminiFlashcardDocumentGenerationServiceTest {
     private final GeminiFlashcardDocumentGenerationService service =
             new GeminiFlashcardDocumentGenerationService(properties());
+
+    @Test
+    void fallsBackWhenPrimaryDocumentModelIsUnavailable() {
+        FlashcardDocumentGenerationProperties properties = properties();
+        properties.setApiBaseUrl("https://gemini.example.test/v1beta");
+        properties.setModel("gemini-primary");
+        properties.setFallbackModel("gemini-fallback");
+        RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GeminiFlashcardDocumentGenerationService fallbackService =
+                new GeminiFlashcardDocumentGenerationService(properties, builder.build());
+
+        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
+                .andExpect(jsonPath("$.model").value("gemini-primary"))
+                .andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
+                .andExpect(jsonPath("$.model").value("gemini-fallback"))
+                .andRespond(withSuccess("{\"output_text\":\"fallback output\"}", MediaType.APPLICATION_JSON));
+
+        String output = fallbackService.sendGeminiInput(
+                List.of(Map.of("type", "text", "text", "Read this document.")),
+                "test");
+
+        assertThat(output).isEqualTo("fallback output");
+        server.verify();
+    }
 
     @Test
     void parseGenerationOutputAcceptsStrictJsonAndOptionalFields() {

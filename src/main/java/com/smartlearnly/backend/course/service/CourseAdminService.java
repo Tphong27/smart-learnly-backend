@@ -17,9 +17,13 @@ import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CategoryRepository;
 import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.user.entity.UserAccount;
-import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.time.Instant;
@@ -42,10 +46,12 @@ public class CourseAdminService {
 
     private final CourseRepository courseRepository;
     private final CategoryRepository categoryRepository;
+    private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final StorageProperties storageProperties;
     private final CourseAccessService courseAccessService;
+    private final CurriculumVersionRepository curriculumVersionRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<CourseResponse> list(
@@ -54,8 +60,7 @@ public class CourseAdminService {
             String keyword,
             String status,
             UUID categoryId,
-            String level
-    ) {
+            String level) {
         CourseStatus resolvedStatus = parseCourseStatus(status, null);
         String resolvedKeyword = normalizeNullable(keyword);
         String resolvedLevel = normalizeNullable(level);
@@ -65,9 +70,14 @@ public class CourseAdminService {
                 categoryId,
                 resolvedLevel);
 
-        if (courseAccessService.isCurrentUserTrainer()) {
-            UUID trainerId = courseAccessService.getCurrentUserId();
-            filters = filters.and(assignedToTrainer(trainerId));
+        if (!courseAccessService.isCurrentUserCourseManager()) {
+            UUID currentUserId = courseAccessService.getCurrentUserId();
+
+            if (courseAccessService.isCurrentUserSme()) {
+                filters = filters.and(assignedToSme(currentUserId));
+            } else if (courseAccessService.isCurrentUserTrainer()) {
+                filters = filters.and(assignedToTrainer(currentUserId));
+            }
         }
 
         Page<Course> coursePage = courseRepository.findAll(
@@ -86,10 +96,8 @@ public class CourseAdminService {
             String keyword,
             CourseStatus status,
             UUID categoryId,
-            String level
-    ) {
-        Specification<Course> filters = (root, query, criteriaBuilder) ->
-                criteriaBuilder.isNull(root.get("deletedAt"));
+            String level) {
+        Specification<Course> filters = (root, query, criteriaBuilder) -> criteriaBuilder.isNull(root.get("deletedAt"));
 
         if (keyword != null) {
             String pattern = "%" + keyword.toLowerCase(Locale.ROOT) + "%";
@@ -99,22 +107,26 @@ public class CourseAdminService {
                     criteriaBuilder.like(criteriaBuilder.lower(root.get("shortDescription")), pattern)));
         }
         if (status != null) {
-            filters = filters.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.equal(
-                            root.get("status").cast(String.class),
-                            status.name().toLowerCase(Locale.ROOT)));
+            filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder.equal(
+                    root.get("status").cast(String.class),
+                    status.name().toLowerCase(Locale.ROOT)));
         }
         if (categoryId != null) {
-            filters = filters.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.equal(root.get("category").get("id"), categoryId));
+            filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder
+                    .equal(root.get("category").get("id"), categoryId));
         }
         if (level != null) {
-            filters = filters.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.equal(
-                            criteriaBuilder.lower(root.get("level")),
-                            level.toLowerCase(Locale.ROOT)));
+            filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder.equal(
+                    criteriaBuilder.lower(root.get("level")),
+                    level.toLowerCase(Locale.ROOT)));
         }
         return filters;
+    }
+
+    private Specification<Course> assignedToSme(UUID smeId) {
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(
+                root.get("assignedSme").get("id"),
+                smeId);
     }
 
     private Specification<Course> assignedToTrainer(UUID trainerId) {
@@ -139,10 +151,12 @@ public class CourseAdminService {
 
     @Transactional
     public CourseResponse create(CreateCourseRequest request) {
+        courseAccessService.requireCourseManager();
         UserAccount creator = currentUserService.requireAuthenticatedUser();
         Course course = new Course();
         course.setCategory(findCategory(request.categoryId()));
         course.setCreator(creator);
+        course.setAssignedSme(findAssignedSme(request.assignedSmeId()));
         course.setTitle(normalizeRequired(request.title(), "Course title is required"));
         course.setSlug(resolveCreateSlug(request.slug(), course.getTitle()));
         course.setShortDescription(normalizeNullable(request.shortDescription()));
@@ -159,6 +173,10 @@ public class CourseAdminService {
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
+        CurriculumVersion masterCurriculum = findOrCreateLatestMasterCurriculum(saved, creator);
+        if (saved.getStatus() == CourseStatus.PUBLISHED) {
+            publishMasterCurriculum(saved, masterCurriculum);
+        }
         auditLogService.record(creator.getEmail(), "COURSE_CREATED", "COURSE", saved.getId().toString());
         return CourseDtoMapper.toCourseResponse(saved);
     }
@@ -178,6 +196,10 @@ public class CourseAdminService {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST, "Category is required");
             }
             course.setCategory(findCategory(request.getCategoryId()));
+        }
+        if (request.isAssignedSmeIdProvided()) {
+            courseAccessService.requireCourseManager();
+            course.setAssignedSme(findAssignedSme(request.getAssignedSmeId()));
         }
         if (request.isTitleProvided()) {
             course.setTitle(normalizeRequired(request.getTitle(), "Course title must not be blank"));
@@ -224,6 +246,9 @@ public class CourseAdminService {
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
+        if (saved.getStatus() == CourseStatus.PUBLISHED) {
+            publishLatestMasterCurriculum(saved, currentUserService.requireAuthenticatedUser());
+        }
         if (previousStatus != saved.getStatus()) {
             AuditAction action = saved.getStatus() == CourseStatus.PUBLISHED
                     ? AuditAction.COURSE_PUBLISHED
@@ -243,8 +268,64 @@ public class CourseAdminService {
         return CourseDtoMapper.toCourseResponse(saved);
     }
 
+    /**
+     * Keeps the learner-facing curriculum in sync with the course status. The admin
+     * UI exposes one
+     * publish action for a course, so leaving its latest MASTER version in DRAFT
+     * makes the course
+     * visible while its lessons disappear from Learning Workspace.
+     */
+    private void publishLatestMasterCurriculum(Course course, UserAccount actor) {
+        CurriculumVersion latest = findOrCreateLatestMasterCurriculum(course, actor);
+        publishMasterCurriculum(course, latest);
+    }
+
+    private CurriculumVersion findOrCreateLatestMasterCurriculum(Course course, UserAccount actor) {
+        return curriculumVersionRepository
+                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
+                        course.getId(), CurriculumScope.MASTER)
+                .orElseGet(() -> createInitialMasterCurriculum(course, actor));
+    }
+
+    private void publishMasterCurriculum(Course course, CurriculumVersion latest) {
+        if (latest.getStatus() == CurriculumStatus.PUBLISHED) {
+            return;
+        }
+
+        Instant now = Instant.now();
+        curriculumVersionRepository
+                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                        course.getId(), CurriculumScope.MASTER, CurriculumStatus.PUBLISHED)
+                .filter(published -> !published.getId().equals(latest.getId()))
+                .ifPresent(published -> {
+                    published.setStatus(CurriculumStatus.ARCHIVED);
+                    published.setArchivedAt(now);
+                    curriculumVersionRepository.save(published);
+                    curriculumVersionRepository.flush();
+                });
+
+        latest.setStatus(CurriculumStatus.PUBLISHED);
+        latest.setPublishedAt(now);
+        latest.setArchivedAt(null);
+        latest.setTitle(course.getTitle());
+        curriculumVersionRepository.save(latest);
+    }
+
+    private CurriculumVersion createInitialMasterCurriculum(Course course, UserAccount actor) {
+        CurriculumVersion version = new CurriculumVersion();
+        version.setCourseId(course.getId());
+        version.setScope(CurriculumScope.MASTER);
+        version.setStatus(CurriculumStatus.DRAFT);
+        version.setVersionNumber(curriculumVersionRepository.findMaxMasterVersionNumber(
+                course.getId(), CurriculumScope.MASTER) + 1);
+        version.setTitle(course.getTitle());
+        version.setCreatedBy(actor.getId());
+        return curriculumVersionRepository.save(version);
+    }
+
     @Transactional
     public void delete(UUID courseId) {
+        courseAccessService.requireCourseManager();
         Course course = findCourse(courseId);
         course.setStatus(CourseStatus.INACTIVE);
         course.setDeletedAt(Instant.now());
@@ -255,6 +336,20 @@ public class CourseAdminService {
     private Course findCourse(UUID courseId) {
         return courseRepository.findByIdAndDeletedAtIsNull(courseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
+    }
+
+    private UserAccount findAssignedSme(UUID assignedSmeId) {
+        if (assignedSmeId == null) {
+            return null;
+        }
+
+        return userRepository.findActiveUserByIdAndRole(
+                assignedSmeId,
+                "SME",
+                "active")
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Assigned SME must be an active SME account"));
     }
 
     private Category findCategory(UUID categoryId) {

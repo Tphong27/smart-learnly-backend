@@ -1,6 +1,7 @@
 
 package com.smartlearnly.backend.test.service;
 
+import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.test.dto.StudentTestAnswerModel;
 import com.smartlearnly.backend.test.entity.StudentTestAnswer;
 import com.smartlearnly.backend.test.entity.TestAttempt;
@@ -20,6 +21,7 @@ public class StudentTestAnswerService {
 
     private final StudentTestAnswerRepository repository;
     private final TestAttemptRepository attemptRepository;
+    private final QuestionAnswerRepository questionAnswerRepository;
 
     public StudentTestAnswerModel.Response saveStudentAnswer(
             StudentTestAnswerModel.SaveRequest request) {
@@ -103,6 +105,15 @@ public class StudentTestAnswerService {
                 entity.getQuestionId());
         response.setSelectedAnswerId(
                 entity.getSelectedAnswerId());
+        if (entity.getIsCorrect() != null) {
+            response.setCorrectAnswerId(questionAnswerRepository
+                    .findByQuestionId(entity.getQuestionId())
+                    .stream()
+                    .filter(answer -> Boolean.TRUE.equals(answer.getIsCorrect()))
+                    .map(answer -> answer.getId())
+                    .findFirst()
+                    .orElse(null));
+        }
         response.setEssayAnswer(
                 entity.getEssayAnswer());
         response.setIsCorrect(

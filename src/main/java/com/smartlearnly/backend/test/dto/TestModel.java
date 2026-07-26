@@ -16,6 +16,7 @@ public class TestModel {
     @NoArgsConstructor
     public static class CreateRequest {
         private UUID moduleId;
+        private UUID curriculumSectionId;
         private UUID classId;
         private UUID courseId;
         private String title;
@@ -27,7 +28,10 @@ public class TestModel {
         private Boolean shuffleQuestions;
         private Boolean shuffleAnswers;
         private Boolean showAnswersAfter;
+        private Boolean isPublished;
         private Boolean isFlashtest;
+        private Instant opensAt;
+        private Instant closesAt;
     }
 
     @Getter
@@ -35,6 +39,7 @@ public class TestModel {
     @NoArgsConstructor
     public static class UpdateRequest {
         private UUID moduleId;
+        private UUID curriculumSectionId;
         private UUID classId;
         private UUID courseId;
         private String title;
@@ -49,6 +54,8 @@ public class TestModel {
         private Boolean isPublished;
         private Boolean isArchived;
         private Boolean isFlashtest;
+        private Instant opensAt;
+        private Instant closesAt;
     }
 
     @Getter
@@ -57,6 +64,7 @@ public class TestModel {
     public static class Response {
         private UUID id;
         private UUID moduleId;
+        private UUID curriculumSectionId;
         private UUID classId;
         private UUID courseId;
         private String title;
@@ -76,6 +84,8 @@ public class TestModel {
         private Instant updatedAt;
         private String accessCode;
         private Instant accessCodeExpiresAt;
+        private Instant opensAt;
+        private Instant closesAt;
     }
 
     @Getter

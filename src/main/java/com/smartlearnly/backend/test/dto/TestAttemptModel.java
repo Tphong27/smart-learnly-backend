@@ -43,6 +43,7 @@ public class TestAttemptModel {
         private Instant endTime;
         private BigDecimal score;
         private BigDecimal percentage;
+        private Integer totalQuestions;
         private AttemptStatus status;
         private Instant createdAt;
         private UUID assignmentId;

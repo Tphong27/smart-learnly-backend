@@ -9,6 +9,11 @@ public interface VideoLearningAidGenerationService {
     record GeneratedChapter(int startSegmentIndex, int endSegmentIndex, String title, String summary) {
     }
 
-    record LearningAidResult(String summary, List<String> keyPoints, List<GeneratedChapter> chapters) {
+    record LearningAidResult(
+            String suggestedTitle,
+            String summary,
+            List<String> keyPoints,
+            List<GeneratedChapter> chapters
+    ) {
     }
 }

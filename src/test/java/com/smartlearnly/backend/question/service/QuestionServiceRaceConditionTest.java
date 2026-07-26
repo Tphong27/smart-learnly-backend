@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.entity.Question;
@@ -55,9 +57,13 @@ class QuestionServiceRaceConditionTest {
     @Mock
     private CourseSectionRepository courseSectionRepository;
     @Mock
+    private CurriculumSectionRepository curriculumSectionRepository;
+    @Mock
     private CurrentUserService currentUserService;
     @Mock
     private QuestionMediaImportService questionMediaImportService;
+    @Mock
+    private CourseAccessService courseAccessService;
 
     private QuestionService questionService;
     private QuestionBank activeBank;
@@ -72,8 +78,10 @@ class QuestionServiceRaceConditionTest {
                 mediaAttachmentRepository,
                 questionBankService,
                 courseSectionRepository,
+                curriculumSectionRepository,
                 currentUserService,
-                questionMediaImportService
+                questionMediaImportService,
+                courseAccessService
         );
         activeBank = new QuestionBank();
         activeBank.setId(UUID.randomUUID());
