@@ -22,9 +22,9 @@ public record DashboardRecentActivityResponse(
                 activity.occurredAt(),
                 activity.actorEmail(),
                 activity.actorRole(),
-                activity.action() == null ? null : activity.action().name(),
-                activity.domain() == null ? null : activity.domain().name(),
-                activity.result() == null ? null : activity.result().name(),
+                activity.action(),
+                activity.domain(),
+                activity.result(),
                 activity.targetType(),
                 activity.targetId(),
                 activity.summary()

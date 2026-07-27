@@ -28,9 +28,9 @@ public class AuditLogQueryService {
     @Transactional(readOnly = true)
     public PageResponse<AuditLogSummaryResponse> list(
             String keyword,
-            AuditDomain domain,
-            AuditAction action,
-            AuditResult result,
+            String domain,
+            String action,
+            String result,
             UUID actorId,
             String actorRole,
             String targetType,
@@ -63,9 +63,9 @@ public class AuditLogQueryService {
 
     private Specification<AuditLog> filters(
             String keyword,
-            AuditDomain domain,
-            AuditAction action,
-            AuditResult result,
+            String domain,
+            String action,
+            String result,
             UUID actorId,
             String actorRole,
             String targetType,
@@ -85,9 +85,9 @@ public class AuditLogQueryService {
                         builder.like(builder.lower(root.get("action").as(String.class)), pattern)
                 ));
             }
-            if (domain != null) predicates.add(builder.equal(root.get("domain"), domain));
-            if (action != null) predicates.add(builder.equal(root.get("action"), action));
-            if (result != null) predicates.add(builder.equal(root.get("result"), result));
+            addIgnoreCase(predicates, builder, root.get("domain"), domain);
+            addIgnoreCase(predicates, builder, root.get("action"), action);
+            addIgnoreCase(predicates, builder, root.get("result"), result);
             if (actorId != null) predicates.add(builder.equal(root.get("actorId"), actorId));
             addIgnoreCase(predicates, builder, root.get("actorRole"), actorRole);
             addIgnoreCase(predicates, builder, root.get("targetType"), targetType);

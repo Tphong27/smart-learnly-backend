@@ -33,9 +33,9 @@ public class AdminAuditLogController {
     @Operation(summary = "List audit logs with filters")
     public ApiResponse<PageResponse<AuditLogSummaryResponse>> list(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) AuditDomain domain,
-            @RequestParam(required = false) AuditAction action,
-            @RequestParam(required = false) AuditResult result,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String result,
             @RequestParam(required = false) UUID actorId,
             @RequestParam(required = false) String actorRole,
             @RequestParam(required = false) String targetType,

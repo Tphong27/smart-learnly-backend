@@ -44,17 +44,14 @@ public class AuditLog {
     @Column(name = "actor_role", length = 30, updatable = false)
     private String actorRole;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 100, updatable = false)
-    private AuditAction action;
+    private String action;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50, updatable = false)
-    private AuditDomain domain;
+    private String domain;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20, updatable = false)
-    private AuditResult result;
+    private String result;
 
     @Column(name = "target_type", length = 50, updatable = false)
     private String targetType;
@@ -95,9 +92,9 @@ public class AuditLog {
         auditLog.setActorId(event.actorId());
         auditLog.setActorEmail(event.actorEmail());
         auditLog.setActorRole(event.actorRole());
-        auditLog.setAction(event.action());
-        auditLog.setDomain(event.domain());
-        auditLog.setResult(event.result());
+        auditLog.setAction(event.action().name());
+        auditLog.setDomain(event.domain().name());
+        auditLog.setResult(event.result().name());
         auditLog.setTargetType(event.targetType());
         auditLog.setTargetId(event.targetId());
         auditLog.setSummary(event.summary());

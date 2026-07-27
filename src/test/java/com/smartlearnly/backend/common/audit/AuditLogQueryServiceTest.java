@@ -36,19 +36,20 @@ class AuditLogQueryServiceTest {
         log.setOccurredAt(Instant.parse("2026-06-22T10:00:00Z"));
         log.setActorType(AuditActorType.SYSTEM);
         log.setActorEmail("scheduler");
-        log.setAction(AuditAction.PAYMENT_RECONCILED);
-        log.setDomain(AuditDomain.PAYMENT);
-        log.setResult(AuditResult.SUCCESS);
+        log.setAction(AuditAction.PAYMENT_RECONCILED.name());
+        log.setDomain(AuditDomain.PAYMENT.name());
+        log.setResult(AuditResult.SUCCESS.name());
         log.setSummary("Payment reconciled");
         when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(log)));
 
         PageResponse<AuditLogSummaryResponse> response = service.list(
-                null, AuditDomain.PAYMENT, null, AuditResult.SUCCESS,
+                null, "PAYMENT", null, "SUCCESS",
                 null, null, null, null, null, null, 0, 20
         );
 
         assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).action()).isEqualTo("PAYMENT_RECONCILED");
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(auditLogRepository).findAll(any(Specification.class), pageable.capture());
         assertThat(pageable.getValue().getSort().getOrderFor("occurredAt").isDescending()).isTrue();

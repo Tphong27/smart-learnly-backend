@@ -76,7 +76,7 @@ class AuditLogServiceTest {
         ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
         verify(auditLogRepository).save(captor.capture());
         assertThat(captor.getValue().getActorId()).isEqualTo(actor.getId());
-        assertThat(captor.getValue().getAction()).isEqualTo(AuditAction.SECTION_CREATED);
-        assertThat(captor.getValue().getDomain()).isEqualTo(AuditDomain.CONTENT);
+        assertThat(captor.getValue().getAction()).isEqualTo("SECTION_CREATED");
+        assertThat(captor.getValue().getDomain()).isEqualTo("CONTENT");
     }
 }

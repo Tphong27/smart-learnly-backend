@@ -29,7 +29,7 @@ class AuditLogTest {
         auditLog.prePersist();
 
         assertThat(auditLog.getOccurredAt()).isNotNull();
-        assertThat(auditLog.getAction()).isEqualTo(AuditAction.PASSWORD_CHANGED);
+        assertThat(auditLog.getAction()).isEqualTo("PASSWORD_CHANGED");
         assertThat(auditLog.getOldValues())
                 .containsEntry("passwordHash", AuditDataSanitizer.REDACTED_VALUE);
         assertThat(auditLog.getNewValues())
