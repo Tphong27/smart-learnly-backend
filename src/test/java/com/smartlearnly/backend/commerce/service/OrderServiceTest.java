@@ -130,7 +130,7 @@ class OrderServiceTest {
         when(orderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
         when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId())).thenReturn(List.of());
-        when(paymentTransactionRepository.findByOrderIdAndStatus(order.getId(), TransactionStatus.PENDING))
+        when(paymentTransactionRepository.findByOrderIdAndStatus(order.getId(), TransactionStatus.PENDING.name()))
                 .thenReturn(List.of(transaction));
         when(sePayOrderRepository.findByTransactionId(transaction.getId())).thenReturn(Optional.of(sePayOrder));
         when(paymentTransactionRepository.findFirstByOrderIdOrderByCreatedAtDesc(order.getId()))
@@ -172,7 +172,7 @@ class OrderServiceTest {
                 .thenReturn(List.of(order.getId()));
         when(orderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
-        when(paymentTransactionRepository.findByOrderIdAndStatus(order.getId(), TransactionStatus.PENDING))
+        when(paymentTransactionRepository.findByOrderIdAndStatus(order.getId(), TransactionStatus.PENDING.name()))
                 .thenReturn(List.of(transaction));
         when(sePayOrderRepository.findByTransactionId(transaction.getId())).thenReturn(Optional.of(sePayOrder));
 

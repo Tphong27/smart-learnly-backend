@@ -48,8 +48,6 @@ class ClassEnrollmentServiceTest {
     private CurrentUserService currentUserService;
     private ClassEnrollmentService service;
 
-    private ClassEnrollmentService service;
-
     @BeforeEach
     void setUp() {
         service = new ClassEnrollmentService(

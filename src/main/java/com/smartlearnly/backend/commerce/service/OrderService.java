@@ -178,7 +178,7 @@ public class OrderService {
     }
 
     private void closePendingPaymentSession(PurchaseOrder order) {
-        paymentTransactionRepository.findByOrderIdAndStatus(order.getId(), TransactionStatus.PENDING)
+        paymentTransactionRepository.findByOrderIdAndStatus(order.getId(), TransactionStatus.PENDING.name())
                 .forEach(transaction -> {
                     transaction.setStatus(TransactionStatus.FAILED);
                     paymentTransactionRepository.save(transaction);
