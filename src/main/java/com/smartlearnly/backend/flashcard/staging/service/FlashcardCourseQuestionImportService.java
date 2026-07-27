@@ -4,7 +4,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
-import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class FlashcardQuestionBankImportService {
+public class FlashcardCourseQuestionImportService {
     private static final Set<String> ACTIVE_IMPORTED_STATUSES = Set.of("draft", "approved");
 
     private final FlashcardSetRepository flashcardSetRepository;
@@ -31,7 +31,7 @@ public class FlashcardQuestionBankImportService {
     private final AdminFlashcardStagingService adminFlashcardStagingService;
 
     @Transactional
-    public StagingBatchResponse importQuestionBank(UUID setId, ImportQuestionBankRequest request) {
+    public StagingBatchResponse importCourseQuestions(UUID setId, ImportCourseQuestionsRequest request) {
         FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
         UUID courseId = requireFlashcardCourseId(flashcardSet);
@@ -60,7 +60,7 @@ public class FlashcardQuestionBankImportService {
         }
 
         questions.forEach(question -> validateQuestion(question, courseId));
-        return adminFlashcardStagingService.importQuestionBank(setId, request);
+        return adminFlashcardStagingService.importCourseQuestions(setId, request);
     }
 
     private UUID requireFlashcardCourseId(FlashcardSet flashcardSet) {

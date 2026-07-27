@@ -31,7 +31,7 @@ public class AdminDashboardService {
                 dashboardQueryRepository.countCourses(range.from(), range.to()),
                 dashboardQueryRepository.countClasses(range.from(), range.to()),
                 dashboardQueryRepository.countContent(range.from(), range.to()),
-                dashboardQueryRepository.countQuestionBanks(range.from(), range.to()),
+                dashboardQueryRepository.countQuestions(range.from(), range.to()),
                 List.of(),
                 Instant.now()
         );

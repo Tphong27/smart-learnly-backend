@@ -55,7 +55,7 @@ public class CurriculumDtoMapper {
     public CurriculumSectionResponse toCurriculumSectionResponse(CurriculumSection section) {
         return new CurriculumSectionResponse(
                 section.getId(),
-                section.getSourceSectionId(),
+                section.getSourceModuleId(),
                 section.getSourceCurriculumSectionId(),
                 section.getTitle(),
                 section.getSortOrder(),
@@ -130,8 +130,8 @@ public class CurriculumDtoMapper {
     public ModuleResponse toModuleResponse(CurriculumSection section) {
         CurriculumVersion version = section.getCurriculumVersion();
         return new ModuleResponse(
-                section.getId(),
-                section.getId(),
+                section.getSourceModuleId(),
+                section.getSourceModuleId(),
                 version == null ? null : version.getCourseId(),
                 section.getTitle(),
                 section.getSortOrder(),
@@ -146,7 +146,7 @@ public class CurriculumDtoMapper {
                 lesson.getId(),
                 version.getCourseId(),
                 lesson.getSection().getId(),
-                lesson.getSection().getId(),
+                lesson.getSection().getSourceModuleId(),
                 lesson.getTitle(),
                 enumUpper(lesson.getType()),
                 lesson.getVideoUrl(),

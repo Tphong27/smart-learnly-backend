@@ -1,22 +1,20 @@
 package com.smartlearnly.backend.question.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.course.service.CourseAccessService;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.file.service.FileStorageService;
 import com.smartlearnly.backend.question.dto.QuestionMediaDtos;
 import com.smartlearnly.backend.question.entity.Question;
-import com.smartlearnly.backend.question.entity.QuestionBank;
-import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
-import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
-import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import java.util.List;
@@ -37,7 +35,7 @@ class QuestionMediaServiceTest {
     @Mock
     private QuestionMediaAttachmentRepository mediaAttachmentRepository;
     @Mock
-    private QuestionBankRepository questionBankRepository;
+    private CourseAccessService courseAccessService;
     @Mock
     private FileStorageService fileStorageService;
     @Mock
@@ -46,36 +44,31 @@ class QuestionMediaServiceTest {
     private QuestionMediaService questionMediaService;
 
     private UUID questionId;
-    private UUID bankId;
+    private UUID courseId;
     private Question question;
-    private QuestionBank archivedBank;
 
     @BeforeEach
     void setUp() {
         questionMediaService = new QuestionMediaService(
                 questionRepository,
                 mediaAttachmentRepository,
-                questionBankRepository,
+                courseAccessService,
                 fileStorageService,
                 storageProperties
         );
         questionId = UUID.randomUUID();
-        bankId = UUID.randomUUID();
+        courseId = UUID.randomUUID();
         question = new Question();
         question.setId(questionId);
-        question.setQuestionBankId(bankId);
+        question.setCourseId(courseId);
         question.setStatus(QuestionStatus.DRAFT);
         question.setQuestionType(QuestionType.MULTIPLE_CHOICE);
-
-        archivedBank = new QuestionBank();
-        archivedBank.setId(bankId);
-        archivedBank.setStatus("archived");
     }
 
     @Test
-    void upload_whenBankArchived_throwsBusinessRule() {
+    void upload_whenCourseAccessDenied_throwsNotFound() {
         when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
-        when(questionBankRepository.findById(bankId)).thenReturn(Optional.of(archivedBank));
+        denyCourseUpdate();
 
         MockMultipartFile file = new MockMultipartFile(
                 "files", "hello.png", "image/png", new byte[]{1, 2, 3}
@@ -83,27 +76,26 @@ class QuestionMediaServiceTest {
 
         assertThatThrownBy(() -> questionMediaService.upload(questionId, "image", List.of(file)))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
+                .extracting("errorCode").isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
         verify(mediaAttachmentRepository, never()).save(any());
     }
 
     @Test
-    void delete_whenBankArchived_throwsBusinessRule() {
-        UUID attachmentId = UUID.randomUUID();
+    void delete_whenCourseAccessDenied_doesNotReadAttachment() {
         when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
-        when(questionBankRepository.findById(bankId)).thenReturn(Optional.of(archivedBank));
+        denyCourseUpdate();
 
-        assertThatThrownBy(() -> questionMediaService.delete(questionId, attachmentId))
+        assertThatThrownBy(() -> questionMediaService.delete(questionId, UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
-        verify(mediaAttachmentRepository, never()).delete(any());
+                .extracting("errorCode").isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+        verify(mediaAttachmentRepository, never()).findByQuestionIdAndId(any(), any());
     }
 
     @Test
-    void reorder_whenBankArchived_throwsBusinessRule() {
+    void reorder_whenCourseAccessDenied_doesNotReadAttachments() {
         UUID attachmentId = UUID.randomUUID();
         when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
-        when(questionBankRepository.findById(bankId)).thenReturn(Optional.of(archivedBank));
+        denyCourseUpdate();
 
         QuestionMediaDtos.ReorderRequest request = new QuestionMediaDtos.ReorderRequest(
                 "image", List.of(attachmentId)
@@ -111,18 +103,16 @@ class QuestionMediaServiceTest {
 
         assertThatThrownBy(() -> questionMediaService.reorder(questionId, request))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
-        verify(mediaAttachmentRepository, never()).save(any());
+                .extracting("errorCode").isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+        verify(mediaAttachmentRepository, never())
+                .findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(any(), any());
     }
 
     @Test
-    void upload_whenQuestionArchived_throwsBusinessRule_evenIfBankActive() {
-        QuestionBank activeBank = new QuestionBank();
-        activeBank.setId(bankId);
-        activeBank.setStatus("approved");
+    void upload_whenQuestionArchived_throwsBusinessRuleBeforeCourseAccess() {
         Question archivedQuestion = new Question();
         archivedQuestion.setId(questionId);
-        archivedQuestion.setQuestionBankId(bankId);
+        archivedQuestion.setCourseId(courseId);
         archivedQuestion.setStatus(QuestionStatus.ARCHIVED);
         archivedQuestion.setQuestionType(QuestionType.MULTIPLE_CHOICE);
 
@@ -135,7 +125,14 @@ class QuestionMediaServiceTest {
         assertThatThrownBy(() -> questionMediaService.upload(questionId, "image", List.of(file)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
+        verify(courseAccessService, never()).requireUpdatableCourse(any());
         verify(mediaAttachmentRepository, never()).save(any());
+    }
+
+    private void denyCourseUpdate() {
+        doThrow(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"))
+                .when(courseAccessService)
+                .requireUpdatableCourse(courseId);
     }
 
     private static <T> T any() {

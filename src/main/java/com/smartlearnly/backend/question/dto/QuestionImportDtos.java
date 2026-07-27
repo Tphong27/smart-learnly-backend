@@ -54,8 +54,6 @@ public final class QuestionImportDtos {
     }
 
     public record ImportBatchRequest(
-            UUID bankId,
-
             @NotNull(message = "Rows are required")
             @Size(min = 1, max = 1000, message = "Batch size must be between 1 and 1000 rows")
             @Valid

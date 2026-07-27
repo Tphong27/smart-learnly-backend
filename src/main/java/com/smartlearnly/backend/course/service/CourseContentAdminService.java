@@ -28,6 +28,8 @@ import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
+import com.smartlearnly.backend.learning.module.entity.CourseModule;
+import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.Comparator;
@@ -52,6 +54,7 @@ public class CourseContentAdminService {
     private final CourseRepository courseRepository;
     private final CurriculumVersionRepository curriculumVersionRepository;
     private final CurriculumSectionRepository sectionRepository;
+    private final CourseModuleRepository courseModuleRepository;
     private final CurriculumLessonRepository lessonRepository;
     private final CurriculumDtoMapper curriculumDtoMapper;
     private final CurrentUserService currentUserService;
@@ -94,7 +97,7 @@ public class CourseContentAdminService {
 
     @Transactional(readOnly = true)
     public ModuleResponse getModule(UUID moduleId) {
-        CurriculumSection module = findReadableSection(moduleId);
+        CurriculumSection module = findReadableModuleSnapshot(moduleId);
 
         return curriculumDtoMapper.toModuleResponse(module);
     }
@@ -110,14 +113,7 @@ public class CourseContentAdminService {
         CurriculumVersion version =
                 findOrCreateMasterAuthoringVersionForUpdate(courseId);
 
-        CurriculumSection section = new CurriculumSection();
-        section.setCurriculumVersion(version);
-        section.setTitle(
-                normalizeRequired(
-                        request.title(),
-                        "Section title is required"
-                )
-        );
+        String title = normalizeRequired(request.title(), "Module title is required");
 
         int sortOrder = request.sortOrder() == null
                 ? sectionRepository.findMaxSortOrderByCurriculumVersionId(
@@ -125,6 +121,18 @@ public class CourseContentAdminService {
                 ) + 1
                 : request.sortOrder();
 
+        CourseModule module = new CourseModule();
+        module.setCourseId(courseId);
+        module.setTitle(title);
+        module.setOrderIndex(sortOrder);
+        module.setStatus(CourseModule.STATUS_ACTIVE);
+        module.setSystem(false);
+        CourseModule savedModule = courseModuleRepository.save(module);
+
+        CurriculumSection section = new CurriculumSection();
+        section.setCurriculumVersion(version);
+        section.setSourceModuleId(savedModule.getId());
+        section.setTitle(title);
         section.setSortOrder(sortOrder);
 
         CurriculumSection saved = sectionRepository.save(section);
@@ -141,8 +149,9 @@ public class CourseContentAdminService {
     @Transactional
     public ModuleResponse createModule(UUID courseId, ModuleRequest request) {
         SectionResponse section = createSection(courseId, request.toSectionRequest());
-
-        return toModuleResponse(section);
+        CurriculumSection snapshot = sectionRepository.findById(section.id())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR, "Created module snapshot was not found"));
+        return curriculumDtoMapper.toModuleResponse(snapshot);
     }
 
     // Cập nhật section.
@@ -165,6 +174,7 @@ public class CourseContentAdminService {
         }
 
         CurriculumSection saved = sectionRepository.save(section);
+        synchronizeCanonicalModule(saved);
 
         audit(
                 "SECTION_UPDATED",
@@ -177,15 +187,16 @@ public class CourseContentAdminService {
 
     @Transactional
     public ModuleResponse updateModule(UUID moduleId, ModuleRequest request) {
-        SectionResponse section = updateSection(moduleId, request.toSectionRequest());
-
-        return toModuleResponse(section);
+        CurriculumSection snapshot = findUpdatableModuleSnapshot(moduleId);
+        updateSection(snapshot.getId(), request.toSectionRequest());
+        return curriculumDtoMapper.toModuleResponse(snapshot);
     }
 
     // Xóa section và tất cả lesson của nó.
     @Transactional
     public void deleteSection(UUID sectionId) {
         CurriculumSection section = findUpdatableSection(sectionId);
+        deactivateCanonicalModule(section);
 
         sectionRepository.delete(section);
 
@@ -198,7 +209,8 @@ public class CourseContentAdminService {
 
     @Transactional
     public void deleteModule(UUID moduleId) {
-        deleteSection(moduleId);
+        CurriculumSection snapshot = findUpdatableModuleSnapshot(moduleId);
+        deleteSection(snapshot.getId());
     }
 
     // Sắp xếp lại toàn bộ section của course.
@@ -242,6 +254,7 @@ public class CourseContentAdminService {
 
         List<CurriculumSection> saved =
                 sectionRepository.saveAll(sections);
+        saved.forEach(this::synchronizeCanonicalModule);
 
         audit(
                 "SECTIONS_REORDERED",
@@ -261,7 +274,23 @@ public class CourseContentAdminService {
 
     @Transactional
     public List<ModuleResponse> reorderModules(UUID courseId, ReorderRequest request) {
-        reorderSections(courseId, request);
+        CurriculumVersion version = findMasterAuthoringVersionForUpdate(courseId);
+        Map<UUID, UUID> snapshotIdsByModuleId = orderedSections(version).stream()
+                .collect(
+                        LinkedHashMap::new,
+                        (map, snapshot) -> map.put(snapshot.getSourceModuleId(), snapshot.getId()),
+                        LinkedHashMap::putAll
+                );
+        List<UUID> snapshotIds = request.ids().stream()
+                .map(moduleId -> {
+                    UUID snapshotId = snapshotIdsByModuleId.get(moduleId);
+                    if (snapshotId == null) {
+                        throw new BusinessException(ErrorCode.INVALID_REQUEST, "Module reorder payload is invalid");
+                    }
+                    return snapshotId;
+                })
+                .toList();
+        reorderSections(courseId, new ReorderRequest(snapshotIds));
 
         return listModules(courseId);
     }
@@ -284,7 +313,7 @@ public class CourseContentAdminService {
 
     @Transactional(readOnly = true)
     public List<LessonResponse> listModuleLessons(UUID moduleId) {
-        return listLessons(moduleId);
+        return listLessons(findReadableModuleSnapshot(moduleId).getId());
     }
 
     // Lấy chi tiết một lesson.
@@ -330,7 +359,7 @@ public class CourseContentAdminService {
 
     @Transactional
     public LessonResponse createModuleLesson(UUID moduleId, LessonRequest request) {
-        return createLesson(moduleId, request);
+        return createLesson(findUpdatableModuleSnapshot(moduleId).getId(), request);
     }
 
     // Cập nhật lesson.
@@ -651,6 +680,48 @@ public class CourseContentAdminService {
         return section;
     }
 
+    private CurriculumSection findReadableModuleSnapshot(UUID moduleId) {
+        CourseModule module = courseModuleRepository.findById(moduleId)
+                .filter(candidate -> !Boolean.TRUE.equals(candidate.getSystem()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Module was not found"));
+        courseAccessService.requireReadableCourse(module.getCourseId());
+        CurriculumVersion version = findMasterAuthoringVersion(module.getCourseId());
+        return sectionRepository.findBySourceModuleIdAndCurriculumVersionId(moduleId, version.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Module was not found"));
+    }
+
+    private CurriculumSection findUpdatableModuleSnapshot(UUID moduleId) {
+        CourseModule module = courseModuleRepository.findById(moduleId)
+                .filter(candidate -> !Boolean.TRUE.equals(candidate.getSystem()))
+                .filter(candidate -> CourseModule.STATUS_ACTIVE.equals(candidate.getStatus()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Module was not found"));
+        courseAccessService.requireUpdatableCourse(module.getCourseId());
+        CurriculumVersion version = findMasterAuthoringVersionForUpdate(module.getCourseId());
+        return sectionRepository.findBySourceModuleIdAndCurriculumVersionId(moduleId, version.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Module was not found"));
+    }
+
+    private void synchronizeCanonicalModule(CurriculumSection snapshot) {
+        if (snapshot.getSourceModuleId() == null) {
+            return;
+        }
+        CourseModule module = courseModuleRepository.findById(snapshot.getSourceModuleId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR, "Canonical module was not found"));
+        module.setTitle(snapshot.getTitle());
+        module.setOrderIndex(snapshot.getSortOrder());
+        courseModuleRepository.save(module);
+    }
+
+    private void deactivateCanonicalModule(CurriculumSection snapshot) {
+        if (snapshot.getSourceModuleId() == null) {
+            return;
+        }
+        courseModuleRepository.findById(snapshot.getSourceModuleId()).ifPresent(module -> {
+            module.setStatus(CourseModule.STATUS_INACTIVE);
+            courseModuleRepository.save(module);
+        });
+    }
+
     private CurriculumSection findMasterSection(UUID sectionId) {
         CurriculumSection section =
                 sectionRepository
@@ -912,18 +983,6 @@ public class CourseContentAdminService {
         return normalized.isEmpty()
                 ? null
                 : normalized;
-    }
-
-    private ModuleResponse toModuleResponse(SectionResponse section) {
-        return new ModuleResponse(
-                section.id(),
-                section.id(),
-                section.courseId(),
-                section.title(),
-                section.sortOrder(),
-                section.createdAt(),
-                section.updatedAt()
-        );
     }
 
     // LESSON RESOURCE MAPPING

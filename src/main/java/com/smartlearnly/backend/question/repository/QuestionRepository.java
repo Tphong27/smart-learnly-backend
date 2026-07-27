@@ -14,16 +14,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
     @Query(value = """
             SELECT q.*
             FROM public.questions q
-            WHERE (CAST(:bankId AS uuid) IS NULL OR q.question_bank_id = CAST(:bankId AS uuid))
-              AND (
-                    CAST(:courseId AS uuid) IS NULL
-                    OR q.course_id = CAST(:courseId AS uuid)
-                    OR q.question_bank_id IN (
-                        SELECT b.id
-                        FROM public.question_banks b
-                        WHERE b.course_id = CAST(:courseId AS uuid)
-                    )
-                  )
+            WHERE q.course_id = :courseId
               AND (CAST(:moduleId AS uuid) IS NULL OR q.module_id = CAST(:moduleId AS uuid))
               AND (CAST(:search AS text) IS NULL OR LOWER(q.question_text) LIKE CONCAT('%', LOWER(CAST(:search AS text)), '%'))
               AND (CAST(:type AS text) IS NULL OR q.question_type::text = CAST(:type AS text))
@@ -34,16 +25,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
             countQuery = """
             SELECT COUNT(*)
             FROM public.questions q
-            WHERE (CAST(:bankId AS uuid) IS NULL OR q.question_bank_id = CAST(:bankId AS uuid))
-              AND (
-                    CAST(:courseId AS uuid) IS NULL
-                    OR q.course_id = CAST(:courseId AS uuid)
-                    OR q.question_bank_id IN (
-                        SELECT b.id
-                        FROM public.question_banks b
-                        WHERE b.course_id = CAST(:courseId AS uuid)
-                    )
-                  )
+            WHERE q.course_id = :courseId
               AND (CAST(:moduleId AS uuid) IS NULL OR q.module_id = CAST(:moduleId AS uuid))
               AND (CAST(:search AS text) IS NULL OR LOWER(q.question_text) LIKE CONCAT('%', LOWER(CAST(:search AS text)), '%'))
               AND (CAST(:type AS text) IS NULL OR q.question_type::text = CAST(:type AS text))
@@ -52,7 +34,6 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
             """,
             nativeQuery = true)
     Page<Question> searchForAdmin(
-            @Param("bankId") UUID bankId,
             @Param("courseId") UUID courseId,
             @Param("moduleId") UUID moduleId,
             @Param("search") String search,
@@ -63,28 +44,6 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
     );
 
     List<Question> findByCourseId(UUID courseId);
-
-    List<Question> findByQuestionBankId(UUID questionBankId);
-
-    long countByQuestionBankId(UUID questionBankId);
-
-    long countByQuestionBankIdAndQuestionTextIgnoreCase(UUID questionBankId, String questionText);
-
-    boolean existsByQuestionBankIdAndQuestionTextIgnoreCase(UUID questionBankId, String questionText);
-
-    @Query(value = """
-            SELECT EXISTS (
-                SELECT 1
-                FROM public.questions q
-                WHERE q.question_bank_id = :questionBankId
-                  AND LOWER(q.question_text) = LOWER(:questionText)
-                  AND q.status::text <> 'archived'
-            )
-            """, nativeQuery = true)
-    boolean existsActiveDuplicate(
-            @Param("questionBankId") UUID questionBankId,
-            @Param("questionText") String questionText
-    );
 
     @Query(value = """
             SELECT EXISTS (
@@ -115,16 +74,4 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
             @Param("questionText") String questionText
     );
 
-    @Query(value = """
-            SELECT q.*
-            FROM public.questions q
-            WHERE q.question_bank_id = :questionBankId
-              AND LOWER(q.question_text) = LOWER(:questionText)
-            ORDER BY CASE WHEN q.status::text = 'archived' THEN 1 ELSE 0 END, q.updated_at DESC
-            LIMIT 3
-            """, nativeQuery = true)
-    List<Question> findExactDuplicateCandidates(
-            @Param("questionBankId") UUID questionBankId,
-            @Param("questionText") String questionText
-    );
 }

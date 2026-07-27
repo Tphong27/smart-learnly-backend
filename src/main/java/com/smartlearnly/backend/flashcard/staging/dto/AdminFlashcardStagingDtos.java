@@ -17,7 +17,7 @@ public final class AdminFlashcardStagingDtos {
     private AdminFlashcardStagingDtos() {
     }
 
-    public record ImportQuestionBankRequest(
+    public record ImportCourseQuestionsRequest(
             @NotEmpty(message = "At least one question id is required")
             @Size(max = 500, message = "Question import must not exceed 500 questions")
             List<@NotNull(message = "Question id must not be null") UUID> questionIds
@@ -147,8 +147,7 @@ public final class AdminFlashcardStagingDtos {
     public record SourceQuestionResponse(
             UUID questionId,
             UUID id,
-            UUID questionBankId,
-            String questionBankName,
+            String sourceName,
             UUID courseId,
             UUID moduleId,
             String questionText,

@@ -36,7 +36,7 @@ import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
-import com.smartlearnly.backend.learning.module.entity.CourseSection;
+import com.smartlearnly.backend.learning.module.entity.CourseModule;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.List;
@@ -360,13 +360,13 @@ class AdminFlashcardServiceTest {
         return actor;
     }
 
-    private CourseSection section(Course course) {
-        CourseSection section = new CourseSection();
-        section.setId(UUID.randomUUID());
-        section.setCourse(course);
-        section.setTitle("Section");
-        section.setSortOrder(0);
-        return section;
+    private CourseModule module(Course course) {
+        CourseModule module = new CourseModule();
+        module.setId(UUID.randomUUID());
+        module.setCourseId(course.getId());
+        module.setTitle("Module");
+        module.setOrderIndex(0);
+        return module;
     }
 
     private CurriculumVersion curriculumVersion(UUID courseId) {
@@ -388,11 +388,11 @@ class AdminFlashcardServiceTest {
         return section;
     }
 
-    private Lesson lesson(Course course, CourseSection section) {
+    private Lesson lesson(Course course, CourseModule module) {
         Lesson lesson = new Lesson();
         lesson.setId(UUID.randomUUID());
         lesson.setCourse(course);
-        lesson.setSection(section);
+        lesson.setModule(module);
         lesson.setTitle("Flashcards");
         lesson.setType(LessonType.FLASHCARD);
         lesson.setStatus(LessonStatus.DRAFT);
@@ -403,11 +403,11 @@ class AdminFlashcardServiceTest {
 
     private FlashcardSet flashcardSet() {
         Course course = course();
-        CourseSection section = section(course);
+        CourseModule module = module(course);
         FlashcardSet flashcardSet = new FlashcardSet();
         flashcardSet.setId(UUID.randomUUID());
         flashcardSet.setCourse(course);
-        flashcardSet.setLesson(lesson(course, section));
+        flashcardSet.setLesson(lesson(course, module));
         flashcardSet.setCourse(course);
         flashcardSet.setTitle("Flashcards");
         flashcardSet.setCreatedAt(Instant.now());

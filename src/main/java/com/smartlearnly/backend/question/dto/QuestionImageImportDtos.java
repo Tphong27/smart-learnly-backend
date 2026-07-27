@@ -81,9 +81,6 @@ public final class QuestionImageImportDtos {
     }
 
     public record ConfirmRequest(
-            @NotNull(message = "Bank ID is required")
-            UUID bankId,
-
             @NotNull(message = "Questions are required")
             @Size(min = 1, max = 1000, message = "Import size must be between 1 and 1000 questions")
             @Valid

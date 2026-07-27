@@ -33,6 +33,7 @@ import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
+import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -48,8 +49,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.hibernate.annotations.SQLRestriction;
 
 /**
- * The admin content service now authors MASTER {@link CurriculumVersion} data instead of the legacy
- * CourseSection/Lesson entities, so the setup builds curriculum-domain objects and mocks the
+ * The admin content service authors MASTER {@link CurriculumVersion} snapshots backed by stable
+ * module identities, so the setup builds curriculum-domain objects and mocks the
  * curriculum repositories. The original behavioural intent of every case is preserved.
  */
 @ExtendWith(MockitoExtension.class)
@@ -60,6 +61,8 @@ class CourseContentAdminServiceTest {
     private CurriculumVersionRepository curriculumVersionRepository;
     @Mock
     private CurriculumSectionRepository curriculumSectionRepository;
+    @Mock
+    private CourseModuleRepository courseModuleRepository;
     @Mock
     private CurriculumLessonRepository curriculumLessonRepository;
     @Mock
@@ -81,6 +84,7 @@ class CourseContentAdminServiceTest {
                 courseRepository,
                 curriculumVersionRepository,
                 curriculumSectionRepository,
+                courseModuleRepository,
                 curriculumLessonRepository,
                 curriculumDtoMapper,
                 currentUserService,
@@ -313,6 +317,11 @@ class CourseContentAdminServiceTest {
             CurriculumVersion version = invocation.getArgument(0);
             version.setId(UUID.randomUUID());
             return version;
+        });
+        when(courseModuleRepository.save(any())).thenAnswer(invocation -> {
+            var module = invocation.getArgument(0, com.smartlearnly.backend.learning.module.entity.CourseModule.class);
+            module.setId(UUID.randomUUID());
+            return module;
         });
         when(curriculumSectionRepository.save(any(CurriculumSection.class))).thenAnswer(invocation -> {
             CurriculumSection section = invocation.getArgument(0);

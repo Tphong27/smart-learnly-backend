@@ -38,8 +38,6 @@ public final class QuestionModel {
     }
 
     public record CreateRequest(
-            UUID bankId,
-            UUID questionBankId,
             UUID courseId,
             UUID moduleId,
 
@@ -65,14 +63,9 @@ public final class QuestionModel {
             @NotEmpty(message = "At least two answers are required")
             List<AnswerRequest> answers
     ) {
-        public UUID resolvedBankId() {
-            return bankId != null ? bankId : questionBankId;
-        }
     }
 
     public record UpdateRequest(
-            UUID bankId,
-            UUID questionBankId,
             UUID courseId,
             UUID moduleId,
 
@@ -98,9 +91,6 @@ public final class QuestionModel {
             @NotEmpty(message = "At least two answers are required")
             List<AnswerRequest> answers
     ) {
-        public UUID resolvedBankId() {
-            return bankId != null ? bankId : questionBankId;
-        }
     }
 
     public record AnswerResponse(
@@ -118,8 +108,6 @@ public final class QuestionModel {
     public record Response(
             UUID questionId,
             UUID id,
-            UUID bankId,
-            UUID questionBankId,
             UUID courseId,
             UUID moduleId,
             String questionText,
