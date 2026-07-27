@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
@@ -481,4 +482,31 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
     List<ClassAdminProjection> findAssignableClasses(
             @Param("courseId") UUID courseId,
             @Param("trainerId") UUID trainerId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            WITH desired_statuses AS (
+                SELECT
+                    class_offering.id,
+                    CASE
+                        WHEN class_offering.end_date < :today
+                            THEN 'completed'::public.class_status
+                        WHEN class_offering.start_date > :today
+                            THEN 'upcoming'::public.class_status
+                        ELSE 'ongoing'::public.class_status
+                    END AS desired_status
+                FROM public.classes class_offering
+                WHERE class_offering.deleted_at IS NULL
+                  AND class_offering.status <>
+                      'cancelled'::public.class_status
+            )
+            UPDATE public.classes class_offering
+            SET status = desired.desired_status
+            FROM desired_statuses desired
+            WHERE class_offering.id = desired.id
+              AND class_offering.status IS DISTINCT FROM
+                  desired.desired_status
+            """, nativeQuery = true)
+    int synchronizeLifecycleStatuses(
+            @Param("today") LocalDate today);
 }

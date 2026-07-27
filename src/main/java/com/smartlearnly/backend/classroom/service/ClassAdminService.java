@@ -3,8 +3,10 @@ package com.smartlearnly.backend.classroom.service;
 import com.smartlearnly.backend.classroom.dto.ClassResponse;
 import com.smartlearnly.backend.classroom.dto.CreateClassRequest;
 import com.smartlearnly.backend.classroom.dto.UpdateClassRequest;
+import com.smartlearnly.backend.classroom.dto.RestoreClassRequest;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.entity.ClassStatus;
+import com.smartlearnly.backend.classroom.entity.ClassLifecycle;
 import com.smartlearnly.backend.classroom.repository.ClassAdminProjection;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.classroom.dto.ClassStatusOptionResponse;
@@ -91,7 +93,7 @@ public class ClassAdminService {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         Course course = requirePublishedCourse(request.courseId());
         UserAccount trainer = requireTrainer(request.trainerId());
-        validateDates(request.startDate(), request.endDate());
+        validateRequiredDates(request.startDate(), request.endDate());
 
         ClassOffering classOffering = new ClassOffering();
         classOffering.setCourseId(course.getId());
@@ -103,10 +105,9 @@ public class ClassAdminService {
         classOffering.setStartDate(request.startDate());
         classOffering.setEndDate(request.endDate());
         classOffering.setMaxStudents(request.maxStudents());
-        classOffering.setStatus(ClassStatus.UPCOMING);
+        classOffering.setStatus(ClassLifecycle.resolveStatus(request.startDate(), request.endDate(), null));
         classOffering.setCreatedBy(actor.getId());
 
-        validateDatesForStatus(classOffering.getStatus(), classOffering.getStartDate(), classOffering.getEndDate());
         classSessionScheduleService.validateScheduleDefinition(classOffering);
 
         ClassOffering saved = classOfferingRepository.saveAndFlush(classOffering);
@@ -119,18 +120,21 @@ public class ClassAdminService {
     public ClassResponse update(UUID classId, UpdateClassRequest request) {
 
         if (!request.hasAnyField()) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "At least one class field must be provided");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one class field must be provided");
         }
 
         ClassOffering classOffering = findClassForUpdate(classId);
-        ClassStatus previousStatus = classOffering.getStatus();
-        ClassStatus requestedStatus = request.isStatusProvided()
-                ? normalizeClassStatus(request.getStatus())
-                : previousStatus;
+        ClassStatus previousStatus = ClassLifecycle.resolveStatus(classOffering.getStartDate(),
+                classOffering.getEndDate(), classOffering.getStatus());
 
-        validateStatusTransition(previousStatus, requestedStatus);
+        classOffering.setStatus(previousStatus);
+
+        if (request.isStatusProvided()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "Class status is updated automatically from start date "
+                            + "and end date. Use the cancel endpoint to cancel a class.");
+        }
+
         validateUpdatePermissions(classOffering, request);
 
         String previousScheduleDescription = classOffering.getScheduleDescription();
@@ -246,18 +250,14 @@ public class ClassAdminService {
             classOffering.setPrice(request.getPrice());
         }
 
-        /*
-         * Apply the already validated target status.
-         */
-        classOffering.setStatus(requestedStatus);
+        validateRequiredDates(classOffering.getStartDate(), classOffering.getEndDate());
 
         /*
-         * Validate final state after applying every provided field.
+         * UPCOMING, ONGOING and COMPLETED are derived values.
+         * CANCELLED remains unchanged.
          */
-        validateDatesForStatus(
-                classOffering.getStatus(),
-                classOffering.getStartDate(),
-                classOffering.getEndDate());
+        classOffering.setStatus(ClassLifecycle.resolveStatus(classOffering.getStartDate(), classOffering.getEndDate(),
+                classOffering.getStatus()));
 
         boolean scheduleDefinitionChanged = !Objects.equals(
                 previousScheduleDescription,
@@ -307,16 +307,92 @@ public class ClassAdminService {
     @Transactional
     public ClassResponse cancel(UUID classId) {
         ClassOffering classOffering = findClassForUpdate(classId);
-        if (classOffering.getStatus() == ClassStatus.COMPLETED) {
+        ClassStatus effectiveStatus = ClassLifecycle.resolveStatus(
+                classOffering.getStartDate(),
+                classOffering.getEndDate(),
+                classOffering.getStatus());
+
+        if (effectiveStatus == ClassStatus.COMPLETED) {
             throw new BusinessException(ErrorCode.CONFLICT, "A completed class cannot be cancelled");
         }
-        if (classOffering.getStatus() != ClassStatus.CANCELLED) {
-            classOffering.setStatus(ClassStatus.CANCELLED);
-            classOfferingRepository.saveAndFlush(classOffering);
-            classSessionScheduleService.deleteFutureSessions(classId);
-            audit("CLASS_CANCELLED", classId);
+
+        if (effectiveStatus == ClassStatus.CANCELLED) {
+            return toResponse(classOffering);
         }
+
+        classOffering.setStatus(ClassStatus.CANCELLED);
+        classOfferingRepository.saveAndFlush(classOffering);
+
+        classSessionScheduleService.deleteFutureSessions(classId);
+
+        audit("CLASS_CANCELLED", classId);
+
         return toResponse(classOffering);
+    }
+
+    @Transactional
+    public ClassResponse restore(UUID classId, RestoreClassRequest request) {
+        ClassOffering classOffering = findClassForUpdate(classId);
+
+        if (classOffering.getStatus() != ClassStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Only a cancelled class can be restored");
+        }
+
+        validateRequiredDates(request.startDate(), request.endDate());
+        classOffering.setStartDate(request.startDate());
+        classOffering.setEndDate(request.endDate());
+
+        ClassStatus restoredStatus = ClassLifecycle.resolveStatus(classOffering.getStartDate(),
+                classOffering.getEndDate(), null);
+
+        long activeCount = activeEnrollmentCount(classId);
+
+        if (classOffering.getMaxStudents() == null || classOffering.getMaxStudents() < activeCount) {
+            throw new BusinessException(
+                    ErrorCode.CLASS_CAPACITY_INVALID,
+                    "Capacity cannot be lower than the active enrollment count");
+        }
+
+        Course course = requireCourse(classOffering.getCourseId());
+
+        UserAccount trainer = classOffering.getTrainerId() == null
+                ? null
+                : userRepository
+                        .findByIdAndDeletedAtIsNull(classOffering.getTrainerId())
+                        .orElse(null);
+
+        boolean activeLifecycle = restoredStatus == ClassStatus.UPCOMING || restoredStatus == ClassStatus.ONGOING;
+
+        if (activeLifecycle) {
+            course = requirePublishedCourse(classOffering.getCourseId());
+            trainer = requireTrainer(classOffering.getTrainerId());
+            classOffering.setMeetingUrl(normalizeMeetingUrl(classOffering.getMeetingUrl()));
+
+            classOffering.setScheduleDescription(normalizeRequired(
+                    classOffering.getScheduleDescription(),
+                    "Class schedule is required before restoring"));
+
+            if (classOffering.getPrice() == null) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Class price is required before restoring");
+            }
+
+            classSessionScheduleService.validateScheduleDefinition(classOffering);
+        }
+        classOffering.setStatus(restoredStatus);
+        classOfferingRepository.saveAndFlush(classOffering);
+
+        if (activeLifecycle) {
+            classSessionScheduleService.synchronizeFutureSessions(
+                    classOffering);
+        } else {
+            classSessionScheduleService.deleteFutureSessions(classId);
+        }
+
+        audit("CLASS_RESTORED", classId);
+
+        return toResponse(classOffering, course, trainer, activeCount);
     }
 
     @Transactional
@@ -427,74 +503,15 @@ public class ClassAdminService {
         return classEnrollmentRepository.countByClassIdAndStatus(classId, "active");
     }
 
-    private void validateDates(LocalDate startDate, LocalDate endDate) {
-        if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "End date must not be before start date");
-        }
-    }
-
-    private void validateDatesForStatus(
-            ClassStatus status,
-            LocalDate startDate,
-            LocalDate endDate) {
+    private void validateRequiredDates(LocalDate startDate, LocalDate endDate) {
         if (startDate == null) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "Start date is required");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Start date is required");
         }
-
         if (endDate == null) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "End date is required");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "End date is required");
         }
-
         if (endDate.isBefore(startDate)) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "End date must not be before start date");
-        }
-
-        LocalDate today = LocalDate.now();
-
-        if (status == ClassStatus.UPCOMING && startDate.isBefore(today)) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "An upcoming class cannot start in the past");
-        }
-
-        if (status == ClassStatus.ONGOING
-                && (startDate.isAfter(today) || endDate.isBefore(today))) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "An ongoing class must include the current date");
-        }
-    }
-
-    private void validateStatusTransition(ClassStatus currentStatus, ClassStatus requestedStatus) {
-        if (currentStatus == requestedStatus) {
-            return;
-        }
-
-        boolean allowed = switch (currentStatus) {
-            case UPCOMING ->
-                requestedStatus == ClassStatus.ONGOING
-                        || requestedStatus == ClassStatus.CANCELLED;
-
-            case ONGOING ->
-                requestedStatus == ClassStatus.COMPLETED
-                        || requestedStatus == ClassStatus.CANCELLED;
-
-            case COMPLETED, CANCELLED -> false;
-        };
-
-        if (!allowed) {
-            throw new BusinessException(
-                    ErrorCode.CONFLICT,
-                    "Invalid class status transition: "
-                            + currentStatus.name().toLowerCase(Locale.ROOT)
-                            + " -> "
-                            + requestedStatus.name().toLowerCase(Locale.ROOT));
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "End date must not be before start date");
         }
     }
 
@@ -556,25 +573,7 @@ public class ClassAdminService {
             return null;
         }
         try {
-            return ClassStatus.valueOf(normalized.toUpperCase(Locale.ROOT))
-                    .name()
-                    .toLowerCase(Locale.ROOT);
-        } catch (IllegalArgumentException exception) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "Class status must be upcoming, ongoing, completed, or cancelled");
-        }
-    }
-
-    private ClassStatus normalizeClassStatus(String status) {
-        String normalized = normalizeNullable(status);
-
-        if (normalized == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Class status is required");
-        }
-
-        try {
-            return ClassStatus.valueOf(normalized.toUpperCase(Locale.ROOT));
+            return ClassStatus.valueOf(normalized.toUpperCase(Locale.ROOT)).name().toLowerCase(Locale.ROOT);
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,

@@ -2,18 +2,17 @@ package com.smartlearnly.backend.question.service;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.course.service.CourseAccessService;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.file.service.FileStorageService;
 import com.smartlearnly.backend.question.dto.QuestionAnswerMediaResponse;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.entity.QuestionAnswerMediaAttachment;
-import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.repository.QuestionAnswerMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
-import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -61,7 +60,7 @@ public class QuestionAnswerMediaService {
     private final QuestionRepository questionRepository;
     private final QuestionAnswerRepository answerRepository;
     private final QuestionAnswerMediaAttachmentRepository mediaAttachmentRepository;
-    private final QuestionBankRepository questionBankRepository;
+    private final CourseAccessService courseAccessService;
     private final FileStorageService fileStorageService;
     private final StorageProperties storageProperties;
     private final Tika tika = new Tika();
@@ -180,11 +179,7 @@ public class QuestionAnswerMediaService {
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media for an archived question");
         }
-        QuestionBank bank = questionBankRepository.findById(question.getQuestionBankId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question bank not found"));
-        if ("archived".equals(bank.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot modify media in an archived question bank");
-        }
+        courseAccessService.requireUpdatableCourse(question.getCourseId());
         QuestionAnswer answer = answerRepository.findById(answerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Answer not found"));
         if (!answer.getQuestionId().equals(questionId)) {

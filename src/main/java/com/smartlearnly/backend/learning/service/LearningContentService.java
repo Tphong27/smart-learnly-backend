@@ -17,8 +17,7 @@ import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.dto.*;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
-import com.smartlearnly.backend.learning.module.entity.CourseSection;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
+import com.smartlearnly.backend.learning.module.entity.CourseModule;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -41,7 +40,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class LearningContentService {
         private final CourseRepository courseRepository;
-        private final CourseSectionRepository courseSectionRepository;
         private final EnrollmentAccessService enrollmentAccessService;
         private final CurrentUserService currentUserService;
         private final LessonProgressRepository lessonProgressRepository;
@@ -198,7 +196,7 @@ public class LearningContentService {
                                 .collect(Collectors.toSet());
         }
 
-        private LearningSectionResponse toSectionResponseWithoutProgress(CourseSection section) {
+        private LearningSectionResponse toSectionResponseWithoutProgress(CourseModule section) {
                 List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
                                 .filter(this::isPublishedLesson)
                                 .map(lesson -> toLessonResponse(lesson, false))
@@ -207,11 +205,11 @@ public class LearningContentService {
                 return new LearningSectionResponse(
                                 section.getId(),
                                 section.getTitle(),
-                                section.getSortOrder(),
+                                section.getOrderIndex(),
                                 lessonResponses);
         }
 
-        private LearningSectionResponse toPreviewSectionResponse(CourseSection section) {
+        private LearningSectionResponse toPreviewSectionResponse(CourseModule section) {
                 List<LearningLessonResponse> lessonResponses = orderedLessons(section).stream()
                                 .filter(this::isPublishedLesson)
                                 .filter(lesson -> Boolean.TRUE.equals(lesson.getPreview()))
@@ -223,11 +221,11 @@ public class LearningContentService {
                 return new LearningSectionResponse(
                                 section.getId(),
                                 section.getTitle(),
-                                section.getSortOrder(),
+                                section.getOrderIndex(),
                                 lessonResponses);
         }
 
-        private List<Lesson> orderedLessons(CourseSection section) {
+        private List<Lesson> orderedLessons(CourseModule section) {
                 return section.getLessons().stream()
                                 .sorted(Comparator
                                                 .comparing(Lesson::getSortOrder,

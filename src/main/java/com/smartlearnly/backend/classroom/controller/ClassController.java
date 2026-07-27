@@ -3,6 +3,7 @@ package com.smartlearnly.backend.classroom.controller;
 import com.smartlearnly.backend.classroom.dto.ClassResponse;
 import com.smartlearnly.backend.classroom.dto.ClassStatusOptionResponse;
 import com.smartlearnly.backend.classroom.dto.CreateClassRequest;
+import com.smartlearnly.backend.classroom.dto.RestoreClassRequest;
 import com.smartlearnly.backend.classroom.dto.UpdateClassRequest;
 import com.smartlearnly.backend.classroom.service.ClassAdminService;
 import com.smartlearnly.backend.classroom.service.ClassTrainerService;
@@ -105,6 +106,14 @@ public class ClassController {
     @Operation(summary = "Cancel a class without deleting history", tags = { "Admin Classes" })
     public ApiResponse<ClassResponse> cancelClass(@PathVariable UUID classId) {
         return ApiResponse.success("Class cancelled successfully", classAdminService.cancel(classId));
+    }
+
+    @PostMapping("/admin/classes/{classId}/restore")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @Operation(summary = "Restore a cancelled class and recalculate its status", tags = { "Admin Classes" })
+    public ApiResponse<ClassResponse> restoreClass(@PathVariable UUID classId,
+            @Valid @RequestBody RestoreClassRequest request) {
+        return ApiResponse.success("Class restored successfully", classAdminService.restore(classId, request));
     }
 
     @DeleteMapping("/admin/classes/{classId}")

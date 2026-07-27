@@ -6,7 +6,7 @@ import java.util.UUID;
 
 public record CurriculumSectionResponse(
         UUID id,
-        UUID sourceSectionId,
+        UUID sourceModuleId,
         UUID sourceCurriculumSectionId,
         String title,
         Integer sortOrder,

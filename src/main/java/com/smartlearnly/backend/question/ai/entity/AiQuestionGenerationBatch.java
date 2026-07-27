@@ -28,9 +28,6 @@ public class AiQuestionGenerationBatch {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "question_bank_id", nullable = false)
-    private UUID questionBankId;
-
     @Column(name = "course_id", nullable = false)
     private UUID courseId;
 

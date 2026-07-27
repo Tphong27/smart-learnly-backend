@@ -5,7 +5,7 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
-import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
@@ -13,7 +13,7 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingCardResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.UpdateStagingCardRequest;
 import com.smartlearnly.backend.flashcard.staging.service.AdminFlashcardStagingService;
-import com.smartlearnly.backend.flashcard.staging.service.FlashcardQuestionBankImportService;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardCourseQuestionImportService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardStagingCardEditService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -48,31 +48,31 @@ import org.springframework.web.multipart.MultipartFile;
 @SecurityRequirement(name = "bearerAuth")
 public class AdminFlashcardStagingController {
     private final AdminFlashcardStagingService adminFlashcardStagingService;
-    private final FlashcardQuestionBankImportService flashcardQuestionBankImportService;
+    private final FlashcardCourseQuestionImportService flashcardCourseQuestionImportService;
     private final FlashcardStagingCardEditService flashcardStagingCardEditService;
 
     @GetMapping("/flashcard-sets/{setId}/staging/source-questions")
-    @Operation(summary = "List same-course question bank questions for flashcard staging")
+    @Operation(summary = "List same-course questions for flashcard staging")
     public ApiResponse<List<SourceQuestionResponse>> listSourceQuestions(
             @PathVariable UUID setId,
-            @RequestParam(required = false) UUID questionBankId,
+            @RequestParam(required = false) UUID moduleId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Short difficulty,
             @RequestParam(required = false) String status
     ) {
         return ApiResponse.success(
                 "Flashcard staging source questions loaded successfully",
-                adminFlashcardStagingService.listSourceQuestions(setId, questionBankId, keyword, difficulty, "approved")
+                adminFlashcardStagingService.listSourceQuestions(setId, moduleId, keyword, difficulty, "approved")
         );
     }
 
-    @PostMapping("/flashcard-sets/{setId}/staging/import-question-bank")
-    @Operation(summary = "Import question bank questions into flashcard staging")
-    public ResponseEntity<ApiResponse<StagingBatchResponse>> importQuestionBank(
+    @PostMapping("/flashcard-sets/{setId}/staging/import-course-questions")
+    @Operation(summary = "Import course questions into flashcard staging")
+    public ResponseEntity<ApiResponse<StagingBatchResponse>> importCourseQuestions(
             @PathVariable UUID setId,
-            @Valid @RequestBody ImportQuestionBankRequest request
+            @Valid @RequestBody ImportCourseQuestionsRequest request
     ) {
-        StagingBatchResponse response = flashcardQuestionBankImportService.importQuestionBank(setId, request);
+        StagingBatchResponse response = flashcardCourseQuestionImportService.importCourseQuestions(setId, request);
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }

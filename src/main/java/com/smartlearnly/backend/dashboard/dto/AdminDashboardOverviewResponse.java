@@ -9,7 +9,7 @@ public record AdminDashboardOverviewResponse(
         DashboardCoursesResponse courses,
         DashboardClassesResponse classes,
         DashboardContentResponse content,
-        DashboardQuestionBanksResponse questionBanks,
+        DashboardQuestionsResponse questions,
         List<DashboardRecentActivityResponse> recentActivities,
         Instant generatedAt
 ) {

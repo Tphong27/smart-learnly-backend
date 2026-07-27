@@ -60,7 +60,7 @@ public class AiQuestionGenerationDraft {
     @Column(columnDefinition = "TEXT")
     private String explanation;
 
-    @Column(name = "module_id")
+    @Column(name = "module_id", nullable = false)
     private UUID moduleId;
 
     @Column(name = "answers_json", nullable = false, columnDefinition = "jsonb")

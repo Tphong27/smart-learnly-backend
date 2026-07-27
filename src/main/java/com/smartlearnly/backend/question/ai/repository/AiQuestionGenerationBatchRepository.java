@@ -10,9 +10,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface AiQuestionGenerationBatchRepository extends JpaRepository<AiQuestionGenerationBatch, UUID> {
     Optional<AiQuestionGenerationBatch> findByRequestedByAndIdempotencyKey(UUID requestedBy, String idempotencyKey);
 
-    List<AiQuestionGenerationBatch> findByQuestionBankIdOrderByCreatedAtDesc(UUID questionBankId);
+    List<AiQuestionGenerationBatch> findByCourseIdOrderByCreatedAtDesc(UUID courseId);
 
     long countByRequestedByAndCreatedAtAfter(UUID requestedBy, Instant createdAtAfter);
 
-    boolean existsByRequestedByAndQuestionBankIdAndStatus(UUID requestedBy, UUID questionBankId, String status);
+    boolean existsByRequestedByAndCourseIdAndStatus(UUID requestedBy, UUID courseId, String status);
 }

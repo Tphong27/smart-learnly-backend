@@ -1,18 +1,14 @@
 package com.smartlearnly.backend.learning.module.entity;
 
-import com.smartlearnly.backend.course.entity.Course;
-import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.OneToMany;
+import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,23 +21,34 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "course_sections", schema = "public")
-public class CourseSection {
+@Table(name = "modules", schema = "public")
+public class CourseModule {
+    public static final String STATUS_ACTIVE = "active";
+    public static final String STATUS_INACTIVE = "inactive";
+
     @Id
     @GeneratedValue
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "course_id", nullable = false)
-    private Course course;
+    @Column(name = "course_id", nullable = false)
+    private UUID courseId;
 
     @Column(nullable = false)
     private String title;
 
-    @Column(name = "sort_order", nullable = false)
-    private Integer sortOrder;
+    @Column(name = "order_index", nullable = false)
+    private Integer orderIndex;
 
-    @OneToMany(mappedBy = "section", fetch = FetchType.LAZY)
+    @Column(nullable = false)
+    private String status;
+
+    @Column(name = "is_system", nullable = false)
+    private Boolean system;
+
+    @Column(name = "system_key")
+    private String systemKey;
+
+    @OneToMany(mappedBy = "module")
     private List<Lesson> lessons = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -53,8 +60,14 @@ public class CourseSection {
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();
-        if (sortOrder == null) {
-            sortOrder = 0;
+        if (orderIndex == null) {
+            orderIndex = 0;
+        }
+        if (status == null) {
+            status = STATUS_ACTIVE;
+        }
+        if (system == null) {
+            system = false;
         }
         if (createdAt == null) {
             createdAt = now;

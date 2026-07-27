@@ -1,7 +1,7 @@
 package com.smartlearnly.backend.learning.lesson.entity;
 
 import com.smartlearnly.backend.course.entity.Course;
-import com.smartlearnly.backend.learning.module.entity.CourseSection;
+import com.smartlearnly.backend.learning.module.entity.CourseModule;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
@@ -39,8 +39,8 @@ public class Lesson {
     private Course course;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "section_id", nullable = false)
-    private CourseSection section;
+    @JoinColumn(name = "module_id", nullable = false)
+    private CourseModule module;
 
     @Column(nullable = false)
     private String title;
@@ -118,4 +118,5 @@ public class Lesson {
         resource.setLesson(this);
         resources.add(resource);
     }
+
 }

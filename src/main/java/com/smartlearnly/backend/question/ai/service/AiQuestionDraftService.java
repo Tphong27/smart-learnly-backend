@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.service.CourseAccessService;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.file.service.FileStorageService.StoredFile;
 import com.smartlearnly.backend.file.service.SupabaseStorageClient;
@@ -28,12 +29,12 @@ import com.smartlearnly.backend.question.ai.repository.AiQuestionGenerationSourc
 import com.smartlearnly.backend.question.ai.repository.AiQuestionGenerationSourceRepository;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
-import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
-import com.smartlearnly.backend.question.service.QuestionBankService;
+import com.smartlearnly.backend.learning.module.entity.CourseModule;
+import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.rag.entity.RagMaterialChunk;
 import com.smartlearnly.backend.rag.entity.RagMaterialSnapshot;
 import com.smartlearnly.backend.rag.repository.RagMaterialChunkRepository;
@@ -85,9 +86,9 @@ public class AiQuestionDraftService {
     private static final int MAX_NEAR_DUPLICATE_CANDIDATES = 3;
     private static final double NEAR_DUPLICATE_THRESHOLD = 0.86D;
 
-    private final QuestionBankService questionBankService;
+    private final CourseAccessService courseAccessService;
     private final CurrentUserService currentUserService;
-    private final com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository curriculumSectionRepository;
+    private final CourseModuleRepository courseModuleRepository;
     private final RagMaterialSnapshotRepository snapshotRepository;
     private final RagMaterialChunkRepository chunkRepository;
     private final AiQuestionGenerationBatchRepository batchRepository;
@@ -107,32 +108,9 @@ public class AiQuestionDraftService {
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
-    public List<AiQuestionDraftDtos.SourceOptionResponse> listSources(UUID bankId) {
-        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
-        List<AiQuestionDraftDtos.SourceOptionResponse> materialSources = snapshotRepository.findReadyByCourseId(bank.getCourseId()).stream()
-                .filter(snapshot -> !chunkRepository.findBySnapshotIdOrderByChunkIndexAsc(snapshot.getId()).isEmpty())
-                .map(snapshot -> new AiQuestionDraftDtos.SourceOptionResponse(
-                        snapshot.getId(),
-                        snapshot.getId(),
-                        snapshot.getCurriculumLessonResourceId() != null ? snapshot.getCurriculumLessonResourceId() : snapshot.getLessonResourceId(),
-                        null,
-                        snapshot.getCourseId(),
-                        snapshot.getLessonId(),
-                        snapshot.getCurriculumLessonId(),
-                        AiQuestionGenerationSource.KIND_MATERIAL,
-                        snapshot.getSourceName(),
-                        null,
-                        null,
-                        null,
-                        snapshot.getChecksum(),
-                        snapshot.getVersion(),
-                        snapshot.getStatus(),
-                        chunkRepository.findBySnapshotIdOrderByChunkIndexAsc(snapshot.getId()).size(),
-                        null,
-                        snapshot.getUpdatedAt()
-                ))
-                .toList();
-        List<AiQuestionDraftDtos.SourceOptionResponse> transcriptSources = videoAiContentRepository.findPublishedMasterTranscriptsByCourseId(bank.getCourseId()).stream()
+    public List<AiQuestionDraftDtos.SourceOptionResponse> listSources(UUID courseId) {
+        courseAccessService.requireReadableCourse(courseId);
+        return videoAiContentRepository.findPublishedMasterTranscriptsByCourseId(courseId).stream()
                 .filter(content -> normalizeSourceText(content.getTranscriptText()).length() >= MIN_SOURCE_CHARACTERS)
                 .map(content -> new AiQuestionDraftDtos.SourceOptionResponse(
                         content.getId(),
@@ -155,14 +133,11 @@ public class AiQuestionDraftService {
                         content.getUpdatedAt()
                 ))
                 .toList();
-        List<AiQuestionDraftDtos.SourceOptionResponse> combined = new ArrayList<>(materialSources);
-        combined.addAll(transcriptSources);
-        return List.copyOf(combined);
     }
 
     @Transactional(readOnly = true)
-    public AiQuestionDraftDtos.SourceCapabilitiesResponse sourceCapabilities(UUID bankId) {
-        questionBankService.findActiveBankEntity(bankId);
+    public AiQuestionDraftDtos.SourceCapabilitiesResponse sourceCapabilities(UUID courseId) {
+        courseAccessService.requireReadableCourse(courseId);
         return new AiQuestionDraftDtos.SourceCapabilitiesResponse(
                 MIN_SOURCE_CHARACTERS,
                 MAX_PASTED_TEXT_CHARACTERS,
@@ -176,30 +151,30 @@ public class AiQuestionDraftService {
     }
 
     @Transactional(readOnly = true)
-    public List<AiQuestionDraftDtos.BatchResponse> listBatches(UUID bankId) {
-        questionBankService.findActiveBankEntity(bankId);
-        return batchRepository.findByQuestionBankIdOrderByCreatedAtDesc(bankId).stream()
+    public List<AiQuestionDraftDtos.BatchResponse> listBatches(UUID courseId) {
+        courseAccessService.requireReadableCourse(courseId);
+        return batchRepository.findByCourseIdOrderByCreatedAtDesc(courseId).stream()
                 .map(this::toBatchResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public AiQuestionDraftDtos.BatchResponse getBatch(UUID bankId, UUID batchId) {
-        AiQuestionGenerationBatch batch = findBatch(bankId, batchId);
+    public AiQuestionDraftDtos.BatchResponse getBatch(UUID courseId, UUID batchId) {
+        AiQuestionGenerationBatch batch = findBatch(courseId, batchId);
         return toBatchResponse(batch);
     }
 
     @Transactional(readOnly = true)
-    public List<AiQuestionDraftDtos.DraftResponse> listDrafts(UUID bankId, UUID batchId) {
-        AiQuestionGenerationBatch batch = findBatch(bankId, batchId);
+    public List<AiQuestionDraftDtos.DraftResponse> listDrafts(UUID courseId, UUID batchId) {
+        AiQuestionGenerationBatch batch = findBatch(courseId, batchId);
         return draftRepository.findByBatchIdOrderByCreatedAtAsc(batch.getId()).stream()
                 .map(this::toDraftResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public AiQuestionDraftDtos.SourceDownloadUrlResponse sourceDownloadUrl(UUID bankId, UUID batchId, UUID sourceId) {
-        AiQuestionGenerationBatch batch = findBatch(bankId, batchId);
+    public AiQuestionDraftDtos.SourceDownloadUrlResponse sourceDownloadUrl(UUID courseId, UUID batchId, UUID sourceId) {
+        AiQuestionGenerationBatch batch = findBatch(courseId, batchId);
         AiQuestionGenerationSource source = sourceRepository.findById(sourceId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "AI generation source not found"));
         if (!batch.getId().equals(source.getBatchId())) {
@@ -224,14 +199,14 @@ public class AiQuestionDraftService {
     }
 
     @Transactional
-    public AiQuestionDraftDtos.BatchResponse createBatch(UUID bankId, AiQuestionDraftDtos.CreateBatchRequest request) {
-        return createBatch(bankId, request, List.of());
+    public AiQuestionDraftDtos.BatchResponse createBatch(UUID courseId, AiQuestionDraftDtos.CreateBatchRequest request) {
+        return createBatch(courseId, request, List.of());
     }
 
     @Transactional
-    public AiQuestionDraftDtos.BatchResponse createBatch(UUID bankId, AiQuestionDraftDtos.CreateBatchRequest request, List<MultipartFile> files) {
+    public AiQuestionDraftDtos.BatchResponse createBatch(UUID courseId, AiQuestionDraftDtos.CreateBatchRequest request, List<MultipartFile> files) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
+        courseAccessService.requireUpdatableCourse(courseId);
         String idempotencyKey = normalizeRequired(request.idempotencyKey(), "Idempotency key is required");
         var existing = batchRepository.findByRequestedByAndIdempotencyKey(actor.getId(), idempotencyKey);
         if (existing.isPresent()) {
@@ -239,22 +214,21 @@ public class AiQuestionDraftService {
         }
 
         validateQuota(actor.getId());
-        if (batchRepository.existsByRequestedByAndQuestionBankIdAndStatus(actor.getId(), bankId, AiQuestionGenerationBatch.STATUS_PROCESSING)) {
-            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Another AI generation batch is still processing for this question bank");
+        if (batchRepository.existsByRequestedByAndCourseIdAndStatus(actor.getId(), courseId, AiQuestionGenerationBatch.STATUS_PROCESSING)) {
+            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Another AI generation batch is still processing for this course");
         }
 
         List<String> questionTypes = normalizeQuestionTypes(request.questionTypes());
         int requestedCount = normalizeRequestedCount(request.requestedCount());
         String language = normalizeLanguage(request.language());
         String instruction = normalizeInstruction(request.generationInstruction());
-        validateModuleId(bank.getCourseId(), request.moduleId());
+        validateModuleId(courseId, request.moduleId());
 
-        List<SourceSpec> sourceSpecs = resolveSourceSpecs(bank, request, files);
+        List<SourceSpec> sourceSpecs = resolveSourceSpecs(courseId, request, files);
         validateSourceBudget(sourceSpecs);
 
         AiQuestionGenerationBatch batch = new AiQuestionGenerationBatch();
-        batch.setQuestionBankId(bank.getId());
-        batch.setCourseId(bank.getCourseId());
+        batch.setCourseId(courseId);
         batch.setRequestedBy(actor.getId());
         batch.setStatus(AiQuestionGenerationBatch.STATUS_REQUESTED);
         batch.setGenerationInstruction(instruction);
@@ -278,8 +252,8 @@ public class AiQuestionDraftService {
     }
 
     @Transactional
-    public AiQuestionDraftDtos.BatchResponse retry(UUID bankId, UUID batchId) {
-        AiQuestionGenerationBatch batch = findBatch(bankId, batchId);
+    public AiQuestionDraftDtos.BatchResponse retry(UUID courseId, UUID batchId) {
+        AiQuestionGenerationBatch batch = findBatch(courseId, batchId);
         if (!AiQuestionGenerationBatch.STATUS_FAILED.equals(batch.getStatus())) {
             throw new BusinessException(ErrorCode.AI_BATCH_NOT_RETRYABLE, "Only FAILED batches can be retried");
         }
@@ -296,8 +270,8 @@ public class AiQuestionDraftService {
     }
 
     @Transactional
-    public AiQuestionDraftDtos.DraftResponse updateDraft(UUID bankId, UUID batchId, UUID draftId, AiQuestionDraftDtos.UpdateDraftRequest request) {
-        AiQuestionGenerationBatch batch = findBatch(bankId, batchId);
+    public AiQuestionDraftDtos.DraftResponse updateDraft(UUID courseId, UUID batchId, UUID draftId, AiQuestionDraftDtos.UpdateDraftRequest request) {
+        AiQuestionGenerationBatch batch = findBatch(courseId, batchId);
         AiQuestionGenerationDraft draft = findDraftInBatch(batch, draftId);
         ensureVersion(draft, request.version());
         ensureDraftEditable(draft);
@@ -317,7 +291,7 @@ public class AiQuestionDraftService {
         if (contentChanged) {
             markEvidenceNeedsReview(draft);
         }
-        applyDraftValidation(batch.getQuestionBankId(), draft, evidenceRepository.findByDraftId(draft.getId()));
+        applyDraftValidation(batch.getCourseId(), draft, evidenceRepository.findByDraftId(draft.getId()));
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), currentUserService.requireAuthenticatedUser().getId(), before, draftSnapshot(saved), "edited");
         refreshBatchCounts(batch);
@@ -325,8 +299,8 @@ public class AiQuestionDraftService {
     }
 
     @Transactional
-    public AiQuestionDraftDtos.DraftResponse rejectDraft(UUID bankId, UUID batchId, UUID draftId, AiQuestionDraftDtos.RejectDraftRequest request) {
-        AiQuestionGenerationBatch batch = findBatch(bankId, batchId);
+    public AiQuestionDraftDtos.DraftResponse rejectDraft(UUID courseId, UUID batchId, UUID draftId, AiQuestionDraftDtos.RejectDraftRequest request) {
+        AiQuestionGenerationBatch batch = findBatch(courseId, batchId);
         AiQuestionGenerationDraft draft = findDraftInBatch(batch, draftId);
         ensureVersion(draft, request.version());
         ensureDraftEditable(draft);
@@ -342,8 +316,8 @@ public class AiQuestionDraftService {
     }
 
     @Transactional
-    public AiQuestionDraftDtos.DraftResponse confirmEvidence(UUID bankId, UUID batchId, UUID draftId, AiQuestionDraftDtos.EvidenceConfirmationRequest request) {
-        AiQuestionGenerationBatch batch = findBatch(bankId, batchId);
+    public AiQuestionDraftDtos.DraftResponse confirmEvidence(UUID courseId, UUID batchId, UUID draftId, AiQuestionDraftDtos.EvidenceConfirmationRequest request) {
+        AiQuestionGenerationBatch batch = findBatch(courseId, batchId);
         AiQuestionGenerationDraft draft = findDraftInBatch(batch, draftId);
         ensureVersion(draft, request.version());
         ensureDraftEditable(draft);
@@ -361,7 +335,7 @@ public class AiQuestionDraftService {
         draft.setEvidenceStatus(request.evidenceStillFits()
                 ? AiQuestionGenerationDraft.EVIDENCE_VALID
                 : AiQuestionGenerationDraft.EVIDENCE_INVALID);
-        applyDraftValidation(batch.getQuestionBankId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences);
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), actor.getId(), before, draftSnapshot(saved), "evidence_confirmed");
         refreshBatchCounts(batch);
@@ -369,9 +343,9 @@ public class AiQuestionDraftService {
     }
 
     @Transactional
-    public AiQuestionDraftDtos.AddSelectedResponse addSelected(UUID bankId, UUID batchId, AiQuestionDraftDtos.AddSelectedRequest request) {
-        AiQuestionGenerationBatch batch = findBatch(bankId, batchId);
-        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
+    public AiQuestionDraftDtos.AddSelectedResponse addSelected(UUID courseId, UUID batchId, AiQuestionDraftDtos.AddSelectedRequest request) {
+        AiQuestionGenerationBatch batch = findBatch(courseId, batchId);
+        courseAccessService.requireUpdatableCourse(courseId);
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         List<AiQuestionDraftDtos.CreatedQuestion> created = new ArrayList<>();
         List<AiQuestionDraftDtos.SkippedItem> skipped = new ArrayList<>();
@@ -386,12 +360,12 @@ public class AiQuestionDraftService {
                 skipped.add(new AiQuestionDraftDtos.SkippedItem(draft.getId(), "AI_DRAFT_VERSION_CONFLICT", "Draft has been updated, please reload"));
                 continue;
             }
-            String skipReason = acceptBlockReason(bank, draft);
+            String skipReason = acceptBlockReason(courseId, draft);
             if (skipReason != null) {
                 skipped.add(new AiQuestionDraftDtos.SkippedItem(draft.getId(), skipReason, messageForSkip(skipReason)));
                 continue;
             }
-            Question question = persistQuestionFromDraft(bank, draft, actor);
+            Question question = persistQuestionFromDraft(courseId, draft, actor);
             String before = draftSnapshot(draft);
             draft.setStatus(AiQuestionGenerationDraft.STATUS_ACCEPTED);
             draft.setReviewedBy(actor.getId());
@@ -455,7 +429,7 @@ public class AiQuestionDraftService {
         draft.setModuleId(moduleId);
         draft.setAnswersJson(toJson(normalizeAnswers(generatedQuestion.answers())));
         List<AiQuestionGenerationEvidence> evidences = new ArrayList<>();
-        applyDraftValidation(batch.getQuestionBankId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences);
         draft = draftRepository.save(draft);
 
         for (QuestionGenerationProvider.GeneratedEvidence generatedEvidence : generatedQuestion.evidence() == null ? List.<QuestionGenerationProvider.GeneratedEvidence>of() : generatedQuestion.evidence()) {
@@ -475,12 +449,12 @@ public class AiQuestionDraftService {
                     : AiQuestionGenerationDraft.EVIDENCE_INVALID);
             evidences.add(evidenceRepository.save(evidence));
         }
-        applyDraftValidation(batch.getQuestionBankId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences);
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), batch.getRequestedBy(), null, draftSnapshot(saved), "generated");
     }
 
-    private String acceptBlockReason(QuestionBank bank, AiQuestionGenerationDraft draft) {
+    private String acceptBlockReason(UUID courseId, AiQuestionGenerationDraft draft) {
         if (!AiQuestionGenerationDraft.STATUS_GENERATED_DRAFT.equals(draft.getStatus())) {
             return "AI_DRAFT_INVALID";
         }
@@ -490,17 +464,16 @@ public class AiQuestionDraftService {
         if (!AiQuestionGenerationDraft.EVIDENCE_VALID.equals(draft.getEvidenceStatus())) {
             return "AI_EVIDENCE_REQUIRED";
         }
-        if (questionRepository.existsActiveDuplicate(bank.getId(), draft.getQuestionText())) {
+        if (questionRepository.existsActiveDuplicateInCourse(courseId, draft.getQuestionText(), null)) {
             return "AI_EXACT_DUPLICATE_ACTIVE";
         }
         return null;
     }
 
-    private Question persistQuestionFromDraft(QuestionBank bank, AiQuestionGenerationDraft draft, UserAccount actor) {
+    private Question persistQuestionFromDraft(UUID courseId, AiQuestionGenerationDraft draft, UserAccount actor) {
         Question question = new Question();
-        question.setQuestionBankId(bank.getId());
-        question.setCourseId(bank.getCourseId());
-        question.setModuleId(validateModuleId(bank.getCourseId(), draft.getModuleId()));
+        question.setCourseId(courseId);
+        question.setModuleId(validateModuleId(courseId, draft.getModuleId()));
         question.setQuestionText(draft.getQuestionText());
         question.setQuestionType(QuestionType.valueOf(draft.getQuestionType().toUpperCase(Locale.ROOT)));
         question.setDifficulty(null);
@@ -523,13 +496,13 @@ public class AiQuestionDraftService {
         return saved;
     }
 
-    private void applyDraftValidation(UUID bankId, AiQuestionGenerationDraft draft, List<AiQuestionGenerationEvidence> evidences) {
+    private void applyDraftValidation(UUID courseId, AiQuestionGenerationDraft draft, List<AiQuestionGenerationEvidence> evidences) {
         List<String> warnings = new ArrayList<>();
-        List<AiQuestionDraftDtos.DuplicateCandidateResponse> duplicateCandidates = duplicateCandidates(bankId, draft.getQuestionText());
+        List<AiQuestionDraftDtos.DuplicateCandidateResponse> duplicateCandidates = duplicateCandidates(courseId, draft.getQuestionText());
         boolean activeExactDuplicate = duplicateCandidates.stream()
                 .anyMatch(candidate -> "exact".equals(candidate.matchType()) && !"archived".equals(candidate.status()));
         if (!duplicateCandidates.isEmpty() && !activeExactDuplicate) {
-            warnings.add("Potential duplicate question found in this Question Bank");
+            warnings.add("Potential duplicate question found in this course");
         }
 
         boolean structurallyValid = isDraftStructurallyValid(draft, warnings);
@@ -588,9 +561,9 @@ public class AiQuestionDraftService {
         return answers.stream().allMatch(answer -> answer.answerText() != null && !answer.answerText().isBlank());
     }
 
-    private List<AiQuestionDraftDtos.DuplicateCandidateResponse> duplicateCandidates(UUID bankId, String questionText) {
+    private List<AiQuestionDraftDtos.DuplicateCandidateResponse> duplicateCandidates(UUID courseId, String questionText) {
         String normalizedQuestion = normalizeForCompare(questionText);
-        List<AiQuestionDraftDtos.DuplicateCandidateResponse> exact = questionRepository.findExactDuplicateCandidates(bankId, questionText).stream()
+        List<AiQuestionDraftDtos.DuplicateCandidateResponse> exact = questionRepository.findExactDuplicateCandidatesInCourse(courseId, questionText).stream()
                 .map(question -> new AiQuestionDraftDtos.DuplicateCandidateResponse(
                         question.getId(),
                         question.getQuestionText(),
@@ -598,7 +571,7 @@ public class AiQuestionDraftService {
                         "exact"
                 ))
                 .toList();
-        List<AiQuestionDraftDtos.DuplicateCandidateResponse> near = questionRepository.findByQuestionBankId(bankId).stream()
+        List<AiQuestionDraftDtos.DuplicateCandidateResponse> near = questionRepository.findByCourseId(courseId).stream()
                 .filter(question -> exact.stream().noneMatch(candidate -> candidate.questionId().equals(question.getId())))
                 .map(question -> Map.entry(question, similarity(normalizedQuestion, normalizeForCompare(question.getQuestionText()))))
                 .filter(entry -> entry.getValue() >= NEAR_DUPLICATE_THRESHOLD)
@@ -679,19 +652,21 @@ public class AiQuestionDraftService {
         }
     }
 
-    private List<SourceSpec> resolveSourceSpecs(QuestionBank bank, AiQuestionDraftDtos.CreateBatchRequest request, List<MultipartFile> files) {
+    private List<SourceSpec> resolveSourceSpecs(UUID courseId, AiQuestionDraftDtos.CreateBatchRequest request, List<MultipartFile> files) {
+        if (request.generationSourceIds() != null && !request.generationSourceIds().isEmpty()) {
+            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Material/RAG sources are not supported for course question generation");
+        }
         List<SourceSpec> specs = new ArrayList<>();
-        specs.addAll(resolveMaterialSpecs(bank, request.generationSourceIds()));
         specs.addAll(resolvePastedTextSpecs(request.pastedTextSources()));
         specs.addAll(resolveDocumentSpecs(files));
-        specs.addAll(resolveTranscriptSpecs(bank, request.transcriptContentIds()));
+        specs.addAll(resolveTranscriptSpecs(courseId, request.transcriptContentIds()));
         if (specs.isEmpty()) {
             throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "At least one generation source is required");
         }
         return specs;
     }
 
-    private List<SourceSpec> resolveMaterialSpecs(QuestionBank bank, List<UUID> generationSourceIds) {
+    private List<SourceSpec> resolveMaterialSpecs(UUID courseId, List<UUID> generationSourceIds) {
         if (generationSourceIds == null || generationSourceIds.isEmpty()) {
             return List.of();
         }
@@ -699,8 +674,8 @@ public class AiQuestionDraftService {
         for (UUID sourceId : new LinkedHashSet<>(generationSourceIds)) {
             RagMaterialSnapshot snapshot = snapshotRepository.findById(sourceId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source was not found or is not RAG-ready"));
-            if (!bank.getCourseId().equals(snapshot.getCourseId())) {
-                throw new BusinessException(ErrorCode.AI_SOURCE_OUT_OF_SCOPE, "Generation source does not belong to this question bank course");
+            if (!courseId.equals(snapshot.getCourseId())) {
+                throw new BusinessException(ErrorCode.AI_SOURCE_OUT_OF_SCOPE, "Generation source does not belong to this course");
             }
             if (!snapshot.isReady()) {
                 throw new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source is not RAG-ready");
@@ -820,7 +795,7 @@ public class AiQuestionDraftService {
         return specs;
     }
 
-    private List<SourceSpec> resolveTranscriptSpecs(QuestionBank bank, List<UUID> transcriptContentIds) {
+    private List<SourceSpec> resolveTranscriptSpecs(UUID courseId, List<UUID> transcriptContentIds) {
         if (transcriptContentIds == null || transcriptContentIds.isEmpty()) {
             return List.of();
         }
@@ -828,11 +803,11 @@ public class AiQuestionDraftService {
         for (UUID contentId : new LinkedHashSet<>(transcriptContentIds)) {
             VideoAiContent content = videoAiContentRepository.findById(contentId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.AI_SOURCE_OUT_OF_SCOPE, "Transcript source was not found"));
-            if (!bank.getCourseId().equals(content.getCourseId())
+            if (!courseId.equals(content.getCourseId())
                     || content.getClassId() != null
                     || !"MASTER".equalsIgnoreCase(content.getLessonScope())
                     || !"published".equalsIgnoreCase(content.getStatus())) {
-                throw new BusinessException(ErrorCode.AI_SOURCE_OUT_OF_SCOPE, "Transcript source is not published for this question bank course");
+                throw new BusinessException(ErrorCode.AI_SOURCE_OUT_OF_SCOPE, "Transcript source is not published for this course");
             }
             String text = normalizeSourceText(content.getTranscriptText());
             validateSourceTextLength(text, MAX_TRANSCRIPT_CHARACTERS, "Transcript text");
@@ -1084,7 +1059,11 @@ public class AiQuestionDraftService {
 
     private UUID validateModuleId(UUID courseId, UUID moduleId) {
         if (moduleId == null) return null;
-        boolean exists = curriculumSectionRepository.existsMasterModuleByIdAndCourseId(moduleId, courseId);
+        boolean exists = courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
+                moduleId,
+                courseId,
+                CourseModule.STATUS_ACTIVE
+        );
         if (!exists) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module must belong to the selected course");
         }
@@ -1162,10 +1141,10 @@ public class AiQuestionDraftService {
         return !normalizeForCompare(previousCorrect).equals(normalizeForCompare(currentCorrect));
     }
 
-    private AiQuestionGenerationBatch findBatch(UUID bankId, UUID batchId) {
+    private AiQuestionGenerationBatch findBatch(UUID courseId, UUID batchId) {
         AiQuestionGenerationBatch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "AI generation batch not found"));
-        if (!bankId.equals(batch.getQuestionBankId())) {
+        if (!courseId.equals(batch.getCourseId())) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "AI generation batch not found");
         }
         return batch;
@@ -1228,7 +1207,6 @@ public class AiQuestionDraftService {
         return new AiQuestionDraftDtos.BatchResponse(
                 batch.getId(),
                 batch.getId(),
-                batch.getQuestionBankId(),
                 batch.getCourseId(),
                 batch.getRequestedBy(),
                 batch.getStatus(),
@@ -1370,10 +1348,10 @@ public class AiQuestionDraftService {
 
     private String messageForSkip(String reasonCode) {
         return switch (reasonCode) {
-            case "AI_EXACT_DUPLICATE_ACTIVE" -> "Trùng chính xác với câu hỏi đang active trong Question Bank.";
+            case "AI_EXACT_DUPLICATE_ACTIVE" -> "Trùng chính xác với câu hỏi đang active trong course.";
             case "AI_EVIDENCE_REQUIRED" -> "Evidence cần được xác nhận lại trước khi thêm.";
             case "AI_DRAFT_VERSION_CONFLICT" -> "Draft đã được cập nhật, vui lòng tải lại.";
-            default -> "Draft không đủ điều kiện để thêm vào Question Bank.";
+            default -> "Draft không đủ điều kiện để thêm vào course questions.";
         };
     }
 
