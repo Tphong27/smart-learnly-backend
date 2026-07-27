@@ -12,8 +12,6 @@ import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.service.EnrollmentAccessService;
-import com.smartlearnly.backend.hls.entity.HlsLesson;
-import com.smartlearnly.backend.hls.repository.HlsLessonRepository;
 import com.smartlearnly.backend.learning.dto.*;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
@@ -45,7 +43,6 @@ public class LearningContentService {
         private final EnrollmentAccessService enrollmentAccessService;
         private final CurrentUserService currentUserService;
         private final LessonProgressRepository lessonProgressRepository;
-        private final HlsLessonRepository hlsLessonRepository;
         private final CurriculumResolutionService curriculumResolutionService;
         private final CurriculumDtoMapper curriculumDtoMapper;
         private final CourseAccessService courseAccessService;
@@ -110,15 +107,12 @@ public class LearningContentService {
                                 resolution.version(),
                                 resolution.classId(),
                                 resolution.source());
-                Set<UUID> hlsReadyLessonIds = readyHlsLessonIds(resolution.version());
-
                 return curriculumDtoMapper.toLearningContentResponse(
                                 resolution.version(),
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
                                 completedLessonIdentityIds,
-                                metadata,
-                                hlsReadyLessonIds);
+                                metadata);
         }
 
         @Transactional(readOnly = true)
@@ -130,14 +124,11 @@ public class LearningContentService {
                                 resolution.version(),
                                 resolution.classId(),
                                 resolution.source());
-                Set<UUID> hlsReadyLessonIds = readyHlsLessonIds(resolution.version());
-
                 return curriculumDtoMapper.toPreviewLearningContentResponse(
                                 resolution.version(),
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
-                                metadata,
-                                hlsReadyLessonIds);
+                                metadata);
         }
 
         @Transactional(readOnly = true)
@@ -168,34 +159,12 @@ public class LearningContentService {
                                 resolution.version(),
                                 resolution.classId(),
                                 resolution.source());
-                Set<UUID> hlsReadyLessonIds = readyHlsLessonIds(resolution.version());
-
                 return curriculumDtoMapper.toLearningContentResponse(
                                 resolution.version(),
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
                                 Set.of(),
-                                metadata,
-                                hlsReadyLessonIds);
-        }
-
-        private Set<UUID> readyHlsLessonIds(CurriculumVersion version) {
-                List<UUID> lessonIds = version.getSections().stream()
-                                .filter(Objects::nonNull)
-                                .flatMap(section -> section.getLessons().stream())
-                                .filter(Objects::nonNull)
-                                .map(lesson -> lesson.getId())
-                                .filter(Objects::nonNull)
-                                .toList();
-
-                if (lessonIds.isEmpty()) {
-                        return Set.of();
-                }
-
-                return hlsLessonRepository.findAllById(lessonIds).stream()
-                                .filter(HlsLesson::isReady)
-                                .map(HlsLesson::getLessonId)
-                                .collect(Collectors.toSet());
+                                metadata);
         }
 
         private LearningSectionResponse toSectionResponseWithoutProgress(CourseSection section) {
@@ -243,18 +212,6 @@ public class LearningContentService {
                                 .map(r -> new LearningResourceResponse(r.getUrl(), r.getName(), r.getContentType()))
                                 .toList();
 
-                // Check if HLS content is available
-                boolean hlsReady = false;
-                String hlsPlaylistUrl = null;
-
-                Optional<HlsLesson> hlsLesson = hlsLessonRepository.findByLessonId(lesson.getId());
-                if (hlsLesson.isPresent() && hlsLesson.get().isReady()) {
-                        hlsReady = true;
-                        // The actual playlist URL is generated with a token, so we just indicate HLS is
-                        // available
-                        hlsPlaylistUrl = "/api/v1/hls/playlist/" + lesson.getId();
-                }
-
                 return new LearningLessonResponse(
                                 lesson.getId(),
                                 lesson.getTitle(),
@@ -267,9 +224,7 @@ public class LearningContentService {
                                 Boolean.TRUE.equals(lesson.getPreview()),
                                 lesson.getSortOrder(),
                                 completed,
-                                resourceResponses,
-                                hlsReady,
-                                hlsPlaylistUrl);
+                                resourceResponses);
         }
 
         private boolean isPublishedLesson(Lesson lesson) {

@@ -172,7 +172,7 @@ public class CloudflareR2StorageClient implements FileStorageService {
         return fallback;
     }
 
-    // ==================== HLS Support Methods ====================
+    // Generic private-object helpers retained for non-public storage use.
 
     /**
      * Streams an object to a private R2 bucket without requiring or returning a
@@ -252,12 +252,12 @@ public class CloudflareR2StorageClient implements FileStorageService {
             if ("NoSuchKey".equals(exception.awsErrorDetails().errorCode())) {
                 throw new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
-                        "HLS content not found"
+                        "Storage object not found"
                 );
             }
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "Failed to retrieve HLS content: " + exception.awsErrorDetails().errorMessage()
+                    "Failed to retrieve storage content: " + exception.awsErrorDetails().errorMessage()
             );
         } catch (SdkException exception) {
             log.warn("R2 getObject failed for bucket={} key={} due to network error",
@@ -271,7 +271,7 @@ public class CloudflareR2StorageClient implements FileStorageService {
                     bucket, key, exception);
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "Failed to read HLS content"
+                    "Failed to read storage content"
             );
         }
     }
@@ -481,11 +481,5 @@ public class CloudflareR2StorageClient implements FileStorageService {
         }
     }
 
-    /**
-     * Gets the HLS bucket name for video content.
-     */
-    public String getHlsBucket() {
-        return storageProperties.getLessonMaterialBucket();
-    }
 }
 

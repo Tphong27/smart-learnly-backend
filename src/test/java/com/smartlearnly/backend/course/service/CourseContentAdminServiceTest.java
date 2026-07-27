@@ -34,6 +34,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.videoai.service.VideoSummaryService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -70,6 +71,8 @@ class CourseContentAdminServiceTest {
     private QuizContentValidator quizContentValidator;
     @Mock
     private CourseAccessService courseAccessService;
+    @Mock
+    private VideoSummaryService videoSummaryService;
 
     private final CurriculumDtoMapper curriculumDtoMapper = new CurriculumDtoMapper();
 
@@ -86,7 +89,8 @@ class CourseContentAdminServiceTest {
                 currentUserService,
                 auditLogService,
                 quizContentValidator,
-                courseAccessService
+                courseAccessService,
+                videoSummaryService
         );
     }
 
@@ -263,7 +267,7 @@ class CourseContentAdminServiceTest {
 
         record LessonCase(String type, String content, String videoUrl) {}
         List<LessonCase> cases = List.of(
-                new LessonCase("VIDEO", "Video summary", "https://storage.test/video.mp4"),
+                new LessonCase("VIDEO", null, null),
                 new LessonCase("RICH_TEXT", "<p>Text lesson</p>", null),
                 new LessonCase("QUIZ", quizContent, null),
                 new LessonCase("FLASHCARD", null, null),
@@ -291,6 +295,9 @@ class CourseContentAdminServiceTest {
                 .containsExactly("VIDEO", "RICH_TEXT", "QUIZ", "FLASHCARD", "ESSAY");
         assertThat(responses).allMatch(response -> "published".equals(response.status()));
         assertThat(responses).allMatch(response -> response.id() != null);
+        assertThat(responses.get(0).videoUrl()).isNull();
+        verify(videoSummaryService, never())
+                .normalizeLessonVideoUrl(null, null, true);
         verify(quizContentValidator).validate(quizContent.trim());
     }
 

@@ -1,8 +1,6 @@
 package com.smartlearnly.backend.curriculum.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
@@ -25,31 +23,16 @@ class CurriculumDtoMapperTest {
     private final CurriculumDtoMapper mapper = new CurriculumDtoMapper();
 
     @Test
-    void toLearningLessonResponseIncludesReadyVideoPlaybackState() {
+    void toLearningLessonResponseIncludesYoutubeVideoUrl() {
         CurriculumLesson lesson = videoLesson();
 
         LearningLessonResponse response = mapper.toLearningLessonResponse(
                 lesson,
-                false,
-                Set.of(lesson.getId()));
+                false);
 
-        assertTrue(response.hlsReady());
         assertEquals(
-                "/api/v1/hls/playlist/" + lesson.getId(),
-                response.hlsPlaylistUrl());
-    }
-
-    @Test
-    void toLearningLessonResponseKeepsPlaybackStateEmptyWhenVideoIsNotReady() {
-        CurriculumLesson lesson = videoLesson();
-
-        LearningLessonResponse response = mapper.toLearningLessonResponse(
-                lesson,
-                false,
-                Set.of());
-
-        assertFalse(response.hlsReady());
-        assertNull(response.hlsPlaylistUrl());
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                response.videoUrl());
     }
 
     @Test
@@ -83,8 +66,7 @@ class CurriculumDtoMapperTest {
                 "Complete course",
                 null,
                 Set.of(text.getLessonIdentityId()),
-                null,
-                Set.of(video.getId()));
+                null);
 
         List<LearningLessonResponse> lessons = response.sections().get(0).lessons();
         assertEquals(
@@ -92,7 +74,9 @@ class CurriculumDtoMapperTest {
                 lessons.stream().map(LearningLessonResponse::lessonType).toList());
         assertEquals(5, response.stats().totalLessons());
         assertTrue(lessons.get(1).completed());
-        assertTrue(lessons.get(0).hlsReady());
+        assertEquals(
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                lessons.get(0).videoUrl());
     }
 
     private CurriculumLesson videoLesson() {
@@ -105,6 +89,9 @@ class CurriculumDtoMapperTest {
         lesson.setLessonIdentityId(UUID.randomUUID());
         lesson.setTitle(type.name() + " lesson");
         lesson.setType(type);
+        if (type == LessonType.VIDEO) {
+            lesson.setVideoUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+        }
         lesson.setStatus(LessonStatus.PUBLISHED);
         lesson.setPreview(false);
         lesson.setSortOrder(sortOrder);

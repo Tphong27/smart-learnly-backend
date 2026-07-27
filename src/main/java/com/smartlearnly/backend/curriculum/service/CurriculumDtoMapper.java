@@ -185,8 +185,7 @@ public class CurriculumDtoMapper {
                 courseThumbnail,
                 completedLessonIds,
                 null,
-                false,
-                Set.of());
+                false);
     }
 
     public LearningContentResponse toLearningContentResponse(
@@ -201,25 +200,7 @@ public class CurriculumDtoMapper {
                 courseThumbnail,
                 completedLessonIds,
                 metadata,
-                false,
-                Set.of());
-    }
-
-    public LearningContentResponse toLearningContentResponse(
-            CurriculumVersion version,
-            String courseTitle,
-            String courseThumbnail,
-            Set<UUID> completedLessonIds,
-            CurriculumMetadataResponse metadata,
-            Set<UUID> hlsReadyLessonIds) {
-        return toLearningContentResponse(
-                version,
-                courseTitle,
-                courseThumbnail,
-                completedLessonIds,
-                metadata,
-                false,
-                hlsReadyLessonIds);
+                false);
     }
 
     public LearningContentResponse toPreviewLearningContentResponse(
@@ -227,28 +208,13 @@ public class CurriculumDtoMapper {
             String courseTitle,
             String courseThumbnail,
             CurriculumMetadataResponse metadata) {
-        return toPreviewLearningContentResponse(
-                version,
-                courseTitle,
-                courseThumbnail,
-                metadata,
-                Set.of());
-    }
-
-    public LearningContentResponse toPreviewLearningContentResponse(
-            CurriculumVersion version,
-            String courseTitle,
-            String courseThumbnail,
-            CurriculumMetadataResponse metadata,
-            Set<UUID> hlsReadyLessonIds) {
         return toLearningContentResponse(
                 version,
                 courseTitle,
                 courseThumbnail,
                 Set.of(),
                 metadata,
-                true,
-                hlsReadyLessonIds);
+                true);
     }
 
     private LearningContentResponse toLearningContentResponse(
@@ -257,14 +223,12 @@ public class CurriculumDtoMapper {
             String courseThumbnail,
             Set<UUID> completedLessonIds,
             CurriculumMetadataResponse metadata,
-            boolean previewOnly,
-            Set<UUID> hlsReadyLessonIds) {
+            boolean previewOnly) {
         List<LearningSectionResponse> sections = orderedSections(version).stream()
                 .map(section -> toLearningSectionResponse(
                         section,
                         completedLessonIds,
-                        previewOnly,
-                        hlsReadyLessonIds))
+                        previewOnly))
                 .filter(section -> !section.lessons().isEmpty())
                 .toList();
 
@@ -281,21 +245,19 @@ public class CurriculumDtoMapper {
     public LearningSectionResponse toLearningSectionResponse(
             CurriculumSection section,
             Set<UUID> completedLessonIds) {
-        return toLearningSectionResponse(section, completedLessonIds, false, Set.of());
+        return toLearningSectionResponse(section, completedLessonIds, false);
     }
 
     private LearningSectionResponse toLearningSectionResponse(
             CurriculumSection section,
             Set<UUID> completedLessonIds,
-            boolean previewOnly,
-            Set<UUID> hlsReadyLessonIds) {
+            boolean previewOnly) {
         List<LearningLessonResponse> lessons = orderedLessons(section).stream()
                 .filter(lesson -> lesson.getStatus() == LessonStatus.PUBLISHED)
                 .filter(lesson -> !previewOnly || Boolean.TRUE.equals(lesson.getPreview()))
                 .map(lesson -> toLearningLessonResponse(
                         lesson,
-                        completedLessonIds.contains(lesson.getLessonIdentityId()),
-                        hlsReadyLessonIds))
+                        completedLessonIds.contains(lesson.getLessonIdentityId())))
                 .toList();
 
         return new LearningSectionResponse(
@@ -307,23 +269,12 @@ public class CurriculumDtoMapper {
     }
 
     public LearningLessonResponse toLearningLessonResponse(CurriculumLesson lesson, boolean completed) {
-        return toLearningLessonResponse(lesson, completed, Set.of());
-    }
-
-    public LearningLessonResponse toLearningLessonResponse(
-            CurriculumLesson lesson,
-            boolean completed,
-            Set<UUID> hlsReadyLessonIds) {
         List<LearningResourceResponse> resources = orderedResources(lesson).stream()
                 .map(resource -> new LearningResourceResponse(
                         resource.getUrl(),
                         resource.getName(),
                         resource.getContentType()))
                 .toList();
-        boolean hlsReady = hlsReadyLessonIds != null && hlsReadyLessonIds.contains(lesson.getId());
-        String hlsPlaylistUrl = hlsReady
-                ? "/api/v1/hls/playlist/" + lesson.getId()
-                : null;
 
         return new LearningLessonResponse(
                 lesson.getId(),
@@ -338,8 +289,6 @@ public class CurriculumDtoMapper {
                 lesson.getSortOrder(),
                 completed,
                 resources,
-                hlsReady,
-                hlsPlaylistUrl,
                 lesson.getLessonIdentityId()
         );
     }

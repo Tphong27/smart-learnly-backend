@@ -70,10 +70,6 @@ public class VideoAiContent {
     @OrderBy("segmentIndex ASC")
     private List<VideoAiTranscriptSegment> segments = new ArrayList<>();
 
-    @OneToMany(mappedBy = "content", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("chapterIndex ASC")
-    private List<VideoAiChapter> chapters = new ArrayList<>();
-
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();
@@ -88,23 +84,4 @@ public class VideoAiContent {
         updatedAt = Instant.now();
     }
 
-    public void replaceSegments(List<VideoAiTranscriptSegment> values) {
-        segments.clear();
-        if (values != null) values.forEach(this::addSegment);
-    }
-
-    public void addSegment(VideoAiTranscriptSegment value) {
-        value.setContent(this);
-        segments.add(value);
-    }
-
-    public void replaceChapters(List<VideoAiChapter> values) {
-        chapters.clear();
-        if (values != null) values.forEach(this::addChapter);
-    }
-
-    public void addChapter(VideoAiChapter value) {
-        value.setContent(this);
-        chapters.add(value);
-    }
 }

@@ -37,7 +37,6 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/sepay").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/internal/hls/jobs/callback").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categories",
                                 "/api/v1/courses",
@@ -64,14 +63,6 @@ public class SecurityConfig {
                                 "/api/v1/courses/*/preview",
                                 "/api/v1/courses/{courseId}/preview"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET,
-                                "/api/v1/hls/token/*",
-                                "/api/v1/hls/playlist/*",
-                                "/api/v1/hls/variant/**",
-                                "/api/v1/hls/key/*",
-                                "/api/v1/hls/segment/**",
-                                "/api/v1/hls/free_video/*"
-                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(Customizer.withDefaults());
@@ -87,7 +78,6 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/sepay").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/internal/hls/jobs/callback").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categories",
                                 "/api/v1/courses",
@@ -122,16 +112,6 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/v1/courses/*/preview",
                                 "/api/v1/courses/{courseId}/preview"
-                        ).permitAll()
-                        // Playback endpoints authenticate with short-lived HLS
-                        // query tokens. Upload/status remain JWT + role protected.
-                        .requestMatchers(HttpMethod.GET,
-                                "/api/v1/hls/token/*",
-                                "/api/v1/hls/playlist/*",
-                                "/api/v1/hls/variant/**",
-                                "/api/v1/hls/key/*",
-                                "/api/v1/hls/segment/**",
-                                "/api/v1/hls/free_video/*"
                         ).permitAll()
                         // Admin endpoints: allow ADMIN/TMO/SME/TRAINER to access course management APIs
                         .requestMatchers("/api/v1/admin/question-banks/**", "/api/v1/admin/questions/**", "/api/v1/admin/test-questions/**")

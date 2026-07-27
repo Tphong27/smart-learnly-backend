@@ -4,21 +4,19 @@ import java.util.List;
 import java.util.UUID;
 
 public record LearningLessonResponse(
-    UUID lessonId,
-    String title,
-    String lessonType,
-    String status,
-    String videoUrl,
-    String content,
-    String attachmentUrl,
-    Integer durationSeconds,
-    boolean isPreview,
-    int sortOrder,
-    boolean completed,
-    List<LearningResourceResponse> resources,
-    boolean hlsReady,
-    String hlsPlaylistUrl,
-    UUID lessonIdentityId
+        UUID lessonId,
+        String title,
+        String lessonType,
+        String status,
+        String videoUrl,
+        String content,
+        String attachmentUrl,
+        Integer durationSeconds,
+        boolean isPreview,
+        int sortOrder,
+        boolean completed,
+        List<LearningResourceResponse> resources,
+        UUID lessonIdentityId
 ) {
     public LearningLessonResponse(
             UUID lessonId,
@@ -32,9 +30,7 @@ public record LearningLessonResponse(
             boolean isPreview,
             int sortOrder,
             boolean completed,
-            List<LearningResourceResponse> resources,
-            boolean hlsReady,
-            String hlsPlaylistUrl) {
+            List<LearningResourceResponse> resources) {
         this(
                 lessonId,
                 title,
@@ -48,8 +44,7 @@ public record LearningLessonResponse(
                 sortOrder,
                 completed,
                 resources,
-                hlsReady,
-                hlsPlaylistUrl,
-                null);
+                null
+        );
     }
 }
