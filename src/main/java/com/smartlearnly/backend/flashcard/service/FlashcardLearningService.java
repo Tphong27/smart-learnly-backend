@@ -405,7 +405,7 @@ public class FlashcardLearningService {
                 flashcardSet.getId(),
                 lesson.getId(),
                 lesson.getCourse().getId(),
-                lesson.getSection().getId(),
+                lesson.getModule().getId(),
                 flashcardSet.getTitle(),
                 flashcardSet.getDescription(),
                 cards.stream()

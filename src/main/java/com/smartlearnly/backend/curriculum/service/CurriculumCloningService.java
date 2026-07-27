@@ -55,7 +55,7 @@ public class CurriculumCloningService {
 
     private CurriculumSection copySection(CurriculumSection source) {
         CurriculumSection target = new CurriculumSection();
-        target.setSourceSectionId(source.getSourceSectionId());
+        target.setSourceModuleId(source.getSourceModuleId());
         target.setSourceCurriculumSectionId(source.getId());
         target.setTitle(source.getTitle());
         target.setSortOrder(source.getSortOrder());

@@ -17,7 +17,7 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
-import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionAnswerResponse;
@@ -39,11 +39,9 @@ import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
-import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
-import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
@@ -69,7 +67,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @RequiredArgsConstructor
 public class AdminFlashcardStagingService {
-    private static final String SOURCE_TYPE_QUESTION_BANK = "QUESTION_BANK";
+    private static final String SOURCE_TYPE_COURSE_QUESTIONS = "COURSE_QUESTIONS";
     private static final String SOURCE_TYPE_TEXT = "TEXT";
     private static final String SOURCE_TYPE_AI = "AI";
     private static final String SOURCE_TYPE_DOCX = "DOCX";
@@ -122,7 +120,6 @@ public class AdminFlashcardStagingService {
     private final FlashcardStagingCardRepository stagingCardRepository;
     private final QuestionRepository questionRepository;
     private final QuestionAnswerRepository questionAnswerRepository;
-    private final QuestionBankRepository questionBankRepository;
     private final CurrentUserService currentUserService;
     private final FlashcardTextGenerationService flashcardTextGenerationService;
     private final FlashcardDocumentGenerationService flashcardDocumentGenerationService;
@@ -132,7 +129,7 @@ public class AdminFlashcardStagingService {
     @Transactional(readOnly = true)
     public List<SourceQuestionResponse> listSourceQuestions(
             UUID setId,
-            UUID questionBankId,
+            UUID moduleId,
             String keyword,
             Short difficulty,
             String status
@@ -140,9 +137,8 @@ public class AdminFlashcardStagingService {
         SetContext context = resolveSetContext(setId);
         QuestionStatus parsedStatus = parseQuestionStatus(status);
         List<Question> questions = questionRepository.searchForAdmin(
-                questionBankId,
                 context.course().getId(),
-                null,
+                moduleId,
                 keyword,
                 null,
                 parsedStatus == null ? null : toApiValue(parsedStatus),
@@ -152,7 +148,6 @@ public class AdminFlashcardStagingService {
                 .filter(question -> context.course().getId().equals(question.getCourseId()))
                 .toList();
         Map<UUID, List<QuestionAnswer>> answersByQuestionId = answersByQuestionId(questions);
-        Map<UUID, String> bankNames = bankNames(questions.stream().map(Question::getQuestionBankId).collect(Collectors.toSet()));
         Set<UUID> importedQuestionIds = importedSourceQuestionIds(
                 setId,
                 questions.stream().map(Question::getId).toList()
@@ -161,7 +156,7 @@ public class AdminFlashcardStagingService {
         return questions.stream()
                 .map(question -> toSourceQuestionResponse(
                         question,
-                        bankNames.get(question.getQuestionBankId()),
+                        "Course questions",
                         answersByQuestionId.getOrDefault(question.getId(), List.of()),
                         importedQuestionIds.contains(question.getId())
                 ))
@@ -169,7 +164,7 @@ public class AdminFlashcardStagingService {
     }
 
     @Transactional
-    public StagingBatchResponse importQuestionBank(UUID setId, ImportQuestionBankRequest request) {
+    public StagingBatchResponse importCourseQuestions(UUID setId, ImportCourseQuestionsRequest request) {
         SetContext context = resolveSetContext(setId);
         if (request == null || request.questionIds() == null || request.questionIds().isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one question id is required");
@@ -191,15 +186,14 @@ public class AdminFlashcardStagingService {
         }
 
         Map<UUID, List<QuestionAnswer>> answersByQuestionId = answersByQuestionId(questions);
-        Map<UUID, String> bankNames = bankNames(questions.stream().map(Question::getQuestionBankId).collect(Collectors.toSet()));
         FlashcardStagingBatch batch = new FlashcardStagingBatch();
         batch.setFlashcardSet(context.flashcardSet());
         applyBatchTarget(batch, context);
         batch.setCourse(context.course());
         batch.setCreatedBy(actor);
-        batch.setSourceType(SOURCE_TYPE_QUESTION_BANK);
+        batch.setSourceType(SOURCE_TYPE_COURSE_QUESTIONS);
         batch.setStatus(STATUS_DRAFT);
-        batch.setSourceName(sourceName(bankNames));
+        batch.setSourceName(context.course().getTitle() + " - Course questions");
         FlashcardStagingBatch savedBatch = stagingBatchRepository.save(batch);
 
         List<FlashcardStagingCard> cards = new ArrayList<>();
@@ -964,30 +958,6 @@ public class AdminFlashcardStagingService {
                 .collect(Collectors.groupingBy(QuestionAnswer::getQuestionId, LinkedHashMap::new, Collectors.toList()));
     }
 
-    private Map<UUID, String> bankNames(Set<UUID> bankIds) {
-        if (bankIds.isEmpty()) {
-            return Map.of();
-        }
-        Map<UUID, String> names = new HashMap<>();
-        questionBankRepository.findAllById(bankIds).forEach(bank -> names.put(bank.getId(), bank.getName()));
-        return names;
-    }
-
-    private String sourceName(Map<UUID, String> bankNames) {
-        List<String> names = bankNames.values().stream()
-                .filter(name -> name != null && !name.isBlank())
-                .distinct()
-                .sorted()
-                .toList();
-        if (names.size() == 1) {
-            return names.get(0);
-        }
-        if (names.size() > 1) {
-            return "Question Bank Import (" + names.size() + " banks)";
-        }
-        return "Question Bank Import";
-    }
-
     private String buildFrontText(Question question, List<QuestionAnswer> answers) {
         String questionText = normalizeRequired(question.getQuestionText(), "Question text is required");
         if (!hasOptions(question, answers)) {
@@ -1114,7 +1084,7 @@ public class AdminFlashcardStagingService {
 
     private SourceQuestionResponse toSourceQuestionResponse(
             Question question,
-            String bankName,
+            String sourceName,
             List<QuestionAnswer> answers,
             boolean imported
     ) {
@@ -1129,8 +1099,7 @@ public class AdminFlashcardStagingService {
         return new SourceQuestionResponse(
                 question.getId(),
                 question.getId(),
-                question.getQuestionBankId(),
-                bankName,
+                sourceName,
                 question.getCourseId(),
                 question.getModuleId(),
                 question.getQuestionText(),

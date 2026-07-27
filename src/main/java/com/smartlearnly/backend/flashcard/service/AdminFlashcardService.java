@@ -457,7 +457,7 @@ public class AdminFlashcardService {
                     flashcardSet.getId(),
                     legacyLesson.getId(),
                     legacyLesson.getCourse().getId(),
-                    legacyLesson.getSection().getId(),
+                    legacyLesson.getModule().getId(),
                     flashcardSet.getTitle(),
                     flashcardSet.getDescription(),
                     cards.stream().map(this::toCardResponse).toList(),

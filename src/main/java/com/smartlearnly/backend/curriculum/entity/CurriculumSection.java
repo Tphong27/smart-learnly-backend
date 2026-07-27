@@ -40,8 +40,8 @@ public class CurriculumSection {
     @Column(name = "curriculum_version_id", nullable = false, insertable = false, updatable = false)
     private UUID curriculumVersionId;
 
-    @Column(name = "source_section_id")
-    private UUID sourceSectionId;
+    @Column(name = "source_module_id")
+    private UUID sourceModuleId;
 
     @Column(name = "source_curriculum_section_id")
     private UUID sourceCurriculumSectionId;

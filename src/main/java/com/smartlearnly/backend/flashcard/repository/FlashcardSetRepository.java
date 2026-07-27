@@ -41,9 +41,9 @@ public interface FlashcardSetRepository extends JpaRepository<FlashcardSet, UUID
                 course.id AS "courseId",
                 course.title AS "courseTitle",
                 course.slug AS "courseSlug",
-                section.id AS "sectionId",
-                section.title AS "sectionTitle",
-                section.sort_order AS "sectionSortOrder",
+                module.id AS "sectionId",
+                module.title AS "sectionTitle",
+                module.order_index AS "sectionSortOrder",
                 lesson.id AS "lessonId",
                 lesson.title AS "lessonTitle",
                 lesson.sort_order AS "lessonSortOrder",
@@ -56,7 +56,7 @@ public interface FlashcardSetRepository extends JpaRepository<FlashcardSet, UUID
                 MAX(progress.last_reviewed_at) AS "lastReviewedAt"
             FROM public.flashcard_sets flashcard_set
             JOIN public.lessons lesson ON lesson.id = flashcard_set.lesson_id
-            JOIN public.course_sections section ON section.id = lesson.section_id
+            JOIN public.modules module ON module.id = lesson.module_id
             JOIN public.courses course ON course.id = lesson.course_id
             JOIN public.course_enrollments enrollment ON enrollment.course_id = course.id
             LEFT JOIN public.flashcards card
@@ -76,9 +76,9 @@ public interface FlashcardSetRepository extends JpaRepository<FlashcardSet, UUID
                 course.id,
                 course.title,
                 course.slug,
-                section.id,
-                section.title,
-                section.sort_order,
+                module.id,
+                module.title,
+                module.order_index,
                 lesson.id,
                 lesson.title,
                 lesson.sort_order,
@@ -86,8 +86,8 @@ public interface FlashcardSetRepository extends JpaRepository<FlashcardSet, UUID
                 flashcard_set.title
             ORDER BY
                 course.title ASC,
-                section.sort_order ASC,
-                section.id ASC,
+                module.order_index ASC,
+                module.id ASC,
                 lesson.sort_order ASC,
                 lesson.id ASC,
                 flashcard_set.title ASC

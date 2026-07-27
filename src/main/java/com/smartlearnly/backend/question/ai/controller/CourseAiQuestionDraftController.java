@@ -1,12 +1,8 @@
 package com.smartlearnly.backend.question.ai.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
-import com.smartlearnly.backend.common.exception.BusinessException;
-import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
 import com.smartlearnly.backend.question.ai.service.AiQuestionDraftService;
-import com.smartlearnly.backend.question.entity.QuestionBank;
-import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,18 +34,17 @@ import org.springframework.web.multipart.MultipartFile;
 @SecurityRequirement(name = "bearerAuth")
 public class CourseAiQuestionDraftController {
     private final AiQuestionDraftService aiQuestionDraftService;
-    private final QuestionBankRepository questionBankRepository;
 
     @GetMapping("/source-capabilities")
     @Operation(summary = "Get supported AI question generation source limits")
     public ApiResponse<AiQuestionDraftDtos.SourceCapabilitiesResponse> sourceCapabilities(@PathVariable UUID courseId) {
-        return ApiResponse.success("AI generation source capabilities loaded successfully", aiQuestionDraftService.sourceCapabilities(resolveCompatibilityBankId(courseId)));
+        return ApiResponse.success("AI generation source capabilities loaded successfully", aiQuestionDraftService.sourceCapabilities(courseId));
     }
 
     @GetMapping("/sources")
     @Operation(summary = "List transcript sources for AI question generation")
     public ApiResponse<List<AiQuestionDraftDtos.SourceOptionResponse>> sources(@PathVariable UUID courseId) {
-        return ApiResponse.success("AI generation sources loaded successfully", aiQuestionDraftService.listSources(resolveCompatibilityBankId(courseId)));
+        return ApiResponse.success("AI generation sources loaded successfully", aiQuestionDraftService.listSources(courseId));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -58,8 +53,7 @@ public class CourseAiQuestionDraftController {
             @PathVariable UUID courseId,
             @Valid @RequestBody AiQuestionDraftDtos.CreateBatchRequest request
     ) {
-        UUID bankId = resolveCompatibilityBankId(courseId);
-        AiQuestionDraftDtos.BatchResponse batch = aiQuestionDraftService.createBatch(bankId, request);
+        AiQuestionDraftDtos.BatchResponse batch = aiQuestionDraftService.createBatch(courseId, request);
         return ResponseEntity.created(URI.create("/api/v1/admin/courses/" + courseId + "/questions/ai-drafts/" + batch.batchId()))
                 .body(ApiResponse.success("AI question generation batch created successfully", batch));
     }
@@ -71,8 +65,7 @@ public class CourseAiQuestionDraftController {
             @Valid @RequestPart("request") AiQuestionDraftDtos.CreateBatchRequest request,
             @RequestPart(value = "files", required = false) List<MultipartFile> files
     ) {
-        UUID bankId = resolveCompatibilityBankId(courseId);
-        AiQuestionDraftDtos.BatchResponse batch = aiQuestionDraftService.createBatch(bankId, request, files == null ? List.of() : files);
+        AiQuestionDraftDtos.BatchResponse batch = aiQuestionDraftService.createBatch(courseId, request, files == null ? List.of() : files);
         return ResponseEntity.created(URI.create("/api/v1/admin/courses/" + courseId + "/questions/ai-drafts/" + batch.batchId()))
                 .body(ApiResponse.success("AI question generation batch created successfully", batch));
     }
@@ -80,13 +73,13 @@ public class CourseAiQuestionDraftController {
     @GetMapping
     @Operation(summary = "List AI question generation batches")
     public ApiResponse<List<AiQuestionDraftDtos.BatchResponse>> list(@PathVariable UUID courseId) {
-        return ApiResponse.success("AI question generation batches loaded successfully", aiQuestionDraftService.listBatches(resolveCompatibilityBankId(courseId)));
+        return ApiResponse.success("AI question generation batches loaded successfully", aiQuestionDraftService.listBatches(courseId));
     }
 
     @GetMapping("/{batchId}")
     @Operation(summary = "Get an AI question generation batch")
     public ApiResponse<AiQuestionDraftDtos.BatchResponse> get(@PathVariable UUID courseId, @PathVariable UUID batchId) {
-        return ApiResponse.success("AI question generation batch loaded successfully", aiQuestionDraftService.getBatch(resolveCompatibilityBankId(courseId), batchId));
+        return ApiResponse.success("AI question generation batch loaded successfully", aiQuestionDraftService.getBatch(courseId, batchId));
     }
 
     @PostMapping("/{batchId}/sources/{sourceId}/download-url")
@@ -96,13 +89,13 @@ public class CourseAiQuestionDraftController {
             @PathVariable UUID batchId,
             @PathVariable UUID sourceId
     ) {
-        return ApiResponse.success("AI generation source download URL created successfully", aiQuestionDraftService.sourceDownloadUrl(resolveCompatibilityBankId(courseId), batchId, sourceId));
+        return ApiResponse.success("AI generation source download URL created successfully", aiQuestionDraftService.sourceDownloadUrl(courseId, batchId, sourceId));
     }
 
     @GetMapping("/{batchId}/items")
     @Operation(summary = "List draft items in an AI question generation batch")
     public ApiResponse<List<AiQuestionDraftDtos.DraftResponse>> items(@PathVariable UUID courseId, @PathVariable UUID batchId) {
-        return ApiResponse.success("AI question drafts loaded successfully", aiQuestionDraftService.listDrafts(resolveCompatibilityBankId(courseId), batchId));
+        return ApiResponse.success("AI question drafts loaded successfully", aiQuestionDraftService.listDrafts(courseId, batchId));
     }
 
     @PutMapping("/{batchId}/drafts/{draftId}")
@@ -113,7 +106,7 @@ public class CourseAiQuestionDraftController {
             @PathVariable UUID draftId,
             @Valid @RequestBody AiQuestionDraftDtos.UpdateDraftRequest request
     ) {
-        return ApiResponse.success("AI question draft updated successfully", aiQuestionDraftService.updateDraft(resolveCompatibilityBankId(courseId), batchId, draftId, request));
+        return ApiResponse.success("AI question draft updated successfully", aiQuestionDraftService.updateDraft(courseId, batchId, draftId, request));
     }
 
     @PostMapping("/{batchId}/drafts/{draftId}/reject")
@@ -124,7 +117,7 @@ public class CourseAiQuestionDraftController {
             @PathVariable UUID draftId,
             @Valid @RequestBody AiQuestionDraftDtos.RejectDraftRequest request
     ) {
-        return ApiResponse.success("AI question draft rejected successfully", aiQuestionDraftService.rejectDraft(resolveCompatibilityBankId(courseId), batchId, draftId, request));
+        return ApiResponse.success("AI question draft rejected successfully", aiQuestionDraftService.rejectDraft(courseId, batchId, draftId, request));
     }
 
     @PostMapping("/{batchId}/drafts/{draftId}/evidence-confirmation")
@@ -135,7 +128,7 @@ public class CourseAiQuestionDraftController {
             @PathVariable UUID draftId,
             @Valid @RequestBody AiQuestionDraftDtos.EvidenceConfirmationRequest request
     ) {
-        return ApiResponse.success("AI question draft evidence updated successfully", aiQuestionDraftService.confirmEvidence(resolveCompatibilityBankId(courseId), batchId, draftId, request));
+        return ApiResponse.success("AI question draft evidence updated successfully", aiQuestionDraftService.confirmEvidence(courseId, batchId, draftId, request));
     }
 
     @PostMapping("/{batchId}/add-selected")
@@ -145,22 +138,13 @@ public class CourseAiQuestionDraftController {
             @PathVariable UUID batchId,
             @Valid @RequestBody AiQuestionDraftDtos.AddSelectedRequest request
     ) {
-        return ApiResponse.success("Selected AI question drafts processed successfully", aiQuestionDraftService.addSelected(resolveCompatibilityBankId(courseId), batchId, request));
+        return ApiResponse.success("Selected AI question drafts processed successfully", aiQuestionDraftService.addSelected(courseId, batchId, request));
     }
 
     @PostMapping("/{batchId}/retry")
     @Operation(summary = "Retry a failed AI question generation batch")
     public ApiResponse<AiQuestionDraftDtos.BatchResponse> retry(@PathVariable UUID courseId, @PathVariable UUID batchId) {
-        return ApiResponse.success("AI question generation batch retry completed", aiQuestionDraftService.retry(resolveCompatibilityBankId(courseId), batchId));
+        return ApiResponse.success("AI question generation batch retry completed", aiQuestionDraftService.retry(courseId, batchId));
     }
 
-    private UUID resolveCompatibilityBankId(UUID courseId) {
-        return questionBankRepository
-                .findByCourseIdAndStatusOrderByUpdatedAtDesc(courseId, "approved")
-                .stream()
-                .findFirst()
-                .or(() -> questionBankRepository.findByCourseIdOrderByUpdatedAtDesc(courseId).stream().findFirst())
-                .map(QuestionBank::getId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course AI question compatibility storage was not found"));
-    }
 }

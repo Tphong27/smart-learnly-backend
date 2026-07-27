@@ -12,7 +12,7 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
-import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
@@ -30,7 +30,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class FlashcardQuestionBankImportServiceTest {
+class FlashcardCourseQuestionImportServiceTest {
     @Mock
     private FlashcardSetRepository flashcardSetRepository;
     @Mock
@@ -40,11 +40,11 @@ class FlashcardQuestionBankImportServiceTest {
     @Mock
     private AdminFlashcardStagingService adminFlashcardStagingService;
 
-    private FlashcardQuestionBankImportService importService;
+    private FlashcardCourseQuestionImportService importService;
 
     @BeforeEach
     void setUp() {
-        importService = new FlashcardQuestionBankImportService(
+        importService = new FlashcardCourseQuestionImportService(
                 flashcardSetRepository,
                 questionRepository,
                 stagingCardRepository,
@@ -53,55 +53,55 @@ class FlashcardQuestionBankImportServiceTest {
     }
 
     @Test
-    void importQuestionBankShouldRejectDuplicateIds() {
+    void importCourseQuestionsShouldRejectDuplicateIds() {
         FlashcardSet set = flashcardSet();
         UUID questionId = UUID.randomUUID();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
 
-        assertThatThrownBy(() -> importService.importQuestionBank(
+        assertThatThrownBy(() -> importService.importCourseQuestions(
                 set.getId(),
-                new ImportQuestionBankRequest(List.of(questionId, questionId))
+                new ImportCourseQuestionsRequest(List.of(questionId, questionId))
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
-        verify(adminFlashcardStagingService, never()).importQuestionBank(any(), any());
+        verify(adminFlashcardStagingService, never()).importCourseQuestions(any(), any());
     }
 
     @Test
-    void importQuestionBankShouldRejectMissingQuestionIds() {
+    void importCourseQuestionsShouldRejectMissingQuestionIds() {
         FlashcardSet set = flashcardSet();
         UUID questionId = UUID.randomUUID();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
         when(questionRepository.findAllById(List.of(questionId))).thenReturn(List.of());
 
-        assertThatThrownBy(() -> importService.importQuestionBank(
+        assertThatThrownBy(() -> importService.importCourseQuestions(
                 set.getId(),
-                new ImportQuestionBankRequest(List.of(questionId))
+                new ImportCourseQuestionsRequest(List.of(questionId))
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
-        verify(adminFlashcardStagingService, never()).importQuestionBank(any(), any());
+        verify(adminFlashcardStagingService, never()).importCourseQuestions(any(), any());
     }
 
     @Test
-    void importQuestionBankShouldRejectNonApprovedQuestion() {
+    void importCourseQuestionsShouldRejectNonApprovedQuestion() {
         FlashcardSet set = flashcardSet();
         Question draftQuestion = question(set.getLesson().getCourse().getId(), QuestionStatus.DRAFT);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
         when(questionRepository.findAllById(List.of(draftQuestion.getId()))).thenReturn(List.of(draftQuestion));
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any())).thenReturn(List.of());
 
-        assertThatThrownBy(() -> importService.importQuestionBank(
+        assertThatThrownBy(() -> importService.importCourseQuestions(
                 set.getId(),
-                new ImportQuestionBankRequest(List.of(draftQuestion.getId()))
+                new ImportCourseQuestionsRequest(List.of(draftQuestion.getId()))
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
-        verify(adminFlashcardStagingService, never()).importQuestionBank(any(), any());
+        verify(adminFlashcardStagingService, never()).importCourseQuestions(any(), any());
     }
 
     @Test
-    void importQuestionBankShouldRejectAlreadyImportedQuestionForSet() {
+    void importCourseQuestionsShouldRejectAlreadyImportedQuestionForSet() {
         FlashcardSet set = flashcardSet();
         Question approvedQuestion = question(set.getLesson().getCourse().getId(), QuestionStatus.APPROVED);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
@@ -109,29 +109,32 @@ class FlashcardQuestionBankImportServiceTest {
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of(approvedQuestion.getId()));
 
-        assertThatThrownBy(() -> importService.importQuestionBank(
+        assertThatThrownBy(() -> importService.importCourseQuestions(
                 set.getId(),
-                new ImportQuestionBankRequest(List.of(approvedQuestion.getId()))
+                new ImportCourseQuestionsRequest(List.of(approvedQuestion.getId()))
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.CONFLICT));
-        verify(adminFlashcardStagingService, never()).importQuestionBank(any(), any());
+        verify(adminFlashcardStagingService, never()).importCourseQuestions(any(), any());
     }
 
     @Test
-    void importQuestionBankShouldDelegateApprovedQuestionInCourse() {
+    void importCourseQuestionsShouldDelegateApprovedQuestionInCourse() {
         FlashcardSet set = flashcardSet();
         Question approvedQuestion = question(set.getLesson().getCourse().getId(), QuestionStatus.APPROVED);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
         when(questionRepository.findAllById(List.of(approvedQuestion.getId()))).thenReturn(List.of(approvedQuestion));
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any())).thenReturn(List.of());
 
-        importService.importQuestionBank(
+        importService.importCourseQuestions(
                 set.getId(),
-                new ImportQuestionBankRequest(List.of(approvedQuestion.getId()))
+                new ImportCourseQuestionsRequest(List.of(approvedQuestion.getId()))
         );
 
-        verify(adminFlashcardStagingService).importQuestionBank(set.getId(), new ImportQuestionBankRequest(List.of(approvedQuestion.getId())));
+        verify(adminFlashcardStagingService).importCourseQuestions(
+                set.getId(),
+                new ImportCourseQuestionsRequest(List.of(approvedQuestion.getId()))
+        );
     }
 
     private FlashcardSet flashcardSet() {
@@ -156,7 +159,7 @@ class FlashcardQuestionBankImportServiceTest {
         Question question = new Question();
         question.setId(UUID.randomUUID());
         question.setCourseId(courseId);
-        question.setQuestionBankId(UUID.randomUUID());
+        question.setModuleId(UUID.randomUUID());
         question.setQuestionText("Question?");
         question.setQuestionType(QuestionType.MULTIPLE_CHOICE);
         question.setStatus(status);

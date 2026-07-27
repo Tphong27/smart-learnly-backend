@@ -20,7 +20,7 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
-import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportQuestionBankRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
@@ -39,14 +39,12 @@ import com.smartlearnly.backend.flashcard.staging.service.FlashcardTranscriptTex
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
-import com.smartlearnly.backend.learning.module.entity.CourseSection;
+import com.smartlearnly.backend.learning.module.entity.CourseModule;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
-import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
-import com.smartlearnly.backend.question.repository.QuestionBankRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
@@ -78,8 +76,6 @@ class AdminFlashcardStagingServiceTest {
     @Mock
     private QuestionAnswerRepository questionAnswerRepository;
     @Mock
-    private QuestionBankRepository questionBankRepository;
-    @Mock
     private CurrentUserService currentUserService;
     @Mock
     private FlashcardTextGenerationService flashcardTextGenerationService;
@@ -101,7 +97,6 @@ class AdminFlashcardStagingServiceTest {
                 stagingCardRepository,
                 questionRepository,
                 questionAnswerRepository,
-                questionBankRepository,
                 currentUserService,
                 flashcardTextGenerationService,
                 flashcardDocumentGenerationService,
@@ -111,12 +106,12 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
-    void importSelectedQuestionBankQuestionsCreatesOneBatchAndStagingCards() {
+    void importSelectedCourseQuestionsCreatesOneBatchAndStagingCards() {
         FlashcardSet flashcardSet = flashcardSet();
         UserAccount actor = actor();
-        QuestionBank bank = bank(flashcardSet.getLesson().getCourse().getId(), "Bank A");
-        Question firstQuestion = question(flashcardSet.getLesson().getCourse().getId(), bank.getId(), "Question 1");
-        Question secondQuestion = question(flashcardSet.getLesson().getCourse().getId(), bank.getId(), "Question 2");
+        UUID moduleId = UUID.randomUUID();
+        Question firstQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Question 1");
+        Question secondQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Question 2");
         firstQuestion.setExplanation("Explanation 1");
         QuestionAnswer firstDistractor = answer(firstQuestion.getId(), "Distractor 1", false, 0);
         QuestionAnswer firstAnswer = answer(firstQuestion.getId(), "Correct 1", true, 1);
@@ -127,7 +122,6 @@ class AdminFlashcardStagingServiceTest {
                 .thenReturn(List.of(firstQuestion, secondQuestion));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(firstQuestion.getId(), secondQuestion.getId())))
                 .thenReturn(List.of(firstDistractor, firstAnswer, secondAnswer));
-        when(questionBankRepository.findAllById(any())).thenReturn(List.of(bank));
         when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
             FlashcardStagingBatch batch = invocation.getArgument(0);
             batch.setId(UUID.randomUUID());
@@ -139,14 +133,14 @@ class AdminFlashcardStagingServiceTest {
             return cards;
         });
 
-        StagingBatchResponse response = service.importQuestionBank(
+        StagingBatchResponse response = service.importCourseQuestions(
                 flashcardSet.getId(),
-                new ImportQuestionBankRequest(List.of(firstQuestion.getId(), secondQuestion.getId()))
+                new ImportCourseQuestionsRequest(List.of(firstQuestion.getId(), secondQuestion.getId()))
         );
 
-        assertThat(response.sourceType()).isEqualTo("QUESTION_BANK");
+        assertThat(response.sourceType()).isEqualTo("COURSE_QUESTIONS");
         assertThat(response.status()).isEqualTo("draft");
-        assertThat(response.sourceName()).isEqualTo("Bank A");
+        assertThat(response.sourceName()).isEqualTo("Course - Course questions");
         assertThat(response.cards()).hasSize(2);
         assertThat(response.cards()).extracting(card -> card.frontText())
                 .containsExactly(
@@ -162,22 +156,24 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
-    void importQuestionBankRejectsQuestionsWithoutCorrectAnswer() {
+    void importCourseQuestionsRejectsQuestionsWithoutCorrectAnswer() {
         FlashcardSet flashcardSet = flashcardSet();
-        QuestionBank bank = bank(flashcardSet.getLesson().getCourse().getId(), "Bank A");
-        Question question = question(flashcardSet.getLesson().getCourse().getId(), bank.getId(), "Question without correct answer");
+        Question question = question(
+                flashcardSet.getLesson().getCourse().getId(),
+                UUID.randomUUID(),
+                "Question without correct answer"
+        );
         QuestionAnswer answer = answer(question.getId(), "Only option", false, 0);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
         when(questionRepository.findAllById(List.of(question.getId()))).thenReturn(List.of(question));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(question.getId())))
                 .thenReturn(List.of(answer));
-        when(questionBankRepository.findAllById(any())).thenReturn(List.of(bank));
         when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThatThrownBy(() -> service.importQuestionBank(
+        assertThatThrownBy(() -> service.importCourseQuestions(
                 flashcardSet.getId(),
-                new ImportQuestionBankRequest(List.of(question.getId()))
+                new ImportCourseQuestionsRequest(List.of(question.getId()))
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -804,9 +800,9 @@ class AdminFlashcardStagingServiceTest {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
         when(questionRepository.findAllById(List.of(question.getId()))).thenReturn(List.of(question));
 
-        assertThatThrownBy(() -> service.importQuestionBank(
+        assertThatThrownBy(() -> service.importCourseQuestions(
                 flashcardSet.getId(),
-                new ImportQuestionBankRequest(List.of(question.getId()))
+                new ImportCourseQuestionsRequest(List.of(question.getId()))
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -816,7 +812,7 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
-    void importRejectsAlreadyImportedQuestionBankQuestion() {
+    void importRejectsAlreadyImportedCourseQuestion() {
         FlashcardSet flashcardSet = flashcardSet();
         Question question = question(
                 flashcardSet.getLesson().getCourse().getId(),
@@ -829,9 +825,9 @@ class AdminFlashcardStagingServiceTest {
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of(question.getId()));
 
-        assertThatThrownBy(() -> service.importQuestionBank(
+        assertThatThrownBy(() -> service.importCourseQuestions(
                 flashcardSet.getId(),
-                new ImportQuestionBankRequest(List.of(question.getId()))
+                new ImportCourseQuestionsRequest(List.of(question.getId()))
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -1318,18 +1314,15 @@ class AdminFlashcardStagingServiceTest {
     @Test
     void sourceQuestionsReturnsOnlySameCourseQuestions() {
         FlashcardSet flashcardSet = flashcardSet();
-        UUID bankId = UUID.randomUUID();
-        Question sameCourseQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Same course");
-        Question otherCourseQuestion = question(UUID.randomUUID(), bankId, "Other course");
+        UUID moduleId = UUID.randomUUID();
+        Question sameCourseQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Same course");
+        Question otherCourseQuestion = question(UUID.randomUUID(), moduleId, "Other course");
         QuestionAnswer answer = answer(sameCourseQuestion.getId(), "Correct", true, 0);
-        QuestionBank bank = bank(flashcardSet.getLesson().getCourse().getId(), "Bank A");
-        bank.setId(bankId);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(sameCourseQuestion, otherCourseQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(sameCourseQuestion.getId())))
                 .thenReturn(List.of(answer));
-        when(questionBankRepository.findAllById(any())).thenReturn(List.of(bank));
 
         List<SourceQuestionResponse> response = service.listSourceQuestions(
                 flashcardSet.getId(),
@@ -1341,7 +1334,7 @@ class AdminFlashcardStagingServiceTest {
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).questionId()).isEqualTo(sameCourseQuestion.getId());
-        assertThat(response.get(0).questionBankName()).isEqualTo("Bank A");
+        assertThat(response.get(0).sourceName()).isEqualTo("Course questions");
         assertThat(response.get(0).correctAnswers()).containsExactly("Correct");
         assertThat(response.get(0).imported()).isFalse();
     }
@@ -1349,16 +1342,15 @@ class AdminFlashcardStagingServiceTest {
     @Test
     void sourceQuestionsMarkDraftAndApprovedStagingSourcesAsImported() {
         FlashcardSet flashcardSet = flashcardSet();
-        UUID bankId = UUID.randomUUID();
-        Question draftImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Draft import");
-        Question approvedImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Approved import");
-        Question notImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Not imported");
+        UUID moduleId = UUID.randomUUID();
+        Question draftImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Draft import");
+        Question approvedImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Approved import");
+        Question notImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Not imported");
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(draftImportedQuestion, approvedImportedQuestion, notImportedQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(anyList()))
                 .thenReturn(List.of());
-        when(questionBankRepository.findAllById(any())).thenReturn(List.of());
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of(draftImportedQuestion.getId(), approvedImportedQuestion.getId()));
 
@@ -1378,7 +1370,7 @@ class AdminFlashcardStagingServiceTest {
     void sourceQuestionsUseNativeSearchForStatusAndDifficultyFilters() {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
         List<SourceQuestionResponse> response = service.listSourceQuestions(
@@ -1397,7 +1389,6 @@ class AdminFlashcardStagingServiceTest {
                 any(),
                 any(),
                 any(),
-                any(),
                 statusCaptor.capture(),
                 difficultyCaptor.capture(),
                 any()
@@ -1409,14 +1400,13 @@ class AdminFlashcardStagingServiceTest {
     @Test
     void sourceQuestionsDoNotMarkRejectedStagingSourcesAsImported() {
         FlashcardSet flashcardSet = flashcardSet();
-        UUID bankId = UUID.randomUUID();
-        Question rejectedQuestion = question(flashcardSet.getLesson().getCourse().getId(), bankId, "Rejected import");
+        UUID moduleId = UUID.randomUUID();
+        Question rejectedQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Rejected import");
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(rejectedQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(rejectedQuestion.getId())))
                 .thenReturn(List.of());
-        when(questionBankRepository.findAllById(any())).thenReturn(List.of());
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of());
 
@@ -1509,8 +1499,8 @@ class AdminFlashcardStagingServiceTest {
 
     private FlashcardSet flashcardSet() {
         Course course = course();
-        CourseSection section = section(course);
-        Lesson lesson = lesson(course, section);
+        CourseModule module = module(course);
+        Lesson lesson = lesson(course, module);
         FlashcardSet flashcardSet = new FlashcardSet();
         flashcardSet.setId(UUID.randomUUID());
         flashcardSet.setLesson(lesson);
@@ -1603,10 +1593,10 @@ class AdminFlashcardStagingServiceTest {
         return card;
     }
 
-    private Question question(UUID courseId, UUID bankId, String questionText) {
+    private Question question(UUID courseId, UUID moduleId, String questionText) {
         Question question = new Question();
         question.setId(UUID.randomUUID());
-        question.setQuestionBankId(bankId);
+        question.setModuleId(moduleId);
         question.setCourseId(courseId);
         question.setQuestionText(questionText);
         question.setQuestionType(QuestionType.MULTIPLE_CHOICE);
@@ -1629,17 +1619,6 @@ class AdminFlashcardStagingServiceTest {
         return answer;
     }
 
-    private QuestionBank bank(UUID courseId, String name) {
-        QuestionBank bank = new QuestionBank();
-        bank.setId(UUID.randomUUID());
-        bank.setCourseId(courseId);
-        bank.setName(name);
-        bank.setStatus("approved");
-        bank.setCreatedAt(Instant.now());
-        bank.setUpdatedAt(Instant.now());
-        return bank;
-    }
-
     private Course course() {
         Course course = new Course();
         course.setId(UUID.randomUUID());
@@ -1648,20 +1627,20 @@ class AdminFlashcardStagingServiceTest {
         return course;
     }
 
-    private CourseSection section(Course course) {
-        CourseSection section = new CourseSection();
-        section.setId(UUID.randomUUID());
-        section.setCourse(course);
-        section.setTitle("Section");
-        section.setSortOrder(0);
-        return section;
+    private CourseModule module(Course course) {
+        CourseModule module = new CourseModule();
+        module.setId(UUID.randomUUID());
+        module.setCourseId(course.getId());
+        module.setTitle("Module");
+        module.setOrderIndex(0);
+        return module;
     }
 
-    private Lesson lesson(Course course, CourseSection section) {
+    private Lesson lesson(Course course, CourseModule module) {
         Lesson lesson = new Lesson();
         lesson.setId(UUID.randomUUID());
         lesson.setCourse(course);
-        lesson.setSection(section);
+        lesson.setModule(module);
         lesson.setTitle("Flashcards");
         lesson.setType(LessonType.FLASHCARD);
         lesson.setStatus(LessonStatus.DRAFT);

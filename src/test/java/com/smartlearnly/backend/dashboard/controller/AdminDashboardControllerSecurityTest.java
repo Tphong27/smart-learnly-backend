@@ -11,7 +11,7 @@ import com.smartlearnly.backend.dashboard.dto.DashboardClassesResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardContentResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardCoursesResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardDateRangeResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardQuestionBanksResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardQuestionsResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardUsersResponse;
 import com.smartlearnly.backend.dashboard.service.AdminDashboardService;
 import java.time.Instant;
@@ -70,7 +70,7 @@ class AdminDashboardControllerSecurityTest {
                 new DashboardCoursesResponse(5, 3, 1, 1, 1),
                 new DashboardClassesResponse(4, 1, 1, 1, 1, 1),
                 new DashboardContentResponse(6, 12, 8, 3, 1, 2, 4),
-                new DashboardQuestionBanksResponse(3, 1, 1, 1, 20, 15, 2, 1, 1, 1, 1, 6, 5, 7, 13),
+                new DashboardQuestionsResponse(20, 15, 2, 1, 1, 1, 6, 5, 7, 13),
                 List.of(),
                 to
         );

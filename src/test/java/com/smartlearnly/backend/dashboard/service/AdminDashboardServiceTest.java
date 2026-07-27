@@ -11,7 +11,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.dashboard.dto.DashboardClassesResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardContentResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardCoursesResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardQuestionBanksResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardQuestionsResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardUsersResponse;
 import com.smartlearnly.backend.dashboard.repository.AdminDashboardQueryRepository;
 import java.time.Duration;
@@ -74,7 +74,7 @@ class AdminDashboardServiceTest {
         verify(dashboardQueryRepository).countCourses(from, to);
         verify(dashboardQueryRepository).countClasses(from, to);
         verify(dashboardQueryRepository).countContent(from, to);
-        verify(dashboardQueryRepository).countQuestionBanks(from, to);
+        verify(dashboardQueryRepository).countQuestions(from, to);
         assertThat(fromCaptor.getValue()).isEqualTo(from);
         assertThat(toCaptor.getValue()).isEqualTo(to);
     }
@@ -88,7 +88,7 @@ class AdminDashboardServiceTest {
                 .thenReturn(new DashboardClassesResponse(4, 1, 1, 1, 1, 1));
         when(dashboardQueryRepository.countContent(any(), any()))
                 .thenReturn(new DashboardContentResponse(6, 12, 8, 3, 1, 2, 4));
-        when(dashboardQueryRepository.countQuestionBanks(any(), any()))
-                .thenReturn(new DashboardQuestionBanksResponse(3, 1, 1, 1, 20, 15, 2, 1, 1, 1, 1, 6, 5, 7, 13));
+        when(dashboardQueryRepository.countQuestions(any(), any()))
+                .thenReturn(new DashboardQuestionsResponse(20, 15, 2, 1, 1, 1, 6, 5, 7, 13));
     }
 }

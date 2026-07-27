@@ -3,7 +3,7 @@ package com.smartlearnly.backend.dashboard.repository;
 import com.smartlearnly.backend.dashboard.dto.DashboardClassesResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardContentResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardCoursesResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardQuestionBanksResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardQuestionsResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardUsersResponse;
 import java.sql.Types;
 import java.time.Instant;
@@ -104,17 +104,19 @@ public class AdminDashboardQueryRepository {
                 SELECT
                     (
                         SELECT COUNT(*)
-                        FROM public.course_sections section
-                        JOIN public.courses course ON course.id = section.course_id
+                        FROM public.modules module
+                        JOIN public.courses course ON course.id = module.course_id
                         WHERE course.deleted_at IS NULL
-                    ) AS sections,
+                          AND module.is_system = false
+                    ) AS modules,
                     (
                         SELECT COUNT(*)
-                        FROM public.course_sections section
-                        JOIN public.courses course ON course.id = section.course_id
+                        FROM public.modules module
+                        JOIN public.courses course ON course.id = module.course_id
                         WHERE course.deleted_at IS NULL
-                          AND section.created_at BETWEEN :from AND :to
-                    ) AS new_sections_in_range,
+                          AND module.is_system = false
+                          AND module.created_at BETWEEN :from AND :to
+                    ) AS new_modules_in_range,
                     COUNT(*) AS lessons,
                     COUNT(*) FILTER (WHERE lesson.status = 'published') AS published_lessons,
                     COUNT(*) FILTER (WHERE lesson.status = 'draft') AS draft_lessons,
@@ -125,80 +127,44 @@ public class AdminDashboardQueryRepository {
                 WHERE course.deleted_at IS NULL
                 """;
         return jdbcTemplate.queryForObject(sql, params(from, to), (rs, rowNum) -> new DashboardContentResponse(
-                rs.getLong("sections"),
+                rs.getLong("modules"),
                 rs.getLong("lessons"),
                 rs.getLong("published_lessons"),
                 rs.getLong("draft_lessons"),
                 rs.getLong("inactive_lessons"),
-                rs.getLong("new_sections_in_range"),
+                rs.getLong("new_modules_in_range"),
                 rs.getLong("new_lessons_in_range")
         ));
     }
 
-    public DashboardQuestionBanksResponse countQuestionBanks(Instant from, Instant to) {
+    public DashboardQuestionsResponse countQuestions(Instant from, Instant to) {
         String sql = """
                 SELECT
-                    (
-                        SELECT COUNT(*)
-                        FROM public.question_banks bank
-                        JOIN public.courses course ON course.id = bank.course_id
-                        WHERE course.deleted_at IS NULL
-                    ) AS total,
-                    (
-                        SELECT COUNT(*)
-                        FROM public.question_banks bank
-                        JOIN public.courses course ON course.id = bank.course_id
-                        WHERE course.deleted_at IS NULL AND bank.status = 'approved'
-                    ) AS approved,
-                    (
-                        SELECT COUNT(*)
-                        FROM public.question_banks bank
-                        JOIN public.courses course ON course.id = bank.course_id
-                        WHERE course.deleted_at IS NULL AND bank.status = 'draft'
-                    ) AS draft,
-                    (
-                        SELECT COUNT(*)
-                        FROM public.question_banks bank
-                        JOIN public.courses course ON course.id = bank.course_id
-                        WHERE course.deleted_at IS NULL AND bank.status = 'archived'
-                    ) AS archived,
-                    (
-                        SELECT COUNT(*)
-                        FROM public.question_banks bank
-                        JOIN public.courses course ON course.id = bank.course_id
-                        WHERE course.deleted_at IS NULL
-                          AND bank.created_at BETWEEN :from AND :to
-                    ) AS new_banks_in_range,
-                    COUNT(*) AS questions,
-                    COUNT(*) FILTER (WHERE question.status = 'approved') AS approved_questions,
-                    COUNT(*) FILTER (WHERE question.status = 'pending_review') AS pending_review_questions,
-                    COUNT(*) FILTER (WHERE question.status = 'draft') AS draft_questions,
-                    COUNT(*) FILTER (WHERE question.status = 'rejected') AS rejected_questions,
-                    COUNT(*) FILTER (WHERE question.status = 'archived') AS archived_questions,
-                    COUNT(*) FILTER (WHERE question.created_at BETWEEN :from AND :to) AS new_questions_in_range,
-                    COUNT(*) FILTER (WHERE question.reviewed_at BETWEEN :from AND :to) AS reviewed_questions_in_range,
-                    COUNT(*) FILTER (WHERE question.is_ai_generated IS TRUE) AS ai_generated_questions,
-                    COUNT(*) FILTER (WHERE question.is_ai_generated IS NOT TRUE) AS manual_questions
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE question.status = 'approved') AS approved,
+                    COUNT(*) FILTER (WHERE question.status = 'pending_review') AS pending_review,
+                    COUNT(*) FILTER (WHERE question.status = 'draft') AS draft,
+                    COUNT(*) FILTER (WHERE question.status = 'rejected') AS rejected,
+                    COUNT(*) FILTER (WHERE question.status = 'archived') AS archived,
+                    COUNT(*) FILTER (WHERE question.created_at BETWEEN :from AND :to) AS new_in_range,
+                    COUNT(*) FILTER (WHERE question.reviewed_at BETWEEN :from AND :to) AS reviewed_in_range,
+                    COUNT(*) FILTER (WHERE question.is_ai_generated IS TRUE) AS ai_generated,
+                    COUNT(*) FILTER (WHERE question.is_ai_generated IS NOT TRUE) AS manual
                 FROM public.questions question
                 JOIN public.courses course ON course.id = question.course_id
                 WHERE course.deleted_at IS NULL
                 """;
-        return jdbcTemplate.queryForObject(sql, params(from, to), (rs, rowNum) -> new DashboardQuestionBanksResponse(
+        return jdbcTemplate.queryForObject(sql, params(from, to), (rs, rowNum) -> new DashboardQuestionsResponse(
                 rs.getLong("total"),
                 rs.getLong("approved"),
+                rs.getLong("pending_review"),
                 rs.getLong("draft"),
+                rs.getLong("rejected"),
                 rs.getLong("archived"),
-                rs.getLong("questions"),
-                rs.getLong("approved_questions"),
-                rs.getLong("pending_review_questions"),
-                rs.getLong("draft_questions"),
-                rs.getLong("rejected_questions"),
-                rs.getLong("archived_questions"),
-                rs.getLong("new_banks_in_range"),
-                rs.getLong("new_questions_in_range"),
-                rs.getLong("reviewed_questions_in_range"),
-                rs.getLong("ai_generated_questions"),
-                rs.getLong("manual_questions")
+                rs.getLong("new_in_range"),
+                rs.getLong("reviewed_in_range"),
+                rs.getLong("ai_generated"),
+                rs.getLong("manual")
         ));
     }
 

@@ -13,11 +13,9 @@ import static org.mockito.Mockito.when;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.service.CourseAccessService;
-import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
+import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.entity.Question;
-import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
@@ -53,11 +51,7 @@ class QuestionServiceRaceConditionTest {
     @Mock
     private QuestionMediaAttachmentRepository mediaAttachmentRepository;
     @Mock
-    private QuestionBankService questionBankService;
-    @Mock
-    private CourseSectionRepository courseSectionRepository;
-    @Mock
-    private CurriculumSectionRepository curriculumSectionRepository;
+    private CourseModuleRepository courseModuleRepository;
     @Mock
     private CurrentUserService currentUserService;
     @Mock
@@ -66,7 +60,8 @@ class QuestionServiceRaceConditionTest {
     private CourseAccessService courseAccessService;
 
     private QuestionService questionService;
-    private QuestionBank activeBank;
+    private UUID courseId;
+    private UUID moduleId;
     private UserAccount actor;
 
     @BeforeEach
@@ -76,37 +71,38 @@ class QuestionServiceRaceConditionTest {
                 answerRepository,
                 answerMediaRepository,
                 mediaAttachmentRepository,
-                questionBankService,
-                courseSectionRepository,
-                curriculumSectionRepository,
+                courseModuleRepository,
                 currentUserService,
                 questionMediaImportService,
                 courseAccessService
         );
-        activeBank = new QuestionBank();
-        activeBank.setId(UUID.randomUUID());
-        activeBank.setCourseId(UUID.randomUUID());
-        activeBank.setStatus("active");
+        courseId = UUID.randomUUID();
+        moduleId = UUID.randomUUID();
         actor = new UserAccount();
         actor.setId(UUID.randomUUID());
         actor.setEmail("admin@slp.vn");
         actor.setRole("ADMIN");
 
         lenient().when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        lenient().when(questionBankService.findActiveBankEntity(activeBank.getId())).thenReturn(activeBank);
+        lenient().when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
+                moduleId,
+                courseId,
+                "active"
+        )).thenReturn(true);
     }
 
     @Test
     void importBatch_singleRow_succeedsWhenNoDuplicate() {
-        when(questionRepository.existsByQuestionBankIdAndQuestionTextIgnoreCase(any(), any())).thenReturn(false);
+        when(questionRepository.existsActiveDuplicateInCourse(any(), any(), any())).thenReturn(false);
         when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
             Question q = invocation.getArgument(0);
             q.setId(UUID.randomUUID());
             return q;
         });
 
-        QuestionImportDtos.ImportBatchResponse response = questionService.importBatch(
-                new QuestionImportDtos.ImportBatchRequest(activeBank.getId(), List.of(validRow(1, "What is 2+2?")), "excel"));
+        QuestionImportDtos.ImportBatchResponse response = questionService.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(List.of(validRow(1, "What is 2+2?")), "excel"));
 
         assertThat(response.created()).isEqualTo(1);
         verify(questionRepository, times(1)).save(any(Question.class));
@@ -114,12 +110,13 @@ class QuestionServiceRaceConditionTest {
 
     @Test
     void importBatch_singleRow_throwsWhenDuplicateAlreadyExists() {
-        when(questionRepository.existsByQuestionBankIdAndQuestionTextIgnoreCase(any(), any())).thenReturn(true);
+        when(questionRepository.existsActiveDuplicateInCourse(any(), any(), any())).thenReturn(true);
 
-        assertThatThrownBy(() -> questionService.importBatch(
-                new QuestionImportDtos.ImportBatchRequest(activeBank.getId(), List.of(validRow(1, "What is 2+2?")), "excel")))
+        assertThatThrownBy(() -> questionService.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(List.of(validRow(1, "What is 2+2?")), "excel")))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("already exists in this bank");
+                .hasMessageContaining("already exists in this course");
 
         verify(questionRepository, times(0)).save(any(Question.class));
     }
@@ -127,7 +124,7 @@ class QuestionServiceRaceConditionTest {
     @Test
     void importBatch_concurrentDuplicateImports_serviceLayerAllowsBoth() {
         AtomicInteger existsCalls = new AtomicInteger();
-        when(questionRepository.existsByQuestionBankIdAndQuestionTextIgnoreCase(any(), any())).thenAnswer(invocation -> {
+        when(questionRepository.existsActiveDuplicateInCourse(any(), any(), any())).thenAnswer(invocation -> {
             existsCalls.incrementAndGet();
             return false;
         });
@@ -146,8 +143,9 @@ class QuestionServiceRaceConditionTest {
             futures.add(executor.submit(() -> {
                 try {
                     start.await();
-                    var resp = questionService.importBatch(
-                            new QuestionImportDtos.ImportBatchRequest(activeBank.getId(), List.of(validRow(1, "Race text")), "excel"));
+                    var resp = questionService.importBatchForCourse(
+                            courseId,
+                            new QuestionImportDtos.ImportBatchRequest(List.of(validRow(1, "Race text")), "excel"));
                     done.countDown();
                     return resp.created();
                 } catch (Throwable t) {
@@ -186,7 +184,7 @@ class QuestionServiceRaceConditionTest {
                 null,
                 (Short) null,
                 null,
-                (UUID) null,
+                moduleId,
                 (List<String>) null,
                 (List<String>) null
         );

@@ -144,7 +144,6 @@ public final class AiQuestionDraftDtos {
     public record BatchResponse(
             UUID batchId,
             UUID id,
-            UUID questionBankId,
             UUID courseId,
             UUID requestedBy,
             String status,

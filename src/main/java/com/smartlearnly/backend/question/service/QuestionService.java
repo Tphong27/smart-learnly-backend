@@ -5,7 +5,8 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.service.CourseAccessService;
-import com.smartlearnly.backend.learning.module.repository.CourseSectionRepository;
+import com.smartlearnly.backend.learning.module.entity.CourseModule;
+import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.question.dto.QuestionAnswerMediaResponse;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
@@ -14,7 +15,6 @@ import com.smartlearnly.backend.question.entity.QuestionAnswerMediaAttachment;
 import com.smartlearnly.backend.question.entity.BloomLevel;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
-import com.smartlearnly.backend.question.entity.QuestionBank;
 import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
@@ -24,14 +24,11 @@ import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -50,15 +47,14 @@ public class QuestionService {
     private final QuestionAnswerRepository answerRepository;
     private final QuestionAnswerMediaAttachmentRepository answerMediaRepository;
     private final QuestionMediaAttachmentRepository mediaAttachmentRepository;
-    private final QuestionBankService questionBankService;
-    private final CourseSectionRepository courseSectionRepository;
-    private final com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository curriculumSectionRepository;
+    private final CourseModuleRepository courseModuleRepository;
     private final CurrentUserService currentUserService;
     private final QuestionMediaImportService questionMediaImportService;
     private final CourseAccessService courseAccessService;
 
     @Transactional(readOnly = true)
-    public PageResponse<QuestionModel.Response> list(UUID bankId, UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
+    public PageResponse<QuestionModel.Response> listByCourse(UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
+        courseAccessService.requireReadableCourse(courseId);
         String normalizedSearch = normalizeNullable(search);
         String normalizedType = type == null || type.isBlank()
                 ? null
@@ -67,7 +63,6 @@ public class QuestionService {
                 ? null
                 : parseQuestionStatus(status, null).name().toLowerCase(Locale.ROOT);
         Page<Question> questionPage = questionRepository.searchForAdmin(
-                bankId,
                 courseId,
                 moduleId,
                 normalizedSearch,
@@ -80,47 +75,12 @@ public class QuestionService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<QuestionModel.Response> listByCourse(UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
-        courseAccessService.requireReadableCourse(courseId);
-
-        return list(null, courseId, moduleId, search, type, status, difficulty, page, size);
-    }
-
-    @Transactional(readOnly = true)
-    public QuestionModel.Response get(UUID questionId) {
-        return toResponse(findQuestion(questionId));
-    }
-
-    @Transactional(readOnly = true)
     public QuestionModel.Response getInCourse(UUID courseId, UUID questionId) {
         courseAccessService.requireReadableCourse(courseId);
         Question question = findQuestion(questionId);
         assertQuestionBelongsToCourse(question, courseId);
 
         return toResponse(question);
-    }
-
-    @Transactional
-    public QuestionModel.Response create(QuestionModel.CreateRequest request) {
-        QuestionBank bank = resolveBank(request.resolvedBankId(), request.courseId());
-        QuestionType questionType = parseSupportedQuestionType(request.questionType());
-        validateAnswers(questionType, request.answers());
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        Question question = new Question();
-        question.setQuestionBankId(bank.getId());
-        question.setCourseId(bank.getCourseId());
-        question.setModuleId(validateModuleId(bank.getCourseId(), request.moduleId()));
-        question.setQuestionText(normalizeRequired(request.questionText(), "Question text is required"));
-        question.setQuestionType(questionType);
-        question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
-        question.setDifficulty(request.difficulty());
-        question.setExplanation(normalizeNullable(request.explanation()));
-        question.setIsAiGenerated(false);
-        question.setStatus(parseQuestionStatus(request.status(), QuestionStatus.DRAFT));
-        question.setCreatedBy(actor.getId());
-        Question saved = questionRepository.save(question);
-        replaceAnswers(saved.getId(), request.answers());
-        return toResponse(saved);
     }
 
     @Transactional
@@ -149,30 +109,6 @@ public class QuestionService {
         Question saved = questionRepository.save(question);
         replaceAnswers(saved.getId(), request.answers());
 
-        return toResponse(saved);
-    }
-
-    @Transactional
-    public QuestionModel.Response update(UUID questionId, QuestionModel.UpdateRequest request) {
-        Question question = findQuestion(questionId);
-        if (question.getStatus() == QuestionStatus.ARCHIVED) {
-            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question");
-        }
-        questionBankService.findActiveBankEntity(question.getQuestionBankId());
-        QuestionBank bank = resolveBank(request.resolvedBankId() == null ? question.getQuestionBankId() : request.resolvedBankId(), request.courseId());
-        QuestionType questionType = parseSupportedQuestionType(request.questionType());
-        validateAnswers(questionType, request.answers());
-        question.setQuestionBankId(bank.getId());
-        question.setCourseId(bank.getCourseId());
-        question.setModuleId(validateModuleId(bank.getCourseId(), request.moduleId()));
-        question.setQuestionText(normalizeRequired(request.questionText(), "Question text is required"));
-        question.setQuestionType(questionType);
-        question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
-        question.setDifficulty(request.difficulty());
-        question.setExplanation(normalizeNullable(request.explanation()));
-        question.setStatus(parseQuestionStatus(request.status(), question.getStatus()));
-        Question saved = questionRepository.save(question);
-        replaceAnswers(saved.getId(), request.answers());
         return toResponse(saved);
     }
 
@@ -206,17 +142,6 @@ public class QuestionService {
     }
 
     @Transactional
-    public void archive(UUID questionId) {
-        Question question = findQuestion(questionId);
-        if (question.getStatus() == QuestionStatus.ARCHIVED) {
-            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
-        }
-        questionBankService.findActiveBankEntity(question.getQuestionBankId());
-        question.setStatus(QuestionStatus.ARCHIVED);
-        questionRepository.save(question);
-    }
-
-    @Transactional
     public void archiveInCourse(UUID courseId, UUID questionId) {
         courseAccessService.requireUpdatableCourse(courseId);
         Question question = findQuestion(questionId);
@@ -228,58 +153,19 @@ public class QuestionService {
         questionRepository.save(question);
     }
 
-    @Transactional
-    public QuestionModel.Response approve(UUID questionId) {
-        return review(questionId, QuestionStatus.APPROVED);
-    }
-
-    @Transactional
-    public QuestionModel.Response reject(UUID questionId) {
-        return review(questionId, QuestionStatus.REJECTED);
-    }
-
-    private QuestionModel.Response review(UUID questionId, QuestionStatus status) {
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        Question question = findQuestion(questionId);
-        if (question.getStatus() == QuestionStatus.ARCHIVED) {
-            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot review an archived question");
-        }
-        question.setStatus(status);
-        question.setReviewedBy(actor.getId());
-        question.setReviewedAt(Instant.now());
-        return toResponse(questionRepository.save(question));
-    }
-
-    private QuestionBank resolveBank(UUID bankId, UUID requestCourseId) {
-        if (bankId == null) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question bank ID is required");
-        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
-        if (requestCourseId != null && !requestCourseId.equals(bank.getCourseId())) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question course must match the selected question bank");
-        return bank;
-    }
-
-    private UUID validateModuleId(UUID courseId, UUID moduleId) {
-        if (moduleId == null) return null;
-        boolean exists = courseSectionRepository.findByIdAndCourseId(moduleId, courseId).isPresent();
-        if (!exists) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module must belong to the selected course");
-        return moduleId;
-    }
-
     private UUID validateRequiredCourseModuleId(UUID courseId, UUID moduleId) {
         if (moduleId == null) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module is required");
         }
-        boolean exists = curriculumSectionRepository.existsMasterModuleByIdAndCourseId(moduleId, courseId);
+        boolean exists = courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
+                moduleId,
+                courseId,
+                CourseModule.STATUS_ACTIVE
+        );
         if (!exists) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module must belong to the selected course");
         }
         return moduleId;
-    }
-
-    @Transactional
-    public QuestionImportDtos.ImportBatchResponse importBatch(QuestionImportDtos.ImportBatchRequest request) {
-        List<Question> savedQuestions = importReviewedRows(request.bankId(), request.rows(), false, null, normalizeImportMediaSource(request.importSource()));
-        List<UUID> createdIds = savedQuestions.stream().map(Question::getId).toList();
-        return new QuestionImportDtos.ImportBatchResponse(request.rows().size(), createdIds.size(), createdIds, List.of());
     }
 
     @Transactional
@@ -330,83 +216,6 @@ public class QuestionService {
             savedQuestions.add(savedQuestion);
         }
         return savedQuestions;
-    }
-
-    @Transactional
-    public List<Question> importReviewedRows(UUID bankId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource) {
-        return importReviewedRows(bankId, rows, aiGenerated, importSource, importSource == null ? null : importSource);
-    }
-
-    private List<Question> importReviewedRows(UUID bankId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource, String mediaImportSource) {
-        QuestionBank bank = questionBankService.findActiveBankEntity(bankId);
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        return importReviewedRows(bank, rows, actor, aiGenerated, importSource, mediaImportSource);
-    }
-
-    private List<Question> importReviewedRows(
-            QuestionBank bank, List<QuestionImportDtos.ImportRow> rows, UserAccount actor,
-            boolean aiGenerated, String importSource, String mediaImportSource
-    ) {
-        if (rows == null || rows.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one question row is required");
-        }
-
-        List<QuestionImportDtos.ImportRowError> errors = new ArrayList<>();
-        Set<Integer> duplicateRowNumbers = new HashSet<>();
-        List<QuestionImportDtos.ImportRow> validatedRows = new ArrayList<>();
-        for (QuestionImportDtos.ImportRow row : rows) {
-            List<String> rowErrors = validateImportRow(bank, row);
-            if (!rowErrors.isEmpty()) {
-                errors.add(new QuestionImportDtos.ImportRowError(row.rowNumber(), rowErrors));
-            } else {
-                validatedRows.add(row);
-            }
-        }
-
-        for (QuestionImportDtos.ImportRow row : validatedRows) {
-            String normalizedText = normalizeRequired(row.questionText(), "Question text is required");
-            if (questionRepository.existsByQuestionBankIdAndQuestionTextIgnoreCase(bank.getId(), normalizedText)) {
-                duplicateRowNumbers.add(row.rowNumber());
-                errors.add(new QuestionImportDtos.ImportRowError(row.rowNumber(), List.of("A question with the same text already exists in this bank")));
-            }
-        }
-
-        if (!errors.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED, buildImportErrorSummary(errors));
-        }
-
-        List<Question> savedQuestions = new ArrayList<>();
-        for (QuestionImportDtos.ImportRow row : validatedRows) {
-            if (duplicateRowNumbers.contains(row.rowNumber())) {
-                continue;
-            }
-            Question savedQuestion = persistImportedQuestion(bank, row, actor, aiGenerated, importSource);
-            questionMediaImportService.attachImportedMedia(savedQuestion, row.imageFiles(), row.audioFiles(), mediaImportSource);
-            savedQuestions.add(savedQuestion);
-        }
-        return savedQuestions;
-    }
-
-    private Question persistImportedQuestion(QuestionBank bank, QuestionImportDtos.ImportRow row, UserAccount actor, boolean aiGenerated, String importSource) {
-        QuestionType questionType = parseSupportedQuestionType(row.questionType());
-        Question question = new Question();
-        question.setQuestionBankId(bank.getId());
-        question.setCourseId(bank.getCourseId());
-        question.setModuleId(validateModuleId(bank.getCourseId(), row.moduleId()));
-        question.setQuestionText(normalizeRequired(row.questionText(), "Question text is required"));
-        question.setQuestionType(questionType);
-        question.setBloomLevel(parseBloomLevel(row.bloomLevel()));
-        question.setDifficulty(row.difficulty());
-        question.setExplanation(normalizeNullable(row.explanation()));
-        question.setIsAiGenerated(aiGenerated);
-        question.setImportSource(normalizeNullable(importSource));
-        question.setStatus(QuestionStatus.DRAFT);
-        question.setCreatedBy(actor.getId());
-        Question saved = questionRepository.save(question);
-
-        List<QuestionModel.AnswerRequest> answers = buildAnswersForImport(row, questionType);
-        replaceAnswers(saved.getId(), answers);
-        return saved;
     }
 
     private Question persistImportedQuestionForCourse(UUID courseId, QuestionImportDtos.ImportRow row, UserAccount actor, boolean aiGenerated, String importSource) {
@@ -479,7 +288,7 @@ public class QuestionService {
         return index;
     }
 
-    private List<String> validateImportRow(QuestionBank bank, QuestionImportDtos.ImportRow row) {
+    private List<String> validateImportRow(UUID courseId, QuestionImportDtos.ImportRow row) {
         List<String> rowErrors = new ArrayList<>();
         if (row.questionText() == null || row.questionText().isBlank()) {
             rowErrors.add("Question text is required");
@@ -574,7 +383,11 @@ public class QuestionService {
         }
 
         if (row.moduleId() != null) {
-            boolean moduleExists = courseSectionRepository.findByIdAndCourseId(row.moduleId(), bank.getCourseId()).isPresent();
+            boolean moduleExists = courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
+                    row.moduleId(),
+                    courseId,
+                    CourseModule.STATUS_ACTIVE
+            );
             if (!moduleExists) {
                 rowErrors.add("Question module must belong to the selected course");
             }
@@ -595,7 +408,11 @@ public class QuestionService {
         if (row.moduleId() == null) {
             rowErrors.add("Question module is required");
         } else {
-            boolean moduleExists = curriculumSectionRepository.existsMasterModuleByIdAndCourseId(row.moduleId(), courseId);
+            boolean moduleExists = courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
+                    row.moduleId(),
+                    courseId,
+                    CourseModule.STATUS_ACTIVE
+            );
             if (!moduleExists) {
                 rowErrors.add("Question module must belong to the selected course");
             }
@@ -804,7 +621,7 @@ public class QuestionService {
         mediaAttachments.addAll(videoAttachments.stream().map(this::toMediaResponse).toList());
         String imageUrl = imageAttachments.isEmpty() ? null : imageAttachments.get(0).getMediaUrl();
         String audioUrl = audioAttachments.isEmpty() ? null : audioAttachments.get(0).getMediaUrl();
-        return new QuestionModel.Response(question.getId(), question.getId(), question.getQuestionBankId(), question.getQuestionBankId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), imageUrl, audioUrl, mediaAttachments, Boolean.TRUE.equals(question.getIsAiGenerated()), question.getImportSource(), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
+        return new QuestionModel.Response(question.getId(), question.getId(), question.getCourseId(), question.getModuleId(), question.getQuestionText(), toApiValue(question.getQuestionType()), toApiValue(question.getBloomLevel()), question.getDifficulty(), question.getExplanation(), imageUrl, audioUrl, mediaAttachments, Boolean.TRUE.equals(question.getIsAiGenerated()), question.getImportSource(), toApiValue(question.getStatus()), answers.size(), answers, question.getCreatedBy(), question.getReviewedBy(), question.getReviewedAt(), question.getCreatedAt(), question.getUpdatedAt());
     }
 
     private QuestionMediaAttachmentResponse toMediaResponse(QuestionMediaAttachment attachment) {
