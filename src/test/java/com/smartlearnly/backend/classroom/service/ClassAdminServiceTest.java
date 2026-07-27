@@ -79,8 +79,8 @@ class ClassAdminServiceTest {
                                 trainer.getId(),
                                 "https://meet.google.com/abc-defg-hij",
                                 "Mon/Wed 19:00",
-                                LocalDate.of(2026, 7, 1),
-                                LocalDate.of(2026, 8, 1),
+                                startDate,
+                                endDate,
                                 25,
                                 new BigDecimal("500000"));
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
@@ -323,7 +323,7 @@ class ClassAdminServiceTest {
 
                 verify(auditLogService).record(
                                 actor.getEmail(),
-                                "CLASS_STATUS_RESTORED",
+                                "CLASS_RESTORED",
                                 "CLASS",
                                 classOffering.getId().toString());
         }

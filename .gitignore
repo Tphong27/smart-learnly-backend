@@ -36,3 +36,9 @@ build/
 docs/ai-context/
 docs/api-contracts/
 
+###test
+.env.unit-test
+reports/
+*.service-account.json
+### Node.js ###
+node_modules/
