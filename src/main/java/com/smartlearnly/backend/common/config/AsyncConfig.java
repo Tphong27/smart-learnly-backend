@@ -1,8 +1,6 @@
 package com.smartlearnly.backend.common.config;
 
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -23,35 +21,4 @@ public class AsyncConfig {
         return executor;
     }
 
-    @Bean(name = "videoProcessingExecutor")
-    Executor videoProcessingExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(1);
-        executor.setMaxPoolSize(2);
-        executor.setQueueCapacity(10);
-        executor.setThreadNamePrefix("video-");
-        executor.setKeepAliveSeconds(120);
-        executor.initialize();
-        return executor;
-    }
-
-    @Bean(name = "videoAiTaskExecutor")
-    Executor videoAiTaskExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(1);
-        executor.setMaxPoolSize(1);
-        executor.setQueueCapacity(1);
-        executor.setThreadNamePrefix("video-ai-");
-        executor.initialize();
-        return executor;
-    }
-
-    @Bean(name = "videoAiLeaseScheduler", destroyMethod = "shutdownNow")
-    ScheduledExecutorService videoAiLeaseScheduler() {
-        return Executors.newSingleThreadScheduledExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "video-ai-lease-heartbeat");
-            thread.setDaemon(true);
-            return thread;
-        });
-    }
 }

@@ -31,6 +31,7 @@ import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
 import com.smartlearnly.backend.learning.module.entity.CourseModule;
 import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.videoai.service.VideoSummaryService;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -61,6 +62,7 @@ public class CourseContentAdminService {
     private final AuditLogService auditLogService;
     private final QuizContentValidator quizContentValidator;
     private final CourseAccessService courseAccessService;
+    private final VideoSummaryService videoSummaryService;
 
     // SECTION READ OPERATIONS
     @Transactional(readOnly = true)
@@ -480,6 +482,7 @@ public class CourseContentAdminService {
                 ? LessonType.RICH_TEXT
                 : lesson.getType();
 
+        String currentVideoUrl = lesson.getVideoUrl();
         lesson.setType(
                 parseLessonType(
                         resolveLessonType(request),
@@ -487,9 +490,21 @@ public class CourseContentAdminService {
                 )
         );
 
-        lesson.setVideoUrl(
-                normalizeNullable(request.videoUrl())
-        );
+        boolean videoLesson = lesson.getType() == LessonType.VIDEO;
+        String requestedVideoUrl = normalizeNullable(request.videoUrl());
+        if (create && videoLesson && requestedVideoUrl == null) {
+            // The curriculum modal creates the lesson shell first. The YouTube
+            // URL is entered and validated later in the lesson detail editor.
+            lesson.setVideoUrl(null);
+        } else {
+            lesson.setVideoUrl(
+                    videoSummaryService.normalizeLessonVideoUrl(
+                            currentVideoUrl,
+                            requestedVideoUrl,
+                            videoLesson
+                    )
+            );
+        }
 
         String content = normalizeNullable(request.content());
 

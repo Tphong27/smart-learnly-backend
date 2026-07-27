@@ -30,6 +30,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.videoai.service.VideoSummaryService;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -61,6 +62,7 @@ public class TrainerClassCurriculumService {
     private final CurrentUserService currentUserService;
     private final AuthenticatedUserResolver authenticatedUserResolver;
     private final QuizContentValidator quizContentValidator;
+    private final VideoSummaryService videoSummaryService;
 
     @Transactional(readOnly = true)
     public ClassCurriculumEditorResponse getEditorCurriculum(UUID classId) {
@@ -435,8 +437,13 @@ public class TrainerClassCurriculumService {
 
     private void applyLessonRequest(CurriculumLesson lesson, LessonRequest request, boolean create) {
         lesson.setTitle(normalizeRequired(request.title(), "Lesson title is required"));
+        String currentVideoUrl = lesson.getVideoUrl();
         lesson.setType(parseLessonType(resolveLessonType(request), create ? LessonType.RICH_TEXT : lesson.getType()));
-        lesson.setVideoUrl(normalizeNullable(request.videoUrl()));
+        lesson.setVideoUrl(videoSummaryService.normalizeLessonVideoUrl(
+                currentVideoUrl,
+                request.videoUrl(),
+                lesson.getType() == LessonType.VIDEO
+        ));
         String content = normalizeNullable(request.content());
         if (lesson.getType() == LessonType.QUIZ) {
             quizContentValidator.validate(content);
