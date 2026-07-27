@@ -1,0 +1,3248 @@
+{
+  "summary": {
+    "generatedAt": "2026-07-27T15:03:29.327Z",
+    "wbsSource": "Report 2.1_Project Tracking_Smart_Learnly_Platform_v1.0(3).xlsx",
+    "backendBranch": "khiem",
+    "frontendBranch": "khiem",
+    "screenCount": 14,
+    "selectedFileCount": 73,
+    "excludedFileCount": 43,
+    "selectedFunctionCount": 189
+  },
+  "scope": [
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/config/GoogleMeetProperties.java",
+      "status": "Excluded",
+      "reason": "Excluded – configuration holder",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/controller/ClassAnalyticsController.java",
+      "status": "Excluded",
+      "reason": "Excluded – thin HTTP delegation; no custom decision logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/controller/ClassController.java",
+      "status": "Excluded",
+      "reason": "Excluded – thin HTTP delegation; no custom decision logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/controller/OpeningScheduleController.java",
+      "status": "Excluded",
+      "reason": "Excluded – thin HTTP delegation; no custom decision logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/controller/ScheduleController.java",
+      "status": "Excluded",
+      "reason": "Excluded – thin HTTP delegation; no custom decision logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/ClassAnalyticsResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/ClassResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/ClassStatusOptionResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/CreateClassRequest.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/MeetingUrlResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/OpeningScheduleItemResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/RestoreClassRequest.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/ScheduleResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/ScheduleSessionResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/StudentPerformanceQuery.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/StudentPerformanceResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/dto/UpdateClassRequest.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "hasAnyField",
+          "signature": "hasAnyField",
+          "line": null,
+          "score": 86,
+          "cyclomaticApprox": 10,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/dto/UpdateClassRequest.java|hasAnyField",
+          "sheetName": "K-BE-UpdateClassRequest-hasAnyField-1"
+        },
+        {
+          "rank": 2,
+          "name": "setScheduleDescription",
+          "signature": "setScheduleDescription",
+          "line": null,
+          "score": 4,
+          "cyclomaticApprox": 1,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/dto/UpdateClassRequest.java|setScheduleDescription",
+          "sheetName": "K-BE-UpdateClassRequest-setScheduleDescription-2"
+        },
+        {
+          "rank": 3,
+          "name": "isMeetingUrlProvided",
+          "signature": "isMeetingUrlProvided",
+          "line": null,
+          "score": 4,
+          "cyclomaticApprox": 1,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/dto/UpdateClassRequest.java|isMeetingUrlProvided",
+          "sheetName": "K-BE-UpdateClassRequest-isMeetingUrlProvided-3"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-16 Class List",
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/entity/ClassLifecycle.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "resolveStatus",
+          "signature": "resolveStatus(LocalDate, LocalDate, ClassStatus)",
+          "line": null,
+          "score": 77,
+          "cyclomaticApprox": 10,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/entity/ClassLifecycle.java|resolveStatus(LocalDate, LocalDate, ClassStatus)",
+          "sheetName": "K-BE-ClassLifecycle-resolveStatus-1"
+        },
+        {
+          "rank": 2,
+          "name": "resolveStatus",
+          "signature": "resolveStatus(LocalDate, LocalDate, ClassStatus, LocalDate)",
+          "line": null,
+          "score": 73,
+          "cyclomaticApprox": 8,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/entity/ClassLifecycle.java|resolveStatus(LocalDate, LocalDate, ClassStatus, LocalDate)",
+          "sheetName": "K-BE-ClassLifecycle-resolveStatus-2"
+        },
+        {
+          "rank": 3,
+          "name": "today",
+          "signature": "today()",
+          "line": null,
+          "score": 2,
+          "cyclomaticApprox": 1,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/entity/ClassLifecycle.java|today()",
+          "sheetName": "K-BE-ClassLifecycle-today-3"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/entity/ClassOffering.java",
+      "status": "Excluded",
+      "reason": "Excluded – persistence entity/enum without custom behavior",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/entity/ClassSession.java",
+      "status": "Excluded",
+      "reason": "Excluded – persistence entity/enum without custom behavior",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/entity/ClassStatus.java",
+      "status": "Excluded",
+      "reason": "Excluded – persistence entity/enum without custom behavior",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-16 Class List",
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/entity/ClassStatusConverter.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "convertToDatabaseColumn",
+          "signature": "convertToDatabaseColumn",
+          "line": null,
+          "score": 9,
+          "cyclomaticApprox": 2,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/entity/ClassStatusConverter.java|convertToDatabaseColumn",
+          "sheetName": "K-BE-ClassStatusConverter-convertToDatabaseColumn-1"
+        },
+        {
+          "rank": 2,
+          "name": "convertToEntityAttribute",
+          "signature": "convertToEntityAttribute",
+          "line": null,
+          "score": 9,
+          "cyclomaticApprox": 2,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/entity/ClassStatusConverter.java|convertToEntityAttribute",
+          "sheetName": "K-BE-ClassStatusConverter-convertToEntityAttribute-2"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/package-info.java",
+      "status": "Excluded",
+      "reason": "Excluded – package metadata only",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/repository/ClassAdminProjection.java",
+      "status": "Excluded",
+      "reason": "Excluded – declarative repository/projection interface; no Java function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-19 Class Analytics"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/repository/ClassAnalyticsRepository.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "findStudentAssessmentStatistics",
+          "signature": "findStudentAssessmentStatistics",
+          "line": null,
+          "score": 165,
+          "cyclomaticApprox": 12,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/repository/ClassAnalyticsRepository.java|findStudentAssessmentStatistics",
+          "sheetName": "K-BE-ClassAnalyticsRepository-findStudentAssessmentStatistics-1"
+        },
+        {
+          "rank": 2,
+          "name": "getAssignmentStatistics",
+          "signature": "getAssignmentStatistics",
+          "line": null,
+          "score": 102,
+          "cyclomaticApprox": 9,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/repository/ClassAnalyticsRepository.java|getAssignmentStatistics",
+          "sheetName": "K-BE-ClassAnalyticsRepository-getAssignmentStatistics-2"
+        },
+        {
+          "rank": 3,
+          "name": "findActiveStudents",
+          "signature": "findActiveStudents",
+          "line": null,
+          "score": 96,
+          "cyclomaticApprox": 11,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/repository/ClassAnalyticsRepository.java|findActiveStudents",
+          "sheetName": "K-BE-ClassAnalyticsRepository-findActiveStudents-3"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/repository/ClassOfferingRepository.java",
+      "status": "Excluded",
+      "reason": "Excluded – declarative repository/projection interface; no Java function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/repository/ClassSessionRepository.java",
+      "status": "Excluded",
+      "reason": "Excluded – declarative repository/projection interface; no Java function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/repository/ClassStatusOptionProjection.java",
+      "status": "Excluded",
+      "reason": "Excluded – declarative repository/projection interface; no Java function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/repository/CoursePublicProjection.java",
+      "status": "Excluded",
+      "reason": "Excluded – declarative repository/projection interface; no Java function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/repository/OpeningScheduleProjection.java",
+      "status": "Excluded",
+      "reason": "Excluded – declarative repository/projection interface; no Java function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/repository/ScheduleProjection.java",
+      "status": "Excluded",
+      "reason": "Excluded – declarative repository/projection interface; no Java function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-16 Class List",
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/ClassAdminService.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "update",
+          "signature": "update",
+          "line": null,
+          "score": 771,
+          "cyclomaticApprox": 73,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassAdminService.java|update",
+          "sheetName": "K-BE-ClassAdminService-update-1"
+        },
+        {
+          "rank": 2,
+          "name": "restore",
+          "signature": "restore",
+          "line": null,
+          "score": 387,
+          "cyclomaticApprox": 39,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassAdminService.java|restore",
+          "sheetName": "K-BE-ClassAdminService-restore-2"
+        },
+        {
+          "rank": 3,
+          "name": "create",
+          "signature": "create",
+          "line": null,
+          "score": 278,
+          "cyclomaticApprox": 29,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassAdminService.java|create",
+          "sheetName": "K-BE-ClassAdminService-create-3"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-19 Class Analytics"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/ClassAnalyticsService.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "getForAdminOrTmo",
+          "signature": "getForAdminOrTmo",
+          "line": null,
+          "score": 371,
+          "cyclomaticApprox": 35,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassAnalyticsService.java|getForAdminOrTmo",
+          "sheetName": "K-BE-ClassAnalyticsService-getForAdminOrTmo-1"
+        },
+        {
+          "rank": 2,
+          "name": "getForTrainer",
+          "signature": "getForTrainer",
+          "line": null,
+          "score": 371,
+          "cyclomaticApprox": 35,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassAnalyticsService.java|getForTrainer",
+          "sheetName": "K-BE-ClassAnalyticsService-getForTrainer-2"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/ClassLifecycleScheduler.java",
+      "status": "Excluded",
+      "reason": "Excluded – scheduler wrappers only; service behavior is tested separately",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/ClassLifecycleSynchronizationService.java",
+      "status": "Excluded",
+      "reason": "Excluded – one-line repository delegation",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-18 Create Class",
+        "SCR-42 My Schedule"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/ClassSessionScheduleService.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "synchronizeFutureSessions",
+          "signature": "synchronizeFutureSessions",
+          "line": null,
+          "score": 503,
+          "cyclomaticApprox": 49,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassSessionScheduleService.java|synchronizeFutureSessions",
+          "sheetName": "K-BE-ClassSessionScheduleService-synchronizeFutureSessions-1"
+        },
+        {
+          "rank": 2,
+          "name": "validateScheduleDefinition",
+          "signature": "validateScheduleDefinition",
+          "line": null,
+          "score": 375,
+          "cyclomaticApprox": 40,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassSessionScheduleService.java|validateScheduleDefinition",
+          "sheetName": "K-BE-ClassSessionScheduleService-validateScheduleDefinition-2"
+        },
+        {
+          "rank": 3,
+          "name": "deleteFutureSessions",
+          "signature": "deleteFutureSessions",
+          "line": null,
+          "score": 26,
+          "cyclomaticApprox": 2,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassSessionScheduleService.java|deleteFutureSessions",
+          "sheetName": "K-BE-ClassSessionScheduleService-deleteFutureSessions-3"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-16 Class List",
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/ClassTrainerService.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "listMyAssignedClasses",
+          "signature": "listMyAssignedClasses",
+          "line": null,
+          "score": 85,
+          "cyclomaticApprox": 9,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassTrainerService.java|listMyAssignedClasses",
+          "sheetName": "K-BE-ClassTrainerService-listMyAssignedClasses-1"
+        },
+        {
+          "rank": 2,
+          "name": "getMyAssignedClassDetail",
+          "signature": "getMyAssignedClassDetail",
+          "line": null,
+          "score": 48,
+          "cyclomaticApprox": 4,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ClassTrainerService.java|getMyAssignedClassDetail",
+          "sheetName": "K-BE-ClassTrainerService-getMyAssignedClassDetail-2"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-18 Create Class"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/GoogleMeetService.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "createMeetingUrl",
+          "signature": "createMeetingUrl",
+          "line": null,
+          "score": 144,
+          "cyclomaticApprox": 16,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/GoogleMeetService.java|createMeetingUrl",
+          "sheetName": "K-BE-GoogleMeetService-createMeetingUrl-1"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-16 Class List",
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/OpeningScheduleService.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "list",
+          "signature": "list",
+          "line": null,
+          "score": 186,
+          "cyclomaticApprox": 20,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/OpeningScheduleService.java|list",
+          "sheetName": "K-BE-OpeningScheduleService-list-1"
+        },
+        {
+          "rank": 2,
+          "name": "getDetail",
+          "signature": "getDetail",
+          "line": null,
+          "score": 60,
+          "cyclomaticApprox": 5,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/OpeningScheduleService.java|getDetail",
+          "sheetName": "K-BE-OpeningScheduleService-getDetail-2"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-42 My Schedule"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/classroom/service/ScheduleService.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "getStaffSchedule",
+          "signature": "getStaffSchedule",
+          "line": null,
+          "score": 73,
+          "cyclomaticApprox": 6,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ScheduleService.java|getStaffSchedule",
+          "sheetName": "K-BE-ScheduleService-getStaffSchedule-1"
+        },
+        {
+          "rank": 2,
+          "name": "getMySchedule",
+          "signature": "getMySchedule",
+          "line": null,
+          "score": 32,
+          "cyclomaticApprox": 2,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/classroom/service/ScheduleService.java|getMySchedule",
+          "sheetName": "K-BE-ScheduleService-getMySchedule-2"
+        }
+      ]
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/controller/TraineeProgressController.java",
+      "status": "Excluded",
+      "reason": "Excluded – thin HTTP delegation; no custom decision logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/dto/CourseProgressItemResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/dto/LessonProgressResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/dto/ProgressMetricResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/dto/TraineeProgressResponse.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/dto/UpdateLessonProgressRequest.java",
+      "status": "Excluded",
+      "reason": "Excluded – DTO/record without executable business logic",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/entity/LessonProgress.java",
+      "status": "Excluded",
+      "reason": "Excluded – persistence entity/enum without custom behavior",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/repository/LessonProgressRepository.java",
+      "status": "Excluded",
+      "reason": "Excluded – declarative repository/projection interface; no Java function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "backend",
+      "screens": [
+        "SCR-41 Personal Progress"
+      ],
+      "file": "src/main/java/com/smartlearnly/backend/lessonprogress/service/TraineeProgressService.java",
+      "status": "Selected",
+      "reason": "Contains testable custom business logic",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "getMyProgress",
+          "signature": "getMyProgress",
+          "line": null,
+          "score": 413,
+          "cyclomaticApprox": 34,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/lessonprogress/service/TraineeProgressService.java|getMyProgress",
+          "sheetName": "K-BE-TraineeProgressService-getMyProgress-1"
+        },
+        {
+          "rank": 2,
+          "name": "calculateStudentClassProgressPercent",
+          "signature": "calculateStudentClassProgressPercent",
+          "line": null,
+          "score": 234,
+          "cyclomaticApprox": 23,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/lessonprogress/service/TraineeProgressService.java|calculateStudentClassProgressPercent",
+          "sheetName": "K-BE-TraineeProgressService-calculateStudentClassProgressPercent-2"
+        },
+        {
+          "rank": 3,
+          "name": "updateLessonProgress",
+          "signature": "updateLessonProgress",
+          "line": null,
+          "score": 112,
+          "cyclomaticApprox": 9,
+          "methodKey": "backend|src/main/java/com/smartlearnly/backend/lessonprogress/service/TraineeProgressService.java|updateLessonProgress",
+          "sheetName": "K-BE-TraineeProgressService-updateLessonProgress-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-20 Checkout"
+      ],
+      "file": "src/features/checkout/components/CheckoutSummary.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 4,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CheckoutSummary",
+          "signature": "CheckoutSummary",
+          "line": 48,
+          "score": 238,
+          "cyclomaticApprox": 15,
+          "methodKey": "frontend|src/features/checkout/components/CheckoutSummary.jsx|CheckoutSummary",
+          "sheetName": "K-FE-CheckoutSummary-CheckoutSummary-1"
+        },
+        {
+          "rank": 2,
+          "name": "toNumber",
+          "signature": "toNumber",
+          "line": 1,
+          "score": 51,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/checkout/components/CheckoutSummary.jsx|toNumber",
+          "sheetName": "K-FE-CheckoutSummary-toNumber-2"
+        },
+        {
+          "rank": 3,
+          "name": "formatDate",
+          "signature": "formatDate",
+          "line": 34,
+          "score": 32,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/checkout/components/CheckoutSummary.jsx|formatDate",
+          "sheetName": "K-FE-CheckoutSummary-formatDate-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-22 Transaction History",
+        "SCR-23 Invoice Detail"
+      ],
+      "file": "src/features/checkout/components/InvoiceDetailModal.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "InvoiceDetailModal",
+          "signature": "InvoiceDetailModal",
+          "line": 9,
+          "score": 298,
+          "cyclomaticApprox": 14,
+          "methodKey": "frontend|src/features/checkout/components/InvoiceDetailModal.jsx|InvoiceDetailModal",
+          "sheetName": "K-FE-InvoiceDetailModal-InvoiceDetailModal-1"
+        },
+        {
+          "rank": 2,
+          "name": "handleDownloadInvoice",
+          "signature": "handleDownloadInvoice",
+          "line": 17,
+          "score": 11,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/checkout/components/InvoiceDetailModal.jsx|handleDownloadInvoice",
+          "sheetName": "K-FE-InvoiceDetailModal-handleDownloadInvoice-2"
+        },
+        {
+          "rank": 3,
+          "name": "onBlocked",
+          "signature": "onBlocked",
+          "line": 22,
+          "score": 4,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/checkout/components/InvoiceDetailModal.jsx|onBlocked",
+          "sheetName": "K-FE-InvoiceDetailModal-onBlocked-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-20 Checkout"
+      ],
+      "file": "src/features/checkout/components/PaymentInstructionCard.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "PaymentInstructionCard",
+          "signature": "PaymentInstructionCard",
+          "line": 34,
+          "score": 72,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/checkout/components/PaymentInstructionCard.jsx|PaymentInstructionCard",
+          "sheetName": "K-FE-PaymentInstructionCard-PaymentInstructionCard-1"
+        },
+        {
+          "rank": 2,
+          "name": "InfoRow",
+          "signature": "InfoRow",
+          "line": 13,
+          "score": 44,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/checkout/components/PaymentInstructionCard.jsx|InfoRow",
+          "sheetName": "K-FE-PaymentInstructionCard-InfoRow-2"
+        },
+        {
+          "rank": 3,
+          "name": "formatMoney",
+          "signature": "formatMoney",
+          "line": 5,
+          "score": 17,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/checkout/components/PaymentInstructionCard.jsx|formatMoney",
+          "sheetName": "K-FE-PaymentInstructionCard-formatMoney-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-20 Checkout"
+      ],
+      "file": "src/features/checkout/components/PaymentStatusBadge.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "PaymentStatusBadge",
+          "signature": "PaymentStatusBadge",
+          "line": 17,
+          "score": 42,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/checkout/components/PaymentStatusBadge.jsx|PaymentStatusBadge",
+          "sheetName": "K-FE-PaymentStatusBadge-PaymentStatusBadge-1"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-20 Checkout"
+      ],
+      "file": "src/features/checkout/components/VietQrBox.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "VietQrBox",
+          "signature": "VietQrBox",
+          "line": 1,
+          "score": 23,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/checkout/components/VietQrBox.jsx|VietQrBox",
+          "sheetName": "K-FE-VietQrBox-VietQrBox-1"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-20 Checkout"
+      ],
+      "file": "src/features/checkout/pages/CheckoutPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 4,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CheckoutPage",
+          "signature": "CheckoutPage",
+          "line": 11,
+          "score": 228,
+          "cyclomaticApprox": 8,
+          "methodKey": "frontend|src/features/checkout/pages/CheckoutPage.jsx|CheckoutPage",
+          "sheetName": "K-FE-CheckoutPage-CheckoutPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "loadOrder",
+          "signature": "loadOrder",
+          "line": 32,
+          "score": 82,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/features/checkout/pages/CheckoutPage.jsx|loadOrder",
+          "sheetName": "K-FE-CheckoutPage-loadOrder-2"
+        },
+        {
+          "rank": 3,
+          "name": "pollOrderStatus",
+          "signature": "pollOrderStatus",
+          "line": 73,
+          "score": 59,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/checkout/pages/CheckoutPage.jsx|pollOrderStatus",
+          "sheetName": "K-FE-CheckoutPage-pollOrderStatus-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-22 Transaction History"
+      ],
+      "file": "src/features/checkout/pages/MyTransactionsPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "MyTransactionsPage",
+          "signature": "MyTransactionsPage",
+          "line": 75,
+          "score": 215,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/checkout/pages/MyTransactionsPage.jsx|MyTransactionsPage",
+          "sheetName": "K-FE-MyTransactionsPage-MyTransactionsPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "CancelOrderModal",
+          "signature": "CancelOrderModal",
+          "line": 16,
+          "score": 88,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/checkout/pages/MyTransactionsPage.jsx|CancelOrderModal",
+          "sheetName": "K-FE-MyTransactionsPage-CancelOrderModal-2"
+        },
+        {
+          "rank": 3,
+          "name": "handleConfirm",
+          "signature": "handleConfirm",
+          "line": 21,
+          "score": 48,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/checkout/pages/MyTransactionsPage.jsx|handleConfirm",
+          "sheetName": "K-FE-MyTransactionsPage-handleConfirm-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-21 Payment Result"
+      ],
+      "file": "src/features/checkout/pages/PaymentResultPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 5,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "PaymentResultPage",
+          "signature": "PaymentResultPage",
+          "line": 38,
+          "score": 329,
+          "cyclomaticApprox": 17,
+          "methodKey": "frontend|src/features/checkout/pages/PaymentResultPage.jsx|PaymentResultPage",
+          "sheetName": "K-FE-PaymentResultPage-PaymentResultPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "loadPaymentResult",
+          "signature": "loadPaymentResult",
+          "line": 72,
+          "score": 72,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/features/checkout/pages/PaymentResultPage.jsx|loadPaymentResult",
+          "sheetName": "K-FE-PaymentResultPage-loadPaymentResult-2"
+        },
+        {
+          "rank": 3,
+          "name": "resolveOutcome",
+          "signature": "resolveOutcome",
+          "line": 24,
+          "score": 32,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/checkout/pages/PaymentResultPage.jsx|resolveOutcome",
+          "sheetName": "K-FE-PaymentResultPage-resolveOutcome-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-22 Transaction History",
+        "SCR-23 Invoice Detail"
+      ],
+      "file": "src/features/checkout/utils/downloadInvoice.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 4,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "downloadInvoice",
+          "signature": "downloadInvoice",
+          "line": 21,
+          "score": 261,
+          "cyclomaticApprox": 8,
+          "methodKey": "frontend|src/features/checkout/utils/downloadInvoice.js|downloadInvoice",
+          "sheetName": "K-FE-downloadInvoice-downloadInvoice-1"
+        },
+        {
+          "rank": 2,
+          "name": "escapeHtml",
+          "signature": "escapeHtml",
+          "line": 4,
+          "score": 22,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/checkout/utils/downloadInvoice.js|escapeHtml",
+          "sheetName": "K-FE-downloadInvoice-escapeHtml-2"
+        },
+        {
+          "rank": 3,
+          "name": "formatDisplayDate",
+          "signature": "formatDisplayDate",
+          "line": 17,
+          "score": 14,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/checkout/utils/downloadInvoice.js|formatDisplayDate",
+          "sheetName": "K-FE-downloadInvoice-formatDisplayDate-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail",
+        "SCR-19 Class Analytics"
+      ],
+      "file": "src/features/classroom/components/ClassAnalyticsTab.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 5,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "ClassAnalyticsTab",
+          "signature": "ClassAnalyticsTab",
+          "line": 32,
+          "score": 392,
+          "cyclomaticApprox": 11,
+          "methodKey": "frontend|src/features/classroom/components/ClassAnalyticsTab.jsx|ClassAnalyticsTab",
+          "sheetName": "K-FE-ClassAnalyticsTab-ClassAnalyticsTab-1"
+        },
+        {
+          "rank": 2,
+          "name": "MetricItem",
+          "signature": "MetricItem",
+          "line": 17,
+          "score": 22,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/components/ClassAnalyticsTab.jsx|MetricItem",
+          "sheetName": "K-FE-ClassAnalyticsTab-MetricItem-2"
+        },
+        {
+          "rank": 3,
+          "name": "changeInactiveDays",
+          "signature": "changeInactiveDays",
+          "line": 127,
+          "score": 16,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/classroom/components/ClassAnalyticsTab.jsx|changeInactiveDays",
+          "sheetName": "K-FE-ClassAnalyticsTab-changeInactiveDays-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/features/classroom/components/ClassCurriculumTab.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 13,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "ClassCurriculumTab",
+          "signature": "ClassCurriculumTab",
+          "line": 54,
+          "score": 499,
+          "cyclomaticApprox": 22,
+          "methodKey": "frontend|src/features/classroom/components/ClassCurriculumTab.jsx|ClassCurriculumTab",
+          "sheetName": "K-FE-ClassCurriculumTab-ClassCurriculumTab-1"
+        },
+        {
+          "rank": 2,
+          "name": "computeStats",
+          "signature": "computeStats",
+          "line": 26,
+          "score": 117,
+          "cyclomaticApprox": 12,
+          "methodKey": "frontend|src/features/classroom/components/ClassCurriculumTab.jsx|computeStats",
+          "sheetName": "K-FE-ClassCurriculumTab-computeStats-2"
+        },
+        {
+          "rank": 3,
+          "name": "handleCreateLesson",
+          "signature": "handleCreateLesson",
+          "line": 174,
+          "score": 72,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/features/classroom/components/ClassCurriculumTab.jsx|handleCreateLesson",
+          "sheetName": "K-FE-ClassCurriculumTab-handleCreateLesson-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-16 Class List"
+      ],
+      "file": "src/features/classroom/components/ClassList.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "ClassList",
+          "signature": "ClassList",
+          "line": 74,
+          "score": 211,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/classroom/components/ClassList.jsx|ClassList",
+          "sheetName": "K-FE-ClassList-ClassList-1"
+        },
+        {
+          "rank": 2,
+          "name": "ClassActions",
+          "signature": "ClassActions",
+          "line": 16,
+          "score": 73,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/classroom/components/ClassList.jsx|ClassActions",
+          "sheetName": "K-FE-ClassList-ClassActions-2"
+        },
+        {
+          "rank": 3,
+          "name": "resolveClassItem",
+          "signature": "resolveClassItem",
+          "line": 6,
+          "score": 33,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/classroom/components/ClassList.jsx|resolveClassItem",
+          "sheetName": "K-FE-ClassList-resolveClassItem-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-16 Class List"
+      ],
+      "file": "src/features/classroom/components/ClassListFilters.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "ClassListFilters",
+          "signature": "ClassListFilters",
+          "line": 5,
+          "score": 166,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/classroom/components/ClassListFilters.jsx|ClassListFilters",
+          "sheetName": "K-FE-ClassListFilters-ClassListFilters-1"
+        },
+        {
+          "rank": 2,
+          "name": "fetchCourseTitle",
+          "signature": "fetchCourseTitle",
+          "line": 40,
+          "score": 74,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/features/classroom/components/ClassListFilters.jsx|fetchCourseTitle",
+          "sheetName": "K-FE-ClassListFilters-fetchCourseTitle-2"
+        },
+        {
+          "rank": 3,
+          "name": "updateFilter",
+          "signature": "updateFilter",
+          "line": 76,
+          "score": 13,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/classroom/components/ClassListFilters.jsx|updateFilter",
+          "sheetName": "K-FE-ClassListFilters-updateFilter-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/features/classroom/components/ClassOverviewTab.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "ClassOverviewTab",
+          "signature": "ClassOverviewTab",
+          "line": 7,
+          "score": 130,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/features/classroom/components/ClassOverviewTab.jsx|ClassOverviewTab",
+          "sheetName": "K-FE-ClassOverviewTab-ClassOverviewTab-1"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-16 Class List",
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/components/ClassStatusBadge.jsx",
+      "status": "Excluded",
+      "reason": "Excluded – presentation-only component without decision or side-effect logic",
+      "functionCount": 1,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail",
+        "SCR-19 Class Analytics"
+      ],
+      "file": "src/features/classroom/components/StudentPerformanceFilters.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "StudentPerformanceFilters",
+          "signature": "StudentPerformanceFilters",
+          "line": 9,
+          "score": 122,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/classroom/components/StudentPerformanceFilters.jsx|StudentPerformanceFilters",
+          "sheetName": "K-FE-StudentPerformanceFilters-StudentPerformanceFilters-1"
+        },
+        {
+          "rank": 2,
+          "name": "clearFilters",
+          "signature": "clearFilters",
+          "line": 38,
+          "score": 6,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/classroom/components/StudentPerformanceFilters.jsx|clearFilters",
+          "sheetName": "K-FE-StudentPerformanceFilters-clearFilters-2"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail",
+        "SCR-19 Class Analytics"
+      ],
+      "file": "src/features/classroom/components/StudentPerformanceTable.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "StudentPerformanceTable",
+          "signature": "StudentPerformanceTable",
+          "line": 14,
+          "score": 247,
+          "cyclomaticApprox": 11,
+          "methodKey": "frontend|src/features/classroom/components/StudentPerformanceTable.jsx|StudentPerformanceTable",
+          "sheetName": "K-FE-StudentPerformanceTable-StudentPerformanceTable-1"
+        },
+        {
+          "rank": 2,
+          "name": "clampProgress",
+          "signature": "clampProgress",
+          "line": 10,
+          "score": 6,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/classroom/components/StudentPerformanceTable.jsx|clampProgress",
+          "sheetName": "K-FE-StudentPerformanceTable-clampProgress-2"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/components/WeeklySchedulePicker.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 10,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "WeeklyScheduleEditor",
+          "signature": "WeeklyScheduleEditor",
+          "line": 57,
+          "score": 193,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/components/WeeklySchedulePicker.jsx|WeeklyScheduleEditor",
+          "sheetName": "K-FE-WeeklySchedulePicker-WeeklyScheduleEditor-1"
+        },
+        {
+          "rank": 2,
+          "name": "parseSchedule",
+          "signature": "parseSchedule",
+          "line": 14,
+          "score": 70,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/classroom/components/WeeklySchedulePicker.jsx|parseSchedule",
+          "sheetName": "K-FE-WeeklySchedulePicker-parseSchedule-2"
+        },
+        {
+          "rank": 3,
+          "name": "stringifySchedule",
+          "signature": "stringifySchedule",
+          "line": 45,
+          "score": 25,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/components/WeeklySchedulePicker.jsx|stringifySchedule",
+          "sheetName": "K-FE-WeeklySchedulePicker-stringifySchedule-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/constants/classLifecycle.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "getClassEditPolicy",
+          "signature": "getClassEditPolicy",
+          "line": 14,
+          "score": 51,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/classroom/constants/classLifecycle.js|getClassEditPolicy",
+          "sheetName": "K-FE-classLifecycle-getClassEditPolicy-1"
+        },
+        {
+          "rank": 2,
+          "name": "normalizeClassStatus",
+          "signature": "normalizeClassStatus",
+          "line": 8,
+          "score": 16,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/constants/classLifecycle.js|normalizeClassStatus",
+          "sheetName": "K-FE-classLifecycle-normalizeClassStatus-2"
+        },
+        {
+          "rank": 3,
+          "name": "isTerminalClassStatus",
+          "signature": "isTerminalClassStatus",
+          "line": 33,
+          "score": 16,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/constants/classLifecycle.js|isTerminalClassStatus",
+          "sheetName": "K-FE-classLifecycle-isTerminalClassStatus-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail",
+        "SCR-19 Class Analytics"
+      ],
+      "file": "src/features/classroom/constants/studentPerformanceFilters.js",
+      "status": "Excluded",
+      "reason": "Excluded – constants only; no executable function body",
+      "functionCount": 0,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/hooks/useActiveTrainers.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "useActiveTrainers",
+          "signature": "useActiveTrainers",
+          "line": 15,
+          "score": 64,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/classroom/hooks/useActiveTrainers.js|useActiveTrainers",
+          "sheetName": "K-FE-useActiveTrainers-useActiveTrainers-1"
+        },
+        {
+          "rank": 2,
+          "name": "normalizeTrainers",
+          "signature": "normalizeTrainers",
+          "line": 11,
+          "score": 14,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/hooks/useActiveTrainers.js|normalizeTrainers",
+          "sheetName": "K-FE-useActiveTrainers-normalizeTrainers-2"
+        },
+        {
+          "rank": 3,
+          "name": "fetchActiveTrainers",
+          "signature": "fetchActiveTrainers",
+          "line": 4,
+          "score": 7,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/classroom/hooks/useActiveTrainers.js|fetchActiveTrainers",
+          "sheetName": "K-FE-useActiveTrainers-fetchActiveTrainers-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/hooks/useClassForm.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "useClassForm",
+          "signature": "useClassForm",
+          "line": 12,
+          "score": 113,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/classroom/hooks/useClassForm.js|useClassForm",
+          "sheetName": "K-FE-useClassForm-useClassForm-1"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/features/classroom/pages/ClassDetailPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 12,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "ClassDetailPage",
+          "signature": "ClassDetailPage",
+          "line": 29,
+          "score": 776,
+          "cyclomaticApprox": 30,
+          "methodKey": "frontend|src/features/classroom/pages/ClassDetailPage.jsx|ClassDetailPage",
+          "sheetName": "K-FE-ClassDetailPage-ClassDetailPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "confirmRestoreClass",
+          "signature": "confirmRestoreClass",
+          "line": 189,
+          "score": 95,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/features/classroom/pages/ClassDetailPage.jsx|confirmRestoreClass",
+          "sheetName": "K-FE-ClassDetailPage-confirmRestoreClass-2"
+        },
+        {
+          "rank": 3,
+          "name": "confirmCancelClass",
+          "signature": "confirmCancelClass",
+          "line": 164,
+          "score": 60,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/classroom/pages/ClassDetailPage.jsx|confirmCancelClass",
+          "sheetName": "K-FE-ClassDetailPage-confirmCancelClass-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/pages/EditionClassPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "EditionClassForm",
+          "signature": "EditionClassForm",
+          "line": 16,
+          "score": 728,
+          "cyclomaticApprox": 31,
+          "methodKey": "frontend|src/features/classroom/pages/EditionClassPage.jsx|EditionClassForm",
+          "sheetName": "K-FE-EditionClassPage-EditionClassForm-1"
+        },
+        {
+          "rank": 2,
+          "name": "EditionClassPage",
+          "signature": "EditionClassPage",
+          "line": 469,
+          "score": 161,
+          "cyclomaticApprox": 9,
+          "methodKey": "frontend|src/features/classroom/pages/EditionClassPage.jsx|EditionClassPage",
+          "sheetName": "K-FE-EditionClassPage-EditionClassPage-2"
+        },
+        {
+          "rank": 3,
+          "name": "handleGenerateMeetingUrl",
+          "signature": "handleGenerateMeetingUrl",
+          "line": 146,
+          "score": 83,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/classroom/pages/EditionClassPage.jsx|handleGenerateMeetingUrl",
+          "sheetName": "K-FE-EditionClassPage-handleGenerateMeetingUrl-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-16 Class List"
+      ],
+      "file": "src/features/classroom/pages/StaffClassListPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 5,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "StaffClassListPage",
+          "signature": "StaffClassListPage",
+          "line": 12,
+          "score": 362,
+          "cyclomaticApprox": 16,
+          "methodKey": "frontend|src/features/classroom/pages/StaffClassListPage.jsx|StaffClassListPage",
+          "sheetName": "K-FE-StaffClassListPage-StaffClassListPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "fetchClasses",
+          "signature": "fetchClasses",
+          "line": 43,
+          "score": 98,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/features/classroom/pages/StaffClassListPage.jsx|fetchClasses",
+          "sheetName": "K-FE-StaffClassListPage-fetchClasses-2"
+        },
+        {
+          "rank": 3,
+          "name": "handleDeleteClass",
+          "signature": "handleDeleteClass",
+          "line": 112,
+          "score": 44,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/classroom/pages/StaffClassListPage.jsx|handleDeleteClass",
+          "sheetName": "K-FE-StaffClassListPage-handleDeleteClass-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/utils/classFormMapper.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 6,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "toUpdateClassPayload",
+          "signature": "toUpdateClassPayload",
+          "line": 65,
+          "score": 123,
+          "cyclomaticApprox": 10,
+          "methodKey": "frontend|src/features/classroom/utils/classFormMapper.js|toUpdateClassPayload",
+          "sheetName": "K-FE-classFormMapper-toUpdateClassPayload-1"
+        },
+        {
+          "rank": 2,
+          "name": "normalizeNumber",
+          "signature": "normalizeNumber",
+          "line": 7,
+          "score": 45,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/classroom/utils/classFormMapper.js|normalizeNumber",
+          "sheetName": "K-FE-classFormMapper-normalizeNumber-2"
+        },
+        {
+          "rank": 3,
+          "name": "toClassFormValues",
+          "signature": "toClassFormValues",
+          "line": 31,
+          "score": 26,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/utils/classFormMapper.js|toClassFormValues",
+          "sheetName": "K-FE-classFormMapper-toClassFormValues-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-16 Class List",
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/utils/classFormatter.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 6,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "formatVnd",
+          "signature": "formatVnd",
+          "line": 44,
+          "score": 56,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/features/classroom/utils/classFormatter.js|formatVnd",
+          "sheetName": "K-FE-classFormatter-formatVnd-1"
+        },
+        {
+          "rank": 2,
+          "name": "getStatusColorClass",
+          "signature": "getStatusColorClass",
+          "line": 58,
+          "score": 32,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/classroom/utils/classFormatter.js|getStatusColorClass",
+          "sheetName": "K-FE-classFormatter-getStatusColorClass-2"
+        },
+        {
+          "rank": 3,
+          "name": "formatCapacity",
+          "signature": "formatCapacity",
+          "line": 38,
+          "score": 23,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/classroom/utils/classFormatter.js|formatCapacity",
+          "sheetName": "K-FE-classFormatter-formatCapacity-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-18 Create Class"
+      ],
+      "file": "src/features/classroom/utils/classValidator.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 5,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "validateScheduleDefinition",
+          "signature": "validateScheduleDefinition",
+          "line": 39,
+          "score": 245,
+          "cyclomaticApprox": 17,
+          "methodKey": "frontend|src/features/classroom/utils/classValidator.js|validateScheduleDefinition",
+          "sheetName": "K-FE-classValidator-validateScheduleDefinition-1"
+        },
+        {
+          "rank": 2,
+          "name": "createClassFormSchema",
+          "signature": "createClassFormSchema",
+          "line": 137,
+          "score": 154,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/utils/classValidator.js|createClassFormSchema",
+          "sheetName": "K-FE-classValidator-createClassFormSchema-2"
+        },
+        {
+          "rank": 3,
+          "name": "isNotPastDate",
+          "signature": "isNotPastDate",
+          "line": 10,
+          "score": 16,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/classroom/utils/classValidator.js|isNotPastDate",
+          "sheetName": "K-FE-classValidator-isNotPastDate-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-11 Course List"
+      ],
+      "file": "src/features/course/components/CourseCard.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CourseCard",
+          "signature": "CourseCard",
+          "line": 16,
+          "score": 158,
+          "cyclomaticApprox": 8,
+          "methodKey": "frontend|src/features/course/components/CourseCard.jsx|CourseCard",
+          "sheetName": "K-FE-CourseCard-CourseCard-1"
+        },
+        {
+          "rank": 2,
+          "name": "getCoursePath",
+          "signature": "getCoursePath",
+          "line": 12,
+          "score": 11,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/course/components/CourseCard.jsx|getCoursePath",
+          "sheetName": "K-FE-CourseCard-getCoursePath-2"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-11 Course List"
+      ],
+      "file": "src/features/course/components/CourseCatalogFilterMenu.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CourseCatalogFilterMenu",
+          "signature": "CourseCatalogFilterMenu",
+          "line": 12,
+          "score": 192,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/course/components/CourseCatalogFilterMenu.jsx|CourseCatalogFilterMenu",
+          "sheetName": "K-FE-CourseCatalogFilterMenu-CourseCatalogFilterMenu-1"
+        },
+        {
+          "rank": 2,
+          "name": "handleKeyDown",
+          "signature": "handleKeyDown",
+          "line": 39,
+          "score": 73,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/features/course/components/CourseCatalogFilterMenu.jsx|handleKeyDown",
+          "sheetName": "K-FE-CourseCatalogFilterMenu-handleKeyDown-2"
+        },
+        {
+          "rank": 3,
+          "name": "closeFilters",
+          "signature": "closeFilters",
+          "line": 27,
+          "score": 16,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/course/components/CourseCatalogFilterMenu.jsx|closeFilters",
+          "sheetName": "K-FE-CourseCatalogFilterMenu-closeFilters-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-11 Course List"
+      ],
+      "file": "src/features/course/components/CourseCatalogToolbar.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CourseCatalogActions",
+          "signature": "CourseCatalogActions",
+          "line": 3,
+          "score": 69,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/course/components/CourseCatalogToolbar.jsx|CourseCatalogActions",
+          "sheetName": "K-FE-CourseCatalogToolbar-CourseCatalogActions-1"
+        },
+        {
+          "rank": 2,
+          "name": "CourseCatalogToolbar",
+          "signature": "CourseCatalogToolbar",
+          "line": 53,
+          "score": 46,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/course/components/CourseCatalogToolbar.jsx|CourseCatalogToolbar",
+          "sheetName": "K-FE-CourseCatalogToolbar-CourseCatalogToolbar-2"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-11 Course List"
+      ],
+      "file": "src/features/course/components/CourseFilters.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CourseFilters",
+          "signature": "CourseFilters",
+          "line": 4,
+          "score": 79,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/course/components/CourseFilters.jsx|CourseFilters",
+          "sheetName": "K-FE-CourseFilters-CourseFilters-1"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-11 Course List"
+      ],
+      "file": "src/features/course/components/CourseListToolbar.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 4,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CourseListToolbar",
+          "signature": "CourseListToolbar",
+          "line": 91,
+          "score": 259,
+          "cyclomaticApprox": 15,
+          "methodKey": "frontend|src/features/course/components/CourseListToolbar.jsx|CourseListToolbar",
+          "sheetName": "K-FE-CourseListToolbar-CourseListToolbar-1"
+        },
+        {
+          "rank": 2,
+          "name": "CatalogFilterDropdown",
+          "signature": "CatalogFilterDropdown",
+          "line": 13,
+          "score": 108,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/course/components/CourseListToolbar.jsx|CatalogFilterDropdown",
+          "sheetName": "K-FE-CourseListToolbar-CatalogFilterDropdown-2"
+        },
+        {
+          "rank": 3,
+          "name": "handlePointerDown",
+          "signature": "handlePointerDown",
+          "line": 25,
+          "score": 14,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/course/components/CourseListToolbar.jsx|handlePointerDown",
+          "sheetName": "K-FE-CourseListToolbar-handlePointerDown-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-12 Course Details"
+      ],
+      "file": "src/features/course/components/CourseReviewsSection.jsx",
+      "status": "Excluded",
+      "reason": "Excluded – presentation-only component without decision or side-effect logic",
+      "functionCount": 1,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/features/course/components/CurriculumStructureEditor.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 30,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CurriculumStructureEditor",
+          "signature": "CurriculumStructureEditor",
+          "line": 1016,
+          "score": 504,
+          "cyclomaticApprox": 28,
+          "methodKey": "frontend|src/features/course/components/CurriculumStructureEditor.jsx|CurriculumStructureEditor",
+          "sheetName": "K-FE-CurriculumStructureEditor-CurriculumStructureEditor-1"
+        },
+        {
+          "rank": 2,
+          "name": "SectionRow",
+          "signature": "SectionRow",
+          "line": 247,
+          "score": 265,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/features/course/components/CurriculumStructureEditor.jsx|SectionRow",
+          "sheetName": "K-FE-CurriculumStructureEditor-SectionRow-2"
+        },
+        {
+          "rank": 3,
+          "name": "LessonCreateModal",
+          "signature": "LessonCreateModal",
+          "line": 713,
+          "score": 206,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/features/course/components/CurriculumStructureEditor.jsx|LessonCreateModal",
+          "sheetName": "K-FE-CurriculumStructureEditor-LessonCreateModal-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-12 Course Details"
+      ],
+      "file": "src/features/course/pages/CourseDetailPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 12,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CourseDetailPage",
+          "signature": "CourseDetailPage",
+          "line": 41,
+          "score": 797,
+          "cyclomaticApprox": 29,
+          "methodKey": "frontend|src/features/course/pages/CourseDetailPage.jsx|CourseDetailPage",
+          "sheetName": "K-FE-CourseDetailPage-CourseDetailPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "load",
+          "signature": "load",
+          "line": 69,
+          "score": 156,
+          "cyclomaticApprox": 13,
+          "methodKey": "frontend|src/features/course/pages/CourseDetailPage.jsx|load",
+          "sheetName": "K-FE-CourseDetailPage-load-2"
+        },
+        {
+          "rank": 3,
+          "name": "handleBuyNowClick",
+          "signature": "handleBuyNowClick",
+          "line": 195,
+          "score": 117,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/features/course/pages/CourseDetailPage.jsx|handleBuyNowClick",
+          "sheetName": "K-FE-CourseDetailPage-handleBuyNowClick-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-11 Course List"
+      ],
+      "file": "src/features/course/pages/CourseListPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 18,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CourseListPage",
+          "signature": "CourseListPage",
+          "line": 72,
+          "score": 892,
+          "cyclomaticApprox": 44,
+          "methodKey": "frontend|src/features/course/pages/CourseListPage.jsx|CourseListPage",
+          "sheetName": "K-FE-CourseListPage-CourseListPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "loadAllCatalogExcludingEnrolled",
+          "signature": "loadAllCatalogExcludingEnrolled",
+          "line": 142,
+          "score": 129,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/course/pages/CourseListPage.jsx|loadAllCatalogExcludingEnrolled",
+          "sheetName": "K-FE-CourseListPage-loadAllCatalogExcludingEnrolled-2"
+        },
+        {
+          "rank": 3,
+          "name": "loadCourses",
+          "signature": "loadCourses",
+          "line": 216,
+          "score": 122,
+          "cyclomaticApprox": 8,
+          "methodKey": "frontend|src/features/course/pages/CourseListPage.jsx|loadCourses",
+          "sheetName": "K-FE-CourseListPage-loadCourses-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-11 Course List",
+        "SCR-12 Course Details"
+      ],
+      "file": "src/features/course/utils/course-price.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 10,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "getDiscountPrice",
+          "signature": "getDiscountPrice",
+          "line": 130,
+          "score": 72,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/features/course/utils/course-price.js|getDiscountPrice",
+          "sheetName": "K-FE-course-price-getDiscountPrice-1"
+        },
+        {
+          "rank": 2,
+          "name": "getDiscountRate",
+          "signature": "getDiscountRate",
+          "line": 100,
+          "score": 56,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/course/utils/course-price.js|getDiscountRate",
+          "sheetName": "K-FE-course-price-getDiscountRate-2"
+        },
+        {
+          "rank": 3,
+          "name": "toNumber",
+          "signature": "toNumber",
+          "line": 1,
+          "score": 47,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/course/utils/course-price.js|toNumber",
+          "sheetName": "K-FE-course-price-toNumber-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-12 Course Details",
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/features/course/utils/lesson-status.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 4,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "isLessonPublished",
+          "signature": "isLessonPublished",
+          "line": 40,
+          "score": 32,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/course/utils/lesson-status.js|isLessonPublished",
+          "sheetName": "K-FE-lesson-status-isLessonPublished-1"
+        },
+        {
+          "rank": 2,
+          "name": "normalizeLessonStatus",
+          "signature": "normalizeLessonStatus",
+          "line": 25,
+          "score": 29,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/course/utils/lesson-status.js|normalizeLessonStatus",
+          "sheetName": "K-FE-lesson-status-normalizeLessonStatus-2"
+        },
+        {
+          "rank": 3,
+          "name": "filterPublishedSections",
+          "signature": "filterPublishedSections",
+          "line": 48,
+          "score": 20,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/course/utils/lesson-status.js|filterPublishedSections",
+          "sheetName": "K-FE-lesson-status-filterPublishedSections-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-05 Trainee Dashboard"
+      ],
+      "file": "src/features/dashboard/components/TraineeDashboardSkeleton.jsx",
+      "status": "Excluded",
+      "reason": "Excluded – loading skeleton only; no business behavior",
+      "functionCount": 1,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-05 Trainee Dashboard"
+      ],
+      "file": "src/features/dashboard/pages/TraineeDashboardPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 13,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "TraineeDashboardPage",
+          "signature": "TraineeDashboardPage",
+          "line": 162,
+          "score": 613,
+          "cyclomaticApprox": 30,
+          "methodKey": "frontend|src/features/dashboard/pages/TraineeDashboardPage.jsx|TraineeDashboardPage",
+          "sheetName": "K-FE-TraineeDashboardPage-TraineeDashboardPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "enrichCourse",
+          "signature": "enrichCourse",
+          "line": 61,
+          "score": 195,
+          "cyclomaticApprox": 21,
+          "methodKey": "frontend|src/features/dashboard/pages/TraineeDashboardPage.jsx|enrichCourse",
+          "sheetName": "K-FE-TraineeDashboardPage-enrichCourse-2"
+        },
+        {
+          "rank": 3,
+          "name": "loadDashboard",
+          "signature": "loadDashboard",
+          "line": 172,
+          "score": 90,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/features/dashboard/pages/TraineeDashboardPage.jsx|loadDashboard",
+          "sheetName": "K-FE-TraineeDashboardPage-loadDashboard-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page"
+      ],
+      "file": "src/features/home/HomePage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "HomePage",
+          "signature": "HomePage",
+          "line": 19,
+          "score": 258,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/home/HomePage.jsx|HomePage",
+          "sheetName": "K-FE-HomePage-HomePage-1"
+        },
+        {
+          "rank": 2,
+          "name": "loadMostEnrolledCourse",
+          "signature": "loadMostEnrolledCourse",
+          "line": 27,
+          "score": 43,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/home/HomePage.jsx|loadMostEnrolledCourse",
+          "sheetName": "K-FE-HomePage-loadMostEnrolledCourse-2"
+        },
+        {
+          "rank": 3,
+          "name": "RoadStop",
+          "signature": "RoadStop",
+          "line": 10,
+          "score": 8,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/home/HomePage.jsx|RoadStop",
+          "sheetName": "K-FE-HomePage-RoadStop-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-16 Class List"
+      ],
+      "file": "src/features/opening-schedule/components/OpeningScheduleCard.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "OpeningScheduleCard",
+          "signature": "OpeningScheduleCard",
+          "line": 22,
+          "score": 173,
+          "cyclomaticApprox": 8,
+          "methodKey": "frontend|src/features/opening-schedule/components/OpeningScheduleCard.jsx|OpeningScheduleCard",
+          "sheetName": "K-FE-OpeningScheduleCard-OpeningScheduleCard-1"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-16 Class List"
+      ],
+      "file": "src/features/opening-schedule/components/OpeningScheduleFilters.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "OpeningScheduleFilters",
+          "signature": "OpeningScheduleFilters",
+          "line": 8,
+          "score": 130,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/opening-schedule/components/OpeningScheduleFilters.jsx|OpeningScheduleFilters",
+          "sheetName": "K-FE-OpeningScheduleFilters-OpeningScheduleFilters-1"
+        },
+        {
+          "rank": 2,
+          "name": "handleChange",
+          "signature": "handleChange",
+          "line": 13,
+          "score": 39,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/opening-schedule/components/OpeningScheduleFilters.jsx|handleChange",
+          "sheetName": "K-FE-OpeningScheduleFilters-handleChange-2"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/features/opening-schedule/pages/OpeningScheduleDetailPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "OpeningScheduleDetailPage",
+          "signature": "OpeningScheduleDetailPage",
+          "line": 31,
+          "score": 675,
+          "cyclomaticApprox": 28,
+          "methodKey": "frontend|src/features/opening-schedule/pages/OpeningScheduleDetailPage.jsx|OpeningScheduleDetailPage",
+          "sheetName": "K-FE-OpeningScheduleDetailPage-OpeningScheduleDetailPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "handleRegister",
+          "signature": "handleRegister",
+          "line": 77,
+          "score": 268,
+          "cyclomaticApprox": 18,
+          "methodKey": "frontend|src/features/opening-schedule/pages/OpeningScheduleDetailPage.jsx|handleRegister",
+          "sheetName": "K-FE-OpeningScheduleDetailPage-handleRegister-2"
+        },
+        {
+          "rank": 3,
+          "name": "loadDetail",
+          "signature": "loadDetail",
+          "line": 47,
+          "score": 69,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/features/opening-schedule/pages/OpeningScheduleDetailPage.jsx|loadDetail",
+          "sheetName": "K-FE-OpeningScheduleDetailPage-loadDetail-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-16 Class List"
+      ],
+      "file": "src/features/opening-schedule/pages/OpeningSchedulePage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 10,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "OpeningSchedulePageContent",
+          "signature": "OpeningSchedulePageContent",
+          "line": 86,
+          "score": 492,
+          "cyclomaticApprox": 18,
+          "methodKey": "frontend|src/features/opening-schedule/pages/OpeningSchedulePage.jsx|OpeningSchedulePageContent",
+          "sheetName": "K-FE-OpeningSchedulePage-OpeningSchedulePageContent-1"
+        },
+        {
+          "rank": 2,
+          "name": "fetchSchedules",
+          "signature": "fetchSchedules",
+          "line": 202,
+          "score": 158,
+          "cyclomaticApprox": 10,
+          "methodKey": "frontend|src/features/opening-schedule/pages/OpeningSchedulePage.jsx|fetchSchedules",
+          "sheetName": "K-FE-OpeningSchedulePage-fetchSchedules-2"
+        },
+        {
+          "rank": 3,
+          "name": "handlePageChange",
+          "signature": "handlePageChange",
+          "line": 273,
+          "score": 81,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/features/opening-schedule/pages/OpeningSchedulePage.jsx|handlePageChange",
+          "sheetName": "K-FE-OpeningSchedulePage-handlePageChange-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-16 Class List"
+      ],
+      "file": "src/features/opening-schedule/utils/opening-schedule-filters.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 6,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "addOneMonthToDateValue",
+          "signature": "addOneMonthToDateValue",
+          "line": 59,
+          "score": 74,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/opening-schedule/utils/opening-schedule-filters.js|addOneMonthToDateValue",
+          "sheetName": "K-FE-opening-schedule-filters-addOneMonthToDateValue-1"
+        },
+        {
+          "rank": 2,
+          "name": "formatDateInputValue",
+          "signature": "formatDateInputValue",
+          "line": 47,
+          "score": 14,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/opening-schedule/utils/opening-schedule-filters.js|formatDateInputValue",
+          "sheetName": "K-FE-opening-schedule-filters-formatDateInputValue-2"
+        },
+        {
+          "rank": 3,
+          "name": "createDefaultOpeningScheduleFilters",
+          "signature": "createDefaultOpeningScheduleFilters",
+          "line": 89,
+          "score": 12,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/features/opening-schedule/utils/opening-schedule-filters.js|createDefaultOpeningScheduleFilters",
+          "sheetName": "K-FE-opening-schedule-filters-createDefaultOpeningScheduleFilters-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-41 Personal Progress"
+      ],
+      "file": "src/features/progress/components/CourseProgressCard.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "CourseProgressCard",
+          "signature": "CourseProgressCard",
+          "line": 24,
+          "score": 381,
+          "cyclomaticApprox": 22,
+          "methodKey": "frontend|src/features/progress/components/CourseProgressCard.jsx|CourseProgressCard",
+          "sheetName": "K-FE-CourseProgressCard-CourseProgressCard-1"
+        },
+        {
+          "rank": 2,
+          "name": "getLearningPath",
+          "signature": "getLearningPath",
+          "line": 7,
+          "score": 42,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/features/progress/components/CourseProgressCard.jsx|getLearningPath",
+          "sheetName": "K-FE-CourseProgressCard-getLearningPath-2"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-41 Personal Progress"
+      ],
+      "file": "src/features/progress/components/ProgressBar.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "ProgressBar",
+          "signature": "ProgressBar",
+          "line": 1,
+          "score": 35,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/features/progress/components/ProgressBar.jsx|ProgressBar",
+          "sheetName": "K-FE-ProgressBar-ProgressBar-1"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-41 Personal Progress"
+      ],
+      "file": "src/features/progress/components/ProgressMetric.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 1,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "ProgressMetric",
+          "signature": "ProgressMetric",
+          "line": 4,
+          "score": 68,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/progress/components/ProgressMetric.jsx|ProgressMetric",
+          "sheetName": "K-FE-ProgressMetric-ProgressMetric-1"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-41 Personal Progress"
+      ],
+      "file": "src/features/progress/components/TraineeProgressSkeleton.jsx",
+      "status": "Excluded",
+      "reason": "Excluded – loading skeleton only; no business behavior",
+      "functionCount": 1,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-41 Personal Progress"
+      ],
+      "file": "src/features/progress/pages/TraineeProgressPage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 2,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "TraineeProgressPage",
+          "signature": "TraineeProgressPage",
+          "line": 39,
+          "score": 452,
+          "cyclomaticApprox": 14,
+          "methodKey": "frontend|src/features/progress/pages/TraineeProgressPage.jsx|TraineeProgressPage",
+          "sheetName": "K-FE-TraineeProgressPage-TraineeProgressPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "normalizeText",
+          "signature": "normalizeText",
+          "line": 33,
+          "score": 16,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/progress/pages/TraineeProgressPage.jsx|normalizeText",
+          "sheetName": "K-FE-TraineeProgressPage-normalizeText-2"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-42 My Schedule"
+      ],
+      "file": "src/features/schedule/pages/SchedulePage.jsx",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 7,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "SchedulePage",
+          "signature": "SchedulePage",
+          "line": 85,
+          "score": 480,
+          "cyclomaticApprox": 16,
+          "methodKey": "frontend|src/features/schedule/pages/SchedulePage.jsx|SchedulePage",
+          "sheetName": "K-FE-SchedulePage-SchedulePage-1"
+        },
+        {
+          "rank": 2,
+          "name": "ScheduleItem",
+          "signature": "ScheduleItem",
+          "line": 40,
+          "score": 82,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/features/schedule/pages/SchedulePage.jsx|ScheduleItem",
+          "sheetName": "K-FE-SchedulePage-ScheduleItem-2"
+        },
+        {
+          "rank": 3,
+          "name": "handleWeekChange",
+          "signature": "handleWeekChange",
+          "line": 247,
+          "score": 23,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/features/schedule/pages/SchedulePage.jsx|handleWeekChange",
+          "sheetName": "K-FE-SchedulePage-handleWeekChange-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-05 Trainee Dashboard",
+        "SCR-11 Course List",
+        "SCR-12 Course Details",
+        "SCR-16 Class List",
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class",
+        "SCR-19 Class Analytics",
+        "SCR-20 Checkout",
+        "SCR-21 Payment Result",
+        "SCR-22 Transaction History",
+        "SCR-23 Invoice Detail",
+        "SCR-41 Personal Progress",
+        "SCR-42 My Schedule"
+      ],
+      "file": "src/services/api-client.js",
+      "status": "Excluded",
+      "reason": "Excluded – cross-cutting HTTP infrastructure, not owned by a specific WBS screen",
+      "functionCount": 9,
+      "selectedFunctions": []
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail",
+        "SCR-19 Class Analytics"
+      ],
+      "file": "src/services/class-analytics.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 6,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "buildAnalyticsParams",
+          "signature": "buildAnalyticsParams",
+          "line": 13,
+          "score": 73,
+          "cyclomaticApprox": 8,
+          "methodKey": "frontend|src/services/class-analytics.service.js|buildAnalyticsParams",
+          "sheetName": "K-FE-class-analytics.service-buildAnalyticsParams-1"
+        },
+        {
+          "rank": 2,
+          "name": "getAnalytics",
+          "signature": "getAnalytics",
+          "line": 26,
+          "score": 25,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/class-analytics.service.js|getAnalytics",
+          "sheetName": "K-FE-class-analytics.service-getAnalytics-2"
+        },
+        {
+          "rank": 3,
+          "name": "unwrapData",
+          "signature": "unwrapData",
+          "line": 7,
+          "score": 14,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/class-analytics.service.js|unwrapData",
+          "sheetName": "K-FE-class-analytics.service-unwrapData-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-16 Class List",
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/services/class.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 14,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "normalizePage",
+          "signature": "normalizePage",
+          "line": 12,
+          "score": 122,
+          "cyclomaticApprox": 13,
+          "methodKey": "frontend|src/services/class.service.js|normalizePage",
+          "sheetName": "K-FE-class.service-normalizePage-1"
+        },
+        {
+          "rank": 2,
+          "name": "listAdmin",
+          "signature": "listAdmin",
+          "line": 32,
+          "score": 58,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/services/class.service.js|listAdmin",
+          "sheetName": "K-FE-class.service-listAdmin-2"
+        },
+        {
+          "rank": 3,
+          "name": "update",
+          "signature": "update",
+          "line": 74,
+          "score": 53,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/services/class.service.js|update",
+          "sheetName": "K-FE-class.service-update-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-05 Trainee Dashboard",
+        "SCR-11 Course List",
+        "SCR-12 Course Details",
+        "SCR-16 Class List",
+        "SCR-18 Create Class"
+      ],
+      "file": "src/services/course.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 37,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "listAdmin",
+          "signature": "listAdmin",
+          "line": 50,
+          "score": 155,
+          "cyclomaticApprox": 15,
+          "methodKey": "frontend|src/services/course.service.js|listAdmin",
+          "sheetName": "K-FE-course.service-listAdmin-1"
+        },
+        {
+          "rank": 2,
+          "name": "getPublicCourses",
+          "signature": "getPublicCourses",
+          "line": 121,
+          "score": 132,
+          "cyclomaticApprox": 13,
+          "methodKey": "frontend|src/services/course.service.js|getPublicCourses",
+          "sheetName": "K-FE-course.service-getPublicCourses-2"
+        },
+        {
+          "rank": 3,
+          "name": "normalizePage",
+          "signature": "normalizePage",
+          "line": 14,
+          "score": 120,
+          "cyclomaticApprox": 13,
+          "methodKey": "frontend|src/services/course.service.js|normalizePage",
+          "sheetName": "K-FE-course.service-normalizePage-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-12 Course Details",
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/services/enrollment.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 6,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "getHistory",
+          "signature": "getHistory",
+          "line": 24,
+          "score": 27,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/enrollment.service.js|getHistory",
+          "sheetName": "K-FE-enrollment.service-getHistory-1"
+        },
+        {
+          "rank": 2,
+          "name": "enrollFreeClass",
+          "signature": "enrollFreeClass",
+          "line": 46,
+          "score": 24,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/enrollment.service.js|enrollFreeClass",
+          "sheetName": "K-FE-enrollment.service-enrollFreeClass-2"
+        },
+        {
+          "rank": 3,
+          "name": "enrollFreeCourse",
+          "signature": "enrollFreeCourse",
+          "line": 8,
+          "score": 23,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/enrollment.service.js|enrollFreeCourse",
+          "sheetName": "K-FE-enrollment.service-enrollFreeCourse-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-01 Home Page",
+        "SCR-16 Class List",
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/services/opening-schedule.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 5,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "normalizePage",
+          "signature": "normalizePage",
+          "line": 12,
+          "score": 94,
+          "cyclomaticApprox": 10,
+          "methodKey": "frontend|src/services/opening-schedule.service.js|normalizePage",
+          "sheetName": "K-FE-opening-schedule.service-normalizePage-1"
+        },
+        {
+          "rank": 2,
+          "name": "list",
+          "signature": "list",
+          "line": 28,
+          "score": 80,
+          "cyclomaticApprox": 7,
+          "methodKey": "frontend|src/services/opening-schedule.service.js|list",
+          "sheetName": "K-FE-opening-schedule.service-list-2"
+        },
+        {
+          "rank": 3,
+          "name": "getDetail",
+          "signature": "getDetail",
+          "line": 56,
+          "score": 25,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/opening-schedule.service.js|getDetail",
+          "sheetName": "K-FE-opening-schedule.service-getDetail-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-12 Course Details",
+        "SCR-17 Class Detail",
+        "SCR-20 Checkout",
+        "SCR-21 Payment Result",
+        "SCR-22 Transaction History",
+        "SCR-23 Invoice Detail"
+      ],
+      "file": "src/services/order.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 10,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "normalizeOrderPayment",
+          "signature": "normalizeOrderPayment",
+          "line": 36,
+          "score": 186,
+          "cyclomaticApprox": 20,
+          "methodKey": "frontend|src/services/order.service.js|normalizeOrderPayment",
+          "sheetName": "K-FE-order.service-normalizeOrderPayment-1"
+        },
+        {
+          "rank": 2,
+          "name": "normalizeCheckout",
+          "signature": "normalizeCheckout",
+          "line": 16,
+          "score": 61,
+          "cyclomaticApprox": 6,
+          "methodKey": "frontend|src/services/order.service.js|normalizeCheckout",
+          "sheetName": "K-FE-order.service-normalizeCheckout-2"
+        },
+        {
+          "rank": 3,
+          "name": "toNumber",
+          "signature": "toNumber",
+          "line": 7,
+          "score": 44,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/services/order.service.js|toNumber",
+          "sheetName": "K-FE-order.service-toNumber-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-20 Checkout",
+        "SCR-21 Payment Result"
+      ],
+      "file": "src/services/payment.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 5,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "normalizePaymentStatus",
+          "signature": "normalizePaymentStatus",
+          "line": 20,
+          "score": 51,
+          "cyclomaticApprox": 5,
+          "methodKey": "frontend|src/services/payment.service.js|normalizePaymentStatus",
+          "sheetName": "K-FE-payment.service-normalizePaymentStatus-1"
+        },
+        {
+          "rank": 2,
+          "name": "isFinal",
+          "signature": "isFinal",
+          "line": 49,
+          "score": 23,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/payment.service.js|isFinal",
+          "sheetName": "K-FE-payment.service-isFinal-2"
+        },
+        {
+          "rank": 3,
+          "name": "isProblem",
+          "signature": "isProblem",
+          "line": 62,
+          "score": 20,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/payment.service.js|isProblem",
+          "sheetName": "K-FE-payment.service-isProblem-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-42 My Schedule"
+      ],
+      "file": "src/services/schedule.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 4,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "normalizeSchedule",
+          "signature": "normalizeSchedule",
+          "line": 8,
+          "score": 34,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/services/schedule.service.js|normalizeSchedule",
+          "sheetName": "K-FE-schedule.service-normalizeSchedule-1"
+        },
+        {
+          "rank": 2,
+          "name": "getStaffWeek",
+          "signature": "getStaffWeek",
+          "line": 27,
+          "score": 32,
+          "cyclomaticApprox": 3,
+          "methodKey": "frontend|src/services/schedule.service.js|getStaffWeek",
+          "sheetName": "K-FE-schedule.service-getStaffWeek-2"
+        },
+        {
+          "rank": 3,
+          "name": "getMyWeek",
+          "signature": "getMyWeek",
+          "line": 17,
+          "score": 23,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/schedule.service.js|getMyWeek",
+          "sheetName": "K-FE-schedule.service-getMyWeek-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-05 Trainee Dashboard",
+        "SCR-41 Personal Progress"
+      ],
+      "file": "src/services/trainee-progress.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 5,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "normalizeCourse",
+          "signature": "normalizeCourse",
+          "line": 21,
+          "score": 153,
+          "cyclomaticApprox": 15,
+          "methodKey": "frontend|src/services/trainee-progress.service.js|normalizeCourse",
+          "sheetName": "K-FE-trainee-progress.service-normalizeCourse-1"
+        },
+        {
+          "rank": 2,
+          "name": "getMyProgress",
+          "signature": "getMyProgress",
+          "line": 57,
+          "score": 77,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/services/trainee-progress.service.js|getMyProgress",
+          "sheetName": "K-FE-trainee-progress.service-getMyProgress-2"
+        },
+        {
+          "rank": 3,
+          "name": "toNumber",
+          "signature": "toNumber",
+          "line": 7,
+          "score": 16,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/trainee-progress.service.js|toNumber",
+          "sheetName": "K-FE-trainee-progress.service-toNumber-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail"
+      ],
+      "file": "src/services/trainer-curriculum.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 19,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "updateSection",
+          "signature": "updateSection",
+          "line": 47,
+          "score": 15,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/services/trainer-curriculum.service.js|updateSection",
+          "sheetName": "K-FE-trainer-curriculum.service-updateSection-1"
+        },
+        {
+          "rank": 2,
+          "name": "createLesson",
+          "signature": "createLesson",
+          "line": 69,
+          "score": 15,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/services/trainer-curriculum.service.js|createLesson",
+          "sheetName": "K-FE-trainer-curriculum.service-createLesson-2"
+        },
+        {
+          "rank": 3,
+          "name": "updateLesson",
+          "signature": "updateLesson",
+          "line": 78,
+          "score": 15,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/services/trainer-curriculum.service.js|updateLesson",
+          "sheetName": "K-FE-trainer-curriculum.service-updateLesson-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-22 Transaction History",
+        "SCR-23 Invoice Detail"
+      ],
+      "file": "src/services/transaction.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 3,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "list",
+          "signature": "list",
+          "line": 8,
+          "score": 40,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/services/transaction.service.js|list",
+          "sheetName": "K-FE-transaction.service-list-1"
+        },
+        {
+          "rank": 2,
+          "name": "unwrap",
+          "signature": "unwrap",
+          "line": 3,
+          "score": 11,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/services/transaction.service.js|unwrap",
+          "sheetName": "K-FE-transaction.service-unwrap-2"
+        },
+        {
+          "rank": 3,
+          "name": "getInvoice",
+          "signature": "getInvoice",
+          "line": 20,
+          "score": 9,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/services/transaction.service.js|getInvoice",
+          "sheetName": "K-FE-transaction.service-getInvoice-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-18 Create Class",
+        "SCR-42 My Schedule"
+      ],
+      "file": "src/services/user.service.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 12,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "normalizeUserPage",
+          "signature": "normalizeUserPage",
+          "line": 12,
+          "score": 102,
+          "cyclomaticApprox": 11,
+          "methodKey": "frontend|src/services/user.service.js|normalizeUserPage",
+          "sheetName": "K-FE-user.service-normalizeUserPage-1"
+        },
+        {
+          "rank": 2,
+          "name": "listAdmin",
+          "signature": "listAdmin",
+          "line": 36,
+          "score": 25,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/services/user.service.js|listAdmin",
+          "sheetName": "K-FE-user.service-listAdmin-2"
+        },
+        {
+          "rank": 3,
+          "name": "getPublicTrainerProfile",
+          "signature": "getPublicTrainerProfile",
+          "line": 96,
+          "score": 15,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/services/user.service.js|getPublicTrainerProfile",
+          "sheetName": "K-FE-user.service-getPublicTrainerProfile-3"
+        }
+      ]
+    },
+    {
+      "repository": "frontend",
+      "screens": [
+        "SCR-17 Class Detail",
+        "SCR-18 Create Class",
+        "SCR-42 My Schedule"
+      ],
+      "file": "src/shared/utils/date.js",
+      "status": "Selected",
+      "reason": "Contains testable screen behavior",
+      "functionCount": 9,
+      "selectedFunctions": [
+        {
+          "rank": 1,
+          "name": "parseLocalDate",
+          "signature": "parseLocalDate",
+          "line": 1,
+          "score": 52,
+          "cyclomaticApprox": 4,
+          "methodKey": "frontend|src/shared/utils/date.js|parseLocalDate",
+          "sheetName": "K-FE-date-parseLocalDate-1"
+        },
+        {
+          "rank": 2,
+          "name": "getIsoWeekInfo",
+          "signature": "getIsoWeekInfo",
+          "line": 61,
+          "score": 47,
+          "cyclomaticApprox": 1,
+          "methodKey": "frontend|src/shared/utils/date.js|getIsoWeekInfo",
+          "sheetName": "K-FE-date-getIsoWeekInfo-2"
+        },
+        {
+          "rank": 3,
+          "name": "toDateKey",
+          "signature": "toDateKey",
+          "line": 21,
+          "score": 31,
+          "cyclomaticApprox": 2,
+          "methodKey": "frontend|src/shared/utils/date.js|toDateKey",
+          "sheetName": "K-FE-date-toDateKey-3"
+        }
+      ]
+    }
+  ]
+}

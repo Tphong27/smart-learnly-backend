@@ -37,8 +37,14 @@ docs/ai-context/
 docs/api-contracts/
 
 ###test
-.env.unit-test
+.env.unit-test.ps1
 reports/
 *.service-account.json
 ### Node.js ###
 node_modules/
+
+.venv-report51/
+
+# Python generated files
+__pycache__/
+*.py[cod]
