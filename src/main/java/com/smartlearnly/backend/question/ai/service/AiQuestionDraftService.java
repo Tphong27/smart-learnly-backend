@@ -682,6 +682,12 @@ public class AiQuestionDraftService {
         specs.addAll(resolvePastedTextSpecs(request.pastedTextSources()));
         specs.addAll(resolveDocumentSpecs(files));
         specs.addAll(resolveTranscriptSpecs(courseId, request.transcriptContentIds()));
+        if (specs.isEmpty()) {
+            throw new BusinessException(
+                ErrorCode.AI_INVALID_GENERATION_CONFIG,
+                "At least one generation source is required"
+            );
+        }
         return specs;
     }
 

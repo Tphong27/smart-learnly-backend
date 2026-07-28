@@ -156,6 +156,48 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void importCourseQuestionsConvertsHtmlContentToPlainText() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UserAccount actor = actor();
+        UUID moduleId = UUID.randomUUID();
+        Question question = question(
+                flashcardSet.getLesson().getCourse().getId(),
+                moduleId,
+                "<p>What&nbsp;is <strong>HTML</strong>?</p><p>Why use it?</p>"
+        );
+        question.setExplanation("<div>Use&nbsp;<em>tags</em>.</div><p>Readable content.</p>");
+        QuestionAnswer distractor = answer(question.getId(), "Plain distractor", false, 0);
+        QuestionAnswer correct = answer(question.getId(), "<p>A&nbsp;markup<br>language</p>", true, 1);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+        when(questionRepository.findAllById(List.of(question.getId()))).thenReturn(List.of(question));
+        when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(question.getId())))
+                .thenReturn(List.of(distractor, correct));
+        when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardStagingCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> card.setId(UUID.randomUUID()));
+            return cards;
+        });
+
+        StagingBatchResponse response = service.importCourseQuestions(
+                flashcardSet.getId(),
+                new ImportCourseQuestionsRequest(List.of(question.getId()))
+        );
+
+        assertThat(response.cards()).hasSize(1);
+        assertThat(response.cards().get(0).frontText())
+                .isEqualTo("What is HTML?\nWhy use it?\n\nOptions:\n1. Plain distractor\n2. A markup\nlanguage");
+        assertThat(response.cards().get(0).backText()).isEqualTo("A markup\nlanguage");
+        assertThat(response.cards().get(0).explanation()).isEqualTo("Use tags.\nReadable content.");
+        assertThat(response.cards().get(0).sourceExcerpt()).isEqualTo("What is HTML?\nWhy use it?");
+    }
+
+    @Test
     void importCourseQuestionsRejectsQuestionsWithoutCorrectAnswer() {
         FlashcardSet flashcardSet = flashcardSet();
         Question question = question(
