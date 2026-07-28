@@ -16,7 +16,12 @@ import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -32,6 +37,9 @@ public class AssignmentSubmissionService {
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final CurrentUserService currentUserService;
+    private final AssignmentAiDraftService assignmentAiDraftService;
+    private static final Path SUBMISSION_UPLOAD_DIR =
+            Path.of("uploads", "assignment-submissions").toAbsolutePath().normalize();
 
     @Transactional
     public AssignmentSubmissionModel.Response startAssignment(
@@ -164,6 +172,47 @@ public class AssignmentSubmissionService {
 
         AssignmentSubmission updated = repository.save(submission);
         return mapToResponse(updated);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, String> generateFeedback(UUID submissionId) {
+        AssignmentSubmission submission = repository.findById(submissionId)
+                .orElseThrow(() -> new EntityNotFoundException("Submission not found"));
+        Assignment assignment = loadAssignment(submission.getAssignmentId());
+        String feedback = assignmentAiDraftService.generateFeedback(
+                assignment.getDescription(),
+                assignment.getRubric(),
+                assignment.getInstructionFileName(),
+                readUploadedFile(assignment.getInstructionFileUrl()),
+                submission.getSubmissionText(),
+                submission.getFileName(),
+                readUploadedFile(submission.getFileUrl()));
+        return Map.of("feedback", feedback);
+    }
+
+    private byte[] readUploadedFile(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            return new byte[0];
+        }
+        String marker = "/submissions/files/";
+        int markerIndex = fileUrl.indexOf(marker);
+        if (markerIndex < 0) {
+            return new byte[0];
+        }
+        String storedName = URLDecoder.decode(
+                fileUrl.substring(markerIndex + marker.length()),
+                StandardCharsets.UTF_8);
+        Path file = SUBMISSION_UPLOAD_DIR.resolve(storedName).normalize();
+        if (!file.startsWith(SUBMISSION_UPLOAD_DIR) || !Files.isRegularFile(file)) {
+            return new byte[0];
+        }
+        try {
+            return Files.readAllBytes(file);
+        } catch (java.io.IOException exception) {
+            throw new BusinessException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Could not read an assignment feedback source file");
+        }
     }
 
     public List<AssignmentSubmissionModel.Response> getSubmissionsByAssignment(UUID assignmentId) {
