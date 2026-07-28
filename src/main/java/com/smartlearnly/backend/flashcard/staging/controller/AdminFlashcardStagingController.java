@@ -68,6 +68,10 @@ public class AdminFlashcardStagingController {
 
     @PostMapping("/flashcard-sets/{setId}/staging/import-course-questions")
     @Operation(summary = "Import course questions into flashcard staging")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "Flashcard staging batch created"
+    )
     public ResponseEntity<ApiResponse<StagingBatchResponse>> importCourseQuestions(
             @PathVariable UUID setId,
             @Valid @RequestBody ImportCourseQuestionsRequest request
