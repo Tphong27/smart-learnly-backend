@@ -1,11 +1,16 @@
 package com.smartlearnly.backend.lessonprogress.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
 import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
@@ -21,6 +26,7 @@ import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.lessonprogress.dto.CourseProgressItemResponse;
+import com.smartlearnly.backend.lessonprogress.dto.LessonProgressResponse;
 import com.smartlearnly.backend.lessonprogress.dto.TraineeProgressResponse;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
@@ -29,6 +35,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -187,6 +194,149 @@ class KhiemTraineeProgressReportTest {
                     assertThat(item.overallPercent()).isEqualTo(50);
                     assertThat(item.courseStatus()).isEqualTo("IN_PROGRESS");
                 });
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_524_calculateStudentClassProgressPercent_returnsZeroWithoutContent() {
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        CurriculumVersion version = version(courseId);
+        when(curriculumResolutionService.resolveTraineeProgress(
+                courseId, classId, studentId))
+                .thenReturn(resolution(version, classId));
+        when(lessonProgressRepository.findByStudentIdAndClassIdAndCourseId(
+                studentId, classId, courseId))
+                .thenReturn(List.of());
+
+        int result = service.calculateStudentClassProgressPercent(
+                studentId, courseId, classId);
+
+        assertThat(result).isZero();
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_525_calculateStudentClassProgressPercent_appliesConfiguredWeights() {
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        CurriculumLesson lesson = lesson(LessonType.VIDEO, LessonStatus.PUBLISHED);
+        CurriculumLesson quiz = lesson(LessonType.QUIZ, LessonStatus.PUBLISHED);
+        CurriculumLesson flashcard =
+                lesson(LessonType.FLASHCARD, LessonStatus.PUBLISHED);
+        CurriculumVersion version = version(courseId, lesson, quiz, flashcard);
+        when(curriculumResolutionService.resolveTraineeProgress(
+                courseId, classId, studentId))
+                .thenReturn(resolution(version, classId));
+        when(lessonProgressRepository.findByStudentIdAndClassIdAndCourseId(
+                studentId, classId, courseId))
+                .thenReturn(List.of(
+                        completedProgress(lesson),
+                        completedProgress(flashcard)));
+
+        int result = service.calculateStudentClassProgressPercent(
+                studentId, courseId, classId);
+
+        assertThat(result).isEqualTo(75);
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_526_calculateStudentClassProgressPercent_ignoresDraftLessons() {
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        CurriculumLesson published =
+                lesson(LessonType.VIDEO, LessonStatus.PUBLISHED);
+        CurriculumLesson draft =
+                lesson(LessonType.VIDEO, LessonStatus.DRAFT);
+        CurriculumVersion version = version(courseId, published, draft);
+        when(curriculumResolutionService.resolveTraineeProgress(
+                courseId, classId, studentId))
+                .thenReturn(resolution(version, classId));
+        when(lessonProgressRepository.findByStudentIdAndClassIdAndCourseId(
+                studentId, classId, courseId))
+                .thenReturn(List.of(completedProgress(published)));
+
+        int result = service.calculateStudentClassProgressPercent(
+                studentId, courseId, classId);
+
+        assertThat(result).isEqualTo(100);
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_527_updateLessonProgress_createsOnlineProgress() {
+        UUID courseId = UUID.randomUUID();
+        CurriculumLesson lesson =
+                lesson(LessonType.VIDEO, LessonStatus.PUBLISHED);
+        CurriculumVersion version = version(courseId, lesson);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+        when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+                .thenReturn(resolution(version, null));
+        when(curriculumLessonRepository.findEffectiveLessonReference(
+                version.getId(), lesson.getLessonIdentityId()))
+                .thenReturn(Optional.of(lesson));
+        when(lessonProgressRepository
+                .findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(
+                        studentId, courseId, lesson.getLessonIdentityId()))
+                .thenReturn(Optional.empty());
+        when(lessonProgressRepository.save(any(LessonProgress.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LessonProgressResponse result = service.updateLessonProgress(
+                lesson.getLessonIdentityId(), courseId, null, true);
+
+        assertThat(result.lessonId()).isEqualTo(lesson.getId());
+        assertThat(result.courseId()).isEqualTo(courseId);
+        assertThat(result.classId()).isNull();
+        assertThat(result.lessonIdentityId()).isEqualTo(lesson.getLessonIdentityId());
+        assertThat(result.completed()).isTrue();
+        assertThat(result.completedAt()).isNotNull();
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_528_updateLessonProgress_rejectsCourseClassMismatch() {
+        UUID actualCourseId = UUID.randomUUID();
+        UUID requestedCourseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(classId);
+        classOffering.setCourseId(actualCourseId);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId))
+                .thenReturn(Optional.of(classOffering));
+
+        assertThatThrownBy(() -> service.updateLessonProgress(
+                UUID.randomUUID(), requestedCourseId, classId, true))
+                .isInstanceOfSatisfying(BusinessException.class, error -> {
+                    assertThat(error.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+                    assertThat(error.getMessage())
+                            .contains("Class does not belong to the selected course");
+                });
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_529_updateLessonProgress_marksExistingProgressIncomplete() {
+        UUID courseId = UUID.randomUUID();
+        CurriculumLesson lesson =
+                lesson(LessonType.VIDEO, LessonStatus.PUBLISHED);
+        CurriculumVersion version = version(courseId, lesson);
+        LessonProgress existing = completedProgress(lesson);
+        existing.setCourseId(courseId);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+        when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+                .thenReturn(resolution(version, null));
+        when(curriculumLessonRepository.findEffectiveLessonReference(
+                version.getId(), lesson.getLessonIdentityId()))
+                .thenReturn(Optional.of(lesson));
+        when(lessonProgressRepository
+                .findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(
+                        studentId, courseId, lesson.getLessonIdentityId()))
+                .thenReturn(Optional.of(existing));
+        when(lessonProgressRepository.save(existing)).thenReturn(existing);
+
+        LessonProgressResponse result = service.updateLessonProgress(
+                lesson.getLessonIdentityId(), courseId, null, false);
+
+        assertThat(result.completed()).isFalse();
+        assertThat(result.completedAt()).isNull();
+        assertThat(result.lastAccessedAt()).isNotNull();
     }
 
     private MyCourseResponse onlineCourse(UUID courseId, String title) {

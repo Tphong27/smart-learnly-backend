@@ -1,14 +1,32 @@
 $ErrorActionPreference = "Stop"
 
 $testClasses = @(
+    "KhiemUpdateClassRequestReportTest",
+    "KhiemClassLifecycleReportTest",
+    "KhiemClassStatusConverterReportTest",
+    "KhiemClassAnalyticsRepositoryReportTest",
     "KhiemClassAdminUpdateReportTest",
+    "KhiemClassAnalyticsServiceReportTest",
     "KhiemClassSessionScheduleReportTest",
+    "KhiemClassTrainerServiceReportTest",
+    "KhiemGoogleMeetServiceReportTest",
+    "KhiemOpeningScheduleServiceReportTest",
+    "KhiemScheduleServiceReportTest",
     "KhiemTraineeProgressReportTest"
 )
 
 $reportClasses = @(
+    "com.smartlearnly.backend.classroom.dto.KhiemUpdateClassRequestReportTest",
+    "com.smartlearnly.backend.classroom.entity.KhiemClassLifecycleReportTest",
+    "com.smartlearnly.backend.classroom.entity.KhiemClassStatusConverterReportTest",
+    "com.smartlearnly.backend.classroom.repository.KhiemClassAnalyticsRepositoryReportTest",
     "com.smartlearnly.backend.classroom.service.KhiemClassAdminUpdateReportTest",
+    "com.smartlearnly.backend.classroom.service.KhiemClassAnalyticsServiceReportTest",
     "com.smartlearnly.backend.classroom.service.KhiemClassSessionScheduleReportTest",
+    "com.smartlearnly.backend.classroom.service.KhiemClassTrainerServiceReportTest",
+    "com.smartlearnly.backend.classroom.service.KhiemGoogleMeetServiceReportTest",
+    "com.smartlearnly.backend.classroom.service.KhiemOpeningScheduleServiceReportTest",
+    "com.smartlearnly.backend.classroom.service.KhiemScheduleServiceReportTest",
     "com.smartlearnly.backend.lessonprogress.service.KhiemTraineeProgressReportTest"
 )
 
