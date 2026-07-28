@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(prefix = "app.classroom.lifecycle", name = "enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "app.classroom.lifecycle.enabled", havingValue = "true", matchIfMissing = true)
 public class ClassLifecycleScheduler {
 
     private final ClassLifecycleSynchronizationService synchronizationService;

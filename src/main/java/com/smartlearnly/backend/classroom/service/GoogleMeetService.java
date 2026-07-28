@@ -3,6 +3,7 @@ package com.smartlearnly.backend.classroom.service;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleOAuthSettings;
 import com.smartlearnly.backend.classroom.config.GoogleMeetProperties;
 import com.smartlearnly.backend.classroom.dto.MeetingUrlResponse;
@@ -52,10 +53,11 @@ public class GoogleMeetService {
     }
 
     public MeetingUrlResponse createMeetingUrl() {
-        GoogleOAuthSettings oauthSettings = requireConfiguration();
+        GoogleMeetSettings meetSettings = settingsService.resolveGoogleMeetSettings();
+        GoogleOAuthSettings oauthSettings = requireConfiguration(meetSettings);
 
         try {
-            String accessToken = requestAccessToken(oauthSettings);
+            String accessToken = requestAccessToken(oauthSettings, meetSettings);
 
             GoogleMeetSpaceResponse space = meetClient
                     .post()
@@ -85,12 +87,12 @@ public class GoogleMeetService {
         }
     }
 
-    private String requestAccessToken(GoogleOAuthSettings oauthSettings) {
+    private String requestAccessToken(GoogleOAuthSettings oauthSettings, GoogleMeetSettings meetSettings) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
 
         form.add("client_id", oauthSettings.clientId());
         form.add("client_secret", oauthSettings.clientSecret());
-        form.add("refresh_token", properties.getRefreshToken());
+        form.add("refresh_token", meetSettings.refreshToken());
         form.add("grant_type", "refresh_token");
 
         GoogleAccessTokenResponse response = tokenClient
@@ -108,8 +110,8 @@ public class GoogleMeetService {
         return response.accessToken().trim();
     }
 
-    private GoogleOAuthSettings requireConfiguration() {
-        if (!properties.isEnabled()) {
+    private GoogleOAuthSettings requireConfiguration(GoogleMeetSettings meetSettings) {
+        if (!meetSettings.enabled()) {
             throw unavailable("Google Meet link generation is disabled");
         }
 
@@ -118,7 +120,7 @@ public class GoogleMeetService {
         boolean configured = oauthSettings != null
                 && StringUtils.hasText(oauthSettings.clientId())
                 && StringUtils.hasText(oauthSettings.clientSecret())
-                && StringUtils.hasText(properties.getRefreshToken());
+                && StringUtils.hasText(meetSettings.refreshToken());
 
         if (!configured) {
             throw unavailable("Google Meet link generation is not configured");
