@@ -34,16 +34,4 @@ public record UpdateAdminUserRequest(
         )
         String password
 ) {
-    @JsonIgnore
-    public boolean hasAnyField() {
-        return fullName != null
-                || email != null
-                || avatarUrl != null
-                || phoneNumber != null
-                || bio != null
-                || role != null
-                || status != null
-                || emailVerified != null
-                || password != null;
-    }
 }
