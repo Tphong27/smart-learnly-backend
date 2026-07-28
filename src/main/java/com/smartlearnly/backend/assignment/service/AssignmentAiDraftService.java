@@ -2,6 +2,8 @@ package com.smartlearnly.backend.assignment.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.assignment.dto.AssignmentAiDraftModel;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -172,6 +174,7 @@ public class AssignmentAiDraftService {
             "bai code"
     );
     private final AssignmentAiDraftProperties properties;
+    private final SystemSettingsService settingsService;
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, CachedSource> sourceCache = new ConcurrentHashMap<>();
@@ -455,7 +458,7 @@ public class AssignmentAiDraftService {
                         log.info(
                                 "Gemini assignment draft succeeded: attempt={} configuredModel={} effectiveModel={}",
                                 attempt,
-                                properties.getModel(),
+                                modelName(),
                                 model
                         );
                     }
@@ -529,7 +532,7 @@ public class AssignmentAiDraftService {
         log.warn(
                 "Gemini assignment draft HTTP error: status={} model={} endpoint={} responseBody={}",
                 exception.getStatusCode().value(),
-                properties.getModel(),
+                modelName(),
                 "/models/" + modelName() + ":generateContent",
                 truncateForLog(exception.getResponseBodyAsString(), 1000),
                 exception
@@ -586,8 +589,12 @@ public class AssignmentAiDraftService {
         return body;
     }
 
+    private AssignmentAiSettings resolveSettings() {
+        return settingsService.resolveAssignmentAiSettings();
+    }
+
     private String modelName() {
-        String configured = normalizeNullable(properties.getModel());
+        String configured = normalizeNullable(resolveSettings().model());
         if (configured == null) {
             return "gemini-flash-latest";
         }
@@ -606,7 +613,7 @@ public class AssignmentAiDraftService {
     }
 
     private String fallbackModel() {
-        String configured = normalizeNullable(properties.getFallbackModel());
+        String configured = normalizeNullable(resolveSettings().fallbackModel());
         if (configured == null) {
             return "gemini-flash-lite-latest";
         }
@@ -616,9 +623,10 @@ public class AssignmentAiDraftService {
     }
 
     private RestClient restClient() {
+        AssignmentAiSettings settings = resolveSettings();
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(properties.getTimeout());
-        requestFactory.setReadTimeout(properties.getTimeout());
+        requestFactory.setConnectTimeout(settings.timeout());
+        requestFactory.setReadTimeout(settings.timeout());
         return RestClient.builder()
                 .baseUrl(properties.getApiBaseUrl())
                 .requestFactory(requestFactory)
@@ -626,13 +634,14 @@ public class AssignmentAiDraftService {
     }
 
     private void ensureAvailable() {
-        if (!properties.isEnabled()
-                || !PROVIDER_NAME.equalsIgnoreCase(properties.getProvider())
-                || properties.getApiKey() == null
-                || properties.getApiKey().isBlank()) {
+        AssignmentAiSettings settings = resolveSettings();
+        if (!settings.enabled()
+                || !PROVIDER_NAME.equalsIgnoreCase(settings.provider())
+                || settings.apiKey() == null
+                || settings.apiKey().isBlank()) {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "AI draft generation is not configured.");
         }
-        String apiKey = properties.getApiKey().trim();
+        String apiKey = settings.apiKey().trim();
         if (apiKey.startsWith("<") || apiKey.endsWith(">")) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
@@ -641,7 +650,7 @@ public class AssignmentAiDraftService {
     }
 
     private String assignmentApiKey() {
-        return properties.getApiKey().trim();
+        return resolveSettings().apiKey().trim();
     }
 
     private boolean isProviderLimitException(RestClientResponseException exception) {

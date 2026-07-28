@@ -2,6 +2,7 @@ package com.smartlearnly.backend.classroom.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "app.classroom.lifecycle.enabled", havingValue = "true", matchIfMissing = true)
 public class ClassLifecycleScheduler {
 
     private final ClassLifecycleSynchronizationService synchronizationService;

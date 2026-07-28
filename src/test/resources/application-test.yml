@@ -21,3 +21,6 @@ app:
     token-secret: smart-learnly-test-hls-secret-at-least-32-characters
   seed:
     auth-users-enabled: false
+  classroom:
+    lifecycle:
+      enabled: false

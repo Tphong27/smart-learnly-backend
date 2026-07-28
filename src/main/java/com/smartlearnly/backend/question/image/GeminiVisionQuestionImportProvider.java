@@ -2,6 +2,8 @@ package com.smartlearnly.backend.question.image;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.QuestionImageImportSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.question.dto.QuestionImageImportDtos;
@@ -27,18 +29,20 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
     private static final String PROVIDER_NAME = "gemini";
 
     private final QuestionImageImportProperties properties;
+    private final SystemSettingsService settingsService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public ImageImportParseResult parse(ImageImportRequest request) {
-        ensureAvailable();
+        QuestionImageImportSettings settings = resolveSettings();
+        ensureAvailable(settings);
         try {
-            String response = restClient()
+            String response = restClient(settings)
                     .post()
                     .uri("/interactions")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("x-goog-api-key", properties.getApiKey())
-                    .body(buildRequestBody(request))
+                    .header("x-goog-api-key", settings.apiKey())
+                    .body(buildRequestBody(request, settings))
                     .retrieve()
                     .body(String.class);
             return parseResponse(response);
@@ -47,7 +51,7 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
             log.warn(
                     "Gemini image import HTTP error: status={} model={} endpoint={} responseBody={}",
                     exception.getStatusCode().value(),
-                    properties.getModel(),
+                    settings.model(),
                     sanitizeEndpoint(properties.getApiBaseUrl()),
                     truncateForLog(exception.getResponseBodyAsString(), 1600),
                     exception
@@ -60,7 +64,7 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
         catch (IOException | IllegalArgumentException exception) {
             log.warn(
                     "Gemini image import response parse error: model={} endpoint={} reason={}",
-                    properties.getModel(),
+                    settings.model(),
                     sanitizeEndpoint(properties.getApiBaseUrl()),
                     exception.getMessage(),
                     exception
@@ -73,7 +77,7 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
         catch (RestClientException exception) {
             log.warn(
                     "Gemini image import request error: model={} endpoint={} reason={}",
-                    properties.getModel(),
+                    settings.model(),
                     sanitizeEndpoint(properties.getApiBaseUrl()),
                     exception.getMessage(),
                     exception
@@ -85,32 +89,36 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
         }
     }
 
-    private void ensureAvailable() {
-        if (!properties.isEnabled()) {
+    private QuestionImageImportSettings resolveSettings() {
+        return settingsService.resolveQuestionImageImportSettings();
+    }
+
+    private void ensureAvailable(QuestionImageImportSettings settings) {
+        if (!settings.enabled()) {
             log.warn("Gemini image import is disabled by configuration");
             throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Image import is disabled");
         }
-        if (!PROVIDER_NAME.equalsIgnoreCase(properties.getProvider())) {
-            log.warn("Gemini image import provider mismatch: configuredProvider={}", properties.getProvider());
+        if (!PROVIDER_NAME.equalsIgnoreCase(settings.provider())) {
+            log.warn("Gemini image import provider mismatch: configuredProvider={}", settings.provider());
             throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Gemini image import provider is not configured");
         }
-        if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
+        if (settings.apiKey() == null || settings.apiKey().isBlank()) {
             log.warn("Gemini image import API key is missing");
             throw new BusinessException(ErrorCode.IMAGE_IMPORT_UNAVAILABLE, "Gemini API key is not configured");
         }
     }
 
-    private RestClient restClient() {
+    private RestClient restClient(QuestionImageImportSettings settings) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(properties.getTimeout());
-        requestFactory.setReadTimeout(properties.getTimeout());
+        requestFactory.setConnectTimeout(settings.timeout());
+        requestFactory.setReadTimeout(settings.timeout());
         return RestClient.builder()
                 .baseUrl(properties.getApiBaseUrl())
                 .requestFactory(requestFactory)
                 .build();
     }
 
-    private Map<String, Object> buildRequestBody(ImageImportRequest request) {
+    private Map<String, Object> buildRequestBody(ImageImportRequest request, QuestionImageImportSettings settings) {
         List<Map<String, Object>> input = new ArrayList<>();
         input.add(Map.of("type", "text", "text", buildPrompt(request.language())));
         for (int index = 0; index < request.files().size(); index += 1) {
@@ -131,7 +139,7 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
         responseFormat.put("mime_type", "application/json");
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", properties.getModel());
+        body.put("model", settings.model());
         body.put("input", input);
         body.put("response_format", responseFormat);
         return body;

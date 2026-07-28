@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleOAuthSettings;
 import com.smartlearnly.backend.classroom.config.GoogleMeetProperties;
 import com.smartlearnly.backend.classroom.dto.MeetingUrlResponse;
@@ -72,6 +73,8 @@ class GoogleMeetServiceTest {
 
     @Test
     void createMeetingUrlShouldReturnProviderMeetingUri() {
+        when(settingsService.resolveGoogleMeetSettings())
+                .thenReturn(new GoogleMeetSettings(true, "fake-refresh-token"));
         when(settingsService.resolveGoogleSettings())
                 .thenReturn(
                         new GoogleOAuthSettings(
@@ -123,7 +126,8 @@ class GoogleMeetServiceTest {
 
     @Test
     void createMeetingUrlShouldRejectDisabledIntegration() {
-        properties.setEnabled(false);
+        when(settingsService.resolveGoogleMeetSettings())
+                .thenReturn(new GoogleMeetSettings(false, "fake-refresh-token"));
 
         assertThatThrownBy(() -> service.createMeetingUrl())
                 .isInstanceOfSatisfying(
