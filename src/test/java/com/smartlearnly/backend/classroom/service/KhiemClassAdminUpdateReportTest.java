@@ -9,6 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.classroom.dto.ClassResponse;
+import com.smartlearnly.backend.classroom.dto.CreateClassRequest;
+import com.smartlearnly.backend.classroom.dto.RestoreClassRequest;
 import com.smartlearnly.backend.classroom.dto.UpdateClassRequest;
 import com.smartlearnly.backend.classroom.entity.ClassLifecycle;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
@@ -19,6 +21,8 @@ import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -234,6 +238,162 @@ class KhiemClassAdminUpdateReportTest {
                 .synchronizeFutureSessions(any(ClassOffering.class));
     }
 
+    @Test
+    void UTCID_KHIEM_BE_497_create_persistsValidUpcomingClassAndBuildsSessions() {
+        Course course = publishedCourse();
+        UserAccount trainer = trainer();
+        UserAccount actor = actor();
+        LocalDate startDate = ClassLifecycle.today().plusDays(2);
+        CreateClassRequest request = new CreateClassRequest(
+                course.getId(),
+                "  Java Cohort  ",
+                trainer.getId(),
+                " https://meet.google.com/abc-defg-hij ",
+                ORIGINAL_SCHEDULE,
+                startDate,
+                startDate.plusMonths(1),
+                30,
+                new BigDecimal("500000"));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                .thenReturn(Optional.of(course));
+        when(userRepository.findActiveUserByIdAndRole(
+                trainer.getId(), "TRAINER", "active"))
+                .thenReturn(Optional.of(trainer));
+        when(classOfferingRepository.saveAndFlush(any(ClassOffering.class)))
+                .thenAnswer(invocation -> {
+                    ClassOffering saved = invocation.getArgument(0);
+                    saved.setId(UUID.randomUUID());
+                    return saved;
+                });
+
+        ClassResponse response = service.create(request);
+
+        assertThat(response.className()).isEqualTo("Java Cohort");
+        assertThat(response.meetingUrl()).isEqualTo("https://meet.google.com/abc-defg-hij");
+        assertThat(response.status()).isEqualTo("upcoming");
+        assertThat(response.availableSeats()).isEqualTo(30);
+        verify(classSessionScheduleService)
+                .validateScheduleDefinition(any(ClassOffering.class));
+        verify(classSessionScheduleService)
+                .synchronizeFutureSessions(any(ClassOffering.class));
+        verify(auditLogService).record(
+                actor.getEmail(),
+                "CLASS_CREATED",
+                "CLASS",
+                response.id().toString());
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_498_create_rejectsUnpublishedCourseBeforeSaving() {
+        Course course = publishedCourse();
+        course.setStatus(CourseStatus.DRAFT);
+        LocalDate startDate = ClassLifecycle.today().plusDays(2);
+        CreateClassRequest request = new CreateClassRequest(
+                course.getId(),
+                "Java Cohort",
+                UUID.randomUUID(),
+                "https://meet.google.com/abc-defg-hij",
+                ORIGINAL_SCHEDULE,
+                startDate,
+                startDate.plusMonths(1),
+                30,
+                BigDecimal.ZERO);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId()))
+                .thenReturn(Optional.of(course));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.errorCode())
+                                .isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION));
+
+        verify(classOfferingRepository, never())
+                .saveAndFlush(any(ClassOffering.class));
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_499_restore_rebuildsActiveCancelledClass() {
+        ClassOffering classOffering = upcomingClass();
+        classOffering.setStatus(ClassStatus.CANCELLED);
+        Course course = publishedCourse();
+        course.setId(classOffering.getCourseId());
+        UserAccount trainer = trainer();
+        trainer.setId(classOffering.getTrainerId());
+        UserAccount actor = actor();
+        LocalDate startDate = ClassLifecycle.today().plusDays(3);
+        RestoreClassRequest request =
+                new RestoreClassRequest(startDate, startDate.plusMonths(1));
+        stubLockedClass(classOffering);
+        when(classEnrollmentRepository.countByClassIdAndStatus(
+                classOffering.getId(), "active")).thenReturn(2L);
+        when(courseRepository.findByIdAndDeletedAtIsNull(classOffering.getCourseId()))
+                .thenReturn(Optional.of(course));
+        when(userRepository.findByIdAndDeletedAtIsNull(classOffering.getTrainerId()))
+                .thenReturn(Optional.of(trainer));
+        when(userRepository.findActiveUserByIdAndRole(
+                classOffering.getTrainerId(), "TRAINER", "active"))
+                .thenReturn(Optional.of(trainer));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+        ClassResponse response = service.restore(classOffering.getId(), request);
+
+        assertThat(response.status()).isEqualTo("upcoming");
+        assertThat(response.activeEnrollmentCount()).isEqualTo(2);
+        verify(classSessionScheduleService)
+                .validateScheduleDefinition(classOffering);
+        verify(classSessionScheduleService)
+                .synchronizeFutureSessions(classOffering);
+        verify(classSessionScheduleService, never())
+                .deleteFutureSessions(classOffering.getId());
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_500_restore_completedDatesDeleteFutureSessions() {
+        ClassOffering classOffering = upcomingClass();
+        classOffering.setStatus(ClassStatus.CANCELLED);
+        Course course = publishedCourse();
+        course.setId(classOffering.getCourseId());
+        UserAccount actor = actor();
+        LocalDate endDate = ClassLifecycle.today().minusDays(1);
+        RestoreClassRequest request =
+                new RestoreClassRequest(endDate.minusMonths(1), endDate);
+        stubLockedClass(classOffering);
+        when(classEnrollmentRepository.countByClassIdAndStatus(
+                classOffering.getId(), "active")).thenReturn(0L);
+        when(courseRepository.findByIdAndDeletedAtIsNull(classOffering.getCourseId()))
+                .thenReturn(Optional.of(course));
+        when(userRepository.findByIdAndDeletedAtIsNull(classOffering.getTrainerId()))
+                .thenReturn(Optional.empty());
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+        ClassResponse response = service.restore(classOffering.getId(), request);
+
+        assertThat(response.status()).isEqualTo("completed");
+        verify(classSessionScheduleService)
+                .deleteFutureSessions(classOffering.getId());
+        verify(classSessionScheduleService, never())
+                .synchronizeFutureSessions(any(ClassOffering.class));
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_501_restore_rejectsClassThatIsNotCancelled() {
+        ClassOffering classOffering = upcomingClass();
+        stubLockedClass(classOffering);
+        RestoreClassRequest request = new RestoreClassRequest(
+                ClassLifecycle.today().plusDays(1),
+                ClassLifecycle.today().plusMonths(1));
+
+        assertThatThrownBy(() -> service.restore(classOffering.getId(), request))
+                .isInstanceOfSatisfying(BusinessException.class, error -> {
+                    assertThat(error.errorCode()).isEqualTo(ErrorCode.CONFLICT);
+                    assertThat(error.getMessage()).contains("Only a cancelled class");
+                });
+
+        verify(classOfferingRepository, never())
+                .saveAndFlush(any(ClassOffering.class));
+    }
+
     private void stubLockedClass(ClassOffering classOffering) {
         when(classOfferingRepository.findByIdForUpdate(classOffering.getId()))
                 .thenReturn(Optional.of(classOffering));
@@ -286,5 +446,23 @@ class KhiemClassAdminUpdateReportTest {
         actor.setId(UUID.randomUUID());
         actor.setEmail("khiem@smartlearnly.dev");
         return actor;
+    }
+
+    private UserAccount trainer() {
+        UserAccount trainer = new UserAccount();
+        trainer.setId(UUID.randomUUID());
+        trainer.setFullName("Trainer");
+        trainer.setEmail("trainer@smartlearnly.dev");
+        trainer.setRole("TRAINER");
+        trainer.setStatus("active");
+        return trainer;
+    }
+
+    private Course publishedCourse() {
+        Course course = new Course();
+        course.setId(UUID.randomUUID());
+        course.setTitle("Java Backend");
+        course.setStatus(CourseStatus.PUBLISHED);
+        return course;
     }
 }

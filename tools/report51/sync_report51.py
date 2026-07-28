@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import sys
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +15,7 @@ from zoneinfo import ZoneInfo
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 DEFAULT_SPREADSHEET_ID = "1VX5JxJClV1dsZIEElCP5l73Dw-_YIleTs3KH_iLYo4o"
 TEMPLATE_SHEET_TITLE = "extractVideoId"
+MAX_WRITE_RETRIES = 7
 
 
 @dataclass(frozen=True)
@@ -150,6 +153,37 @@ def sheets_service():
     )
 
 
+def execute_write_with_retry(request, operation: str):
+    from googleapiclient.errors import HttpError
+
+    for attempt in range(MAX_WRITE_RETRIES + 1):
+        try:
+            return request.execute()
+        except HttpError as error:
+            status = getattr(error.resp, "status", None)
+            if status != 429 or attempt >= MAX_WRITE_RETRIES:
+                raise
+
+            retry_after_header = error.resp.get("retry-after")
+            retry_after = (
+                float(retry_after_header)
+                if retry_after_header
+                else 0.0
+            )
+            exponential_delay = min(60.0, 2.0 ** (attempt + 1))
+            delay = max(
+                retry_after,
+                exponential_delay + random.uniform(0.0, 1.0),
+            )
+            print(
+                f"Google Sheets quota reached while {operation}; "
+                f"retrying in {delay:.1f} seconds "
+                f"({attempt + 1}/{MAX_WRITE_RETRIES}).",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+
+
 def spreadsheet_metadata(service, spreadsheet_id: str) -> dict[str, Any]:
     return (
         service.spreadsheets()
@@ -170,65 +204,6 @@ def sheet_map(metadata: dict[str, Any]) -> dict[str, int]:
 
 def quote_sheet(title: str) -> str:
     return "'" + title.replace("'", "''") + "'"
-
-
-def ensure_method_sheet(
-    service,
-    spreadsheet_id: str,
-    method_name: str,
-) -> None:
-    metadata = spreadsheet_metadata(service, spreadsheet_id)
-    sheets = sheet_map(metadata)
-    if method_name in sheets:
-        return
-
-    template_id = sheets.get(TEMPLATE_SHEET_TITLE)
-    if template_id is None:
-        raise RuntimeError(
-            f"Template sheet '{TEMPLATE_SHEET_TITLE}' was not found."
-        )
-
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={
-            "requests": [
-                {
-                    "duplicateSheet": {
-                        "sourceSheetId": template_id,
-                        "newSheetName": method_name,
-                    }
-                }
-            ]
-        },
-    ).execute()
-
-
-def clear_values(
-    service,
-    spreadsheet_id: str,
-    sheet_title: str,
-    cell_range: str,
-) -> None:
-    service.spreadsheets().values().clear(
-        spreadsheetId=spreadsheet_id,
-        range=f"{quote_sheet(sheet_title)}!{cell_range}",
-        body={},
-    ).execute()
-
-
-def update_values(
-    service,
-    spreadsheet_id: str,
-    sheet_title: str,
-    start_cell: str,
-    values: list[list[Any]],
-) -> None:
-    service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range=f"{quote_sheet(sheet_title)}!{start_cell}",
-        valueInputOption="USER_ENTERED",
-        body={"majorDimension": "ROWS", "values": values},
-    ).execute()
 
 
 def read_values(
@@ -256,102 +231,6 @@ def get_cell(rows: list[list[Any]], row: int, column: int) -> str:
     return str(rows[row][column]).strip()
 
 
-def write_method_list(
-    service,
-    spreadsheet_id: str,
-    manifest: dict[str, Any],
-) -> None:
-    rows = read_values(
-        service,
-        spreadsheet_id,
-        "methodlist",
-        "A1:F200",
-    )
-
-    for method in manifest["methods"]:
-        target_row = None
-        for row_index in range(5, len(rows)):
-            if (
-                get_cell(rows, row_index, 1) == method["moduleName"]
-                and get_cell(rows, row_index, 2) == method["methodName"]
-            ):
-                target_row = row_index + 1
-                break
-
-        if target_row is None:
-            placeholder_index = next(
-                (
-                    row_index
-                    for row_index in range(5, len(rows))
-                    if get_cell(rows, row_index, 1).casefold()
-                    .startswith("modulename")
-                    or get_cell(rows, row_index, 2).casefold()
-                    .startswith("methodname")
-                ),
-                None,
-            )
-            if placeholder_index is not None:
-                target_row = placeholder_index + 1
-
-        if target_row is None:
-            row_index = 5
-            while get_cell(rows, row_index, 0):
-                row_index += 1
-            target_row = row_index + 1
-
-        update_values(
-            service,
-            spreadsheet_id,
-            "methodlist",
-            f"A{target_row}",
-            [[
-                target_row - 5,
-                method["moduleName"],
-                method["methodName"],
-                method["sheetName"],
-                method["description"],
-                method["preCondition"],
-            ]],
-        )
-
-        while len(rows) < target_row:
-            rows.append([])
-        rows[target_row - 1] = [
-            target_row - 5,
-            method["moduleName"],
-            method["methodName"],
-            method["sheetName"],
-            method["description"],
-            method["preCondition"],
-        ]
-
-
-def insert_row_before(
-    service,
-    spreadsheet_id: str,
-    sheet_id: int,
-    zero_based_row: int,
-) -> None:
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={
-            "requests": [
-                {
-                    "insertDimension": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "dimension": "ROWS",
-                            "startIndex": zero_based_row,
-                            "endIndex": zero_based_row + 1,
-                        },
-                        "inheritFromBefore": True,
-                    }
-                }
-            ]
-        },
-    ).execute()
-
-
 def case_counts(
     method: dict[str, Any],
     results: dict[str, ExecutedCase],
@@ -368,122 +247,6 @@ def case_counts(
         counts[results[case["javaTestName"]].status] += 1
         counts[case["type"]] += 1
     return counts
-
-
-def write_statics(
-    service,
-    spreadsheet_id: str,
-    manifest: dict[str, Any],
-    results: dict[str, ExecutedCase],
-) -> None:
-    metadata = spreadsheet_metadata(service, spreadsheet_id)
-    statics_id = sheet_map(metadata)["statics"]
-    rows = read_values(service, spreadsheet_id, "statics", "A1:I200")
-
-    for method in manifest["methods"]:
-        target_index = None
-        for row_index in range(1, len(rows)):
-            if get_cell(rows, row_index, 1) == method["functionCode"]:
-                target_index = row_index
-                break
-
-        if target_index is None:
-            target_index = next(
-                (
-                    row_index
-                    for row_index in range(1, len(rows))
-                    if get_cell(rows, row_index, 1).casefold()
-                    .startswith("methodname")
-                ),
-                None,
-            )
-
-        if target_index is None:
-            subtotal_index = next(
-                (
-                    index
-                    for index in range(1, len(rows))
-                    if get_cell(rows, index, 1).casefold() == "sub total"
-                ),
-                len(rows),
-            )
-            target_index = next(
-                (
-                    index
-                    for index in range(1, subtotal_index)
-                    if not get_cell(rows, index, 1)
-                ),
-                None,
-            )
-            if target_index is None:
-                insert_row_before(
-                    service,
-                    spreadsheet_id,
-                    statics_id,
-                    subtotal_index,
-                )
-                rows.insert(subtotal_index, [])
-                target_index = subtotal_index
-
-        counts = case_counts(method, results)
-        update_values(
-            service,
-            spreadsheet_id,
-            "statics",
-            f"A{target_index + 1}",
-            [[
-                target_index,
-                method["functionCode"],
-                counts["P"],
-                counts["F"],
-                counts["U"],
-                counts["N"],
-                counts["A"],
-                counts["B"],
-                len(method["cases"]),
-            ]],
-        )
-        while len(rows) <= target_index:
-            rows.append([])
-        rows[target_index] = [
-            target_index,
-            method["functionCode"],
-            counts["P"],
-            counts["F"],
-            counts["U"],
-            counts["N"],
-            counts["A"],
-            counts["B"],
-            len(method["cases"]),
-        ]
-
-    subtotal_index = next(
-        (
-            index
-            for index in range(1, len(rows))
-            if get_cell(rows, index, 1).casefold() == "sub total"
-        ),
-        len(rows),
-    )
-    subtotal_row = subtotal_index + 1
-    last_detail_row = subtotal_row - 1
-    update_values(
-        service,
-        spreadsheet_id,
-        "statics",
-        f"A{subtotal_row}",
-        [[
-            "",
-            "Sub total",
-            f"=SUM(C2:C{last_detail_row})",
-            f"=SUM(D2:D{last_detail_row})",
-            f"=SUM(E2:E{last_detail_row})",
-            f"=SUM(F2:F{last_detail_row})",
-            f"=SUM(G2:G{last_detail_row})",
-            f"=SUM(H2:H{last_detail_row})",
-            f"=SUM(I2:I{last_detail_row})",
-        ]],
-    )
 
 
 def grouped_case_values(
@@ -624,7 +387,7 @@ def detail_sheet(
     for case_index, case in enumerate(method["cases"]):
         column = case_start_column + case_index
         executed = results[case["javaTestName"]]
-        put(7, column, case["id"])
+        put(7, column, f"UTCID{case_index + 1:02d}")
         put(result_start_row, column, case["type"])
         put(result_start_row + 1, column, executed.status)
         put(result_start_row + 2, column, executed_date)
@@ -676,12 +439,10 @@ def grid_range(
     }
 
 
-def format_method_sheet(
-    service,
-    spreadsheet_id: str,
+def method_sheet_format_requests(
     sheet_id: int,
     detail: DetailSheet,
-) -> None:
+) -> list[dict[str, Any]]:
     blue = {"red": 0.0, "green": 0.0, "blue": 0.5}
     white = {"red": 1.0, "green": 1.0, "blue": 1.0}
     black = {"red": 0.0, "green": 0.0, "blue": 0.0}
@@ -689,7 +450,7 @@ def format_method_sheet(
         "style": "SOLID",
         "color": black,
     }
-    table_end_column = max(18, detail.case_end_column)
+    table_end_column = max(19, detail.case_end_column)
 
     requests: list[dict[str, Any]] = [
         {
@@ -742,8 +503,8 @@ def format_method_sheet(
                     sheet_id,
                     7,
                     7,
-                    detail.case_start_column,
-                    detail.case_end_column,
+                    1,
+                    19,
                 ),
                 "cell": {
                     "userEnteredFormat": {
@@ -812,7 +573,7 @@ def format_method_sheet(
                 "properties": {
                     "sheetId": sheet_id,
                     "gridProperties": {
-                        "frozenRowCount": 7,
+                        "frozenRowCount": 0,
                         "frozenColumnCount": 0,
                     },
                 },
@@ -971,37 +732,357 @@ def format_method_sheet(
             }
         })
 
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={"requests": requests},
-    ).execute()
+    return requests
 
 
-def write_method_sheets(
+def ensure_all_method_sheets(
+    service,
+    spreadsheet_id: str,
+    manifest: dict[str, Any],
+) -> dict[str, int]:
+    metadata = spreadsheet_metadata(service, spreadsheet_id)
+    sheets = sheet_map(metadata)
+    template_id = sheets.get(TEMPLATE_SHEET_TITLE)
+    if template_id is None:
+        raise RuntimeError(
+            f"Template sheet '{TEMPLATE_SHEET_TITLE}' was not found."
+        )
+
+    missing_titles = list(dict.fromkeys(
+        method["sheetName"]
+        for method in manifest["methods"]
+        if method["sheetName"] not in sheets
+    ))
+    if missing_titles:
+        requests = [
+            {
+                "duplicateSheet": {
+                    "sourceSheetId": template_id,
+                    "newSheetName": title,
+                }
+            }
+            for title in missing_titles
+        ]
+        execute_write_with_retry(
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": requests},
+            ),
+            "creating missing method sheets",
+        )
+        metadata = spreadsheet_metadata(service, spreadsheet_id)
+        sheets = sheet_map(metadata)
+
+    return sheets
+
+
+def method_list_value_updates(
+    service,
+    spreadsheet_id: str,
+    manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    rows = read_values(
+        service,
+        spreadsheet_id,
+        "methodlist",
+        "A1:F200",
+    )
+    updates: list[dict[str, Any]] = []
+
+    for method in manifest["methods"]:
+        target_row = None
+        for row_index in range(5, len(rows)):
+            if (
+                get_cell(rows, row_index, 1) == method["moduleName"]
+                and get_cell(rows, row_index, 2) == method["methodName"]
+            ):
+                target_row = row_index + 1
+                break
+
+        if target_row is None:
+            placeholder_index = next(
+                (
+                    row_index
+                    for row_index in range(5, len(rows))
+                    if get_cell(rows, row_index, 1).casefold()
+                    .startswith("modulename")
+                    or get_cell(rows, row_index, 2).casefold()
+                    .startswith("methodname")
+                ),
+                None,
+            )
+            if placeholder_index is not None:
+                target_row = placeholder_index + 1
+
+        if target_row is None:
+            row_index = 5
+            while get_cell(rows, row_index, 0):
+                row_index += 1
+            target_row = row_index + 1
+
+        row_values = [
+            target_row - 5,
+            method["moduleName"],
+            method["methodName"],
+            method["sheetName"],
+            method["description"],
+            method["preCondition"],
+        ]
+        updates.append({
+            "range": (
+                f"{quote_sheet('methodlist')}!A{target_row}:F{target_row}"
+            ),
+            "majorDimension": "ROWS",
+            "values": [row_values],
+        })
+
+        while len(rows) < target_row:
+            rows.append([])
+        rows[target_row - 1] = row_values
+
+    return updates
+
+
+def statics_value_updates(
+    service,
+    spreadsheet_id: str,
+    manifest: dict[str, Any],
+    results: dict[str, ExecutedCase],
+) -> list[dict[str, Any]]:
+    metadata = spreadsheet_metadata(service, spreadsheet_id)
+    statics_id = sheet_map(metadata)["statics"]
+    rows = read_values(service, spreadsheet_id, "statics", "A1:I200")
+    pending_methods: list[dict[str, Any]] = []
+    assigned: list[tuple[dict[str, Any], int]] = []
+
+    for method in manifest["methods"]:
+        target_index = next(
+            (
+                row_index
+                for row_index in range(1, len(rows))
+                if get_cell(rows, row_index, 1)
+                == method["functionCode"]
+            ),
+            None,
+        )
+
+        if target_index is None:
+            target_index = next(
+                (
+                    row_index
+                    for row_index in range(1, len(rows))
+                    if get_cell(rows, row_index, 1).casefold()
+                    .startswith("methodname")
+                ),
+                None,
+            )
+
+        if target_index is None:
+            subtotal_index = next(
+                (
+                    index
+                    for index in range(1, len(rows))
+                    if get_cell(rows, index, 1).casefold()
+                    == "sub total"
+                ),
+                len(rows),
+            )
+            target_index = next(
+                (
+                    index
+                    for index in range(1, subtotal_index)
+                    if not get_cell(rows, index, 1)
+                ),
+                None,
+            )
+
+        if target_index is None:
+            pending_methods.append(method)
+            continue
+
+        assigned.append((method, target_index))
+        while len(rows) <= target_index:
+            rows.append([])
+        rows[target_index] = ["", method["functionCode"]]
+
+    if pending_methods:
+        subtotal_index = next(
+            (
+                index
+                for index in range(1, len(rows))
+                if get_cell(rows, index, 1).casefold()
+                == "sub total"
+            ),
+            len(rows),
+        )
+        insert_count = len(pending_methods)
+        execute_write_with_retry(
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={
+                    "requests": [
+                        {
+                            "insertDimension": {
+                                "range": {
+                                    "sheetId": statics_id,
+                                    "dimension": "ROWS",
+                                    "startIndex": subtotal_index,
+                                    "endIndex": (
+                                        subtotal_index + insert_count
+                                    ),
+                                },
+                                "inheritFromBefore": True,
+                            }
+                        }
+                    ]
+                },
+            ),
+            "inserting rows into statics",
+        )
+        rows[subtotal_index:subtotal_index] = [
+            [] for _ in range(insert_count)
+        ]
+        for offset, method in enumerate(pending_methods):
+            target_index = subtotal_index + offset
+            assigned.append((method, target_index))
+            rows[target_index] = ["", method["functionCode"]]
+
+    updates: list[dict[str, Any]] = []
+    for method, target_index in assigned:
+        counts = case_counts(method, results)
+        row_values = [
+            target_index,
+            method["functionCode"],
+            counts["P"],
+            counts["F"],
+            counts["U"],
+            counts["N"],
+            counts["A"],
+            counts["B"],
+            len(method["cases"]),
+        ]
+        updates.append({
+            "range": (
+                f"{quote_sheet('statics')}!"
+                f"A{target_index + 1}:I{target_index + 1}"
+            ),
+            "majorDimension": "ROWS",
+            "values": [row_values],
+        })
+        rows[target_index] = row_values
+
+    subtotal_index = next(
+        (
+            index
+            for index in range(1, len(rows))
+            if get_cell(rows, index, 1).casefold() == "sub total"
+        ),
+        len(rows),
+    )
+    subtotal_row = subtotal_index + 1
+    last_detail_row = subtotal_row - 1
+    updates.append({
+        "range": (
+            f"{quote_sheet('statics')}!"
+            f"A{subtotal_row}:I{subtotal_row}"
+        ),
+        "majorDimension": "ROWS",
+        "values": [[
+            "",
+            "Sub total",
+            f"=SUM(C2:C{last_detail_row})",
+            f"=SUM(D2:D{last_detail_row})",
+            f"=SUM(E2:E{last_detail_row})",
+            f"=SUM(F2:F{last_detail_row})",
+            f"=SUM(G2:G{last_detail_row})",
+            f"=SUM(H2:H{last_detail_row})",
+            f"=SUM(I2:I{last_detail_row})",
+        ]],
+    })
+    return updates
+
+
+def synchronize_in_batches(
     service,
     spreadsheet_id: str,
     manifest: dict[str, Any],
     results: dict[str, ExecutedCase],
 ) -> None:
+    sheets = ensure_all_method_sheets(
+        service,
+        spreadsheet_id,
+        manifest,
+    )
+
+    value_updates: list[dict[str, Any]] = [{
+        "range": f"{quote_sheet('methodlist')}!C1:C3",
+        "majorDimension": "ROWS",
+        "values": [
+            [manifest["projectName"]],
+            [manifest["projectCode"]],
+            [manifest["testEnvironment"]],
+        ],
+    }]
+    value_updates.extend(
+        method_list_value_updates(
+            service,
+            spreadsheet_id,
+            manifest,
+        )
+    )
+    value_updates.extend(
+        statics_value_updates(
+            service,
+            spreadsheet_id,
+            manifest,
+            results,
+        )
+    )
+
+    clear_ranges: list[str] = []
+    format_requests: list[dict[str, Any]] = []
     for method in manifest["methods"]:
         title = method["sheetName"]
-        ensure_method_sheet(service, spreadsheet_id, title)
-        metadata = spreadsheet_metadata(service, spreadsheet_id)
-        sheet_id = sheet_map(metadata)[title]
         detail = detail_sheet(manifest, method, results)
-        clear_values(service, spreadsheet_id, title, "A1:Z100")
-        update_values(
-            service,
-            spreadsheet_id,
-            title,
-            "A1",
-            detail.matrix,
+        clear_ranges.append(
+            f"{quote_sheet(title)}!A1:Z100"
         )
-        format_method_sheet(
-            service,
-            spreadsheet_id,
-            sheet_id,
-            detail,
+        value_updates.append({
+            "range": f"{quote_sheet(title)}!A1",
+            "majorDimension": "ROWS",
+            "values": detail.matrix,
+        })
+        format_requests.extend(
+            method_sheet_format_requests(sheets[title], detail)
+        )
+
+    if clear_ranges:
+        execute_write_with_retry(
+            service.spreadsheets().values().batchClear(
+                spreadsheetId=spreadsheet_id,
+                body={"ranges": clear_ranges},
+            ),
+            "clearing method sheets",
+        )
+
+    execute_write_with_retry(
+        service.spreadsheets().values().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={
+                "valueInputOption": "USER_ENTERED",
+                "data": value_updates,
+            },
+        ),
+        "writing report values",
+    )
+
+    if format_requests:
+        execute_write_with_retry(
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": format_requests},
+            ),
+            "formatting method sheets",
         )
 
 
@@ -1014,20 +1095,12 @@ def main() -> int:
     )
     service = sheets_service()
 
-    update_values(
+    synchronize_in_batches(
         service,
         spreadsheet_id,
-        "methodlist",
-        "C1",
-        [
-            [manifest["projectName"]],
-            [manifest["projectCode"]],
-            [manifest["testEnvironment"]],
-        ],
+        manifest,
+        results,
     )
-    write_method_list(service, spreadsheet_id, manifest)
-    write_statics(service, spreadsheet_id, manifest, results)
-    write_method_sheets(service, spreadsheet_id, manifest, results)
 
     passed = sum(case.status == "P" for case in results.values())
     failed = sum(case.status == "F" for case in results.values())

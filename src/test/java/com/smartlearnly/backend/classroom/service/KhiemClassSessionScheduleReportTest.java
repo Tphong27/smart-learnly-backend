@@ -195,6 +195,86 @@ class KhiemClassSessionScheduleReportTest {
         assertThat(deleteCaptor.getValue()).containsExactly(stale);
     }
 
+    @Test
+    void UTCID_KHIEM_BE_502_validateScheduleDefinition_rejectsMissingTrainer() {
+        ClassOffering classOffering = offeringForTomorrow(
+                oneSlotSchedule(LocalDate.now().plusDays(1).getDayOfWeek()));
+        classOffering.setTrainerId(null);
+
+        assertThatThrownBy(() -> service.validateScheduleDefinition(classOffering))
+                .isInstanceOfSatisfying(BusinessException.class, error -> {
+                    assertThat(error.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+                    assertThat(error.getMessage()).isEqualTo("Please select a trainer");
+                });
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_503_validateScheduleDefinition_acceptsFutureSession() {
+        LocalDate sessionDate = LocalDate.now().plusDays(1);
+        ClassOffering classOffering =
+                offering(sessionDate, oneSlotSchedule(sessionDate.getDayOfWeek()));
+
+        service.validateScheduleDefinition(classOffering);
+
+        verify(classSessionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_504_validateScheduleDefinition_rejectsPastOnlySchedule() {
+        LocalDate sessionDate = LocalDate.now().minusDays(1);
+        ClassOffering classOffering =
+                offering(sessionDate, oneSlotSchedule(sessionDate.getDayOfWeek()));
+
+        assertThatThrownBy(() -> service.validateScheduleDefinition(classOffering))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getMessage())
+                                .contains("at least one future class session"));
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_505_deleteFutureSessions_deletesOnlyNotStartedRows() {
+        UUID classId = UUID.randomUUID();
+        ClassSession historical = session(
+                classId,
+                LocalDate.now().minusDays(1),
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                UUID.randomUUID());
+        ClassSession future = session(
+                classId,
+                LocalDate.now().plusDays(1),
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                UUID.randomUUID());
+        when(classSessionRepository
+                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
+                        classId,
+                        LocalDate.now()))
+                .thenReturn(List.of(historical, future));
+
+        service.deleteFutureSessions(classId);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ClassSession>> captor =
+                ArgumentCaptor.forClass(List.class);
+        verify(classSessionRepository).deleteAll(captor.capture());
+        assertThat(captor.getValue()).containsExactly(future);
+    }
+
+    @Test
+    void UTCID_KHIEM_BE_506_deleteFutureSessions_skipsRepositoryDeleteWhenEmpty() {
+        UUID classId = UUID.randomUUID();
+        when(classSessionRepository
+                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
+                        classId,
+                        LocalDate.now()))
+                .thenReturn(List.of());
+
+        service.deleteFutureSessions(classId);
+
+        verify(classSessionRepository, never()).deleteAll(any());
+    }
+
     private ClassOffering offeringForTomorrow(String schedule) {
         return offering(LocalDate.now().plusDays(1), schedule);
     }
