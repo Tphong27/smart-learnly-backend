@@ -64,7 +64,6 @@ class TraineeProgressServiceTest {
 
         @Mock
         private AssignmentSubmissionRepository assignmentSubmissionRepository;
-        
         @InjectMocks
         private TraineeProgressService traineeProgressService;
 
