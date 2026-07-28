@@ -291,7 +291,7 @@ public class AiQuestionDraftService {
         if (contentChanged) {
             markEvidenceNeedsReview(draft);
         }
-        applyDraftValidation(batch.getCourseId(), draft, evidenceRepository.findByDraftId(draft.getId()));
+        applyDraftValidation(batch.getCourseId(), draft, evidenceRepository.findByDraftId(draft.getId()), evidenceRequired(batch.getId()));
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), currentUserService.requireAuthenticatedUser().getId(), before, draftSnapshot(saved), "edited");
         refreshBatchCounts(batch);
@@ -335,7 +335,7 @@ public class AiQuestionDraftService {
         draft.setEvidenceStatus(request.evidenceStillFits()
                 ? AiQuestionGenerationDraft.EVIDENCE_VALID
                 : AiQuestionGenerationDraft.EVIDENCE_INVALID);
-        applyDraftValidation(batch.getCourseId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences, evidenceRequired(batch.getId()));
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), actor.getId(), before, draftSnapshot(saved), "evidence_confirmed");
         refreshBatchCounts(batch);
@@ -360,7 +360,7 @@ public class AiQuestionDraftService {
                 skipped.add(new AiQuestionDraftDtos.SkippedItem(draft.getId(), "AI_DRAFT_VERSION_CONFLICT", "Draft has been updated, please reload"));
                 continue;
             }
-            String skipReason = acceptBlockReason(courseId, draft);
+            String skipReason = acceptBlockReason(courseId, batch, draft);
             if (skipReason != null) {
                 skipped.add(new AiQuestionDraftDtos.SkippedItem(draft.getId(), skipReason, messageForSkip(skipReason)));
                 continue;
@@ -395,8 +395,9 @@ public class AiQuestionDraftService {
                     sourceInputs
             ));
             int generated = 0;
+            boolean evidenceRequired = !sourceInputs.isEmpty();
             for (QuestionGenerationProvider.GeneratedQuestion generatedQuestion : result.questions()) {
-                persistGeneratedDraft(batch, moduleId, generatedQuestion);
+                persistGeneratedDraft(batch, moduleId, generatedQuestion, evidenceRequired);
                 generated += 1;
             }
             batch.setGeneratedCount(generated);
@@ -419,7 +420,12 @@ public class AiQuestionDraftService {
         }
     }
 
-    private void persistGeneratedDraft(AiQuestionGenerationBatch batch, UUID moduleId, QuestionGenerationProvider.GeneratedQuestion generatedQuestion) {
+    private void persistGeneratedDraft(
+            AiQuestionGenerationBatch batch,
+            UUID moduleId,
+            QuestionGenerationProvider.GeneratedQuestion generatedQuestion,
+            boolean evidenceRequired
+    ) {
         AiQuestionGenerationDraft draft = new AiQuestionGenerationDraft();
         draft.setBatchId(batch.getId());
         draft.setStatus(AiQuestionGenerationDraft.STATUS_GENERATED_DRAFT);
@@ -429,10 +435,13 @@ public class AiQuestionDraftService {
         draft.setModuleId(moduleId);
         draft.setAnswersJson(toJson(normalizeAnswers(generatedQuestion.answers())));
         List<AiQuestionGenerationEvidence> evidences = new ArrayList<>();
-        applyDraftValidation(batch.getCourseId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences, evidenceRequired);
         draft = draftRepository.save(draft);
 
-        for (QuestionGenerationProvider.GeneratedEvidence generatedEvidence : generatedQuestion.evidence() == null ? List.<QuestionGenerationProvider.GeneratedEvidence>of() : generatedQuestion.evidence()) {
+        List<QuestionGenerationProvider.GeneratedEvidence> generatedEvidences = evidenceRequired && generatedQuestion.evidence() != null
+                ? generatedQuestion.evidence()
+                : List.of();
+        for (QuestionGenerationProvider.GeneratedEvidence generatedEvidence : generatedEvidences) {
             AiQuestionGenerationEvidence evidence = new AiQuestionGenerationEvidence();
             evidence.setDraftId(draft.getId());
             evidence.setGenerationSourceId(generatedEvidence.generationSourceId());
@@ -449,19 +458,19 @@ public class AiQuestionDraftService {
                     : AiQuestionGenerationDraft.EVIDENCE_INVALID);
             evidences.add(evidenceRepository.save(evidence));
         }
-        applyDraftValidation(batch.getCourseId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences, evidenceRequired);
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), batch.getRequestedBy(), null, draftSnapshot(saved), "generated");
     }
 
-    private String acceptBlockReason(UUID courseId, AiQuestionGenerationDraft draft) {
+    private String acceptBlockReason(UUID courseId, AiQuestionGenerationBatch batch, AiQuestionGenerationDraft draft) {
         if (!AiQuestionGenerationDraft.STATUS_GENERATED_DRAFT.equals(draft.getStatus())) {
             return "AI_DRAFT_INVALID";
         }
         if (AiQuestionGenerationDraft.VALIDATION_INVALID.equals(draft.getValidationStatus())) {
             return "AI_DRAFT_INVALID";
         }
-        if (!AiQuestionGenerationDraft.EVIDENCE_VALID.equals(draft.getEvidenceStatus())) {
+        if (evidenceRequired(batch.getId()) && !AiQuestionGenerationDraft.EVIDENCE_VALID.equals(draft.getEvidenceStatus())) {
             return "AI_EVIDENCE_REQUIRED";
         }
         if (questionRepository.existsActiveDuplicateInCourse(courseId, draft.getQuestionText(), null)) {
@@ -496,7 +505,12 @@ public class AiQuestionDraftService {
         return saved;
     }
 
-    private void applyDraftValidation(UUID courseId, AiQuestionGenerationDraft draft, List<AiQuestionGenerationEvidence> evidences) {
+    private void applyDraftValidation(
+            UUID courseId,
+            AiQuestionGenerationDraft draft,
+            List<AiQuestionGenerationEvidence> evidences,
+            boolean evidenceRequired
+    ) {
         List<String> warnings = new ArrayList<>();
         List<AiQuestionDraftDtos.DuplicateCandidateResponse> duplicateCandidates = duplicateCandidates(courseId, draft.getQuestionText());
         boolean activeExactDuplicate = duplicateCandidates.stream()
@@ -509,19 +523,21 @@ public class AiQuestionDraftService {
         boolean hasSupportingEvidence = evidences.stream().anyMatch(evidence ->
                 Boolean.TRUE.equals(evidence.getSupportsCorrectAnswer())
                         && AiQuestionGenerationDraft.EVIDENCE_VALID.equals(evidence.getEvidenceStatus()));
-        if (!hasSupportingEvidence) {
+        if (evidenceRequired && !hasSupportingEvidence) {
             warnings.add("Missing valid evidence for the correct answer");
         }
         draft.setDuplicateCandidates(toJson(duplicateCandidates));
         draft.setValidationWarnings(toJson(warnings));
-        if (hasSupportingEvidence && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
+        if (!evidenceRequired && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
+            draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_VALID);
+        } else if (hasSupportingEvidence && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
             draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_VALID);
         } else if (!hasSupportingEvidence && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
             draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_INVALID);
         }
         if (activeExactDuplicate) {
             draft.setValidationStatus(AiQuestionGenerationDraft.VALIDATION_INVALID);
-        } else if (!structurallyValid || !hasSupportingEvidence || AiQuestionGenerationDraft.EVIDENCE_INVALID.equals(draft.getEvidenceStatus())
+        } else if (!structurallyValid || (evidenceRequired && !hasSupportingEvidence) || AiQuestionGenerationDraft.EVIDENCE_INVALID.equals(draft.getEvidenceStatus())
                 || AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
             draft.setValidationStatus(AiQuestionGenerationDraft.VALIDATION_INVALID);
         } else if (!warnings.isEmpty()) {
@@ -529,6 +545,10 @@ public class AiQuestionDraftService {
         } else {
             draft.setValidationStatus(AiQuestionGenerationDraft.VALIDATION_VALID);
         }
+    }
+
+    private boolean evidenceRequired(UUID batchId) {
+        return sourceRepository.findFirstByBatchId(batchId).isPresent();
     }
 
     private boolean isDraftStructurallyValid(AiQuestionGenerationDraft draft, List<String> warnings) {
@@ -624,21 +644,23 @@ public class AiQuestionDraftService {
                 source.setFileSizeBytes(spec.fileSizeBytes());
                 source.setNormalizedCharCount(spec.normalizedCharCount());
                 source.setDownloadable(spec.fileContent() != null);
+                String filePayloadRef = spec.fileContent() == null
+                        ? null
+                        : auditObjectPath(batch.getId(), UUID.randomUUID(), spec.fileName());
+                source.setSourcePayloadRef(filePayloadRef != null ? filePayloadRef : spec.payloadRef());
                 source = sourceRepository.save(source);
 
                 if (spec.fileContent() != null) {
-                    String objectPath = auditObjectPath(batch.getId(), source.getId(), spec.fileName());
                     StoredFile stored = supabaseStorageClient.store(
                             storageProperties.getAiQuestionSourceFileBucket(),
-                            objectPath,
+                            filePayloadRef,
                             spec.mimeType(),
                             spec.fileContent()
                     );
                     uploadedObjects.add(new UploadedObject(storageProperties.getAiQuestionSourceFileBucket(), stored.objectPath()));
-                    source.setSourcePayloadRef(stored.objectPath());
-                    source = sourceRepository.save(source);
-                } else if (spec.payloadRef() != null) {
-                    source.setSourcePayloadRef(spec.payloadRef());
+                    if (!stored.objectPath().equals(source.getSourcePayloadRef())) {
+                        source.setSourcePayloadRef(stored.objectPath());
+                    }
                     source = sourceRepository.save(source);
                 }
 
@@ -660,9 +682,6 @@ public class AiQuestionDraftService {
         specs.addAll(resolvePastedTextSpecs(request.pastedTextSources()));
         specs.addAll(resolveDocumentSpecs(files));
         specs.addAll(resolveTranscriptSpecs(courseId, request.transcriptContentIds()));
-        if (specs.isEmpty()) {
-            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "At least one generation source is required");
-        }
         return specs;
     }
 
@@ -1095,8 +1114,8 @@ public class AiQuestionDraftService {
     }
 
     private int normalizeRequestedCount(Integer value) {
-        if (value == null || (value != 5 && value != 10 && value != 20)) {
-            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Requested count must be 5, 10, or 20");
+        if (value == null || value < 1 || value > 20) {
+            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Requested count must be between 1 and 20");
         }
         return value;
     }
