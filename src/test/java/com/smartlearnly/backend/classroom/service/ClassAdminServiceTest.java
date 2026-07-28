@@ -78,7 +78,19 @@ class ClassAdminServiceTest {
                                 "Spring Cohort",
                                 trainer.getId(),
                                 "https://meet.google.com/abc-defg-hij",
-                                "Mon/Wed 19:00",
+                                """
+                                                [
+                                                  {
+                                                    "dayOfWeek": "MONDAY",
+                                                    "slots": [
+                                                      {
+                                                        "startTime": "19:30",
+                                                        "endTime": "21:30"
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                                """,
                                 startDate,
                                 endDate,
                                 25,
@@ -353,8 +365,8 @@ class ClassAdminServiceTest {
                                                     "dayOfWeek": "MONDAY",
                                                     "slots": [
                                                       {
-                                                        "startTime": "19:00",
-                                                        "endTime": "21:00"
+                                                        "startTime": "19:30",
+                                                        "endTime": "21:30"
                                                       }
                                                     ]
                                                   }

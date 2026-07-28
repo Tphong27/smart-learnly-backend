@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.entity.ClassSession;
+import com.smartlearnly.backend.classroom.entity.ClassTimeSlot;
 import com.smartlearnly.backend.classroom.repository.ClassSessionRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -165,7 +166,7 @@ public class ClassSessionScheduleService {
             final DayOfWeek dayOfWeek;
 
             try {
-                dayOfWeek = DayOfWeek.valueOf( dayValue);
+                dayOfWeek = DayOfWeek.valueOf(dayValue);
             } catch (IllegalArgumentException exception) {
                 throw invalidSchedule("Invalid schedule day: " + dayValue);
             }
@@ -185,10 +186,11 @@ public class ClassSessionScheduleService {
             }
 
             List<TimeRange> ranges = new ArrayList<>();
+            Set<ClassTimeSlot> configuredSlots = EnumSet.noneOf(ClassTimeSlot.class);
 
             for (JsonNode slotNode : slotsNode) {
                 if (!slotNode.isObject()) {
-                    throw invalidSchedule( "Each schedule slot must be a JSON object");
+                    throw invalidSchedule("Each schedule slot must be a JSON object");
                 }
 
                 String startValue = slotNode.path("startTime").asText("");
@@ -208,42 +210,29 @@ public class ClassSessionScheduleService {
                     throw invalidSchedule("Schedule time must use HH:mm format");
                 }
 
-                if (!endTime.isAfter(startTime)) {
-                    throw invalidSchedule("Schedule end time must be after start time");
+                ClassTimeSlot classTimeSlot = ClassTimeSlot
+                        .find(startTime, endTime)
+                        .orElseThrow(() -> invalidSchedule(
+                                "Class schedule may only use: "
+                                        + ClassTimeSlot
+                                                .allowedSlotsDescription()));
+
+                if (!configuredSlots.add(classTimeSlot)) {
+                    throw invalidSchedule(
+                            classTimeSlot.getLabel()
+                                    + " is selected more than once on "
+                                    + dayOfWeek);
                 }
 
-                ranges.add(new TimeRange(startTime, endTime));
+                ranges.add(new TimeRange(
+                        classTimeSlot.getStartTime(),
+                        classTimeSlot.getEndTime()));
             }
 
             result.put(dayOfWeek, ranges);
         }
 
-        validateNoOverlaps(result);
-
         return result;
-    }
-
-    private void validateNoOverlaps(Map<DayOfWeek, List<TimeRange>> schedule) {
-        for (Map.Entry<DayOfWeek, List<TimeRange>> entry : schedule.entrySet()) {
-            List<TimeRange> ranges = new ArrayList<>(entry.getValue());
-
-            ranges.sort(Comparator.comparing(TimeRange::startTime));
-
-            for (int index = 1; index < ranges.size(); index++) {
-
-                TimeRange previous = ranges.get(index - 1);
-
-                TimeRange current = ranges.get(index);
-
-                if (current.startTime()
-                        .isBefore(previous.endTime())) {
-
-                    throw invalidSchedule(
-                            "Schedule slots overlap on "
-                                    + entry.getKey());
-                }
-            }
-        }
     }
 
     private BusinessException invalidSchedule(String message) {

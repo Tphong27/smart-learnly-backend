@@ -46,8 +46,8 @@ class KhiemClassAdminUpdateReportTest {
                 "dayOfWeek": "MONDAY",
                 "slots": [
                   {
-                    "startTime": "19:00",
-                    "endTime": "21:00"
+                    "startTime": "19:30",
+                    "endTime": "21:30"
                   }
                 ]
               }

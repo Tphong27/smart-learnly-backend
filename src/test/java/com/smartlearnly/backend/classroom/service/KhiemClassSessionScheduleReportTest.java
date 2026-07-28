@@ -29,316 +29,341 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class KhiemClassSessionScheduleReportTest {
 
-    @Mock
-    private ClassSessionRepository classSessionRepository;
+        @Mock
+        private ClassSessionRepository classSessionRepository;
 
-    private ClassSessionScheduleService service;
+        private ClassSessionScheduleService service;
 
-    @BeforeEach
-    void setUp() {
-        service = new ClassSessionScheduleService(
-                classSessionRepository,
-                new ObjectMapper());
-    }
+        @BeforeEach
+        void setUp() {
+                service = new ClassSessionScheduleService(
+                                classSessionRepository,
+                                new ObjectMapper());
+        }
 
-    @Test
-    void UTCID_KHIEM_BE_468_synchronizeFutureSessions_rejectsBlankSchedule() {
-        ClassOffering classOffering = offeringForTomorrow(null);
+        @Test
+        void UTCID_KHIEM_BE_468_synchronizeFutureSessions_rejectsBlankSchedule() {
+                ClassOffering classOffering = offeringForTomorrow(null);
 
-        assertThatThrownBy(() -> service.synchronizeFutureSessions(classOffering))
-                .isInstanceOfSatisfying(
-                        BusinessException.class,
-                        error -> {
-                            assertThat(error.errorCode())
-                                    .isEqualTo(ErrorCode.INVALID_REQUEST);
-                            assertThat(error.getMessage())
-                                    .isEqualTo("Class schedule is required");
-                        });
+                assertThatThrownBy(() -> service.synchronizeFutureSessions(classOffering))
+                                .isInstanceOfSatisfying(
+                                                BusinessException.class,
+                                                error -> {
+                                                        assertThat(error.errorCode())
+                                                                        .isEqualTo(ErrorCode.INVALID_REQUEST);
+                                                        assertThat(error.getMessage())
+                                                                        .isEqualTo("Class schedule is required");
+                                                });
 
-        verify(classSessionRepository, never()).saveAll(any());
-    }
+                verify(classSessionRepository, never()).saveAll(any());
+        }
 
-    @Test
-    void UTCID_KHIEM_BE_469_synchronizeFutureSessions_rejectsOverlappingSlots() {
-        LocalDate sessionDate = LocalDate.now().plusDays(1);
-        ClassOffering classOffering = offering(
-                sessionDate,
-                overlappingSchedule(sessionDate.getDayOfWeek()));
+        @Test
+        void UTCID_KHIEM_BE_469_synchronizeFutureSessions_rejectsUnsupportedTimeRange() {
+                LocalDate sessionDate = LocalDate.now().plusDays(1);
+                ClassOffering classOffering = offering(
+                                sessionDate,
+                                unsupportedSchedule(sessionDate.getDayOfWeek()));
 
-        assertThatThrownBy(() -> service.synchronizeFutureSessions(classOffering))
-                .isInstanceOfSatisfying(
-                        BusinessException.class,
-                        error -> {
-                            assertThat(error.errorCode())
-                                    .isEqualTo(ErrorCode.INVALID_REQUEST);
-                            assertThat(error.getMessage())
-                                    .contains("Schedule slots overlap");
-                        });
+                assertThatThrownBy(() -> service.synchronizeFutureSessions(classOffering))
+                                .isInstanceOfSatisfying(
+                                                BusinessException.class,
+                                                error -> {
+                                                        assertThat(error.errorCode())
+                                                                        .isEqualTo(ErrorCode.INVALID_REQUEST);
+                                                        assertThat(error.getMessage())
+                                                                        .contains("Class schedule may only use");
+                                                });
 
-        verify(classSessionRepository, never()).saveAll(any());
-    }
+                verify(classSessionRepository, never()).saveAll(any());
+        }
 
-    @Test
-    void UTCID_KHIEM_BE_470_synchronizeFutureSessions_rejectsTrainerConflict() {
-        LocalDate sessionDate = LocalDate.now().plusDays(1);
-        ClassOffering classOffering = offering(
-                sessionDate,
-                oneSlotSchedule(sessionDate.getDayOfWeek()));
-        ClassSession conflicting = session(
-                UUID.randomUUID(),
-                sessionDate,
-                LocalTime.of(9, 30),
-                LocalTime.of(10, 30),
-                classOffering.getTrainerId());
+        @Test
+        void UTCID_KHIEM_BE_530_synchronizeFutureSessions_rejectsDuplicateStandardSlot() {
+                LocalDate sessionDate = LocalDate.now().plusDays(1);
+                ClassOffering classOffering = offering(
+                                sessionDate,
+                                duplicateSlotSchedule(sessionDate.getDayOfWeek()));
 
-        when(classSessionRepository.findTrainerSessionsForConflictCheck(
-                classOffering.getTrainerId(),
-                classOffering.getId(),
-                sessionDate,
-                sessionDate))
-                .thenReturn(List.of(conflicting));
+                assertThatThrownBy(() -> service.synchronizeFutureSessions(classOffering))
+                                .isInstanceOfSatisfying(
+                                                BusinessException.class,
+                                                error -> assertThat(error.getMessage())
+                                                                .contains("Slot 2 is selected more than once"));
 
-        assertThatThrownBy(() -> service.synchronizeFutureSessions(classOffering))
-                .isInstanceOfSatisfying(
-                        BusinessException.class,
-                        error -> {
-                            assertThat(error.errorCode())
-                                    .isEqualTo(ErrorCode.INVALID_REQUEST);
-                            assertThat(error.getMessage())
-                                    .contains("Trainer already has another class");
-                        });
+                verify(classSessionRepository, never()).saveAll(any());
+        }
 
-        verify(classSessionRepository, never()).saveAll(any());
-    }
+        @Test
+        void UTCID_KHIEM_BE_470_synchronizeFutureSessions_rejectsTrainerConflict() {
+                LocalDate sessionDate = LocalDate.now().plusDays(1);
+                ClassOffering classOffering = offering(
+                                sessionDate,
+                                oneSlotSchedule(sessionDate.getDayOfWeek()));
+                ClassSession conflicting = session(
+                                UUID.randomUUID(),
+                                sessionDate,
+                                LocalTime.of(10, 30),
+                                LocalTime.of(11, 30),
+                                classOffering.getTrainerId());
 
-    @Test
-    void UTCID_KHIEM_BE_471_synchronizeFutureSessions_createsDesiredSession() {
-        LocalDate sessionDate = LocalDate.now().plusDays(1);
-        ClassOffering classOffering = offering(
-                sessionDate,
-                oneSlotSchedule(sessionDate.getDayOfWeek()));
-        when(classSessionRepository.findTrainerSessionsForConflictCheck(
-                classOffering.getTrainerId(),
-                classOffering.getId(),
-                sessionDate,
-                sessionDate))
-                .thenReturn(List.of());
-        when(classSessionRepository
-                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
-                        classOffering.getId(),
-                        LocalDate.now()))
-                .thenReturn(List.of());
+                when(classSessionRepository.findTrainerSessionsForConflictCheck(
+                                classOffering.getTrainerId(),
+                                classOffering.getId(),
+                                sessionDate,
+                                sessionDate))
+                                .thenReturn(List.of(conflicting));
 
-        service.synchronizeFutureSessions(classOffering);
+                assertThatThrownBy(() -> service.synchronizeFutureSessions(classOffering))
+                                .isInstanceOfSatisfying(
+                                                BusinessException.class,
+                                                error -> {
+                                                        assertThat(error.errorCode())
+                                                                        .isEqualTo(ErrorCode.INVALID_REQUEST);
+                                                        assertThat(error.getMessage())
+                                                                        .contains("Trainer already has another class");
+                                                });
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<ClassSession>> captor =
-                ArgumentCaptor.forClass(List.class);
-        verify(classSessionRepository).saveAll(captor.capture());
-        assertThat(captor.getValue())
-                .singleElement()
-                .satisfies(saved -> {
-                    assertThat(saved.getClassId()).isEqualTo(classOffering.getId());
-                    assertThat(saved.getTrainerId())
-                            .isEqualTo(classOffering.getTrainerId());
-                    assertThat(saved.getSessionDate()).isEqualTo(sessionDate);
-                    assertThat(saved.getStartTime()).isEqualTo(LocalTime.of(9, 0));
-                    assertThat(saved.getEndTime()).isEqualTo(LocalTime.of(10, 0));
-                });
-    }
+                verify(classSessionRepository, never()).saveAll(any());
+        }
 
-    @Test
-    void UTCID_KHIEM_BE_472_synchronizeFutureSessions_updatesMatchingAndDeletesStale() {
-        LocalDate sessionDate = LocalDate.now().plusDays(1);
-        ClassOffering classOffering = offering(
-                sessionDate,
-                oneSlotSchedule(sessionDate.getDayOfWeek()));
-        UUID oldTrainerId = UUID.randomUUID();
-        ClassSession matching = session(
-                classOffering.getId(),
-                sessionDate,
-                LocalTime.of(9, 0),
-                LocalTime.of(10, 0),
-                oldTrainerId);
-        ClassSession stale = session(
-                classOffering.getId(),
-                sessionDate,
-                LocalTime.of(11, 0),
-                LocalTime.of(12, 0),
-                oldTrainerId);
+        @Test
+        void UTCID_KHIEM_BE_471_synchronizeFutureSessions_createsDesiredSession() {
+                LocalDate sessionDate = LocalDate.now().plusDays(1);
+                ClassOffering classOffering = offering(
+                                sessionDate,
+                                oneSlotSchedule(sessionDate.getDayOfWeek()));
+                when(classSessionRepository.findTrainerSessionsForConflictCheck(
+                                classOffering.getTrainerId(),
+                                classOffering.getId(),
+                                sessionDate,
+                                sessionDate))
+                                .thenReturn(List.of());
+                when(classSessionRepository
+                                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
+                                                classOffering.getId(),
+                                                LocalDate.now()))
+                                .thenReturn(List.of());
 
-        when(classSessionRepository.findTrainerSessionsForConflictCheck(
-                classOffering.getTrainerId(),
-                classOffering.getId(),
-                sessionDate,
-                sessionDate))
-                .thenReturn(List.of());
-        when(classSessionRepository
-                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
-                        classOffering.getId(),
-                        LocalDate.now()))
-                .thenReturn(List.of(matching, stale));
+                service.synchronizeFutureSessions(classOffering);
 
-        service.synchronizeFutureSessions(classOffering);
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<ClassSession>> captor = ArgumentCaptor.forClass(List.class);
+                verify(classSessionRepository).saveAll(captor.capture());
+                assertThat(captor.getValue())
+                                .singleElement()
+                                .satisfies(saved -> {
+                                        assertThat(saved.getClassId()).isEqualTo(classOffering.getId());
+                                        assertThat(saved.getTrainerId())
+                                                        .isEqualTo(classOffering.getTrainerId());
+                                        assertThat(saved.getSessionDate()).isEqualTo(sessionDate);
+                                        assertThat(saved.getStartTime()).isEqualTo(LocalTime.of(9, 45));
+                                        assertThat(saved.getEndTime()).isEqualTo(LocalTime.of(11, 45));
+                                });
+        }
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<ClassSession>> saveCaptor =
-                ArgumentCaptor.forClass(List.class);
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Collection<ClassSession>> deleteCaptor =
-                ArgumentCaptor.forClass(Collection.class);
-        verify(classSessionRepository).saveAll(saveCaptor.capture());
-        verify(classSessionRepository).deleteAll(deleteCaptor.capture());
+        @Test
+        void UTCID_KHIEM_BE_472_synchronizeFutureSessions_updatesMatchingAndDeletesStale() {
+                LocalDate sessionDate = LocalDate.now().plusDays(1);
+                ClassOffering classOffering = offering(
+                                sessionDate,
+                                oneSlotSchedule(sessionDate.getDayOfWeek()));
+                UUID oldTrainerId = UUID.randomUUID();
+                ClassSession matching = session(
+                                classOffering.getId(),
+                                sessionDate,
+                                LocalTime.of(9, 45),
+                                LocalTime.of(11, 45),
+                                oldTrainerId);
+                ClassSession stale = session(
+                                classOffering.getId(),
+                                sessionDate,
+                                LocalTime.of(13, 0),
+                                LocalTime.of(15, 0),
+                                oldTrainerId);
 
-        assertThat(saveCaptor.getValue()).containsExactly(matching);
-        assertThat(matching.getTrainerId()).isEqualTo(classOffering.getTrainerId());
-        assertThat(deleteCaptor.getValue()).containsExactly(stale);
-    }
+                when(classSessionRepository.findTrainerSessionsForConflictCheck(
+                                classOffering.getTrainerId(),
+                                classOffering.getId(),
+                                sessionDate,
+                                sessionDate))
+                                .thenReturn(List.of());
+                when(classSessionRepository
+                                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
+                                                classOffering.getId(),
+                                                LocalDate.now()))
+                                .thenReturn(List.of(matching, stale));
 
-    @Test
-    void UTCID_KHIEM_BE_502_validateScheduleDefinition_rejectsMissingTrainer() {
-        ClassOffering classOffering = offeringForTomorrow(
-                oneSlotSchedule(LocalDate.now().plusDays(1).getDayOfWeek()));
-        classOffering.setTrainerId(null);
+                service.synchronizeFutureSessions(classOffering);
 
-        assertThatThrownBy(() -> service.validateScheduleDefinition(classOffering))
-                .isInstanceOfSatisfying(BusinessException.class, error -> {
-                    assertThat(error.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
-                    assertThat(error.getMessage()).isEqualTo("Please select a trainer");
-                });
-    }
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<ClassSession>> saveCaptor = ArgumentCaptor.forClass(List.class);
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<Collection<ClassSession>> deleteCaptor = ArgumentCaptor.forClass(Collection.class);
+                verify(classSessionRepository).saveAll(saveCaptor.capture());
+                verify(classSessionRepository).deleteAll(deleteCaptor.capture());
 
-    @Test
-    void UTCID_KHIEM_BE_503_validateScheduleDefinition_acceptsFutureSession() {
-        LocalDate sessionDate = LocalDate.now().plusDays(1);
-        ClassOffering classOffering =
-                offering(sessionDate, oneSlotSchedule(sessionDate.getDayOfWeek()));
+                assertThat(saveCaptor.getValue()).containsExactly(matching);
+                assertThat(matching.getTrainerId()).isEqualTo(classOffering.getTrainerId());
+                assertThat(deleteCaptor.getValue()).containsExactly(stale);
+        }
 
-        service.validateScheduleDefinition(classOffering);
+        @Test
+        void UTCID_KHIEM_BE_502_validateScheduleDefinition_rejectsMissingTrainer() {
+                ClassOffering classOffering = offeringForTomorrow(
+                                oneSlotSchedule(LocalDate.now().plusDays(1).getDayOfWeek()));
+                classOffering.setTrainerId(null);
 
-        verify(classSessionRepository, never()).saveAll(any());
-    }
+                assertThatThrownBy(() -> service.validateScheduleDefinition(classOffering))
+                                .isInstanceOfSatisfying(BusinessException.class, error -> {
+                                        assertThat(error.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+                                        assertThat(error.getMessage()).isEqualTo("Please select a trainer");
+                                });
+        }
 
-    @Test
-    void UTCID_KHIEM_BE_504_validateScheduleDefinition_rejectsPastOnlySchedule() {
-        LocalDate sessionDate = LocalDate.now().minusDays(1);
-        ClassOffering classOffering =
-                offering(sessionDate, oneSlotSchedule(sessionDate.getDayOfWeek()));
+        @Test
+        void UTCID_KHIEM_BE_503_validateScheduleDefinition_acceptsFutureSession() {
+                LocalDate sessionDate = LocalDate.now().plusDays(1);
+                ClassOffering classOffering = offering(sessionDate, oneSlotSchedule(sessionDate.getDayOfWeek()));
 
-        assertThatThrownBy(() -> service.validateScheduleDefinition(classOffering))
-                .isInstanceOfSatisfying(BusinessException.class, error ->
-                        assertThat(error.getMessage())
-                                .contains("at least one future class session"));
-    }
+                service.validateScheduleDefinition(classOffering);
 
-    @Test
-    void UTCID_KHIEM_BE_505_deleteFutureSessions_deletesOnlyNotStartedRows() {
-        UUID classId = UUID.randomUUID();
-        ClassSession historical = session(
-                classId,
-                LocalDate.now().minusDays(1),
-                LocalTime.of(9, 0),
-                LocalTime.of(10, 0),
-                UUID.randomUUID());
-        ClassSession future = session(
-                classId,
-                LocalDate.now().plusDays(1),
-                LocalTime.of(9, 0),
-                LocalTime.of(10, 0),
-                UUID.randomUUID());
-        when(classSessionRepository
-                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
-                        classId,
-                        LocalDate.now()))
-                .thenReturn(List.of(historical, future));
+                verify(classSessionRepository, never()).saveAll(any());
+        }
 
-        service.deleteFutureSessions(classId);
+        @Test
+        void UTCID_KHIEM_BE_504_validateScheduleDefinition_rejectsPastOnlySchedule() {
+                LocalDate sessionDate = LocalDate.now().minusDays(1);
+                ClassOffering classOffering = offering(sessionDate, oneSlotSchedule(sessionDate.getDayOfWeek()));
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<ClassSession>> captor =
-                ArgumentCaptor.forClass(List.class);
-        verify(classSessionRepository).deleteAll(captor.capture());
-        assertThat(captor.getValue()).containsExactly(future);
-    }
+                assertThatThrownBy(() -> service.validateScheduleDefinition(classOffering))
+                                .isInstanceOfSatisfying(BusinessException.class, error -> assertThat(error.getMessage())
+                                                .contains("at least one future class session"));
+        }
 
-    @Test
-    void UTCID_KHIEM_BE_506_deleteFutureSessions_skipsRepositoryDeleteWhenEmpty() {
-        UUID classId = UUID.randomUUID();
-        when(classSessionRepository
-                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
-                        classId,
-                        LocalDate.now()))
-                .thenReturn(List.of());
+        @Test
+        void UTCID_KHIEM_BE_505_deleteFutureSessions_deletesOnlyNotStartedRows() {
+                UUID classId = UUID.randomUUID();
+                ClassSession historical = session(
+                                classId,
+                                LocalDate.now().minusDays(1),
+                                LocalTime.of(9, 45),
+                                LocalTime.of(11, 45),
+                                UUID.randomUUID());
+                ClassSession future = session(
+                                classId,
+                                LocalDate.now().plusDays(1),
+                                LocalTime.of(9, 45),
+                                LocalTime.of(11, 45),
+                                UUID.randomUUID());
+                when(classSessionRepository
+                                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
+                                                classId,
+                                                LocalDate.now()))
+                                .thenReturn(List.of(historical, future));
 
-        service.deleteFutureSessions(classId);
+                service.deleteFutureSessions(classId);
 
-        verify(classSessionRepository, never()).deleteAll(any());
-    }
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<ClassSession>> captor = ArgumentCaptor.forClass(List.class);
+                verify(classSessionRepository).deleteAll(captor.capture());
+                assertThat(captor.getValue()).containsExactly(future);
+        }
 
-    private ClassOffering offeringForTomorrow(String schedule) {
-        return offering(LocalDate.now().plusDays(1), schedule);
-    }
+        @Test
+        void UTCID_KHIEM_BE_506_deleteFutureSessions_skipsRepositoryDeleteWhenEmpty() {
+                UUID classId = UUID.randomUUID();
+                when(classSessionRepository
+                                .findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(
+                                                classId,
+                                                LocalDate.now()))
+                                .thenReturn(List.of());
 
-    private ClassOffering offering(LocalDate sessionDate, String schedule) {
-        ClassOffering classOffering = new ClassOffering();
-        classOffering.setId(UUID.randomUUID());
-        classOffering.setCourseId(UUID.randomUUID());
-        classOffering.setTrainerId(UUID.randomUUID());
-        classOffering.setStartDate(sessionDate);
-        classOffering.setEndDate(sessionDate);
-        classOffering.setScheduleDescription(schedule);
-        return classOffering;
-    }
+                service.deleteFutureSessions(classId);
 
-    private ClassSession session(
-            UUID classId,
-            LocalDate sessionDate,
-            LocalTime startTime,
-            LocalTime endTime,
-            UUID trainerId) {
-        ClassSession session = new ClassSession();
-        session.setId(UUID.randomUUID());
-        session.setClassId(classId);
-        session.setSessionDate(sessionDate);
-        session.setStartTime(startTime);
-        session.setEndTime(endTime);
-        session.setTrainerId(trainerId);
-        return session;
-    }
+                verify(classSessionRepository, never()).deleteAll(any());
+        }
 
-    private String oneSlotSchedule(DayOfWeek day) {
-        return """
-                [
-                  {
-                    "dayOfWeek": "%s",
-                    "slots": [
-                      {
-                        "startTime": "09:00",
-                        "endTime": "10:00"
-                      }
-                    ]
-                  }
-                ]
-                """.formatted(day.name());
-    }
+        private ClassOffering offeringForTomorrow(String schedule) {
+                return offering(LocalDate.now().plusDays(1), schedule);
+        }
 
-    private String overlappingSchedule(DayOfWeek day) {
-        return """
-                [
-                  {
-                    "dayOfWeek": "%s",
-                    "slots": [
-                      {
-                        "startTime": "09:00",
-                        "endTime": "10:30"
-                      },
-                      {
-                        "startTime": "10:00",
-                        "endTime": "11:00"
-                      }
-                    ]
-                  }
-                ]
-                """.formatted(day.name());
-    }
+        private ClassOffering offering(LocalDate sessionDate, String schedule) {
+                ClassOffering classOffering = new ClassOffering();
+                classOffering.setId(UUID.randomUUID());
+                classOffering.setCourseId(UUID.randomUUID());
+                classOffering.setTrainerId(UUID.randomUUID());
+                classOffering.setStartDate(sessionDate);
+                classOffering.setEndDate(sessionDate);
+                classOffering.setScheduleDescription(schedule);
+                return classOffering;
+        }
+
+        private ClassSession session(
+                        UUID classId,
+                        LocalDate sessionDate,
+                        LocalTime startTime,
+                        LocalTime endTime,
+                        UUID trainerId) {
+                ClassSession session = new ClassSession();
+                session.setId(UUID.randomUUID());
+                session.setClassId(classId);
+                session.setSessionDate(sessionDate);
+                session.setStartTime(startTime);
+                session.setEndTime(endTime);
+                session.setTrainerId(trainerId);
+                return session;
+        }
+
+        private String oneSlotSchedule(DayOfWeek day) {
+                return """
+                                [
+                                  {
+                                    "dayOfWeek": "%s",
+                                    "slots": [
+                                      {
+                                        "startTime": "09:45",
+                                        "endTime": "11:45"
+                                      }
+                                    ]
+                                  }
+                                ]
+                                """.formatted(day.name());
+        }
+
+        private String unsupportedSchedule(DayOfWeek day) {
+                return """
+                                [
+                                  {
+                                    "dayOfWeek": "%s",
+                                    "slots": [
+                                      {
+                                        "startTime": "09:00",
+                                        "endTime": "10:30"
+                                      }
+                                    ]
+                                  }
+                                ]
+                                """.formatted(day.name());
+        }
+
+        private String duplicateSlotSchedule(DayOfWeek day) {
+                return """
+                                [
+                                  {
+                                    "dayOfWeek": "%s",
+                                    "slots": [
+                                      {
+                                        "startTime": "09:45",
+                                        "endTime": "11:45"
+                                      },
+                                      {
+                                        "startTime": "09:45",
+                                        "endTime": "11:45"
+                                      }
+                                    ]
+                                  }
+                                ]
+                                """.formatted(day.name());
+        }
 }
