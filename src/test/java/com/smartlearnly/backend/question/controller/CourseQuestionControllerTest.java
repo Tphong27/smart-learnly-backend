@@ -126,6 +126,18 @@ class CourseQuestionControllerTest {
     }
 
     @Test
+    void get_returnsQuestionFromService() {
+        QuestionModel.Response question = response("What is Java?", "draft");
+        when(questionService.getInCourse(courseId, questionId)).thenReturn(question);
+
+        var response = controller.get(courseId, questionId);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.message()).isEqualTo("Question loaded successfully");
+        assertThat(response.data()).isSameAs(question);
+    }
+
+    @Test
     void update_delegatesToQuestionService() {
         QuestionModel.UpdateRequest request = updateRequest();
         QuestionModel.Response updated = response("Updated?", "pending_review");
