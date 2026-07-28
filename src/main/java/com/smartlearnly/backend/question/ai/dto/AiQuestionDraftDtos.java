@@ -15,8 +15,6 @@ public final class AiQuestionDraftDtos {
 
     public record SourceOptionResponse(
             UUID generationSourceId,
-            UUID materialSnapshotId,
-            UUID materialId,
             UUID transcriptContentId,
             UUID courseId,
             UUID lessonId,
@@ -28,7 +26,6 @@ public final class AiQuestionDraftDtos {
             Long durationSeconds,
             String checksum,
             String version,
-            String ragStatus,
             Integer chunkCount,
             Integer normalizedCharCount,
             Instant updatedAt
@@ -36,8 +33,6 @@ public final class AiQuestionDraftDtos {
     }
 
     public record CreateBatchRequest(
-            List<UUID> generationSourceIds,
-
             List<UUID> transcriptContentIds,
 
             @Valid
@@ -98,7 +93,6 @@ public final class AiQuestionDraftDtos {
     public record EvidenceResponse(
             UUID evidenceId,
             UUID generationSourceId,
-            UUID materialChunkId,
             UUID sourceChunkId,
             String chunkReference,
             String sourceExcerpt,
@@ -170,14 +164,11 @@ public final class AiQuestionDraftDtos {
             UUID sourceId,
             UUID generationSourceId,
             String sourceKind,
-            UUID materialId,
-            UUID materialSnapshotId,
             UUID transcriptContentId,
             UUID lessonId,
             String sourceName,
             String sourceChecksum,
             String sourceVersion,
-            String ragStatus,
             String mimeType,
             Long fileSizeBytes,
             Integer normalizedCharCount,

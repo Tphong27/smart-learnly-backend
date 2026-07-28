@@ -33,7 +33,7 @@ public enum ErrorCode {
     COURSE_ACCESS_BLOCKED(HttpStatus.LOCKED, "Course access has been blocked"),
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Payload exceeds the allowed size"),
     BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_CONTENT, "Business rule violation"),
-    AI_SOURCE_NOT_RAG_READY(HttpStatus.UNPROCESSABLE_CONTENT, "AI source is not RAG-ready"),
+    AI_SOURCE_INVALID(HttpStatus.UNPROCESSABLE_CONTENT, "AI source is invalid"),
     AI_SOURCE_OUT_OF_SCOPE(HttpStatus.FORBIDDEN, "AI source is outside the allowed scope"),
     AI_INVALID_GENERATION_CONFIG(HttpStatus.BAD_REQUEST, "AI generation config is invalid"),
     AI_BATCH_NOT_RETRYABLE(HttpStatus.CONFLICT, "AI batch is not retryable"),

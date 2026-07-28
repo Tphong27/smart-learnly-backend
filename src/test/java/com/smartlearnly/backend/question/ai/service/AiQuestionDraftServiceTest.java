@@ -27,8 +27,6 @@ import com.smartlearnly.backend.question.ai.repository.AiQuestionGenerationSourc
 import com.smartlearnly.backend.question.ai.repository.AiQuestionGenerationSourceRepository;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
-import com.smartlearnly.backend.rag.repository.RagMaterialChunkRepository;
-import com.smartlearnly.backend.rag.repository.RagMaterialSnapshotRepository;
 import com.smartlearnly.backend.videoai.entity.VideoAiContent;
 import com.smartlearnly.backend.videoai.entity.VideoAiTranscriptSegment;
 import com.smartlearnly.backend.videoai.repository.VideoAiContentRepository;
@@ -52,10 +50,6 @@ class AiQuestionDraftServiceTest {
     private CurrentUserService currentUserService;
     @Mock
     private CourseModuleRepository courseModuleRepository;
-    @Mock
-    private RagMaterialSnapshotRepository snapshotRepository;
-    @Mock
-    private RagMaterialChunkRepository chunkRepository;
     @Mock
     private AiQuestionGenerationBatchRepository batchRepository;
     @Mock
@@ -96,8 +90,6 @@ class AiQuestionDraftServiceTest {
                 courseAccessService,
                 currentUserService,
                 courseModuleRepository,
-                snapshotRepository,
-                chunkRepository,
                 batchRepository,
                 sourceRepository,
                 draftRepository,
@@ -249,7 +241,6 @@ class AiQuestionDraftServiceTest {
         source.setSourceName("source.txt");
         source.setSourceChecksum("checksum");
         source.setSourceVersion("1");
-        source.setRagStatus("ready");
         source.setMimeType("text/plain");
         source.setFileSizeBytes(123L);
         source.setNormalizedCharCount(120);

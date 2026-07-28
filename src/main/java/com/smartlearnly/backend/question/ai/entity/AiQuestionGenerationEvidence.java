@@ -28,9 +28,6 @@ public class AiQuestionGenerationEvidence {
     @Column(name = "generation_source_id", nullable = false)
     private UUID generationSourceId;
 
-    @Column(name = "material_chunk_id")
-    private UUID materialChunkId;
-
     @Column(name = "source_chunk_id")
     private UUID sourceChunkId;
 
