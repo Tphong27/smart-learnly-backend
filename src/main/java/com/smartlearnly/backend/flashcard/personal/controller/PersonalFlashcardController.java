@@ -4,17 +4,21 @@ import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.flashcard.dto.FlashcardImageUploadResponse;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.BulkDeletePersonalFlashcardCardsRequest;
+import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.BulkCreatePersonalFlashcardCardsRequest;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.CreatePersonalFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.CreatePersonalFlashcardSetRequest;
+import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.GeneratePersonalFlashcardsFromTextRequest;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalBulkDeleteResponse;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalFlashcardCardResponse;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalFlashcardSetDetailResponse;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalFlashcardSetSummaryResponse;
+import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalGeneratedFlashcardsResponse;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalFlashcardStudyResponse;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.ReorderPersonalFlashcardCardsRequest;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.ReplacePersonalFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.ReplacePersonalFlashcardSetRequest;
 import com.smartlearnly.backend.flashcard.personal.service.PersonalFlashcardImageUploadService;
+import com.smartlearnly.backend.flashcard.personal.service.PersonalFlashcardImportService;
 import com.smartlearnly.backend.flashcard.personal.service.PersonalFlashcardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -51,6 +55,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class PersonalFlashcardController {
     private final PersonalFlashcardService personalFlashcardService;
     private final PersonalFlashcardImageUploadService personalFlashcardImageUploadService;
+    private final PersonalFlashcardImportService personalFlashcardImportService;
 
     @GetMapping
     @Operation(summary = "List Personal flashcard sets")
@@ -145,6 +150,45 @@ public class PersonalFlashcardController {
         return ApiResponse.success(
                 "Personal flashcard cards deleted successfully",
                 personalFlashcardService.bulkDeleteCards(setId, request)
+        );
+    }
+
+    @PostMapping("/{setId}/cards/bulk-create")
+    @Operation(summary = "Create generated Personal flashcards atomically")
+    public ApiResponse<PersonalFlashcardSetDetailResponse> bulkCreateCards(
+            @PathVariable UUID setId,
+            @Valid @RequestBody BulkCreatePersonalFlashcardCardsRequest request
+    ) {
+        return ApiResponse.success(
+                "Personal flashcard cards created successfully",
+                personalFlashcardImportService.bulkCreateCards(setId, request)
+        );
+    }
+
+    @PostMapping("/{setId}/imports/generate-from-text")
+    @Operation(summary = "Generate unsaved Personal flashcard candidates from pasted text")
+    public ApiResponse<PersonalGeneratedFlashcardsResponse> generateFromText(
+            @PathVariable UUID setId,
+            @Valid @RequestBody GeneratePersonalFlashcardsFromTextRequest request
+    ) {
+        return ApiResponse.success(
+                "Personal flashcard candidates generated successfully",
+                personalFlashcardImportService.generateFromText(setId, request)
+        );
+    }
+
+    @PostMapping(value = "/{setId}/imports/generate-from-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Generate unsaved Personal flashcard candidates from a document")
+    public ApiResponse<PersonalGeneratedFlashcardsResponse> generateFromFile(
+            @PathVariable UUID setId,
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(30) Integer desiredCount,
+            @RequestParam(defaultValue = "auto") String language,
+            @RequestParam(defaultValue = "medium") String difficulty
+    ) {
+        return ApiResponse.success(
+                "Personal flashcard candidates generated successfully",
+                personalFlashcardImportService.generateFromFile(setId, file, desiredCount, language, difficulty)
         );
     }
 

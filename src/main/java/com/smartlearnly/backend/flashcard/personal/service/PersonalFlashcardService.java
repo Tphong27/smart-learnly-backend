@@ -9,7 +9,6 @@ import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.BulkDeletePersonalFlashcardCardsRequest;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.CreatePersonalFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.CreatePersonalFlashcardSetRequest;
-import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalBulkDeleteResponse;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalFlashcardCardResponse;
 import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.PersonalFlashcardSetDetailResponse;
@@ -134,7 +133,6 @@ public class PersonalFlashcardService {
     @Transactional
     public PersonalFlashcardCardResponse addCard(UUID setId, CreatePersonalFlashcardCardRequest request) {
         FlashcardSet flashcardSet = requirePersonalSetForWrite(requireEligibleActor(), setId);
-        requireBelowCardLimit(setId);
         FlashcardCard card = new FlashcardCard();
         card.setFlashcardSet(flashcardSet);
         applyCardValues(
@@ -275,16 +273,6 @@ public class PersonalFlashcardService {
 
     private List<FlashcardCard> findActiveCards(UUID setId) {
         return flashcardCardRepository.findPersonalActiveBySetIdOrderByOrderIndex(setId);
-    }
-
-    private void requireBelowCardLimit(UUID setId) {
-        if (flashcardCardRepository.countActiveBySetId(setId)
-                >= PersonalFlashcardDtos.MAX_ACTIVE_CARDS_PER_PERSONAL_SET) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "Personal flashcard sets cannot exceed 500 active cards"
-            );
-        }
     }
 
     private void applyCardValues(

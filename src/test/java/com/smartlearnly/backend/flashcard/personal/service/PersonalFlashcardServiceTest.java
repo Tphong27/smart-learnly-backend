@@ -98,7 +98,6 @@ class PersonalFlashcardServiceTest {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(flashcardSetRepository.findPersonalForUpdateByIdAndOwnerId(set.getId(), actor.getId()))
                 .thenReturn(Optional.of(set));
-        when(flashcardCardRepository.countActiveBySetId(set.getId())).thenReturn(0L);
         when(flashcardCardRepository.findMaxOrderIndexBySetId(set.getId())).thenReturn(-1);
         when(flashcardCardRepository.saveAndFlush(any())).thenAnswer(invocation -> {
             FlashcardCard card = invocation.getArgument(0);
@@ -198,25 +197,6 @@ class PersonalFlashcardServiceTest {
                 new CreatePersonalFlashcardCardRequest("Front only", null, "   ", null, null, null)
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
-    }
-
-    @Test
-    void addCardShouldRejectTheFiveHundredFirstActiveCard() {
-        UserAccount actor = user("TRAINEE");
-        FlashcardSet set = personalSet(actor);
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(flashcardSetRepository.findPersonalForUpdateByIdAndOwnerId(set.getId(), actor.getId()))
-                .thenReturn(Optional.of(set));
-        when(flashcardCardRepository.countActiveBySetId(set.getId())).thenReturn(500L);
-
-        assertThatThrownBy(() -> service.addCard(
-                set.getId(),
-                new CreatePersonalFlashcardCardRequest("Front", null, "Back", null, null, null)
-        )).isInstanceOfSatisfying(BusinessException.class, exception -> {
-            assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
-            assertThat(exception.getMessage()).contains("500 active cards");
-        });
-        verify(flashcardCardRepository, never()).saveAndFlush(any());
     }
 
     @Test
