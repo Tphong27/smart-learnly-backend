@@ -51,7 +51,7 @@ class CourseAiQuestionDraftControllerTest {
     @Test
     void sources_returnsServiceResponse() {
         AiQuestionDraftDtos.SourceOptionResponse source =
-                new AiQuestionDraftDtos.SourceOptionResponse(sourceId, null, null, sourceId, courseId, null, null, "transcript", "Video transcript", null, "vi", 60L, "checksum", "1", "published", 1, 120, null);
+                new AiQuestionDraftDtos.SourceOptionResponse(sourceId, sourceId, courseId, null, null, "transcript", "Video transcript", null, "vi", 60L, "checksum", "1", 1, 120, null);
         when(aiQuestionDraftService.listSources(courseId)).thenReturn(List.of(source));
 
         var response = controller.sources(courseId);
@@ -196,7 +196,6 @@ class CourseAiQuestionDraftControllerTest {
 
     private AiQuestionDraftDtos.CreateBatchRequest createRequest() {
         return new AiQuestionDraftDtos.CreateBatchRequest(
-                List.of(),
                 List.of(sourceId),
                 List.of(),
                 List.of("multiple_choice"),
