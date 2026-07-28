@@ -40,6 +40,8 @@ class AssignmentSubmissionServiceTest {
     private SimpMessagingTemplate messagingTemplate;
     @Mock
     private CurrentUserService currentUserService;
+    @Mock
+    private AssignmentAiDraftService assignmentAiDraftService;
 
     private AssignmentSubmissionService service;
 
@@ -50,7 +52,8 @@ class AssignmentSubmissionServiceTest {
                 assignmentRepository,
                 userRepository,
                 messagingTemplate,
-                currentUserService);
+                currentUserService,
+                assignmentAiDraftService);
     }
 
     @Test

@@ -118,6 +118,13 @@ public class AssignmentSubmissionController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{id}/ai-feedback")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    public ResponseEntity<Map<String, String>> generateAiFeedback(
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(submissionService.generateFeedback(id));
+    }
+
     @GetMapping("/assignment/{assignmentId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentSubmissionModel.Response>>
