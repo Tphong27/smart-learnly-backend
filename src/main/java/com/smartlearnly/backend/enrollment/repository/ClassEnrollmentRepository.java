@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.enrollment.repository;
 
 import com.smartlearnly.backend.enrollment.entity.ClassEnrollment;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.persistence.LockModeType;
@@ -31,4 +32,15 @@ public interface ClassEnrollmentRepository extends JpaRepository<ClassEnrollment
         long countByClassIdAndStatus(
                         @Param("classId") UUID classId,
                         @Param("status") String status);
+
+        @Query(value = """
+                        SELECT enrollment.student_id
+                        FROM public.class_enrollments enrollment
+                        WHERE enrollment.class_id = :classId
+                          AND enrollment.status IN (
+                                'active'::public.enroll_status,
+                                'completed'::public.enroll_status
+                          )
+                        """, nativeQuery = true)
+        List<UUID> findActiveOrCompletedStudentIdsByClassId(@Param("classId") UUID classId);
 }

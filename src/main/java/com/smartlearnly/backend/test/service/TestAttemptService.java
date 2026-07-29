@@ -5,6 +5,10 @@ import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.test.dto.TestAttemptModel;
 import com.smartlearnly.backend.test.entity.AttemptStatus;
 import com.smartlearnly.backend.test.entity.StudentTestAnswer;
@@ -24,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +45,12 @@ public class TestAttemptService {
     private final SimpMessagingTemplate messagingTemplate;
     private final TestService testService;
     private final UserRepository userRepository;
+    private NotificationService notificationService;
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
     @Transactional
     public TestAttemptModel.Response startAttempt(TestAttemptModel.StartRequest request) {
@@ -107,6 +118,7 @@ public class TestAttemptService {
         TestAttemptModel.Response response = mapToResponse(updated);
         response.setPercentage(grade.percentage());
         broadcast(response, null);
+        emitAttemptCompletedNotification(updated);
         return response;
     }
 
@@ -222,6 +234,31 @@ public class TestAttemptService {
 
     private boolean isActive(AttemptStatus status) {
         return status == AttemptStatus.DOING || status == AttemptStatus.IN_PROGRESS;
+    }
+
+    private void emitAttemptCompletedNotification(TestAttempt attempt) {
+        if (notificationService == null
+                || attempt == null
+                || attempt.getStudentId() == null
+                || attempt.getTestId() == null) {
+            return;
+        }
+        Test test = testRepository.findById(attempt.getTestId()).orElse(null);
+        notificationService.emit(new NotificationCreateCommand(
+                attempt.getStudentId(),
+                NotificationType.TEST,
+                attempt.getStatus() == AttemptStatus.EXPIRED ? "Test attempt expired" : "Test attempt submitted",
+                test == null
+                        ? "Your test attempt has been recorded."
+                        : "Your attempt for " + test.getTitle() + " has been recorded.",
+                "TEST_ATTEMPT",
+                attempt.getId(),
+                "/test-attempts/" + attempt.getId(),
+                null,
+                "test-attempt:" + attempt.getId() + ":" + attempt.getStatus(),
+                NotificationPayloads.of(
+                        "testId", attempt.getTestId(),
+                        "status", attempt.getStatus() == null ? null : attempt.getStatus().name())));
     }
 
     private void broadcast(TestAttemptModel.Response response, String studentName) {

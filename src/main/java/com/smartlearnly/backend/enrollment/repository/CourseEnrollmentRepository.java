@@ -28,6 +28,17 @@ public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollme
 
     Optional<CourseEnrollment> findByIdAndStudentId(UUID id, UUID studentId);
 
+    @Query(value = """
+            SELECT enrollment.student_id
+            FROM public.course_enrollments enrollment
+            WHERE enrollment.course_id = :courseId
+              AND enrollment.status IN (
+                    'active'::public.enroll_status,
+                    'completed'::public.enroll_status
+              )
+            """, nativeQuery = true)
+    List<UUID> findActiveOrCompletedStudentIdsByCourseId(@Param("courseId") UUID courseId);
+
         @Query(value = """
             SELECT
                 course.id AS "id",

@@ -25,12 +25,18 @@ import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository
 import com.smartlearnly.backend.enrollment.repository.EnrollmentHistoryProjection;
 import com.smartlearnly.backend.enrollment.repository.EnrollmentStatusHistoryRepository;
 import com.smartlearnly.backend.enrollment.repository.MyCourseProjection;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.payment.repository.SuccessfulPaymentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -47,6 +53,12 @@ public class CourseEnrollmentService {
         private final SuccessfulPaymentRepository successfulPaymentRepository;
         private final CurrentUserService currentUserService;
         private final AuditLogService auditLogService;
+        private NotificationService notificationService;
+
+        @Autowired(required = false)
+        void setNotificationService(NotificationService notificationService) {
+                this.notificationService = notificationService;
+        }
 
         @Transactional
         public EnrollmentResponse enrollFreeCourse(UUID courseId) {
@@ -105,6 +117,14 @@ public class CourseEnrollmentService {
                                                         "courseId",
                                                         courseId));
 
+                        emitCourseEnrollmentNotification(
+                                        student.getId(),
+                                        savedEnrollment.getId(),
+                                        course,
+                                        "Course enrollment completed",
+                                        "You now have access to " + course.getTitle() + ".",
+                                        "course-enrollment:" + savedEnrollment.getId() + ":active");
+
                         return toEnrollmentResponse(
                                         savedEnrollment,
                                         false,
@@ -143,6 +163,14 @@ public class CourseEnrollmentService {
                                 java.util.Map.of("status", EnrollmentStatus.ACTIVE.name()),
                                 java.util.Map.of("courseId", courseId));
 
+                emitCourseEnrollmentNotification(
+                                student.getId(),
+                                reactivatedEnrollment.getId(),
+                                course,
+                                "Course enrollment reactivated",
+                                "Your access to " + course.getTitle() + " has been restored.",
+                                "course-enrollment:" + reactivatedEnrollment.getId() + ":reactivated");
+
                 return toEnrollmentResponse(
                                 reactivatedEnrollment,
                                 false,
@@ -151,7 +179,7 @@ public class CourseEnrollmentService {
 
         @Transactional
         public EnrollmentResponse grantFreeClassCourseEnrollment(UUID studentId, UUID courseId, UUID classId) {
-                requirePublishedCourse(courseId);
+                Course course = requirePublishedCourse(courseId);
                 CourseEnrollment existing = courseEnrollmentRepository
                                 .findByCourseIdAndStudentIdForUpdate(courseId, studentId)
                                 .orElse(null);
@@ -205,6 +233,14 @@ public class CourseEnrollmentService {
                                 "free-class:" + classId,
                                 null);
 
+                emitCourseEnrollmentNotification(
+                                studentId,
+                                saved.getId(),
+                                course,
+                                fromStatus == null ? "Course access granted" : "Course access reactivated",
+                                "You now have course access through your class enrollment.",
+                                "course-enrollment:" + saved.getId() + ":free-class");
+
                 return toEnrollmentResponse(saved, false, fromStatus != null);
         }
 
@@ -222,7 +258,7 @@ public class CourseEnrollmentService {
                         return toEnrollmentResponse(existing, true, false);
                 }
 
-                requireExistingCourse(courseId);
+                Course course = requireExistingCourse(courseId);
                 if (existing == null) {
                         CourseEnrollment created = new CourseEnrollment();
                         created.setCourseId(courseId);
@@ -244,6 +280,13 @@ public class CourseEnrollmentService {
                                         java.util.Map.of("courseId", courseId, "studentId", studentId, "transactionId",
                                                         transactionId),
                                         "transaction:" + transactionId, null);
+                        emitCourseEnrollmentNotification(
+                                        studentId,
+                                        saved.getId(),
+                                        course,
+                                        "Payment confirmed",
+                                        "Your payment was received and course access is active.",
+                                        "course-enrollment:" + saved.getId() + ":paid");
                         return toEnrollmentResponse(saved, false, false);
                 }
 
@@ -265,7 +308,39 @@ public class CourseEnrollmentService {
                                 java.util.Map.of("courseId", courseId, "studentId", studentId, "transactionId",
                                                 transactionId),
                                 "transaction:" + transactionId, null);
+                emitCourseEnrollmentNotification(
+                                studentId,
+                                saved.getId(),
+                                course,
+                                "Payment confirmed",
+                                "Your payment was received and course access has been restored.",
+                                "course-enrollment:" + saved.getId() + ":paid-reactivated");
                 return toEnrollmentResponse(saved, false, true);
+        }
+
+        private void emitCourseEnrollmentNotification(
+                        UUID studentId,
+                        UUID enrollmentId,
+                        Course course,
+                        String title,
+                        String body,
+                        String eventKey) {
+                if (notificationService == null || studentId == null || course == null) {
+                        return;
+                }
+                notificationService.emit(new NotificationCreateCommand(
+                                studentId,
+                                NotificationType.ENROLLMENT,
+                                title,
+                                body,
+                                "COURSE_ENROLLMENT",
+                                enrollmentId,
+                                "/learning/courses/" + course.getId(),
+                                null,
+                                eventKey,
+                                NotificationPayloads.of(
+                                                "courseId", course.getId(),
+                                                "courseTitle", course.getTitle())));
         }
 
         @Transactional(readOnly = true)

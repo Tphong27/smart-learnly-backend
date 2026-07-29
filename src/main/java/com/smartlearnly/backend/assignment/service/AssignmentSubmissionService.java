@@ -10,6 +10,9 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -20,10 +23,12 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,8 +43,14 @@ public class AssignmentSubmissionService {
     private final SimpMessagingTemplate messagingTemplate;
     private final CurrentUserService currentUserService;
     private final AssignmentAiDraftService assignmentAiDraftService;
+    private NotificationService notificationService;
     private static final Path SUBMISSION_UPLOAD_DIR =
             Path.of("uploads", "assignment-submissions").toAbsolutePath().normalize();
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
     @Transactional
     public AssignmentSubmissionModel.Response startAssignment(
@@ -69,6 +80,7 @@ public class AssignmentSubmissionService {
         AssignmentSubmission saved = repository.save(submission);
         AssignmentSubmissionModel.Response response = mapToResponse(saved);
         broadcast(response, assignment, request.getStudentName());
+        emitSubmissionSubmittedNotification(assignment, saved);
         return response;
     }
 
@@ -171,7 +183,62 @@ public class AssignmentSubmissionService {
         submission.setGradedAt(Instant.now());
 
         AssignmentSubmission updated = repository.save(submission);
+        Assignment assignment = assignmentRepository.findById(updated.getAssignmentId()).orElse(null);
+        emitSubmissionGradedNotification(assignment, updated);
         return mapToResponse(updated);
+    }
+
+    private void emitSubmissionSubmittedNotification(Assignment assignment, AssignmentSubmission submission) {
+        if (notificationService == null
+                || assignment == null
+                || assignment.getCreatedBy() == null
+                || submission == null) {
+            return;
+        }
+        notificationService.emit(new NotificationCreateCommand(
+                assignment.getCreatedBy(),
+                NotificationType.ASSIGNMENT,
+                "Assignment submitted",
+                "A trainee submitted " + assignment.getTitle() + ".",
+                "ASSIGNMENT_SUBMISSION",
+                submission.getId(),
+                "/submissions/" + submission.getId(),
+                submission.getStudentId(),
+                "assignment-submission:" + submission.getId() + ":submitted",
+                notificationPayload(
+                        "assignmentId", assignment.getId(),
+                        "studentId", submission.getStudentId(),
+                        "status", submission.getStatus() == null ? null : submission.getStatus().name())));
+    }
+
+    private void emitSubmissionGradedNotification(Assignment assignment, AssignmentSubmission submission) {
+        if (notificationService == null || assignment == null || submission == null || submission.getStudentId() == null) {
+            return;
+        }
+        notificationService.emit(new NotificationCreateCommand(
+                submission.getStudentId(),
+                NotificationType.FEEDBACK,
+                "Assignment feedback available",
+                "Feedback for " + assignment.getTitle() + " is available.",
+                "ASSIGNMENT_SUBMISSION",
+                submission.getId(),
+                "/submissions/" + submission.getId(),
+                submission.getGradedBy(),
+                "assignment-submission:" + submission.getId() + ":graded",
+                notificationPayload(
+                        "assignmentId", assignment.getId(),
+                        "status", submission.getStatus() == null ? null : submission.getStatus().name())));
+    }
+
+    private Map<String, Object> notificationPayload(Object... keyValues) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        for (int index = 0; index + 1 < keyValues.length; index += 2) {
+            Object value = keyValues[index + 1];
+            if (value != null) {
+                payload.put(String.valueOf(keyValues[index]), value);
+            }
+        }
+        return payload;
     }
 
     @Transactional(readOnly = true)

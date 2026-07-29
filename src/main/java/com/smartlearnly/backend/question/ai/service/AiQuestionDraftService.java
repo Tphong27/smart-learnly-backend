@@ -12,6 +12,10 @@ import com.smartlearnly.backend.file.service.FileStorageService.StoredFile;
 import com.smartlearnly.backend.file.service.SupabaseStorageClient;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
 import com.smartlearnly.backend.question.ai.entity.AiQuestionGenerationBatch;
 import com.smartlearnly.backend.question.ai.entity.AiQuestionGenerationDraft;
@@ -56,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -100,6 +105,12 @@ public class AiQuestionDraftService {
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final VideoAiContentRepository videoAiContentRepository;
     private final ObjectMapper objectMapper;
+    private NotificationService notificationService;
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
     @Transactional(readOnly = true)
     public List<AiQuestionDraftDtos.SourceOptionResponse> listSources(UUID courseId) {
@@ -402,13 +413,44 @@ public class AiQuestionDraftService {
             }
             batch.setCompletedAt(Instant.now());
             refreshBatchCounts(batch);
+            emitAiBatchNotification(batch);
         } catch (BusinessException exception) {
             batch.setStatus(AiQuestionGenerationBatch.STATUS_FAILED);
             batch.setErrorCode(exception.errorCode().name());
             batch.setSafeErrorMessage(exception.getMessage());
             batch.setCompletedAt(Instant.now());
             refreshBatchCounts(batch);
+            emitAiBatchNotification(batch);
         }
+    }
+
+    private void emitAiBatchNotification(AiQuestionGenerationBatch batch) {
+        if (notificationService == null || batch.getRequestedBy() == null) {
+            return;
+        }
+        boolean ready = AiQuestionGenerationBatch.STATUS_READY.equals(batch.getStatus());
+        boolean failed = AiQuestionGenerationBatch.STATUS_FAILED.equals(batch.getStatus());
+        if (!ready && !failed) {
+            return;
+        }
+        notificationService.emit(new NotificationCreateCommand(
+                batch.getRequestedBy(),
+                NotificationType.AI_SUGGESTION,
+                ready ? "AI question drafts are ready" : "AI question generation failed",
+                ready
+                        ? "Review the generated draft questions before adding them to the course."
+                        : (batch.getSafeErrorMessage() == null ? "The AI provider did not return usable draft questions." : batch.getSafeErrorMessage()),
+                "AI_QUESTION_BATCH",
+                batch.getId(),
+                "/admin/courses/" + batch.getCourseId() + "/questions/ai-drafts/" + batch.getId(),
+                null,
+                "ai-question-batch:" + batch.getId() + ":" + batch.getStatus(),
+                NotificationPayloads.of(
+                        "courseId", batch.getCourseId(),
+                        "status", batch.getStatus(),
+                        "generatedCount", batch.getGeneratedCount() == null ? 0 : batch.getGeneratedCount()
+                )
+        ));
     }
 
     private void persistGeneratedDraft(

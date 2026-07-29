@@ -17,6 +17,10 @@ import com.smartlearnly.backend.enrollment.entity.EnrollmentStatusHistory;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentTransitionSource;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.EnrollmentStatusHistoryRepository;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.payment.repository.SuccessfulPaymentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
@@ -24,6 +28,7 @@ import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +43,12 @@ public class ClassEnrollmentService {
     private final CourseEnrollmentService courseEnrollmentService;
     private final AuditLogService auditLogService;
     private final CurrentUserService currentUserService;
+    private NotificationService notificationService;
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
     @Transactional
     public ClassEnrollmentResponse enrollFreeClass(UUID classId) {
@@ -129,6 +140,14 @@ public class ClassEnrollmentService {
                 Map.of(
                         "classId", classId,
                         "courseId", classOffering.getCourseId()));
+
+        emitClassEnrollmentNotification(
+                student.getId(),
+                saved.getId(),
+                classOffering,
+                fromStatus == null ? "Class enrollment completed" : "Class enrollment reactivated",
+                "Your enrollment for " + classOffering.getClassName() + " is active.",
+                "class-enrollment:" + saved.getId() + ":free");
 
         return toResponse(
                 saved,
@@ -237,7 +256,41 @@ public class ClassEnrollmentService {
                 "transaction:" + transactionId,
                 null);
 
+        emitClassEnrollmentNotification(
+                studentId,
+                saved.getId(),
+                classOffering,
+                fromStatus == null ? "Class payment confirmed" : "Class enrollment reactivated",
+                "Your enrollment for " + classOffering.getClassName() + " is active.",
+                "class-enrollment:" + saved.getId() + ":paid");
+
         return saved;
+    }
+
+    private void emitClassEnrollmentNotification(
+            UUID studentId,
+            UUID enrollmentId,
+            ClassOffering classOffering,
+            String title,
+            String body,
+            String eventKey) {
+        if (notificationService == null || studentId == null || classOffering == null) {
+            return;
+        }
+        notificationService.emit(new NotificationCreateCommand(
+                studentId,
+                NotificationType.ENROLLMENT,
+                title,
+                body,
+                "CLASS_ENROLLMENT",
+                enrollmentId,
+                "/learning/classes/" + classOffering.getId(),
+                null,
+                eventKey,
+                NotificationPayloads.of(
+                        "classId", classOffering.getId(),
+                        "courseId", classOffering.getCourseId(),
+                        "className", classOffering.getClassName())));
     }
 
     private void requireSuccessfulClassPayment(UUID transactionId, UUID studentId, UUID classId) {
