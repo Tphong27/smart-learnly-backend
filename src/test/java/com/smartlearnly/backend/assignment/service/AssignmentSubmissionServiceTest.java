@@ -16,14 +16,19 @@ import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionReposi
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -42,6 +47,8 @@ class AssignmentSubmissionServiceTest {
     private CurrentUserService currentUserService;
     @Mock
     private AssignmentAiDraftService assignmentAiDraftService;
+    @Mock
+    private NotificationService notificationService;
 
     private AssignmentSubmissionService service;
 
@@ -54,6 +61,7 @@ class AssignmentSubmissionServiceTest {
                 messagingTemplate,
                 currentUserService,
                 assignmentAiDraftService);
+        service.setNotificationService(notificationService);
     }
 
     @Test
@@ -86,6 +94,45 @@ class AssignmentSubmissionServiceTest {
         assertThat(response.getStudentId()).isEqualTo(trainee.getId());
         assertThat(response.getStatus()).isEqualTo(SubmissionStatus.SUBMITTED);
         assertThat(response.getFileName()).isEqualTo("work.pdf");
+
+        ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
+                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+        verify(notificationService).emit(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().userId()).isEqualTo(assignment.getCreatedBy());
+        assertThat(notificationCaptor.getValue().type()).isEqualTo(NotificationType.ASSIGNMENT);
+        assertThat(notificationCaptor.getValue().referenceType()).isEqualTo("ASSIGNMENT_SUBMISSION");
+    }
+
+    @Test
+    void gradeSubmissionShouldNotifyTrainee() {
+        UserAccount trainer = new UserAccount();
+        trainer.setId(UUID.randomUUID());
+        trainer.setRole("TRAINER");
+        Assignment assignment = assignment(UUID.randomUUID());
+        AssignmentSubmission submission = new AssignmentSubmission();
+        submission.setId(UUID.randomUUID());
+        submission.setAssignmentId(assignment.getId());
+        submission.setStudentId(UUID.randomUUID());
+        submission.setStatus(SubmissionStatus.SUBMITTED);
+
+        AssignmentSubmissionModel.GradeRequest request = new AssignmentSubmissionModel.GradeRequest();
+        request.setScore(new BigDecimal("8.5"));
+        request.setTrainerFeedback("Good work");
+        request.setStatus(SubmissionStatus.GRADED);
+
+        when(submissionRepository.findById(submission.getId())).thenReturn(Optional.of(submission));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
+        when(submissionRepository.save(submission)).thenReturn(submission);
+        when(assignmentRepository.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+
+        service.gradeSubmission(submission.getId(), request);
+
+        ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
+                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+        verify(notificationService).emit(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().userId()).isEqualTo(submission.getStudentId());
+        assertThat(notificationCaptor.getValue().type()).isEqualTo(NotificationType.FEEDBACK);
+        assertThat(notificationCaptor.getValue().actorId()).isEqualTo(trainer.getId());
     }
 
     @Test
@@ -120,6 +167,7 @@ class AssignmentSubmissionServiceTest {
         assignment.setAllowLateSubmission(false);
         assignment.setIsArchived(false);
         assignment.setIsFlashtest(false);
+        assignment.setCreatedBy(UUID.randomUUID());
         return assignment;
     }
 }
