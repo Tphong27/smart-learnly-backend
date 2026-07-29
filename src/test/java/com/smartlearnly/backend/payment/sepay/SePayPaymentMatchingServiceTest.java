@@ -23,6 +23,9 @@ import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.enrollment.service.ClassEnrollmentService;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -33,6 +36,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -60,6 +64,8 @@ class SePayPaymentMatchingServiceTest {
     private SePayInvoiceNumberRepository invoiceNumberRepository;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private NotificationService notificationService;
 
     private SePayProperties sePayProperties;
     private SePayPaymentMatchingService service;
@@ -81,6 +87,7 @@ class SePayPaymentMatchingServiceTest {
                 auditLogService,
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );
+        service.setNotificationService(notificationService);
     }
 
     @Test
@@ -110,6 +117,14 @@ class SePayPaymentMatchingServiceTest {
         verify(courseEnrollmentService).grantPaidCourseEnrollment(studentId, courseId, transactionId);
         verify(classEnrollmentService, never()).grantPaidClassEnrollment(any(), any(), any(), any());
         verify(webhookEventRepository).markProcessed(EVENT_ID);
+
+        ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
+                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+        verify(notificationService).emit(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().userId()).isEqualTo(studentId);
+        assertThat(notificationCaptor.getValue().type()).isEqualTo(NotificationType.PAYMENT);
+        assertThat(notificationCaptor.getValue().referenceType()).isEqualTo("PAYMENT_TRANSACTION");
+        assertThat(notificationCaptor.getValue().referenceId()).isEqualTo(transactionId);
     }
 
     @Test
