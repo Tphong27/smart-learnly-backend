@@ -25,12 +25,17 @@ import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -49,6 +54,12 @@ public class OrderService {
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final ClassOfferingRepository classOfferingRepository;
+    private NotificationService notificationService;
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<OrderSummaryResponse> listOrders(int page, int size, String keyword, OrderStatus status) {
@@ -105,6 +116,11 @@ public class OrderService {
                 Map.of("status", OrderStatus.CANCELLED.name()),
                 Map.of("orderCode", saved.getOrderCode())
         );
+        emitOrderNotification(
+                saved,
+                "Order cancelled",
+                "Your pending order was cancelled.",
+                "order:" + saved.getId() + ":cancelled");
         return toOrderResponse(saved);
     }
 
@@ -174,7 +190,31 @@ public class OrderService {
                 "order:" + saved.getId(),
                 null
         );
+        emitOrderNotification(
+                saved,
+                "Order expired",
+                "Your pending order expired after the checkout window.",
+                "order:" + saved.getId() + ":expired");
         return true;
+    }
+
+    private void emitOrderNotification(PurchaseOrder order, String title, String body, String eventKey) {
+        if (notificationService == null || order == null || order.getUserId() == null) {
+            return;
+        }
+        notificationService.emit(new NotificationCreateCommand(
+                order.getUserId(),
+                NotificationType.PAYMENT,
+                title,
+                body,
+                "ORDER",
+                order.getId(),
+                "/orders/" + order.getId(),
+                null,
+                eventKey,
+                NotificationPayloads.of(
+                        "orderCode", order.getOrderCode(),
+                        "status", order.getStatus() == null ? null : order.getStatus().name())));
     }
 
     private void closePendingPaymentSession(PurchaseOrder order) {
