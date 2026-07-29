@@ -27,6 +27,9 @@ import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -65,6 +68,8 @@ class OrderServiceTest {
 
     @Mock
     private ClassOfferingRepository classOfferingRepository;
+    @Mock
+    private NotificationService notificationService;
 
     private OrderService orderService;
 
@@ -82,6 +87,7 @@ class OrderServiceTest {
                 auditLogService,
                 classOfferingRepository
         );
+        orderService.setNotificationService(notificationService);
 
         admin = new UserAccount();
         admin.setId(UUID.randomUUID());
@@ -186,6 +192,13 @@ class OrderServiceTest {
         ArgumentCaptor<PurchaseOrder> orderCaptor = ArgumentCaptor.forClass(PurchaseOrder.class);
         verify(orderRepository).save(orderCaptor.capture());
         assertThat(orderCaptor.getValue().getStatus()).isEqualTo(OrderStatus.EXPIRED);
+
+        ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
+                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+        verify(notificationService).emit(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().userId()).isEqualTo(trainee.getId());
+        assertThat(notificationCaptor.getValue().type()).isEqualTo(NotificationType.PAYMENT);
+        assertThat(notificationCaptor.getValue().referenceType()).isEqualTo("ORDER");
     }
 
     private PurchaseOrder pendingOrder(UUID userId, Instant expiresAt) {
