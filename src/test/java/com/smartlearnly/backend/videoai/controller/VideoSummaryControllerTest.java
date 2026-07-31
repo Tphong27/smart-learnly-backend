@@ -58,8 +58,9 @@ class VideoSummaryControllerTest {
      * {@code POST /api/v1/video-summary/generate} với body
      * {@code {"youtubeUrl":"https://youtu.be/V9i3cGD-mts"}}.
      *
-     * <p>Expected output: HTTP 200, URL chuẩn, durationMinutes và summary object
-     * gồm 3 overview paragraphs cùng danh sách key takeaways.
+     * <p>Expected output: HTTP 200, URL chuẩn, durationSeconds chính xác,
+     * durationMinutes tương thích ngược và summary object gồm 3 overview
+     * paragraphs cùng danh sách key takeaways.
      */
     @Test
     void handleGenerateVideoSummaryRequest_returnsStructuredApiResponse_whenRequestIsValid()
@@ -78,6 +79,7 @@ class VideoSummaryControllerTest {
         GenerateSummaryResponse response = new GenerateSummaryResponse(
                 VIDEO_ID,
                 "https://www.youtube.com/watch?v=" + VIDEO_ID,
+                1_021L,
                 18,
                 summary);
         when(service.generateVideoSummary(YOUTUBE_URL)).thenReturn(response);
@@ -100,6 +102,7 @@ class VideoSummaryControllerTest {
                 .andExpect(jsonPath("$.data.videoId").value(VIDEO_ID))
                 .andExpect(jsonPath("$.data.videoUrl").value(
                         "https://www.youtube.com/watch?v=" + VIDEO_ID))
+                .andExpect(jsonPath("$.data.durationSeconds").value(1_021))
                 .andExpect(jsonPath("$.data.durationMinutes").value(18))
                 .andExpect(jsonPath(
                         "$.data.summary.overviewParagraphs.length()")

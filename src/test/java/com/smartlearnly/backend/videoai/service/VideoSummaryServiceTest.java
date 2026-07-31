@@ -370,6 +370,9 @@ class VideoSummaryServiceTest {
         assertThat(actualResponse.videoUrl()).isEqualTo(WATCH_URL);
         assertThat(actualResponse.summary()).isEqualTo(GENERATED_SUMMARY);
 
+        // THEN: Response giữ nguyên thời lượng chính xác theo giây.
+        assertThat(actualResponse.durationSeconds()).isEqualTo(1_021L);
+
         // THEN: 17 phút 1 giây được làm tròn lên 18 phút.
         assertThat(actualResponse.durationMinutes()).isEqualTo(18);
 

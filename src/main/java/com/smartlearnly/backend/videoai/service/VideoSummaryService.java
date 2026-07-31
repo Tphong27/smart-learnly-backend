@@ -38,10 +38,12 @@ public class VideoSummaryService {
                 summaryService.generateSummaryFromTranscript(
                         transcript.language(),
                         transcript.text());
+        long durationSeconds = metadata.durationSeconds();
         return new GenerateSummaryResponse(
                 videoId,
                 buildCanonicalYoutubeUrl(videoId),
-                Math.toIntExact((metadata.durationSeconds() + 59) / 60),
+                durationSeconds,
+                Math.toIntExact((durationSeconds + 59) / 60),
                 summary);
     }
 
