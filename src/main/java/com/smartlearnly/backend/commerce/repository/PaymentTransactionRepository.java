@@ -1,7 +1,6 @@
 package com.smartlearnly.backend.commerce.repository;
 
 import com.smartlearnly.backend.commerce.entity.PaymentTransaction;
-import com.smartlearnly.backend.commerce.entity.TransactionStatus;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
@@ -258,9 +257,15 @@ public interface PaymentTransactionRepository
 
     Optional<PaymentTransaction> findFirstByOrderIdOrderByCreatedAtDesc(UUID orderId);
 
+    @Query(value = """
+            select transaction_record.*
+            from public.transactions transaction_record
+            where transaction_record.order_id = :orderId
+              and cast(transaction_record.status as text) = cast(:status as text)
+            """, nativeQuery = true)
     List<PaymentTransaction> findByOrderIdAndStatus(
-            UUID orderId,
-            TransactionStatus status);
+            @Param("orderId") UUID orderId,
+            @Param("status") String status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

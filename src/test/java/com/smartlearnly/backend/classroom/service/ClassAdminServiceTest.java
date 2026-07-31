@@ -78,9 +78,21 @@ class ClassAdminServiceTest {
                                 "Spring Cohort",
                                 trainer.getId(),
                                 "https://meet.google.com/abc-defg-hij",
-                                "Mon/Wed 19:00",
-                                LocalDate.of(2026, 7, 1),
-                                LocalDate.of(2026, 8, 1),
+                                """
+                                                [
+                                                  {
+                                                    "dayOfWeek": "MONDAY",
+                                                    "slots": [
+                                                      {
+                                                        "startTime": "19:30",
+                                                        "endTime": "21:30"
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                                """,
+                                startDate,
+                                endDate,
                                 25,
                                 new BigDecimal("500000"));
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
@@ -323,7 +335,7 @@ class ClassAdminServiceTest {
 
                 verify(auditLogService).record(
                                 actor.getEmail(),
-                                "CLASS_STATUS_RESTORED",
+                                "CLASS_RESTORED",
                                 "CLASS",
                                 classOffering.getId().toString());
         }
@@ -353,8 +365,8 @@ class ClassAdminServiceTest {
                                                     "dayOfWeek": "MONDAY",
                                                     "slots": [
                                                       {
-                                                        "startTime": "19:00",
-                                                        "endTime": "21:00"
+                                                        "startTime": "19:30",
+                                                        "endTime": "21:30"
                                                       }
                                                     ]
                                                   }

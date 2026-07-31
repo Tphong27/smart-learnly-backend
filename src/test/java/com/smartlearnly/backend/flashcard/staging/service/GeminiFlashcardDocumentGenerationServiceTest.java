@@ -10,6 +10,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationService.DocumentGenerationRequest;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardGeminiGenerationService.GeminiGenerationRequest;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -22,8 +23,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 class GeminiFlashcardDocumentGenerationServiceTest {
-    private final GeminiFlashcardDocumentGenerationService service =
-            new GeminiFlashcardDocumentGenerationService(properties());
+    private final GeminiFlashcardGenerationService service =
+            new GeminiFlashcardGenerationService(properties());
 
     @Test
     void fallsBackWhenPrimaryDocumentModelIsUnavailable() {
@@ -33,8 +34,8 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         properties.setFallbackModel("gemini-fallback");
         RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GeminiFlashcardDocumentGenerationService fallbackService =
-                new GeminiFlashcardDocumentGenerationService(properties, builder.build());
+        GeminiFlashcardGenerationService fallbackService =
+                new GeminiFlashcardGenerationService(properties, builder.build());
 
         server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
                 .andExpect(jsonPath("$.model").value("gemini-primary"))
@@ -270,6 +271,32 @@ class GeminiFlashcardDocumentGenerationServiceTest {
     }
 
     @Test
+    void documentAdapterDelegatesToGenericGeminiProvider() {
+        CapturingGeminiGenerationService delegate = new CapturingGeminiGenerationService();
+        GeminiFlashcardDocumentGenerationService adapter = new GeminiFlashcardDocumentGenerationService(delegate);
+        DocumentGenerationRequest request = new DocumentGenerationRequest(
+                "Readable document content ".repeat(10),
+                List.of(),
+                7,
+                "vi",
+                "hard",
+                "DOCX",
+                "lesson.docx"
+        );
+
+        GenerationResult result = adapter.generate(request);
+
+        assertThat(result).isSameAs(delegate.result);
+        assertThat(delegate.request.sourceText()).isEqualTo(request.documentText());
+        assertThat(delegate.request.desiredCount()).isEqualTo(7);
+        assertThat(delegate.request.language()).isEqualTo("vi");
+        assertThat(delegate.request.difficulty()).isEqualTo("hard");
+        assertThat(delegate.request.sourceType()).isEqualTo("DOCX");
+        assertThat(delegate.request.sourceName()).isEqualTo("lesson.docx");
+        assertThat(delegate.request.sourceContentLabel()).isEqualTo("Document content");
+    }
+
+    @Test
     void generateRejectsPdfWhenMergedContentIsStillUnusable() {
         DocumentGenerationRequest request = new DocumentGenerationRequest(
                 "Too short.",
@@ -281,7 +308,16 @@ class GeminiFlashcardDocumentGenerationServiceTest {
                 "scan.pdf"
         );
 
-        assertThatThrownBy(() -> service.generate(request))
+        assertThatThrownBy(() -> service.generate(GeminiGenerationRequest.document(
+                request.documentText(),
+                request.images(),
+                request.renderedPageImages(),
+                request.desiredCount(),
+                request.language(),
+                request.difficulty(),
+                request.sourceType(),
+                request.sourceName()
+        )))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
                     assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
                     assertThat(exception.getMessage()).contains("Scanned PDF pages could not be read");
@@ -292,5 +328,16 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         FlashcardDocumentGenerationProperties properties = new FlashcardDocumentGenerationProperties();
         properties.setApiKey("test-key");
         return properties;
+    }
+
+    private static class CapturingGeminiGenerationService implements FlashcardGeminiGenerationService {
+        private final GenerationResult result = new GenerationResult("TEXT", List.of());
+        private GeminiGenerationRequest request;
+
+        @Override
+        public GenerationResult generate(GeminiGenerationRequest request) {
+            this.request = request;
+            return result;
+        }
     }
 }

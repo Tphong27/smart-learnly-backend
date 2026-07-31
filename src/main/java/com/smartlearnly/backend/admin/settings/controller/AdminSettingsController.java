@@ -1,12 +1,21 @@
 package com.smartlearnly.backend.admin.settings.controller;
 
+import com.smartlearnly.backend.admin.settings.dto.AssignmentAiSettingsResponse;
+import com.smartlearnly.backend.admin.settings.dto.AssignmentAiSettingsUpdateRequest;
 import com.smartlearnly.backend.admin.settings.dto.EmailSettingsResponse;
 import com.smartlearnly.backend.admin.settings.dto.EmailSettingsUpdateRequest;
+import com.smartlearnly.backend.admin.settings.dto.GoogleMeetSettingsResponse;
+import com.smartlearnly.backend.admin.settings.dto.GoogleMeetSettingsUpdateRequest;
 import com.smartlearnly.backend.admin.settings.dto.GoogleOAuthSettingsResponse;
 import com.smartlearnly.backend.admin.settings.dto.GoogleOAuthSettingsUpdateRequest;
+import com.smartlearnly.backend.admin.settings.dto.QuestionImageImportSettingsResponse;
+import com.smartlearnly.backend.admin.settings.dto.QuestionImageImportSettingsUpdateRequest;
 import com.smartlearnly.backend.admin.settings.dto.TestEmailRequest;
 import com.smartlearnly.backend.admin.settings.service.SettingKeys;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.QuestionImageImportSettings;
 import com.smartlearnly.backend.auth.service.EmailService;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.audit.AuditLogService;
@@ -20,6 +29,7 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -31,7 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/settings")
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin System Settings", description = "Admin-only system configuration for email and OAuth providers.")
+@Tag(name = "Admin System Settings", description = "Admin-only system configuration for email, OAuth, integrations, and AI providers.")
 public class AdminSettingsController {
     private static final String GOOGLE_REDIRECT_URI_HINT = "/login/oauth2/code/google";
 
@@ -53,6 +63,7 @@ public class AdminSettingsController {
     }
 
     @PutMapping("/email")
+    @Transactional
     @Operation(summary = "Update email settings")
     public ApiResponse<EmailSettingsResponse> updateEmailSettings(
             @Valid @RequestBody EmailSettingsUpdateRequest request
@@ -61,8 +72,7 @@ public class AdminSettingsController {
         settingsService.put(SettingKeys.EMAIL_API_KEY, request.apiKey(), true, actor);
         settingsService.put(SettingKeys.EMAIL_FROM_NAME, request.fromName(), false, actor);
         settingsService.put(SettingKeys.EMAIL_FROM_EMAIL, request.fromEmail(), false, actor);
-        // Reply-to is optional; allow clearing by sending a blank handled at service level.
-        settingsService.put(SettingKeys.EMAIL_REPLY_TO, request.replyTo(), false, actor);
+        putOptionalText(SettingKeys.EMAIL_REPLY_TO, request.replyTo(), actor);
         auditLogService.record(actorLabel(), "SETTINGS_UPDATE_EMAIL", "system_settings", "email");
         return getEmailSettings();
     }
@@ -79,7 +89,6 @@ public class AdminSettingsController {
         try {
             emailService.sendTestEmail(recipient);
         } catch (BusinessException exception) {
-            // Provider error already carries an actionable message (e.g. unverified domain).
             throw exception;
         } catch (IllegalStateException exception) {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, exception.getMessage());
@@ -105,6 +114,7 @@ public class AdminSettingsController {
     }
 
     @PutMapping("/oauth/google")
+    @Transactional
     @Operation(summary = "Update Google OAuth settings")
     public ApiResponse<GoogleOAuthSettingsResponse> updateGoogleOAuth(
             @Valid @RequestBody GoogleOAuthSettingsUpdateRequest request
@@ -115,6 +125,119 @@ public class AdminSettingsController {
         settingsService.put(SettingKeys.GOOGLE_SCOPE, request.scope(), false, actor);
         auditLogService.record(actorLabel(), "SETTINGS_UPDATE_OAUTH_GOOGLE", "system_settings", "oauth.google");
         return getGoogleOAuth();
+    }
+
+    @GetMapping("/integrations/google-meet")
+    @Operation(summary = "Get current Google Meet integration settings (secret masked)")
+    public ApiResponse<GoogleMeetSettingsResponse> getGoogleMeetSettings() {
+        GoogleMeetSettings settings = settingsService.resolveGoogleMeetSettings();
+        GoogleMeetSettingsResponse response = new GoogleMeetSettingsResponse(
+                settings.enabled(),
+                settingsService.hasValue(SettingKeys.GOOGLE_MEET_REFRESH_TOKEN)
+                        || (settings.refreshToken() != null && !settings.refreshToken().isBlank())
+        );
+        return ApiResponse.success("Google Meet settings loaded", response);
+    }
+
+    @PutMapping("/integrations/google-meet")
+    @Transactional
+    @Operation(summary = "Update Google Meet integration settings")
+    public ApiResponse<GoogleMeetSettingsResponse> updateGoogleMeetSettings(
+            @Valid @RequestBody GoogleMeetSettingsUpdateRequest request
+    ) {
+        UUID actor = currentUserId();
+        settingsService.put(SettingKeys.GOOGLE_MEET_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())), false, actor);
+        putOptionalSecret(SettingKeys.GOOGLE_MEET_REFRESH_TOKEN, request.refreshToken(), actor);
+        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_GOOGLE_MEET", "system_settings", "google_meet");
+        return getGoogleMeetSettings();
+    }
+
+    @GetMapping("/ai/question-image-import")
+    @Operation(summary = "Get current question image import settings (secret masked)")
+    public ApiResponse<QuestionImageImportSettingsResponse> getQuestionImageImportSettings() {
+        QuestionImageImportSettings settings = settingsService.resolveQuestionImageImportSettings();
+        QuestionImageImportSettingsResponse response = new QuestionImageImportSettingsResponse(
+                settings.enabled(),
+                settings.provider(),
+                settings.isConfigured(),
+                settings.model(),
+                settings.timeoutSeconds(),
+                settings.maxFileSizeMb(),
+                settings.maxFiles()
+        );
+        return ApiResponse.success("Question image import settings loaded", response);
+    }
+
+    @PutMapping("/ai/question-image-import")
+    @Transactional
+    @Operation(summary = "Update question image import settings")
+    public ApiResponse<QuestionImageImportSettingsResponse> updateQuestionImageImportSettings(
+            @Valid @RequestBody QuestionImageImportSettingsUpdateRequest request
+    ) {
+        UUID actor = currentUserId();
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())), false, actor);
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_PROVIDER, request.provider(), false, actor);
+        putOptionalSecret(SettingKeys.QUESTION_IMAGE_IMPORT_API_KEY, request.apiKey(), actor);
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MODEL, request.model(), false, actor);
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false, actor);
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB, String.valueOf(request.maxFileSizeMb()), false, actor);
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILES, String.valueOf(request.maxFiles()), false, actor);
+        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_QUESTION_IMAGE_IMPORT", "system_settings", "question_image_import");
+        return getQuestionImageImportSettings();
+    }
+
+    @GetMapping("/ai/assignment-draft")
+    @Operation(summary = "Get current assignment AI draft settings (secret masked)")
+    public ApiResponse<AssignmentAiSettingsResponse> getAssignmentAiSettings() {
+        AssignmentAiSettings settings = settingsService.resolveAssignmentAiSettings();
+        AssignmentAiSettingsResponse response = new AssignmentAiSettingsResponse(
+                settings.enabled(),
+                settings.provider(),
+                settings.isConfigured(),
+                settings.model(),
+                settings.fallbackModel(),
+                settings.timeoutSeconds()
+        );
+        return ApiResponse.success("Assignment AI settings loaded", response);
+    }
+
+    @PutMapping("/ai/assignment-draft")
+    @Transactional
+    @Operation(summary = "Update assignment AI draft settings")
+    public ApiResponse<AssignmentAiSettingsResponse> updateAssignmentAiSettings(
+            @Valid @RequestBody AssignmentAiSettingsUpdateRequest request
+    ) {
+        UUID actor = currentUserId();
+        settingsService.put(SettingKeys.ASSIGNMENT_AI_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())), false, actor);
+        settingsService.put(SettingKeys.ASSIGNMENT_AI_PROVIDER, request.provider(), false, actor);
+        putOptionalSecret(SettingKeys.ASSIGNMENT_AI_API_KEY, request.apiKey(), actor);
+        settingsService.put(SettingKeys.ASSIGNMENT_AI_MODEL, request.model(), false, actor);
+        settingsService.put(SettingKeys.ASSIGNMENT_AI_FALLBACK_MODEL, request.fallbackModel(), false, actor);
+        settingsService.put(SettingKeys.ASSIGNMENT_AI_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false, actor);
+        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_ASSIGNMENT_AI", "system_settings", "assignment_ai");
+        return getAssignmentAiSettings();
+    }
+
+    private void putOptionalText(String key, String value, UUID actor) {
+        if (value == null) {
+            return;
+        }
+        if (value.isBlank()) {
+            settingsService.delete(key);
+            return;
+        }
+        settingsService.put(key, value, false, actor);
+    }
+
+    private void putOptionalSecret(String key, String value, UUID actor) {
+        if (value == null || SystemSettingsService.SECRET_PLACEHOLDER.equals(value)) {
+            return;
+        }
+        if (value.isBlank()) {
+            settingsService.delete(key);
+            return;
+        }
+        settingsService.put(key, value, true, actor);
     }
 
     private UUID currentUserId() {

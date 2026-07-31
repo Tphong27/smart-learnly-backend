@@ -75,6 +75,8 @@ app:
             api-base-url: ${APP_GOOGLE_MEET_API_BASE_URL:https://meet.googleapis.com}
             timeout: ${APP_GOOGLE_MEET_TIMEOUT:PT20S}
     payment:
+        checkout-expiration: ${CHECKOUT_EXPIRATION:PT30M}
+        order-expiration-interval: ${ORDER_EXPIRATION_INTERVAL:PT1M}
         sepay:
             webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
             api-token: ${SEPAY_API_TOKEN:}

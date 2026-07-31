@@ -4,6 +4,9 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 run-dev.ps1
+.venv-video-ai/
+.venv-video-ai.broken-*/
+.video-ai-models/
 
 ### STS ###
 .apt_generated
@@ -36,3 +39,15 @@ build/
 docs/ai-context/
 docs/api-contracts/
 
+###test
+.env.unit-test.ps1
+reports/
+*.service-account.json
+### Node.js ###
+node_modules/
+
+.venv-report51/
+
+# Python generated files
+__pycache__/
+*.py[cod]

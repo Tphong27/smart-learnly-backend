@@ -2,6 +2,8 @@ package com.smartlearnly.backend.assignment.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.assignment.dto.AssignmentAiDraftModel;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -36,6 +38,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.multipart.MultipartFile;
+import java.io.InputStream;
 
 @Slf4j
 @Service
@@ -54,7 +57,7 @@ public class AssignmentAiDraftService {
     private static final int MAX_DRAFT_COUNT = 5;
     private static final String UNSUPPORTED_SOURCE_MESSAGE = "Only PDF or DOCX files can be uploaded.";
     private static final Pattern DRAFT_COUNT_PATTERN = Pattern.compile(
-            "\\b(\\d{1,2}|mot|one|hai|two|ba|three|bon|four|nam|five|sau|six|bay|seven|tam|eight|chin|nine|muoi|ten)\\b\\s+(?:bai|assignment|assignments|essay|essays|de|task|tasks|exercise|exercises)"
+            "\\b(\\d{1,2}|mot|one|hai|two|ba|three|bon|four|nam|five|sau|six|bay|seven|tam|eight|chin|nine|muoi|ten)\\b\\s+(?:bai(?:\\s+van|\\s+phan\\s+tich)?|assignment|assignments|essay|essays|character\\s+analysis|animal\\s+analysis|de|task|tasks|exercise|exercises)"
     );
     private static final Pattern NUMBERED_DRAFT_ITEM_PATTERN = Pattern.compile("\\bbai\\s+\\d{1,2}\\b");
     private static final Pattern NEXT_DRAFT_ITEM_PATTERN = Pattern.compile("\\bbai\\s+tiep\\s+theo\\b");
@@ -172,6 +175,7 @@ public class AssignmentAiDraftService {
             "bai code"
     );
     private final AssignmentAiDraftProperties properties;
+    private final SystemSettingsService settingsService;
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, CachedSource> sourceCache = new ConcurrentHashMap<>();
@@ -218,6 +222,83 @@ public class AssignmentAiDraftService {
                 source.text().isBlank() ? 0 : source.text().length(),
                 source.cacheKey()
         );
+    }
+
+    public String generateFeedback(
+            String assignmentDescription,
+            String rubric,
+            String instructionFileName,
+            byte[] instructionFile,
+            String submissionText,
+            String submissionFileName,
+            byte[] submissionFile
+    ) {
+        ensureAvailable();
+        String instructionSource = extractFeedbackFile(
+                instructionFileName,
+                instructionFile,
+                "assignment instructions");
+        String submissionSource = extractFeedbackFile(
+                submissionFileName,
+                submissionFile,
+                "trainee submission");
+        String prompt = """
+                You are an assignment feedback assistant for trainers.
+                Evaluate the trainee's work against the assignment description, the trainer's attached instructions, and every criterion in the rubric.
+                Reply in the primary language used by the assignment and rubric. Support only natural English or natural Vietnamese with complete Vietnamese diacritics.
+                State clearly which requirements and rubric criteria were met, partly met, or not demonstrated, and give concise, actionable improvements.
+                Base the evaluation only on the supplied material. Do not invent evidence and do not assign a numeric score.
+                Return plain text only. Do not use Markdown, Markdown headings, bullets, numbered-list syntax, tables, emphasis markers, links, or code fences.
+                Use short normal-text section labels and paragraphs separated by line breaks so the result can be pasted directly into a feedback field.
+
+                Assignment description:
+                %s
+
+                Trainer instruction file:
+                %s
+
+                Rubric:
+                %s
+
+                Trainee submission text:
+                %s
+
+                Trainee submission file:
+                %s
+                """.formatted(
+                trimToMax(stripHtml(assignmentDescription), 5000),
+                trimToMax(instructionSource, 7000),
+                trimToMax(normalizeText(rubric), 5000),
+                trimToMax(normalizeText(submissionText), 5000),
+                trimToMax(submissionSource, 10000));
+        return trimToMax(
+                toPlainText(sendGeminiInput(List.of(Map.of("type", "text", "text", prompt)))),
+                MAX_REPLY_LENGTH);
+    }
+
+    private String extractFeedbackFile(String fileName, byte[] bytes, String label) {
+        if (bytes == null || bytes.length == 0) {
+            return "No " + label + " file was attached.";
+        }
+        String safeName = sanitizeFileName(fileName);
+        String extension = extensionOf(safeName);
+        if ("txt".equals(extension)) {
+            return normalizeSourceText(new String(bytes, StandardCharsets.UTF_8));
+        }
+        if (!"pdf".equals(extension) && !"docx".equals(extension)) {
+            return "The attached " + label + " file (" + safeName
+                    + ") uses a format that cannot be extracted as text.";
+        }
+        try {
+            MultipartFile multipartFile = new InMemoryMultipartFile(safeName, bytes);
+            var extracted = documentTextExtractionService.extract(multipartFile);
+            return "docx".equals(extension)
+                    ? mergeSourceText(extracted.text(), extractDocxXmlText(bytes))
+                    : normalizeSourceText(extracted.text());
+        } catch (RuntimeException exception) {
+            log.warn("Could not extract {} file {}: {}", label, safeName, exception.getMessage());
+            return "The attached " + label + " file (" + safeName + ") could not be read.";
+        }
     }
 
     private SourceContent resolveSource(MultipartFile file, String sourceCacheKey, String message) {
@@ -455,7 +536,7 @@ public class AssignmentAiDraftService {
                         log.info(
                                 "Gemini assignment draft succeeded: attempt={} configuredModel={} effectiveModel={}",
                                 attempt,
-                                properties.getModel(),
+                                modelName(),
                                 model
                         );
                     }
@@ -529,7 +610,7 @@ public class AssignmentAiDraftService {
         log.warn(
                 "Gemini assignment draft HTTP error: status={} model={} endpoint={} responseBody={}",
                 exception.getStatusCode().value(),
-                properties.getModel(),
+                modelName(),
                 "/models/" + modelName() + ":generateContent",
                 truncateForLog(exception.getResponseBodyAsString(), 1000),
                 exception
@@ -586,8 +667,12 @@ public class AssignmentAiDraftService {
         return body;
     }
 
+    private AssignmentAiSettings resolveSettings() {
+        return settingsService.resolveAssignmentAiSettings();
+    }
+
     private String modelName() {
-        String configured = normalizeNullable(properties.getModel());
+        String configured = normalizeNullable(resolveSettings().model());
         if (configured == null) {
             return "gemini-flash-latest";
         }
@@ -606,7 +691,7 @@ public class AssignmentAiDraftService {
     }
 
     private String fallbackModel() {
-        String configured = normalizeNullable(properties.getFallbackModel());
+        String configured = normalizeNullable(resolveSettings().fallbackModel());
         if (configured == null) {
             return "gemini-flash-lite-latest";
         }
@@ -616,9 +701,10 @@ public class AssignmentAiDraftService {
     }
 
     private RestClient restClient() {
+        AssignmentAiSettings settings = resolveSettings();
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(properties.getTimeout());
-        requestFactory.setReadTimeout(properties.getTimeout());
+        requestFactory.setConnectTimeout(settings.timeout());
+        requestFactory.setReadTimeout(settings.timeout());
         return RestClient.builder()
                 .baseUrl(properties.getApiBaseUrl())
                 .requestFactory(requestFactory)
@@ -626,13 +712,14 @@ public class AssignmentAiDraftService {
     }
 
     private void ensureAvailable() {
-        if (!properties.isEnabled()
-                || !PROVIDER_NAME.equalsIgnoreCase(properties.getProvider())
-                || properties.getApiKey() == null
-                || properties.getApiKey().isBlank()) {
+        AssignmentAiSettings settings = resolveSettings();
+        if (!settings.enabled()
+                || !PROVIDER_NAME.equalsIgnoreCase(settings.provider())
+                || settings.apiKey() == null
+                || settings.apiKey().isBlank()) {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "AI draft generation is not configured.");
         }
-        String apiKey = properties.getApiKey().trim();
+        String apiKey = settings.apiKey().trim();
         if (apiKey.startsWith("<") || apiKey.endsWith(">")) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
@@ -641,7 +728,7 @@ public class AssignmentAiDraftService {
     }
 
     private String assignmentApiKey() {
-        return properties.getApiKey().trim();
+        return resolveSettings().apiKey().trim();
     }
 
     private boolean isProviderLimitException(RestClientResponseException exception) {
@@ -1162,6 +1249,22 @@ public class AssignmentAiDraftService {
     }
 
     private record DraftParts(String content, String rubric) {
+    }
+
+    private record InMemoryMultipartFile(String originalFilename, byte[] bytes)
+            implements MultipartFile {
+        @Override public String getName() { return "file"; }
+        @Override public String getOriginalFilename() { return originalFilename; }
+        @Override public String getContentType() { return MediaType.APPLICATION_OCTET_STREAM_VALUE; }
+        @Override public boolean isEmpty() { return bytes == null || bytes.length == 0; }
+        @Override public long getSize() { return bytes == null ? 0 : bytes.length; }
+        @Override public byte[] getBytes() { return bytes == null ? new byte[0] : bytes.clone(); }
+        @Override public InputStream getInputStream() {
+            return new ByteArrayInputStream(getBytes());
+        }
+        @Override public void transferTo(java.io.File dest) throws IOException {
+            java.nio.file.Files.write(dest.toPath(), getBytes());
+        }
     }
 
     private record SourceIndex(String lead, List<String> chunks, int originalCharacters) {

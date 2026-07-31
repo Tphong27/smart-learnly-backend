@@ -1,0 +1,28 @@
+{
+  "name": "smart-learnly-backend",
+  "version": "1.0.0",
+  "description": "Spring Boot backend for Smart Learnly Platform.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tphong27/smart-learnly-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Tphong27/smart-learnly-backend/issues"
+  },
+  "homepage": "https://github.com/Tphong27/smart-learnly-backend#readme",
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "fast-xml-parser": "^5.10.1",
+    "googleapis": "^173.0.0"
+  }
+}

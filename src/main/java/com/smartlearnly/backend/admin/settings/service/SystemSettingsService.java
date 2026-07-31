@@ -2,6 +2,10 @@ package com.smartlearnly.backend.admin.settings.service;
 
 import com.smartlearnly.backend.admin.settings.entity.SystemSetting;
 import com.smartlearnly.backend.admin.settings.repository.SystemSettingRepository;
+import com.smartlearnly.backend.assignment.service.AssignmentAiDraftProperties;
+import com.smartlearnly.backend.classroom.config.GoogleMeetProperties;
+import com.smartlearnly.backend.question.image.QuestionImageImportProperties;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +37,9 @@ public class SystemSettingsService {
     private final String envResendFromEmail;
     private final String envGoogleClientId;
     private final String envGoogleClientSecret;
+    private final GoogleMeetProperties googleMeetProperties;
+    private final QuestionImageImportProperties questionImageImportProperties;
+    private final AssignmentAiDraftProperties assignmentAiDraftProperties;
 
     public SystemSettingsService(
             SystemSettingRepository repository,
@@ -41,7 +48,10 @@ public class SystemSettingsService {
             @Value("${app.resend.api-key:}") String envResendApiKey,
             @Value("${app.resend.from-email:Smart Learnly <no-reply@mail.smartlearnly.online>}") String envResendFromEmail,
             @Value("${app.auth.google-client-id:}") String envGoogleClientId,
-            @Value("${app.auth.google-client-secret:}") String envGoogleClientSecret) {
+            @Value("${app.auth.google-client-secret:}") String envGoogleClientSecret,
+            GoogleMeetProperties googleMeetProperties,
+            QuestionImageImportProperties questionImageImportProperties,
+            AssignmentAiDraftProperties assignmentAiDraftProperties) {
         this.repository = repository;
         this.cipher = cipher;
         this.envResendApiUrl = envResendApiUrl;
@@ -49,6 +59,9 @@ public class SystemSettingsService {
         this.envResendFromEmail = envResendFromEmail;
         this.envGoogleClientId = envGoogleClientId;
         this.envGoogleClientSecret = envGoogleClientSecret;
+        this.googleMeetProperties = googleMeetProperties;
+        this.questionImageImportProperties = questionImageImportProperties;
+        this.assignmentAiDraftProperties = assignmentAiDraftProperties;
     }
 
     public boolean secretStorageEnabled() {
@@ -102,6 +115,12 @@ public class SystemSettingsService {
         evictCache();
     }
 
+    @Transactional
+    public void delete(String key) {
+        repository.deleteById(key);
+        evictCache();
+    }
+
     /** Resolve effective email settings (DB first, env fallback). */
     public EmailSettings resolveEmailSettings() {
         return new EmailSettings(
@@ -119,6 +138,70 @@ public class SystemSettingsService {
                 getOrDefault(SettingKeys.GOOGLE_CLIENT_ID, envGoogleClientId),
                 getOrDefault(SettingKeys.GOOGLE_CLIENT_SECRET, envGoogleClientSecret),
                 getOrDefault(SettingKeys.GOOGLE_SCOPE, "openid,profile,email"));
+    }
+
+    public GoogleMeetSettings resolveGoogleMeetSettings() {
+        return new GoogleMeetSettings(
+                getBooleanOrDefault(SettingKeys.GOOGLE_MEET_ENABLED, googleMeetProperties.isEnabled()),
+                getOrDefault(SettingKeys.GOOGLE_MEET_REFRESH_TOKEN, googleMeetProperties.getRefreshToken()));
+    }
+
+    public QuestionImageImportSettings resolveQuestionImageImportSettings() {
+        return new QuestionImageImportSettings(
+                getBooleanOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_ENABLED, questionImageImportProperties.isEnabled()),
+                getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_PROVIDER, questionImageImportProperties.getProvider()),
+                getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_API_KEY, questionImageImportProperties.getApiKey()),
+                getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_MODEL, questionImageImportProperties.getModel()),
+                getLongOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS, questionImageImportProperties.getTimeout().toSeconds()),
+                getIntOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB, Math.toIntExact(questionImageImportProperties.getMaxFileSize().toMegabytes())),
+                getIntOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILES, questionImageImportProperties.getMaxFiles()));
+    }
+
+    public AssignmentAiSettings resolveAssignmentAiSettings() {
+        return new AssignmentAiSettings(
+                getBooleanOrDefault(SettingKeys.ASSIGNMENT_AI_ENABLED, assignmentAiDraftProperties.isEnabled()),
+                getOrDefault(SettingKeys.ASSIGNMENT_AI_PROVIDER, assignmentAiDraftProperties.getProvider()),
+                getOrDefault(SettingKeys.ASSIGNMENT_AI_API_KEY, assignmentAiDraftProperties.getApiKey()),
+                getOrDefault(SettingKeys.ASSIGNMENT_AI_MODEL, assignmentAiDraftProperties.getModel()),
+                getOrDefault(SettingKeys.ASSIGNMENT_AI_FALLBACK_MODEL, assignmentAiDraftProperties.getFallbackModel()),
+                getLongOrDefault(SettingKeys.ASSIGNMENT_AI_TIMEOUT_SECONDS, assignmentAiDraftProperties.getTimeout().toSeconds()));
+    }
+
+    private boolean getBooleanOrDefault(String key, boolean fallback) {
+        String value = getRawValue(key);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        String normalized = value.trim().toLowerCase();
+        return switch (normalized) {
+            case "true", "1", "yes", "on" -> true;
+            case "false", "0", "no", "off" -> false;
+            default -> fallback;
+        };
+    }
+
+    private int getIntOrDefault(String key, int fallback) {
+        String value = getRawValue(key);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private long getLongOrDefault(String key, long fallback) {
+        String value = getRawValue(key);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
     }
 
     private synchronized void ensureCacheLoaded() {
@@ -166,5 +249,41 @@ public class SystemSettingsService {
     }
 
     public record GoogleOAuthSettings(String clientId, String clientSecret, String scope) {
+    }
+
+    public record GoogleMeetSettings(boolean enabled, String refreshToken) {
+    }
+
+    public record QuestionImageImportSettings(
+            boolean enabled,
+            String provider,
+            String apiKey,
+            String model,
+            long timeoutSeconds,
+            int maxFileSizeMb,
+            int maxFiles) {
+        public Duration timeout() {
+            return Duration.ofSeconds(timeoutSeconds);
+        }
+
+        public boolean isConfigured() {
+            return apiKey != null && !apiKey.isBlank();
+        }
+    }
+
+    public record AssignmentAiSettings(
+            boolean enabled,
+            String provider,
+            String apiKey,
+            String model,
+            String fallbackModel,
+            long timeoutSeconds) {
+        public Duration timeout() {
+            return Duration.ofSeconds(timeoutSeconds);
+        }
+
+        public boolean isConfigured() {
+            return apiKey != null && !apiKey.isBlank();
+        }
     }
 }

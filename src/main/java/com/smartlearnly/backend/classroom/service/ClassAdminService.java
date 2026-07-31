@@ -19,18 +19,24 @@ import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Locale;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.net.URI;
 import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -47,7 +53,13 @@ public class ClassAdminService {
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
     private final ClassSessionScheduleService classSessionScheduleService;
+    private NotificationService notificationService;
     private static final Pattern GOOGLE_MEET_PATH_PATTERN = Pattern.compile("^/[a-z]{3}-[a-z]{4}-[a-z]{3}/?$");
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
     @Transactional(readOnly = true)
     public List<ClassStatusOptionResponse> listStatusOptions() {
@@ -113,6 +125,11 @@ public class ClassAdminService {
         ClassOffering saved = classOfferingRepository.saveAndFlush(classOffering);
         classSessionScheduleService.synchronizeFutureSessions(saved);
         auditLogService.record(actor.getEmail(), "CLASS_CREATED", "CLASS", saved.getId().toString());
+        emitClassNotificationToTrainer(
+                saved,
+                "New class assigned",
+                "You have been assigned to " + saved.getClassName() + ".",
+                "created");
         return toResponse(saved, course, trainer, 0);
     }
 
@@ -301,6 +318,12 @@ public class ClassAdminService {
 
         audit("CLASS_UPDATED", classId);
 
+        emitClassNotificationToTrainerAndStudents(
+                classOffering,
+                "Class updated",
+                classOffering.getClassName() + " was updated.",
+                "updated");
+
         return getClassDetailResponse(classId);
     }
 
@@ -326,6 +349,12 @@ public class ClassAdminService {
         classSessionScheduleService.deleteFutureSessions(classId);
 
         audit("CLASS_CANCELLED", classId);
+
+        emitClassNotificationToTrainerAndStudents(
+                classOffering,
+                "Class cancelled",
+                classOffering.getClassName() + " was cancelled.",
+                "cancelled");
 
         return toResponse(classOffering);
     }
@@ -391,6 +420,12 @@ public class ClassAdminService {
         }
 
         audit("CLASS_RESTORED", classId);
+
+        emitClassNotificationToTrainerAndStudents(
+                classOffering,
+                "Class restored",
+                classOffering.getClassName() + " was restored.",
+                "restored");
 
         return toResponse(classOffering, course, trainer, activeCount);
     }
@@ -649,6 +684,56 @@ public class ClassAdminService {
     private void audit(String action, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         auditLogService.record(actor.getEmail(), action, "CLASS", classId.toString());
+    }
+
+    private void emitClassNotificationToTrainerAndStudents(
+            ClassOffering classOffering,
+            String title,
+            String body,
+            String eventSuffix) {
+        emitClassNotificationToTrainer(classOffering, title, body, eventSuffix);
+        if (notificationService == null || classOffering == null || classOffering.getId() == null) {
+            return;
+        }
+        for (UUID studentId : classEnrollmentRepository.findActiveOrCompletedStudentIdsByClassId(classOffering.getId())) {
+            emitClassNotification(studentId, classOffering, title, body, eventSuffix);
+        }
+    }
+
+    private void emitClassNotificationToTrainer(
+            ClassOffering classOffering,
+            String title,
+            String body,
+            String eventSuffix) {
+        if (classOffering == null || classOffering.getTrainerId() == null) {
+            return;
+        }
+        emitClassNotification(classOffering.getTrainerId(), classOffering, title, body, eventSuffix);
+    }
+
+    private void emitClassNotification(
+            UUID userId,
+            ClassOffering classOffering,
+            String title,
+            String body,
+            String eventSuffix) {
+        if (notificationService == null || userId == null || classOffering == null) {
+            return;
+        }
+        notificationService.emit(new NotificationCreateCommand(
+                userId,
+                NotificationType.CLASS,
+                title,
+                body,
+                "CLASS",
+                classOffering.getId(),
+                "/classes/" + classOffering.getId(),
+                null,
+                "class:" + classOffering.getId() + ":" + eventSuffix,
+                NotificationPayloads.of(
+                        "classId", classOffering.getId(),
+                        "courseId", classOffering.getCourseId(),
+                        "className", classOffering.getClassName())));
     }
 
     private ClassResponse getClassDetailResponse(UUID classId) {

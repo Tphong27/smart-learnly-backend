@@ -21,6 +21,9 @@ import com.smartlearnly.backend.enrollment.entity.EnrollmentStatusHistory;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentTransitionSource;
 import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.EnrollmentStatusHistoryRepository;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.payment.repository.SuccessfulPaymentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
@@ -48,6 +51,8 @@ class CourseEnrollmentServiceTest {
     private CurrentUserService currentUserService;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private NotificationService notificationService;
 
     private CourseEnrollmentService service;
 
@@ -61,6 +66,7 @@ class CourseEnrollmentServiceTest {
                 currentUserService,
                 auditLogService
         );
+        service.setNotificationService(notificationService);
     }
 
     @Test
@@ -90,6 +96,13 @@ class CourseEnrollmentServiceTest {
         assertThat(courseHistory.getSource())
                 .isEqualTo(EnrollmentTransitionSource.FREE_ENROLLMENT);
         assertThat(courseHistory.getFromStatus()).isNull();
+
+        ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
+                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+        verify(notificationService).emit(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().userId()).isEqualTo(studentId);
+        assertThat(notificationCaptor.getValue().type()).isEqualTo(NotificationType.ENROLLMENT);
+        assertThat(notificationCaptor.getValue().referenceType()).isEqualTo("COURSE_ENROLLMENT");
     }
 
     @Test

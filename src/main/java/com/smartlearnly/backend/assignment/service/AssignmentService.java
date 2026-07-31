@@ -16,15 +16,22 @@ import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +46,16 @@ public class AssignmentService {
     private final CurriculumResolutionService curriculumResolutionService;
     private final CurriculumLessonRepository curriculumLessonRepository;
     private final CurriculumVersionRepository curriculumVersionRepository;
+    private NotificationService notificationService;
+    private ClassEnrollmentRepository notificationClassEnrollmentRepository;
+
+    @Autowired(required = false)
+    void setNotificationDependencies(
+            NotificationService notificationService,
+            ClassEnrollmentRepository classEnrollmentRepository) {
+        this.notificationService = notificationService;
+        this.notificationClassEnrollmentRepository = classEnrollmentRepository;
+    }
 
     public AssignmentModel.Response createAssignment(
             AssignmentModel.CreateRequest request) {
@@ -63,6 +80,12 @@ public class AssignmentService {
         assignment.setCreatedBy(currentUserService.requireAuthenticatedUser().getId());
 
         Assignment saved = assignmentRepository.save(assignment);
+
+        emitAssignmentNotificationToStudents(
+                saved,
+                "New assignment",
+                "A new assignment is available: " + saved.getTitle() + ".",
+                "created");
 
         return mapToResponse(saved);
     }
@@ -260,21 +283,60 @@ public class AssignmentService {
             assignmentSubmissionRepository.deleteByAssignmentId(updated.getId());
         }
 
+        emitAssignmentNotificationToStudents(
+                updated,
+                "Assignment updated",
+                updated.getTitle() + " was updated.",
+                "updated");
+
         return mapToResponse(updated);
     }
 
     @Transactional
     public void deleteAssignment(UUID id) {
 
-        if (!assignmentRepository.existsById(id)) {
-            throw new EntityNotFoundException("Assignment not found");
-        }
+        Assignment assignment = assignmentRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
+        emitAssignmentNotificationToStudents(
+                assignment,
+                "Assignment removed",
+                assignment.getTitle() + " was removed.",
+                "deleted");
 
         // A completed assignment owns submission rows. Delete those children
         // first so the supported staff delete action works after grading too.
         assignmentSubmissionRepository.deleteByAssignmentId(id);
         assignmentSubmissionRepository.flush();
         assignmentRepository.deleteById(id);
+    }
+
+    private void emitAssignmentNotificationToStudents(
+            Assignment assignment,
+            String title,
+            String body,
+            String eventSuffix) {
+        if (notificationService == null
+                || notificationClassEnrollmentRepository == null
+                || assignment == null
+                || assignment.getClassId() == null) {
+            return;
+        }
+        for (UUID studentId : notificationClassEnrollmentRepository.findActiveOrCompletedStudentIdsByClassId(assignment.getClassId())) {
+            notificationService.emit(new NotificationCreateCommand(
+                    studentId,
+                    NotificationType.ASSIGNMENT,
+                    title,
+                    body,
+                    "ASSIGNMENT",
+                    assignment.getId(),
+                    "/assignments/" + assignment.getId(),
+                    assignment.getCreatedBy(),
+                    "assignment:" + assignment.getId() + ":" + eventSuffix,
+                    NotificationPayloads.of(
+                            "assignmentId", assignment.getId(),
+                            "classId", assignment.getClassId(),
+                            "title", assignment.getTitle())));
+        }
     }
 
     private AssignmentModel.Response mapToResponse(Assignment assignment) {

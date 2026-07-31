@@ -228,7 +228,11 @@ class CourseQueryServiceTests {
 						Pageable.class)
 				.getAnnotation(Query.class);
 
-		assertThat(query.value())
+		String normalizedQuery = query.value()
+				.replaceAll("\\s+", " ")
+				.trim();
+
+		assertThat(normalizedQuery)
 				.contains("c.status = 'published'::public.course_status")
 				.contains("c.deleted_at IS NULL")
 				.contains("category.slug = :categorySlug")
@@ -240,7 +244,12 @@ class CourseQueryServiceTests {
 				.contains("enrollment.course_id = c.id")
 				.contains("'active'::public.enroll_status")
 				.contains("'completed'::public.enroll_status");
-		assertThat(query.countQuery())
+
+		String normalizedCountQuery = query.countQuery()
+				.replaceAll("\\s+", " ")
+				.trim();
+
+		assertThat(normalizedCountQuery)
 				.contains("c.status = 'published'::public.course_status")
 				.contains("c.deleted_at IS NULL")
 				.contains("c.discounted_price < c.price");

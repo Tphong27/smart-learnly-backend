@@ -17,6 +17,10 @@ import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.audit.AuditResult;
 import com.smartlearnly.backend.enrollment.service.ClassEnrollmentService;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -57,6 +61,7 @@ public class SePayPaymentMatchingService {
     private final SePayInvoiceNumberRepository invoiceNumberRepository;
     private final AuditLogService auditLogService;
     private final Clock clock;
+    private NotificationService notificationService;
 
     @Autowired
     public SePayPaymentMatchingService(
@@ -110,6 +115,11 @@ public class SePayPaymentMatchingService {
         this.invoiceNumberRepository = invoiceNumberRepository;
         this.auditLogService = auditLogService;
         this.clock = clock;
+    }
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -210,6 +220,7 @@ public class SePayPaymentMatchingService {
         sePayOrderRepository.saveAndFlush(sePayOrder);
 
         grantEnrollments(order.getId(), order.getUserId(), transaction.getId());
+        emitPaymentSuccessNotification(order, transaction);
         if (reconciled) {
             auditLogService.recordSystem(
                     "sepay-reconciliation", AuditAction.PAYMENT_RECONCILED, AuditDomain.PAYMENT, AuditResult.SUCCESS,
@@ -352,6 +363,28 @@ public class SePayPaymentMatchingService {
                 );
             }
         }
+    }
+
+    private void emitPaymentSuccessNotification(PurchaseOrder order, PaymentTransaction transaction) {
+        if (notificationService == null || order == null || order.getUserId() == null || transaction == null) {
+            return;
+        }
+        notificationService.emit(new NotificationCreateCommand(
+                order.getUserId(),
+                NotificationType.PAYMENT,
+                "Payment confirmed",
+                "Your payment has been confirmed.",
+                "PAYMENT_TRANSACTION",
+                transaction.getId(),
+                "/orders/" + order.getId(),
+                null,
+                "payment-transaction:" + transaction.getId() + ":success",
+                NotificationPayloads.of(
+                        "orderId", order.getId(),
+                        "orderCode", order.getOrderCode(),
+                        "transactionId", transaction.getId(),
+                        "amount", transaction.getAmount(),
+                        "status", transaction.getStatus() == null ? null : transaction.getStatus().name())));
     }
 
     private boolean isBlank(String value) {

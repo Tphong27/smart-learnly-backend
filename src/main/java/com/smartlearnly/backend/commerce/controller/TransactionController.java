@@ -66,13 +66,13 @@ public class TransactionController {
         return ApiResponse.success("Transactions loaded successfully", result);
     }
 
-    @GetMapping("/filter-options")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Get transaction filter options from existing data")
-    public ApiResponse<TransactionFilterOptionsResponse> getFilterOptions() {
+    @GetMapping("/{transactionId}")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
+    @Operation(summary = "Get transaction detail")
+    public ApiResponse<TransactionResponse> getTransaction(@PathVariable UUID transactionId) {
         return ApiResponse.success(
-                "Transaction filter options loaded successfully",
-                transactionQueryService.getFilterOptions());
+                "Transaction loaded successfully",
+                transactionQueryService.getTransaction(transactionId));
     }
 
     @GetMapping("/{transactionId}/invoice")

@@ -1,0 +1,872 @@
+{
+  "projectName": "Smart Learnly Platform",
+  "projectCode": "SLP",
+  "testEnvironment": "Windows 10/11; Java 17; Maven Wrapper; JUnit 5; Mockito; JaCoCo; Google Sheets API.",
+  "createdBy": "KhiemND",
+  "executedBy": "KhiemND",
+  "methods": [
+    {
+      "moduleName": "ClassAdminService",
+      "methodName": "update",
+      "functionCode": "ClassAdminService.update",
+      "sheetName": "Khiem-updateClass",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassAdminUpdateReportTest",
+      "description": "Partially update a class while enforcing lifecycle, permission, capacity, commercial-history and session-synchronization rules.",
+      "preCondition": "Class repositories, current user, audit log and ClassSessionScheduleService are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_462",
+          "javaTestName": "UTCID_KHIEM_BE_462_update_rejectsEmptyPatch",
+          "type": "A",
+          "scenario": "The PATCH request contains no provided field.",
+          "input": "A new empty UpdateClassRequest.",
+          "expected": "INVALID_REQUEST is thrown before the class row is locked."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_463",
+          "javaTestName": "UTCID_KHIEM_BE_463_update_rejectsManualLifecycleStatus",
+          "type": "A",
+          "scenario": "The client attempts to set a lifecycle status directly.",
+          "input": "status=cancelled.",
+          "expected": "INVALID_REQUEST is thrown and no class is saved."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_464",
+          "javaTestName": "UTCID_KHIEM_BE_464_update_rejectsCapacityBelowActiveEnrollment",
+          "type": "B",
+          "scenario": "Capacity is reduced below the number of active trainees.",
+          "input": "maxStudents=2; active enrollment count=3.",
+          "expected": "CLASS_CAPACITY_INVALID is thrown."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_465",
+          "javaTestName": "UTCID_KHIEM_BE_465_update_rejectsPriceChangeAfterCommercialHistory",
+          "type": "A",
+          "scenario": "Price is changed after enrollment or payment history exists.",
+          "input": "price=750000; hasCommercialHistory=true.",
+          "expected": "CONFLICT is thrown and no class is saved."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_466",
+          "javaTestName": "UTCID_KHIEM_BE_466_update_resynchronizesSessionsWhenScheduleChanges",
+          "type": "N",
+          "scenario": "A valid weekly schedule is changed for an upcoming class.",
+          "input": "MONDAY 19:00-21:00 becomes WEDNESDAY 18:30-20:30.",
+          "expected": "Definition is validated, class is saved, future sessions are synchronized and CLASS_UPDATED is audited."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_467",
+          "javaTestName": "UTCID_KHIEM_BE_467_update_deletesFutureSessionsOnCompletedTransition",
+          "type": "B",
+          "scenario": "Updated dates move an upcoming class into the completed lifecycle.",
+          "input": "startDate and endDate are both in the past.",
+          "expected": "Status becomes COMPLETED; future sessions are deleted and are not rebuilt."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassSessionScheduleService",
+      "methodName": "synchronizeFutureSessions",
+      "functionCode": "ClassSessionScheduleService.synchronizeFutureSessions",
+      "sheetName": "Khiem-syncSessions",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassSessionScheduleReportTest",
+      "description": "Parse a weekly schedule, generate future sessions, detect trainer conflicts and reconcile saved sessions without rewriting history.",
+      "preCondition": "ClassSessionRepository is mocked; ObjectMapper is real; dates are generated relative to the execution day.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_468",
+          "javaTestName": "UTCID_KHIEM_BE_468_synchronizeFutureSessions_rejectsBlankSchedule",
+          "type": "A",
+          "scenario": "The class has no weekly schedule JSON.",
+          "input": "scheduleDescription=null.",
+          "expected": "INVALID_REQUEST with 'Class schedule is required'."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_469",
+          "javaTestName": "UTCID_KHIEM_BE_469_synchronizeFutureSessions_rejectsOverlappingSlots",
+          "type": "A",
+          "scenario": "Two slots on the same day overlap.",
+          "input": "09:00-10:30 and 10:00-11:00.",
+          "expected": "INVALID_REQUEST is thrown before sessions are saved."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_470",
+          "javaTestName": "UTCID_KHIEM_BE_470_synchronizeFutureSessions_rejectsTrainerConflict",
+          "type": "A",
+          "scenario": "The trainer already teaches another class at an overlapping time.",
+          "input": "Desired 09:00-10:00; existing 09:30-10:30 on the same date.",
+          "expected": "INVALID_REQUEST reports the trainer conflict."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_471",
+          "javaTestName": "UTCID_KHIEM_BE_471_synchronizeFutureSessions_createsDesiredSession",
+          "type": "N",
+          "scenario": "A valid one-day schedule has no existing session or trainer conflict.",
+          "input": "Tomorrow 09:00-10:00.",
+          "expected": "One ClassSession is saved with the class and trainer IDs."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_472",
+          "javaTestName": "UTCID_KHIEM_BE_472_synchronizeFutureSessions_updatesMatchingAndDeletesStale",
+          "type": "B",
+          "scenario": "One future session still matches the schedule and another is stale.",
+          "input": "Matching 09:00-10:00; stale 11:00-12:00.",
+          "expected": "The matching row receives the current trainer; the stale row is deleted."
+        }
+      ]
+    },
+    {
+      "moduleName": "TraineeProgressService",
+      "methodName": "getMyProgress",
+      "functionCode": "TraineeProgressService.getMyProgress",
+      "sheetName": "Khiem-getMyProgress",
+      "testClass": "com.smartlearnly.backend.lessonprogress.service.KhiemTraineeProgressReportTest",
+      "description": "Build and classify the authenticated trainee's online-course and class progress from effective curriculum data.",
+      "preCondition": "Current user, enrollment, curriculum, progress and assignment dependencies are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_473",
+          "javaTestName": "UTCID_KHIEM_BE_473_getMyProgress_returnsZeroSummaryForEmptyEnrollment",
+          "type": "B",
+          "scenario": "The trainee has no enrolled online course or class.",
+          "input": "getMyCourses() returns an empty list.",
+          "expected": "All totals are zero and all result lists are empty."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_474",
+          "javaTestName": "UTCID_KHIEM_BE_474_getMyProgress_classifiesCompletedOnlineCourse",
+          "type": "N",
+          "scenario": "An online course has one published and completed lesson.",
+          "input": "One online enrollment and one completed VIDEO lesson.",
+          "expected": "The course is 100% and appears in completedCourseItems."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_475",
+          "javaTestName": "UTCID_KHIEM_BE_475_getMyProgress_separatesCompletedOnlineAndPartialClass",
+          "type": "N",
+          "scenario": "The trainee has one completed online course and one half-completed class.",
+          "input": "Online 1/1; class lessons 1/2.",
+          "expected": "Total=2, completed=1, in-progress=1 and class overall progress=50%."
+        }
+      ]
+    },
+    {
+      "moduleName": "UpdateClassRequest",
+      "methodName": "hasAnyField",
+      "functionCode": "UpdateClassRequest.hasAnyField",
+      "sheetName": "Khiem-hasAnyField",
+      "testClass": "com.smartlearnly.backend.classroom.dto.KhiemUpdateClassRequestReportTest",
+      "description": "Detect whether a PATCH request explicitly contains at least one supported class field.",
+      "preCondition": "A real UpdateClassRequest instance is used; no dependency is mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_476",
+          "javaTestName": "UTCID_KHIEM_BE_476_hasAnyField_returnsFalseForNewRequest",
+          "type": "B",
+          "scenario": "No setter has been invoked.",
+          "input": "A new UpdateClassRequest.",
+          "expected": "hasAnyField returns false."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_477",
+          "javaTestName": "UTCID_KHIEM_BE_477_hasAnyField_returnsTrueForExplicitNullField",
+          "type": "B",
+          "scenario": "The client explicitly provides a nullable field with null.",
+          "input": "setMeetingUrl(null).",
+          "expected": "hasAnyField returns true and meetingUrlProvided is true."
+        }
+      ]
+    },
+    {
+      "moduleName": "UpdateClassRequest",
+      "methodName": "setScheduleDescription",
+      "functionCode": "UpdateClassRequest.setScheduleDescription",
+      "sheetName": "Khiem-setSchedule",
+      "testClass": "com.smartlearnly.backend.classroom.dto.KhiemUpdateClassRequestReportTest",
+      "description": "Store the schedule value and record that the PATCH field was explicitly provided.",
+      "preCondition": "A real UpdateClassRequest instance is used.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_478",
+          "javaTestName": "UTCID_KHIEM_BE_478_setScheduleDescription_storesValueAndMarksProvided",
+          "type": "N",
+          "scenario": "A non-null weekly schedule is provided.",
+          "input": "Monday 19:00-21:00.",
+          "expected": "The value is stored and scheduleDescriptionProvided is true."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_479",
+          "javaTestName": "UTCID_KHIEM_BE_479_setScheduleDescription_preservesExplicitNull",
+          "type": "B",
+          "scenario": "The schedule field is explicitly sent as null.",
+          "input": "setScheduleDescription(null).",
+          "expected": "The value remains null but the request is not treated as empty."
+        }
+      ]
+    },
+    {
+      "moduleName": "UpdateClassRequest",
+      "methodName": "isMeetingUrlProvided",
+      "functionCode": "UpdateClassRequest.isMeetingUrlProvided",
+      "sheetName": "Khiem-meetingProvided",
+      "testClass": "com.smartlearnly.backend.classroom.dto.KhiemUpdateClassRequestReportTest",
+      "description": "Distinguish an omitted meeting URL from an explicitly provided meeting URL.",
+      "preCondition": "A real UpdateClassRequest instance is used.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_480",
+          "javaTestName": "UTCID_KHIEM_BE_480_isMeetingUrlProvided_distinguishesOmittedAndProvided",
+          "type": "N",
+          "scenario": "The request changes from omitted meeting URL to a valid provided URL.",
+          "input": "New request, then setMeetingUrl(valid Google Meet URL).",
+          "expected": "The flag changes from false to true and the URL is retained."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassLifecycle",
+      "methodName": "resolveStatus(startDate,endDate,currentStatus,today)",
+      "functionCode": "ClassLifecycle.resolveStatus/4",
+      "sheetName": "Khiem-resolveStatusAt",
+      "testClass": "com.smartlearnly.backend.classroom.entity.KhiemClassLifecycleReportTest",
+      "description": "Resolve class lifecycle status against an explicit business date while preserving cancellation.",
+      "preCondition": "A fixed reference date of 2026-07-28 is used.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_481",
+          "javaTestName": "UTCID_KHIEM_BE_481_resolveStatusWithToday_preservesCancelledStatus",
+          "type": "B",
+          "scenario": "A cancelled class is within its scheduled date range.",
+          "input": "currentStatus=CANCELLED.",
+          "expected": "CANCELLED is preserved."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_482",
+          "javaTestName": "UTCID_KHIEM_BE_482_resolveStatusWithToday_resolvesDateBoundaries",
+          "type": "B",
+          "scenario": "Dates represent future, current-day and expired classes.",
+          "input": "Three valid start/end date combinations.",
+          "expected": "UPCOMING, ONGOING and COMPLETED are resolved respectively."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_483",
+          "javaTestName": "UTCID_KHIEM_BE_483_resolveStatusWithToday_rejectsInvalidDates",
+          "type": "A",
+          "scenario": "Required dates are missing or end date precedes start date.",
+          "input": "startDate=null; then endDate<startDate.",
+          "expected": "IllegalArgumentException explains the invalid date."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassLifecycle",
+      "methodName": "resolveStatus(startDate,endDate,currentStatus)",
+      "functionCode": "ClassLifecycle.resolveStatus/3",
+      "sheetName": "Khiem-resolveStatus",
+      "testClass": "com.smartlearnly.backend.classroom.entity.KhiemClassLifecycleReportTest",
+      "description": "Resolve status using the current date in the configured business zone.",
+      "preCondition": "Test dates are generated relative to ClassLifecycle.today().",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_484",
+          "javaTestName": "UTCID_KHIEM_BE_484_resolveStatus_usesBusinessToday",
+          "type": "N",
+          "scenario": "One class starts tomorrow and another ended yesterday.",
+          "input": "Dates relative to business today.",
+          "expected": "The classes resolve to UPCOMING and COMPLETED."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassLifecycle",
+      "methodName": "today",
+      "functionCode": "ClassLifecycle.today",
+      "sheetName": "Khiem-businessToday",
+      "testClass": "com.smartlearnly.backend.classroom.entity.KhiemClassLifecycleReportTest",
+      "description": "Return the current calendar date in Asia/Ho_Chi_Minh.",
+      "preCondition": "The expected date is sampled immediately before and after the method call.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_485",
+          "javaTestName": "UTCID_KHIEM_BE_485_today_returnsDateInBusinessZone",
+          "type": "B",
+          "scenario": "The call may occur around a date boundary.",
+          "input": "No argument.",
+          "expected": "The result is between the two Asia/Ho_Chi_Minh date samples."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassStatusConverter",
+      "methodName": "convertToDatabaseColumn",
+      "functionCode": "ClassStatusConverter.convertToDatabaseColumn",
+      "sheetName": "Khiem-statusToDb",
+      "testClass": "com.smartlearnly.backend.classroom.entity.KhiemClassStatusConverterReportTest",
+      "description": "Convert ClassStatus enum values to the lowercase PostgreSQL representation.",
+      "preCondition": "A real converter instance is used.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_486",
+          "javaTestName": "UTCID_KHIEM_BE_486_convertToDatabaseColumn_convertsEnumToLowercase",
+          "type": "N",
+          "scenario": "Valid enum values are persisted.",
+          "input": "UPCOMING and CANCELLED.",
+          "expected": "upcoming and cancelled are returned."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_487",
+          "javaTestName": "UTCID_KHIEM_BE_487_convertToDatabaseColumn_preservesNull",
+          "type": "B",
+          "scenario": "The entity attribute is null.",
+          "input": "null.",
+          "expected": "null is returned."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassStatusConverter",
+      "methodName": "convertToEntityAttribute",
+      "functionCode": "ClassStatusConverter.convertToEntityAttribute",
+      "sheetName": "Khiem-statusFromDb",
+      "testClass": "com.smartlearnly.backend.classroom.entity.KhiemClassStatusConverterReportTest",
+      "description": "Convert database status text to ClassStatus without case sensitivity.",
+      "preCondition": "A real converter instance is used.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_488",
+          "javaTestName": "UTCID_KHIEM_BE_488_convertToEntityAttribute_acceptsMixedCase",
+          "type": "N",
+          "scenario": "Database text uses lowercase or mixed case.",
+          "input": "OnGoInG and completed.",
+          "expected": "ONGOING and COMPLETED are returned."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_489",
+          "javaTestName": "UTCID_KHIEM_BE_489_convertToEntityAttribute_handlesNullAndRejectsUnknownValue",
+          "type": "A",
+          "scenario": "The database value is null or outside the enum.",
+          "input": "null and archived.",
+          "expected": "null is preserved and archived raises IllegalArgumentException."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassAnalyticsRepository",
+      "methodName": "findActiveStudents",
+      "functionCode": "ClassAnalyticsRepository.findActiveStudents",
+      "sheetName": "Khiem-findActiveStudents",
+      "testClass": "com.smartlearnly.backend.classroom.repository.KhiemClassAnalyticsRepositoryReportTest",
+      "description": "Map active enrollment native-query rows into student analytics records.",
+      "preCondition": "EntityManager and native Query are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_490",
+          "javaTestName": "UTCID_KHIEM_BE_490_findActiveStudents_mapsDatabaseRows",
+          "type": "N",
+          "scenario": "The query returns UUID text, strings and a SQL timestamp.",
+          "input": "One active-student row.",
+          "expected": "The row is converted to UUID, text and Instant fields."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassAnalyticsRepository",
+      "methodName": "getAssignmentStatistics",
+      "functionCode": "ClassAnalyticsRepository.getAssignmentStatistics",
+      "sheetName": "Khiem-assignmentStats",
+      "testClass": "com.smartlearnly.backend.classroom.repository.KhiemClassAnalyticsRepositoryReportTest",
+      "description": "Calculate assignment counts, rates, average score, late work and pending grading.",
+      "preCondition": "EntityManager and native Query are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_491",
+          "javaTestName": "UTCID_KHIEM_BE_491_getAssignmentStatistics_calculatesSubmissionRate",
+          "type": "N",
+          "scenario": "Two assignments and two active students yield four expected submissions.",
+          "input": "submitted=3; expected=4.",
+          "expected": "Submission rate is 75.00 and all counts are mapped."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_492",
+          "javaTestName": "UTCID_KHIEM_BE_492_getAssignmentStatistics_returnsZeroRateWithoutExpectedSubmissions",
+          "type": "B",
+          "scenario": "There are no assignments or active students.",
+          "input": "All counts zero and average score null.",
+          "expected": "Rate is zero and null average score is preserved."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassAnalyticsRepository",
+      "methodName": "findStudentAssessmentStatistics",
+      "functionCode": "ClassAnalyticsRepository.findStudentAssessmentStatistics",
+      "sheetName": "Khiem-studentStats",
+      "testClass": "com.smartlearnly.backend.classroom.repository.KhiemClassAnalyticsRepositoryReportTest",
+      "description": "Map per-student learning activity, score and late-submission native-query results.",
+      "preCondition": "EntityManager and native Query are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_493",
+          "javaTestName": "UTCID_KHIEM_BE_493_findStudentAssessmentStatistics_mapsNullableStatistics",
+          "type": "B",
+          "scenario": "One student has complete statistics and one has null aggregates.",
+          "input": "Two native-query rows.",
+          "expected": "Values and nulls are mapped without fabricating scores."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassAdminService",
+      "methodName": "create",
+      "functionCode": "ClassAdminService.create",
+      "sheetName": "Khiem-createClass",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassAdminUpdateReportTest",
+      "description": "Create a class only for a published course and active trainer, then build sessions and audit.",
+      "preCondition": "Repositories, current user, schedule service and audit service are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_497",
+          "javaTestName": "UTCID_KHIEM_BE_497_create_persistsValidUpcomingClassAndBuildsSessions",
+          "type": "N",
+          "scenario": "A valid future class is created.",
+          "input": "Published course, active trainer, valid Meet URL, dates, capacity and price.",
+          "expected": "The class is normalized, saved, synchronized and audited as upcoming."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_498",
+          "javaTestName": "UTCID_KHIEM_BE_498_create_rejectsUnpublishedCourseBeforeSaving",
+          "type": "A",
+          "scenario": "The selected course is still draft.",
+          "input": "course.status=DRAFT.",
+          "expected": "BUSINESS_RULE_VIOLATION is thrown before saving."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassAdminService",
+      "methodName": "restore",
+      "functionCode": "ClassAdminService.restore",
+      "sheetName": "Khiem-restoreClass",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassAdminUpdateReportTest",
+      "description": "Restore cancelled classes with lifecycle, capacity, course, trainer and session rules.",
+      "preCondition": "Class, enrollment, course, trainer, schedule and audit dependencies are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_499",
+          "javaTestName": "UTCID_KHIEM_BE_499_restore_rebuildsActiveCancelledClass",
+          "type": "N",
+          "scenario": "A cancelled class is restored with future dates.",
+          "input": "Valid published course, active trainer and capacity.",
+          "expected": "Status becomes UPCOMING and future sessions are rebuilt."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_500",
+          "javaTestName": "UTCID_KHIEM_BE_500_restore_completedDatesDeleteFutureSessions",
+          "type": "B",
+          "scenario": "A cancelled class is restored with dates that already ended.",
+          "input": "endDate is yesterday.",
+          "expected": "Status becomes COMPLETED and future sessions are deleted."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_501",
+          "javaTestName": "UTCID_KHIEM_BE_501_restore_rejectsClassThatIsNotCancelled",
+          "type": "A",
+          "scenario": "An upcoming class is sent to the restore endpoint.",
+          "input": "currentStatus=UPCOMING.",
+          "expected": "CONFLICT is thrown and no class is saved."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassAnalyticsService",
+      "methodName": "getForAdminOrTmo",
+      "functionCode": "ClassAnalyticsService.getForAdminOrTmo",
+      "sheetName": "Khiem-adminAnalytics",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassAnalyticsServiceReportTest",
+      "description": "Authorize through ClassAdminService and build class-level metrics plus a filtered student page.",
+      "preCondition": "Class services, analytics repository and progress service are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_494",
+          "javaTestName": "UTCID_KHIEM_BE_494_getForAdminOrTmo_buildsUnfilteredSummaryAndPage",
+          "type": "N",
+          "scenario": "Two active students have different progress and activity dates.",
+          "input": "Progress 25 and 100; one student inactive.",
+          "expected": "Average is 62.5, inactive count is one and summary remains unfiltered."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_495",
+          "javaTestName": "UTCID_KHIEM_BE_495_getForAdminOrTmo_rejectsUnsupportedProgressFilter",
+          "type": "A",
+          "scenario": "The client sends an unsupported progress filter.",
+          "input": "progress=almost_done.",
+          "expected": "INVALID_REQUEST is thrown."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassAnalyticsService",
+      "methodName": "getForTrainer",
+      "functionCode": "ClassAnalyticsService.getForTrainer",
+      "sheetName": "Khiem-trainerAnalytics",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassAnalyticsServiceReportTest",
+      "description": "Authorize analytics through the trainer's assigned-class lookup.",
+      "preCondition": "ClassTrainerService and analytics dependencies are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_496",
+          "javaTestName": "UTCID_KHIEM_BE_496_getForTrainer_usesAssignedClassAuthorizationPath",
+          "type": "B",
+          "scenario": "The assigned class has no active students.",
+          "input": "Empty student data; page=-1; size=500.",
+          "expected": "Trainer authorization is used, page becomes zero and size is capped at 100."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassSessionScheduleService",
+      "methodName": "validateScheduleDefinition",
+      "functionCode": "ClassSessionScheduleService.validateScheduleDefinition",
+      "sheetName": "Khiem-validateSchedule",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassSessionScheduleReportTest",
+      "description": "Validate trainer, dates, schedule JSON and the existence of at least one future session.",
+      "preCondition": "ObjectMapper is real and ClassSessionRepository is mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_502",
+          "javaTestName": "UTCID_KHIEM_BE_502_validateScheduleDefinition_rejectsMissingTrainer",
+          "type": "A",
+          "scenario": "No trainer is selected.",
+          "input": "trainerId=null.",
+          "expected": "INVALID_REQUEST asks the user to select a trainer."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_503",
+          "javaTestName": "UTCID_KHIEM_BE_503_validateScheduleDefinition_acceptsFutureSession",
+          "type": "N",
+          "scenario": "A valid one-slot schedule creates a session tomorrow.",
+          "input": "Tomorrow 09:00-10:00.",
+          "expected": "Validation completes without persistence."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_504",
+          "javaTestName": "UTCID_KHIEM_BE_504_validateScheduleDefinition_rejectsPastOnlySchedule",
+          "type": "B",
+          "scenario": "All configured dates are in the past.",
+          "input": "Start and end date were yesterday.",
+          "expected": "INVALID_REQUEST reports that no future session can be created."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassSessionScheduleService",
+      "methodName": "deleteFutureSessions",
+      "functionCode": "ClassSessionScheduleService.deleteFutureSessions",
+      "sheetName": "Khiem-deleteSessions",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassSessionScheduleReportTest",
+      "description": "Delete only sessions that have not started, preserving history.",
+      "preCondition": "ClassSessionRepository is mocked; dates are relative to execution day.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_505",
+          "javaTestName": "UTCID_KHIEM_BE_505_deleteFutureSessions_deletesOnlyNotStartedRows",
+          "type": "B",
+          "scenario": "The repository returns one historical and one future session.",
+          "input": "Yesterday and tomorrow.",
+          "expected": "Only tomorrow's session is deleted."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_506",
+          "javaTestName": "UTCID_KHIEM_BE_506_deleteFutureSessions_skipsRepositoryDeleteWhenEmpty",
+          "type": "B",
+          "scenario": "There is no mutable session.",
+          "input": "Empty repository result.",
+          "expected": "deleteAll is not called."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassTrainerService",
+      "methodName": "listMyAssignedClasses",
+      "functionCode": "ClassTrainerService.listMyAssignedClasses",
+      "sheetName": "Khiem-trainerClasses",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassTrainerServiceReportTest",
+      "description": "List only the authenticated trainer's classes with normalized filters and bounded pagination.",
+      "preCondition": "CurrentUserService and ClassOfferingRepository are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_507",
+          "javaTestName": "UTCID_KHIEM_BE_507_listMyAssignedClasses_normalizesFiltersAndCapsPageSize",
+          "type": "B",
+          "scenario": "Filters contain spaces and SQL LIKE wildcard characters; size exceeds limit.",
+          "input": "status=ONGOING; keyword=Java%_101; size=500.",
+          "expected": "Status is normalized, keyword is escaped and size is capped at 100."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_508",
+          "javaTestName": "UTCID_KHIEM_BE_508_listMyAssignedClasses_rejectsInvalidStatus",
+          "type": "A",
+          "scenario": "An unsupported status is requested.",
+          "input": "status=archived.",
+          "expected": "INVALID_REQUEST is thrown."
+        }
+      ]
+    },
+    {
+      "moduleName": "ClassTrainerService",
+      "methodName": "getMyAssignedClassDetail",
+      "functionCode": "ClassTrainerService.getMyAssignedClassDetail",
+      "sheetName": "Khiem-trainerClassDetail",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemClassTrainerServiceReportTest",
+      "description": "Return class detail only when it is assigned to the authenticated trainer.",
+      "preCondition": "CurrentUserService and ClassOfferingRepository are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_509",
+          "javaTestName": "UTCID_KHIEM_BE_509_getMyAssignedClassDetail_returnsOnlyAssignedProjection",
+          "type": "B",
+          "scenario": "The assigned class is over capacity.",
+          "input": "maxStudents=10; activeCount=15.",
+          "expected": "Detail is returned and available seats are clamped to zero."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_510",
+          "javaTestName": "UTCID_KHIEM_BE_510_getMyAssignedClassDetail_hidesUnassignedClass",
+          "type": "A",
+          "scenario": "The repository cannot find this class for the trainer.",
+          "input": "Empty assigned-class result.",
+          "expected": "RESOURCE_NOT_FOUND is thrown."
+        }
+      ]
+    },
+    {
+      "moduleName": "GoogleMeetService",
+      "methodName": "createMeetingUrl",
+      "functionCode": "GoogleMeetService.createMeetingUrl",
+      "sheetName": "Khiem-createMeetingUrl",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemGoogleMeetServiceReportTest",
+      "description": "Exchange a refresh token for an access token and create a Google Meet space with guarded configuration.",
+      "preCondition": "System settings are mocked and both HTTP services use MockRestServiceServer.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_511",
+          "javaTestName": "UTCID_KHIEM_BE_511_createMeetingUrl_exchangesTokenAndReturnsTrimmedUrl",
+          "type": "N",
+          "scenario": "OAuth and Meet endpoints both return successful JSON.",
+          "input": "Configured credentials and fake provider responses.",
+          "expected": "The Bearer token is used and the trimmed meeting URL is returned."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_512",
+          "javaTestName": "UTCID_KHIEM_BE_512_createMeetingUrl_rejectsDisabledIntegration",
+          "type": "A",
+          "scenario": "Google Meet generation is disabled.",
+          "input": "enabled=false.",
+          "expected": "EXTERNAL_SERVICE_UNAVAILABLE is thrown before any HTTP call."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_513",
+          "javaTestName": "UTCID_KHIEM_BE_513_createMeetingUrl_rejectsIncompleteConfiguration",
+          "type": "A",
+          "scenario": "The refresh token is blank.",
+          "input": "refreshToken=' '.",
+          "expected": "EXTERNAL_SERVICE_UNAVAILABLE reports incomplete configuration."
+        }
+      ]
+    },
+    {
+      "moduleName": "OpeningScheduleService",
+      "methodName": "list",
+      "functionCode": "OpeningScheduleService.list",
+      "sheetName": "Khiem-openingSchedules",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemOpeningScheduleServiceReportTest",
+      "description": "Validate dynamic opening-class filters, escape keyword patterns and map bounded paged results.",
+      "preCondition": "ClassOfferingRepository is mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_514",
+          "javaTestName": "UTCID_KHIEM_BE_514_list_escapesKeywordCapsSizeAndMapsAvailability",
+          "type": "B",
+          "scenario": "Keyword contains SQL LIKE symbols, requested size is large and class is full.",
+          "input": "Java%_101; size=500; activeCount>capacity.",
+          "expected": "Keyword is escaped, size is 100 and available slots are zero."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_515",
+          "javaTestName": "UTCID_KHIEM_BE_515_list_rejectsInvalidDateAndPriceRanges",
+          "type": "A",
+          "scenario": "Date or price range is reversed.",
+          "input": "startFrom>startTo; then minPrice>maxPrice.",
+          "expected": "INVALID_REQUEST is thrown for each invalid range."
+        }
+      ]
+    },
+    {
+      "moduleName": "OpeningScheduleService",
+      "methodName": "getDetail",
+      "functionCode": "OpeningScheduleService.getDetail",
+      "sheetName": "Khiem-openingDetail",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemOpeningScheduleServiceReportTest",
+      "description": "Validate class ID and return only a class exposed by the opening-schedule query.",
+      "preCondition": "ClassOfferingRepository is mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_516",
+          "javaTestName": "UTCID_KHIEM_BE_516_getDetail_rejectsNullClassId",
+          "type": "A",
+          "scenario": "No class ID is supplied.",
+          "input": "classId=null.",
+          "expected": "INVALID_REQUEST is thrown."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_517",
+          "javaTestName": "UTCID_KHIEM_BE_517_getDetail_returnsOpeningClass",
+          "type": "N",
+          "scenario": "The opening class exists and has no active enrollment count.",
+          "input": "capacity=30; activeCount=null.",
+          "expected": "Active count becomes zero and available slots are 30."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_518",
+          "javaTestName": "UTCID_KHIEM_BE_518_getDetail_rejectsMissingOpeningClass",
+          "type": "A",
+          "scenario": "The ID does not identify an opening class.",
+          "input": "Empty repository result.",
+          "expected": "RESOURCE_NOT_FOUND is thrown."
+        }
+      ]
+    },
+    {
+      "moduleName": "ScheduleService",
+      "methodName": "getMySchedule",
+      "functionCode": "ScheduleService.getMySchedule",
+      "sheetName": "Khiem-mySchedule",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemScheduleServiceReportTest",
+      "description": "Resolve the trainee's Monday-to-Sunday window and map visible enrolled-class sessions.",
+      "preCondition": "CurrentUserService and ClassSessionRepository are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_519",
+          "javaTestName": "UTCID_KHIEM_BE_519_getMySchedule_resolvesWeekAndMapsSessions",
+          "type": "N",
+          "scenario": "A Wednesday is requested and one Friday session exists.",
+          "input": "requestedDate=2026-07-29.",
+          "expected": "Window is 2026-07-27 through 2026-08-02 and the session is mapped."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_520",
+          "javaTestName": "UTCID_KHIEM_BE_520_getMySchedule_usesCurrentWeekWhenDateOmitted",
+          "type": "B",
+          "scenario": "The client omits the reference date.",
+          "input": "requestedDate=null.",
+          "expected": "The current business-server week is used."
+        }
+      ]
+    },
+    {
+      "moduleName": "ScheduleService",
+      "methodName": "getStaffSchedule",
+      "functionCode": "ScheduleService.getStaffSchedule",
+      "sheetName": "Khiem-staffSchedule",
+      "testClass": "com.smartlearnly.backend.classroom.service.KhiemScheduleServiceReportTest",
+      "description": "Enforce TRAINER/TMO schedule scope and resolve the selected trainer.",
+      "preCondition": "Current user, user repository and session repository are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_521",
+          "javaTestName": "UTCID_KHIEM_BE_521_getStaffSchedule_trainerCanOnlySeeOwnSchedule",
+          "type": "A",
+          "scenario": "A trainer passes another trainer ID.",
+          "input": "actor.role=TRAINER; requestedTrainerId differs.",
+          "expected": "The actor ID is used and the requested ID is ignored."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_522",
+          "javaTestName": "UTCID_KHIEM_BE_522_getStaffSchedule_tmoValidatesSelectedTrainer",
+          "type": "N",
+          "scenario": "TMO selects an existing active trainer.",
+          "input": "actor.role=TMO; requested trainer is active.",
+          "expected": "Trainer validity is checked and their sessions are returned."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_523",
+          "javaTestName": "UTCID_KHIEM_BE_523_getStaffSchedule_rejectsUnauthorizedRole",
+          "type": "A",
+          "scenario": "An unsupported role requests the staff schedule.",
+          "input": "actor.role=ADMIN.",
+          "expected": "FORBIDDEN is thrown."
+        }
+      ]
+    },
+    {
+      "moduleName": "TraineeProgressService",
+      "methodName": "calculateStudentClassProgressPercent",
+      "functionCode": "TraineeProgressService.calculateStudentClassProgressPercent",
+      "sheetName": "Khiem-classProgress",
+      "testClass": "com.smartlearnly.backend.lessonprogress.service.KhiemTraineeProgressReportTest",
+      "description": "Calculate weighted class progress from published lesson, quiz and flashcard completion.",
+      "preCondition": "Curriculum resolution and lesson-progress repository are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_524",
+          "javaTestName": "UTCID_KHIEM_BE_524_calculateStudentClassProgressPercent_returnsZeroWithoutContent",
+          "type": "B",
+          "scenario": "The effective curriculum has no content.",
+          "input": "No lessons and no progress rows.",
+          "expected": "Progress is zero."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_525",
+          "javaTestName": "UTCID_KHIEM_BE_525_calculateStudentClassProgressPercent_appliesConfiguredWeights",
+          "type": "N",
+          "scenario": "Lesson and flashcard are complete while quiz is incomplete.",
+          "input": "Lesson=100%, Quiz=0%, Flashcard=100%.",
+          "expected": "Weighted overall progress is 75%."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_526",
+          "javaTestName": "UTCID_KHIEM_BE_526_calculateStudentClassProgressPercent_ignoresDraftLessons",
+          "type": "B",
+          "scenario": "A completed published lesson exists beside an uncompleted draft lesson.",
+          "input": "One PUBLISHED and one DRAFT video.",
+          "expected": "Only published content is counted, producing 100%."
+        }
+      ]
+    },
+    {
+      "moduleName": "TraineeProgressService",
+      "methodName": "updateLessonProgress",
+      "functionCode": "TraineeProgressService.updateLessonProgress",
+      "sheetName": "Khiem-updateProgress",
+      "testClass": "com.smartlearnly.backend.lessonprogress.service.KhiemTraineeProgressReportTest",
+      "description": "Create or update progress in the correct online/class curriculum scope and enforce course-class consistency.",
+      "preCondition": "Current user, curriculum, class and progress dependencies are mocked.",
+      "cases": [
+        {
+          "id": "UTCID_KHIEM_BE_527",
+          "javaTestName": "UTCID_KHIEM_BE_527_updateLessonProgress_createsOnlineProgress",
+          "type": "N",
+          "scenario": "The trainee completes an online lesson with no previous row.",
+          "input": "classId=null; completed=true.",
+          "expected": "A new online progress row is saved with completion timestamps."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_528",
+          "javaTestName": "UTCID_KHIEM_BE_528_updateLessonProgress_rejectsCourseClassMismatch",
+          "type": "A",
+          "scenario": "The requested course does not own the selected class.",
+          "input": "requestedCourseId differs from class.courseId.",
+          "expected": "INVALID_REQUEST is thrown before curriculum resolution."
+        },
+        {
+          "id": "UTCID_KHIEM_BE_529",
+          "javaTestName": "UTCID_KHIEM_BE_529_updateLessonProgress_marksExistingProgressIncomplete",
+          "type": "B",
+          "scenario": "An existing completed online lesson is unchecked.",
+          "input": "completed=false.",
+          "expected": "completedAt is cleared and lastAccessedAt is refreshed."
+        }
+      ]
+    }
+  ]
+}

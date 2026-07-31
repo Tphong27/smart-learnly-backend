@@ -5,6 +5,11 @@ import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
+import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
+import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.test.dto.TestModel;
 import com.smartlearnly.backend.test.entity.Test;
 import com.smartlearnly.backend.test.entity.TestAttempt;
@@ -17,9 +22,12 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +43,19 @@ public class TestService {
     private final TestAttemptRepository testAttemptRepository;
     private final StudentTestAnswerRepository studentTestAnswerRepository;
     private final CurriculumSectionRepository curriculumSectionRepository;
+    private NotificationService notificationService;
+    private ClassEnrollmentRepository notificationClassEnrollmentRepository;
+    private CourseEnrollmentRepository notificationCourseEnrollmentRepository;
+
+    @Autowired(required = false)
+    void setNotificationDependencies(
+            NotificationService notificationService,
+            ClassEnrollmentRepository classEnrollmentRepository,
+            CourseEnrollmentRepository courseEnrollmentRepository) {
+        this.notificationService = notificationService;
+        this.notificationClassEnrollmentRepository = classEnrollmentRepository;
+        this.notificationCourseEnrollmentRepository = courseEnrollmentRepository;
+    }
 
     public TestModel.Response createTest(
             TestModel.CreateRequest request) {
@@ -73,6 +94,14 @@ public class TestService {
                 currentUserService.requireAuthenticatedUser().getId());
 
         Test saved = testRepository.save(test);
+
+        if (Boolean.TRUE.equals(saved.getIsPublished())) {
+            emitTestNotificationToStudents(
+                    saved,
+                    "New test available",
+                    "A new test is available: " + saved.getTitle() + ".",
+                    "created");
+        }
 
         return mapToResponse(saved);
     }
@@ -204,15 +233,28 @@ public class TestService {
             resetAttempts(id);
         }
 
+        if (Boolean.TRUE.equals(updated.getIsPublished())) {
+            emitTestNotificationToStudents(
+                    updated,
+                    "Test updated",
+                    updated.getTitle() + " was updated.",
+                    "updated");
+        }
+
         return mapToResponse(updated);
     }
 
     @Transactional
     public void deleteTest(UUID id) {
 
-        if (!testRepository.existsById(id)) {
-            throw new EntityNotFoundException(
-                    "Test not found");
+        Test test = testRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        if (Boolean.TRUE.equals(test.getIsPublished())) {
+            emitTestNotificationToStudents(
+                    test,
+                    "Test removed",
+                    test.getTitle() + " was removed.",
+                    "deleted");
         }
 
         // Attempts and their answers reference the test without database-level
@@ -220,6 +262,46 @@ public class TestService {
         // after it has been taken.
         resetAttempts(id);
         testRepository.deleteById(id);
+    }
+
+    private void emitTestNotificationToStudents(Test test, String title, String body, String eventSuffix) {
+        if (notificationService == null || test == null) {
+            return;
+        }
+        List<UUID> studentIds = List.of();
+        if (test.getClassId() != null && notificationClassEnrollmentRepository != null) {
+            studentIds = notificationClassEnrollmentRepository.findActiveOrCompletedStudentIdsByClassId(test.getClassId());
+        } else if (test.getCourseId() != null && notificationCourseEnrollmentRepository != null) {
+            studentIds = notificationCourseEnrollmentRepository.findActiveOrCompletedStudentIdsByCourseId(test.getCourseId());
+        }
+        for (UUID studentId : studentIds) {
+            notificationService.emit(new NotificationCreateCommand(
+                    studentId,
+                    NotificationType.TEST,
+                    title,
+                    body,
+                    "TEST",
+                    test.getId(),
+                    "/tests/" + test.getId(),
+                    test.getCreatedBy(),
+                    "test:" + test.getId() + ":" + eventSuffix,
+                    notificationPayload(
+                            "testId", test.getId(),
+                            "courseId", test.getCourseId(),
+                            "classId", test.getClassId(),
+                            "title", test.getTitle())));
+        }
+    }
+
+    private Map<String, Object> notificationPayload(Object... keyValues) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        for (int index = 0; index + 1 < keyValues.length; index += 2) {
+            Object value = keyValues[index + 1];
+            if (value != null) {
+                payload.put(String.valueOf(keyValues[index]), value);
+            }
+        }
+        return payload;
     }
 
     private void resetAttempts(UUID testId) {

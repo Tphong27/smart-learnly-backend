@@ -202,7 +202,9 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
 
     private String buildPrompt(GenerationRequest request) {
         StringBuilder sourceBuilder = new StringBuilder();
-        for (SourceInput source : request.sources()) {
+        List<SourceInput> sources = request.sources() == null ? List.of() : request.sources();
+        boolean hasSources = !sources.isEmpty();
+        for (SourceInput source : sources) {
             sourceBuilder.append("\nSOURCE ")
                     .append(source.generationSourceId())
                     .append(" | ")
@@ -227,9 +229,23 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                 ? "Generate clear, grounded draft questions that assess the selected lesson materials."
                 : request.generationInstruction().trim();
 
+        String groundingRule = hasSources
+                ? "Use only the provided SOURCE/CHUNK content. Do not use outside knowledge."
+                : "No source material was selected. Generate from the user generation instruction and general course/module context only; keep questions as drafts for human review.";
+        String evidenceRule = hasSources
+                ? """
+                - At least one evidence item must support the correct answer.
+                - If the provided chunks are insufficient, return fewer questions rather than hallucinating.
+                """
+                : """
+                - Evidence may be an empty array because no source material was selected.
+                - Do not invent source IDs, chunk IDs, chunk references, or excerpts.
+                """;
+        String sourcesText = hasSources ? sourceBuilder.toString() : "No source material selected.";
+
         return """
                 You create draft questions for a human-reviewed Question Bank.
-                This is not a chatbot. Use only the provided SOURCE/CHUNK content. Do not use outside knowledge.
+                This is not a chatbot. %s
                 Output language: %s.
                 Requested count: %d.
                 Allowed question types: %s.
@@ -260,17 +276,18 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                 - Every question must have exactly one correct answer.
                 - multiple_choice must have exactly 4 answers.
                 - true_false must have exactly two answers: True and False.
-                - At least one evidence item must support the correct answer.
-                - If the provided chunks are insufficient, return fewer questions rather than hallucinating.
+                %s
 
                 Sources:
                 %s
                 """.formatted(
+                groundingRule,
                 request.language(),
                 request.requestedCount(),
                 String.join(", ", request.questionTypes()),
                 instruction,
-                sourceBuilder
+                evidenceRule,
+                sourcesText
         );
     }
 

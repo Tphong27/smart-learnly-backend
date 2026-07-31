@@ -18,4 +18,25 @@ public final class SettingKeys {
     public static final String GOOGLE_CLIENT_ID = "oauth.google.client_id";
     public static final String GOOGLE_CLIENT_SECRET = "oauth.google.client_secret";
     public static final String GOOGLE_SCOPE = "oauth.google.scope";
+
+    // Google Meet integration.
+    public static final String GOOGLE_MEET_ENABLED = "google_meet.enabled";
+    public static final String GOOGLE_MEET_REFRESH_TOKEN = "google_meet.refresh_token";
+
+    // Question image import.
+    public static final String QUESTION_IMAGE_IMPORT_ENABLED = "question_image_import.enabled";
+    public static final String QUESTION_IMAGE_IMPORT_PROVIDER = "question_image_import.provider";
+    public static final String QUESTION_IMAGE_IMPORT_API_KEY = "question_image_import.api_key";
+    public static final String QUESTION_IMAGE_IMPORT_MODEL = "question_image_import.model";
+    public static final String QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS = "question_image_import.timeout_seconds";
+    public static final String QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB = "question_image_import.max_file_size_mb";
+    public static final String QUESTION_IMAGE_IMPORT_MAX_FILES = "question_image_import.max_files";
+
+    // Assignment AI draft.
+    public static final String ASSIGNMENT_AI_ENABLED = "assignment_ai.enabled";
+    public static final String ASSIGNMENT_AI_PROVIDER = "assignment_ai.provider";
+    public static final String ASSIGNMENT_AI_API_KEY = "assignment_ai.api_key";
+    public static final String ASSIGNMENT_AI_MODEL = "assignment_ai.model";
+    public static final String ASSIGNMENT_AI_FALLBACK_MODEL = "assignment_ai.fallback_model";
+    public static final String ASSIGNMENT_AI_TIMEOUT_SECONDS = "assignment_ai.timeout_seconds";
 }

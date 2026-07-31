@@ -44,6 +44,8 @@ import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import java.io.IOException;
+import java.io.StringReader;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -56,12 +58,18 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import javax.swing.text.MutableAttributeSet;
+import javax.swing.text.html.HTML;
+import javax.swing.text.html.HTMLEditorKit;
+import javax.swing.text.html.parser.ParserDelegator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -78,6 +86,7 @@ public class AdminFlashcardStagingService {
     private static final String SOURCE_NAME_UPLOADED_PDF_GENERATION = "Uploaded PDF Generation";
     private static final String SOURCE_NAME_VIDEO_TRANSCRIPT_GENERATION = "Video Transcript Generation";
     private static final String STATUS_DRAFT = "draft";
+    private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[a-zA-Z][^>]*>");
     private static final String STATUS_APPROVED = "approved";
     private static final String STATUS_REJECTED = "rejected";
     private static final List<String> VISIBLE_STAGING_STATUSES = List.of(STATUS_DRAFT, STATUS_APPROVED);
@@ -205,8 +214,8 @@ public class AdminFlashcardStagingService {
             card.setSourceQuestionId(question.getId());
             card.setFrontText(buildFrontText(question, answers));
             card.setBackText(buildBackText(answers));
-            card.setExplanation(normalizeNullable(question.getExplanation()));
-            card.setSourceExcerpt(normalizeNullable(question.getQuestionText()));
+            card.setExplanation(normalizeQuestionContent(question.getExplanation()));
+            card.setSourceExcerpt(normalizeQuestionContent(question.getQuestionText()));
             card.setStatus(STATUS_DRAFT);
             card.setSortOrder(index);
             validateCard(card);
@@ -959,13 +968,13 @@ public class AdminFlashcardStagingService {
     }
 
     private String buildFrontText(Question question, List<QuestionAnswer> answers) {
-        String questionText = normalizeRequired(question.getQuestionText(), "Question text is required");
+        String questionText = normalizeRequiredQuestionContent(question.getQuestionText(), "Question text is required");
         if (!hasOptions(question, answers)) {
             return questionText;
         }
         List<String> options = orderedAnswers(answers).stream()
                 .map(QuestionAnswer::getAnswerText)
-                .map(this::normalizeNullable)
+                .map(this::normalizeQuestionContent)
                 .filter(value -> value != null)
                 .toList();
         if (options.isEmpty()) {
@@ -1001,7 +1010,7 @@ public class AdminFlashcardStagingService {
         List<String> correctAnswers = orderedAnswers(answers).stream()
                 .filter(answer -> Boolean.TRUE.equals(answer.getIsCorrect()))
                 .map(QuestionAnswer::getAnswerText)
-                .map(this::normalizeNullable)
+                .map(this::normalizeQuestionContent)
                 .filter(value -> value != null)
                 .toList();
         if (correctAnswers.isEmpty()) {
@@ -1171,6 +1180,51 @@ public class AdminFlashcardStagingService {
         return value == null ? null : value.name().toLowerCase(Locale.ROOT);
     }
 
+    private String normalizeRequiredQuestionContent(String value, String message) {
+        String normalized = normalizeQuestionContent(value);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
+        }
+        return normalized;
+    }
+
+    private String normalizeQuestionContent(String value) {
+        if (value == null) {
+            return null;
+        }
+        String decoded = HtmlUtils.htmlUnescape(value).replace('\u00A0', ' ');
+        String plainText = looksLikeHtml(decoded)
+                ? HtmlPlainTextExtractor.extract(decoded)
+                : decoded;
+        return normalizePlainText(plainText);
+    }
+
+    private boolean looksLikeHtml(String value) {
+        return value != null && HTML_TAG_PATTERN.matcher(value).find();
+    }
+
+    private String normalizePlainText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value
+                .replace('\u00A0', ' ')
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
+        String[] lines = normalized.split("\n", -1);
+        List<String> cleanedLines = new ArrayList<>();
+        for (String line : lines) {
+            String cleaned = line.trim().replaceAll("[ \\t\\x0B\\f]+", " ");
+            if (!cleaned.isEmpty()) {
+                cleanedLines.add(cleaned);
+            }
+        }
+        if (cleanedLines.isEmpty()) {
+            return null;
+        }
+        return String.join("\n", cleanedLines);
+    }
+
     private String normalizeRequired(String value, String message) {
         String normalized = normalizeNullable(value);
         if (normalized == null) {
@@ -1201,6 +1255,94 @@ public class AdminFlashcardStagingService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static final class HtmlPlainTextExtractor extends HTMLEditorKit.ParserCallback {
+        private static final Set<HTML.Tag> BLOCK_TAGS = Set.of(
+                HTML.Tag.ADDRESS,
+                HTML.Tag.BLOCKQUOTE,
+                HTML.Tag.DD,
+                HTML.Tag.DIV,
+                HTML.Tag.DL,
+                HTML.Tag.DT,
+                HTML.Tag.H1,
+                HTML.Tag.H2,
+                HTML.Tag.H3,
+                HTML.Tag.H4,
+                HTML.Tag.H5,
+                HTML.Tag.H6,
+                HTML.Tag.HR,
+                HTML.Tag.LI,
+                HTML.Tag.OL,
+                HTML.Tag.P,
+                HTML.Tag.PRE,
+                HTML.Tag.TABLE,
+                HTML.Tag.TD,
+                HTML.Tag.TH,
+                HTML.Tag.TR,
+                HTML.Tag.UL
+        );
+
+        private final StringBuilder builder = new StringBuilder();
+        private boolean pendingLineBreak;
+
+        static String extract(String html) {
+            HtmlPlainTextExtractor callback = new HtmlPlainTextExtractor();
+            try {
+                new ParserDelegator().parse(new StringReader(html), callback, true);
+            } catch (IOException exception) {
+                return html;
+            }
+            return callback.builder.toString();
+        }
+
+        @Override
+        public void handleText(char[] data, int pos) {
+            appendLineBreakIfNeeded();
+            builder.append(data);
+        }
+
+        @Override
+        public void handleStartTag(HTML.Tag tag, MutableAttributeSet attributes, int pos) {
+            if (isBlock(tag)) {
+                requestLineBreak();
+            }
+        }
+
+        @Override
+        public void handleEndTag(HTML.Tag tag, int pos) {
+            if (isBlock(tag)) {
+                requestLineBreak();
+            }
+        }
+
+        @Override
+        public void handleSimpleTag(HTML.Tag tag, MutableAttributeSet attributes, int pos) {
+            if (tag == HTML.Tag.BR || isBlock(tag)) {
+                requestLineBreak();
+            }
+        }
+
+        private boolean isBlock(HTML.Tag tag) {
+            return BLOCK_TAGS.contains(tag);
+        }
+
+        private void requestLineBreak() {
+            if (builder.length() > 0) {
+                pendingLineBreak = true;
+            }
+        }
+
+        private void appendLineBreakIfNeeded() {
+            if (!pendingLineBreak) {
+                return;
+            }
+            int length = builder.length();
+            if (length > 0 && builder.charAt(length - 1) != '\n') {
+                builder.append('\n');
+            }
+            pendingLineBreak = false;
+        }
     }
 
     private record SetContext(

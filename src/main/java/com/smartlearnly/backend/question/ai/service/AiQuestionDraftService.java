@@ -12,6 +12,10 @@ import com.smartlearnly.backend.file.service.FileStorageService.StoredFile;
 import com.smartlearnly.backend.file.service.SupabaseStorageClient;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
 import com.smartlearnly.backend.question.ai.entity.AiQuestionGenerationBatch;
 import com.smartlearnly.backend.question.ai.entity.AiQuestionGenerationDraft;
@@ -35,10 +39,6 @@ import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.learning.module.entity.CourseModule;
 import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
-import com.smartlearnly.backend.rag.entity.RagMaterialChunk;
-import com.smartlearnly.backend.rag.entity.RagMaterialSnapshot;
-import com.smartlearnly.backend.rag.repository.RagMaterialChunkRepository;
-import com.smartlearnly.backend.rag.repository.RagMaterialSnapshotRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.videoai.entity.VideoAiContent;
 import com.smartlearnly.backend.videoai.entity.VideoAiTranscriptSegment;
@@ -60,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -89,8 +90,6 @@ public class AiQuestionDraftService {
     private final CourseAccessService courseAccessService;
     private final CurrentUserService currentUserService;
     private final CourseModuleRepository courseModuleRepository;
-    private final RagMaterialSnapshotRepository snapshotRepository;
-    private final RagMaterialChunkRepository chunkRepository;
     private final AiQuestionGenerationBatchRepository batchRepository;
     private final AiQuestionGenerationSourceRepository sourceRepository;
     private final AiQuestionGenerationDraftRepository draftRepository;
@@ -106,6 +105,12 @@ public class AiQuestionDraftService {
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final VideoAiContentRepository videoAiContentRepository;
     private final ObjectMapper objectMapper;
+    private NotificationService notificationService;
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
     @Transactional(readOnly = true)
     public List<AiQuestionDraftDtos.SourceOptionResponse> listSources(UUID courseId) {
@@ -114,8 +119,6 @@ public class AiQuestionDraftService {
                 .filter(content -> normalizeSourceText(content.getTranscriptText()).length() >= MIN_SOURCE_CHARACTERS)
                 .map(content -> new AiQuestionDraftDtos.SourceOptionResponse(
                         content.getId(),
-                        null,
-                        null,
                         content.getId(),
                         content.getCourseId(),
                         content.getLessonId(),
@@ -127,7 +130,6 @@ public class AiQuestionDraftService {
                         durationSeconds(content),
                         checksum(normalizeSourceText(content.getTranscriptText())),
                         String.valueOf(content.getRevision() == null ? 0 : content.getRevision()),
-                        content.getStatus(),
                         Math.max(1, content.getSegments().size()),
                         normalizeSourceText(content.getTranscriptText()).length(),
                         content.getUpdatedAt()
@@ -291,7 +293,7 @@ public class AiQuestionDraftService {
         if (contentChanged) {
             markEvidenceNeedsReview(draft);
         }
-        applyDraftValidation(batch.getCourseId(), draft, evidenceRepository.findByDraftId(draft.getId()));
+        applyDraftValidation(batch.getCourseId(), draft, evidenceRepository.findByDraftId(draft.getId()), evidenceRequired(batch.getId()));
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), currentUserService.requireAuthenticatedUser().getId(), before, draftSnapshot(saved), "edited");
         refreshBatchCounts(batch);
@@ -335,7 +337,7 @@ public class AiQuestionDraftService {
         draft.setEvidenceStatus(request.evidenceStillFits()
                 ? AiQuestionGenerationDraft.EVIDENCE_VALID
                 : AiQuestionGenerationDraft.EVIDENCE_INVALID);
-        applyDraftValidation(batch.getCourseId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences, evidenceRequired(batch.getId()));
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), actor.getId(), before, draftSnapshot(saved), "evidence_confirmed");
         refreshBatchCounts(batch);
@@ -360,7 +362,7 @@ public class AiQuestionDraftService {
                 skipped.add(new AiQuestionDraftDtos.SkippedItem(draft.getId(), "AI_DRAFT_VERSION_CONFLICT", "Draft has been updated, please reload"));
                 continue;
             }
-            String skipReason = acceptBlockReason(courseId, draft);
+            String skipReason = acceptBlockReason(courseId, batch, draft);
             if (skipReason != null) {
                 skipped.add(new AiQuestionDraftDtos.SkippedItem(draft.getId(), skipReason, messageForSkip(skipReason)));
                 continue;
@@ -395,8 +397,9 @@ public class AiQuestionDraftService {
                     sourceInputs
             ));
             int generated = 0;
+            boolean evidenceRequired = !sourceInputs.isEmpty();
             for (QuestionGenerationProvider.GeneratedQuestion generatedQuestion : result.questions()) {
-                persistGeneratedDraft(batch, moduleId, generatedQuestion);
+                persistGeneratedDraft(batch, moduleId, generatedQuestion, evidenceRequired);
                 generated += 1;
             }
             batch.setGeneratedCount(generated);
@@ -410,16 +413,52 @@ public class AiQuestionDraftService {
             }
             batch.setCompletedAt(Instant.now());
             refreshBatchCounts(batch);
+            emitAiBatchNotification(batch);
         } catch (BusinessException exception) {
             batch.setStatus(AiQuestionGenerationBatch.STATUS_FAILED);
             batch.setErrorCode(exception.errorCode().name());
             batch.setSafeErrorMessage(exception.getMessage());
             batch.setCompletedAt(Instant.now());
             refreshBatchCounts(batch);
+            emitAiBatchNotification(batch);
         }
     }
 
-    private void persistGeneratedDraft(AiQuestionGenerationBatch batch, UUID moduleId, QuestionGenerationProvider.GeneratedQuestion generatedQuestion) {
+    private void emitAiBatchNotification(AiQuestionGenerationBatch batch) {
+        if (notificationService == null || batch.getRequestedBy() == null) {
+            return;
+        }
+        boolean ready = AiQuestionGenerationBatch.STATUS_READY.equals(batch.getStatus());
+        boolean failed = AiQuestionGenerationBatch.STATUS_FAILED.equals(batch.getStatus());
+        if (!ready && !failed) {
+            return;
+        }
+        notificationService.emit(new NotificationCreateCommand(
+                batch.getRequestedBy(),
+                NotificationType.AI_SUGGESTION,
+                ready ? "AI question drafts are ready" : "AI question generation failed",
+                ready
+                        ? "Review the generated draft questions before adding them to the course."
+                        : (batch.getSafeErrorMessage() == null ? "The AI provider did not return usable draft questions." : batch.getSafeErrorMessage()),
+                "AI_QUESTION_BATCH",
+                batch.getId(),
+                "/admin/courses/" + batch.getCourseId() + "/questions/ai-drafts/" + batch.getId(),
+                null,
+                "ai-question-batch:" + batch.getId() + ":" + batch.getStatus(),
+                NotificationPayloads.of(
+                        "courseId", batch.getCourseId(),
+                        "status", batch.getStatus(),
+                        "generatedCount", batch.getGeneratedCount() == null ? 0 : batch.getGeneratedCount()
+                )
+        ));
+    }
+
+    private void persistGeneratedDraft(
+            AiQuestionGenerationBatch batch,
+            UUID moduleId,
+            QuestionGenerationProvider.GeneratedQuestion generatedQuestion,
+            boolean evidenceRequired
+    ) {
         AiQuestionGenerationDraft draft = new AiQuestionGenerationDraft();
         draft.setBatchId(batch.getId());
         draft.setStatus(AiQuestionGenerationDraft.STATUS_GENERATED_DRAFT);
@@ -429,16 +468,18 @@ public class AiQuestionDraftService {
         draft.setModuleId(moduleId);
         draft.setAnswersJson(toJson(normalizeAnswers(generatedQuestion.answers())));
         List<AiQuestionGenerationEvidence> evidences = new ArrayList<>();
-        applyDraftValidation(batch.getCourseId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences, evidenceRequired);
         draft = draftRepository.save(draft);
 
-        for (QuestionGenerationProvider.GeneratedEvidence generatedEvidence : generatedQuestion.evidence() == null ? List.<QuestionGenerationProvider.GeneratedEvidence>of() : generatedQuestion.evidence()) {
+        List<QuestionGenerationProvider.GeneratedEvidence> generatedEvidences = evidenceRequired && generatedQuestion.evidence() != null
+                ? generatedQuestion.evidence()
+                : List.of();
+        for (QuestionGenerationProvider.GeneratedEvidence generatedEvidence : generatedEvidences) {
             AiQuestionGenerationEvidence evidence = new AiQuestionGenerationEvidence();
             evidence.setDraftId(draft.getId());
             evidence.setGenerationSourceId(generatedEvidence.generationSourceId());
             AiQuestionGenerationSourceChunk sourceChunk = sourceChunkRepository.findById(generatedEvidence.chunkId()).orElse(null);
             evidence.setSourceChunkId(sourceChunk == null ? null : sourceChunk.getId());
-            evidence.setMaterialChunkId(sourceChunk == null ? generatedEvidence.chunkId() : sourceChunk.getMaterialChunkId());
             evidence.setChunkReference(normalizeRequired(generatedEvidence.chunkReference(), "Evidence chunk reference is required"));
             evidence.setSourceExcerpt(normalizeRequired(generatedEvidence.excerpt(), "Evidence excerpt is required"));
             evidence.setStartMs(sourceChunk == null ? null : sourceChunk.getStartMs());
@@ -449,19 +490,19 @@ public class AiQuestionDraftService {
                     : AiQuestionGenerationDraft.EVIDENCE_INVALID);
             evidences.add(evidenceRepository.save(evidence));
         }
-        applyDraftValidation(batch.getCourseId(), draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences, evidenceRequired);
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), batch.getRequestedBy(), null, draftSnapshot(saved), "generated");
     }
 
-    private String acceptBlockReason(UUID courseId, AiQuestionGenerationDraft draft) {
+    private String acceptBlockReason(UUID courseId, AiQuestionGenerationBatch batch, AiQuestionGenerationDraft draft) {
         if (!AiQuestionGenerationDraft.STATUS_GENERATED_DRAFT.equals(draft.getStatus())) {
             return "AI_DRAFT_INVALID";
         }
         if (AiQuestionGenerationDraft.VALIDATION_INVALID.equals(draft.getValidationStatus())) {
             return "AI_DRAFT_INVALID";
         }
-        if (!AiQuestionGenerationDraft.EVIDENCE_VALID.equals(draft.getEvidenceStatus())) {
+        if (evidenceRequired(batch.getId()) && !AiQuestionGenerationDraft.EVIDENCE_VALID.equals(draft.getEvidenceStatus())) {
             return "AI_EVIDENCE_REQUIRED";
         }
         if (questionRepository.existsActiveDuplicateInCourse(courseId, draft.getQuestionText(), null)) {
@@ -496,7 +537,12 @@ public class AiQuestionDraftService {
         return saved;
     }
 
-    private void applyDraftValidation(UUID courseId, AiQuestionGenerationDraft draft, List<AiQuestionGenerationEvidence> evidences) {
+    private void applyDraftValidation(
+            UUID courseId,
+            AiQuestionGenerationDraft draft,
+            List<AiQuestionGenerationEvidence> evidences,
+            boolean evidenceRequired
+    ) {
         List<String> warnings = new ArrayList<>();
         List<AiQuestionDraftDtos.DuplicateCandidateResponse> duplicateCandidates = duplicateCandidates(courseId, draft.getQuestionText());
         boolean activeExactDuplicate = duplicateCandidates.stream()
@@ -509,19 +555,21 @@ public class AiQuestionDraftService {
         boolean hasSupportingEvidence = evidences.stream().anyMatch(evidence ->
                 Boolean.TRUE.equals(evidence.getSupportsCorrectAnswer())
                         && AiQuestionGenerationDraft.EVIDENCE_VALID.equals(evidence.getEvidenceStatus()));
-        if (!hasSupportingEvidence) {
+        if (evidenceRequired && !hasSupportingEvidence) {
             warnings.add("Missing valid evidence for the correct answer");
         }
         draft.setDuplicateCandidates(toJson(duplicateCandidates));
         draft.setValidationWarnings(toJson(warnings));
-        if (hasSupportingEvidence && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
+        if (!evidenceRequired && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
+            draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_VALID);
+        } else if (hasSupportingEvidence && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
             draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_VALID);
         } else if (!hasSupportingEvidence && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
             draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_INVALID);
         }
         if (activeExactDuplicate) {
             draft.setValidationStatus(AiQuestionGenerationDraft.VALIDATION_INVALID);
-        } else if (!structurallyValid || !hasSupportingEvidence || AiQuestionGenerationDraft.EVIDENCE_INVALID.equals(draft.getEvidenceStatus())
+        } else if (!structurallyValid || (evidenceRequired && !hasSupportingEvidence) || AiQuestionGenerationDraft.EVIDENCE_INVALID.equals(draft.getEvidenceStatus())
                 || AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
             draft.setValidationStatus(AiQuestionGenerationDraft.VALIDATION_INVALID);
         } else if (!warnings.isEmpty()) {
@@ -529,6 +577,10 @@ public class AiQuestionDraftService {
         } else {
             draft.setValidationStatus(AiQuestionGenerationDraft.VALIDATION_VALID);
         }
+    }
+
+    private boolean evidenceRequired(UUID batchId) {
+        return sourceRepository.findFirstByBatchId(batchId).isPresent();
     }
 
     private boolean isDraftStructurallyValid(AiQuestionGenerationDraft draft, List<String> warnings) {
@@ -609,36 +661,35 @@ public class AiQuestionDraftService {
         List<UploadedObject> uploadedObjects = new ArrayList<>();
         try {
             for (SourceSpec spec : specs) {
-            AiQuestionGenerationSource source = new AiQuestionGenerationSource();
-            source.setBatchId(batch.getId());
+                AiQuestionGenerationSource source = new AiQuestionGenerationSource();
+                source.setBatchId(batch.getId());
                 source.setSourceKind(spec.kind());
-                source.setMaterialId(spec.materialId());
-                source.setMaterialSnapshotId(spec.materialSnapshotId());
                 source.setTranscriptContentId(spec.transcriptContentId());
                 source.setLessonId(spec.lessonId());
                 source.setSourceName(spec.sourceName());
                 source.setSourceChecksum(spec.checksum());
                 source.setSourceVersion(spec.version());
-                source.setRagStatus(spec.ragStatus());
                 source.setMimeType(spec.mimeType());
                 source.setFileSizeBytes(spec.fileSizeBytes());
                 source.setNormalizedCharCount(spec.normalizedCharCount());
                 source.setDownloadable(spec.fileContent() != null);
+                String filePayloadRef = spec.fileContent() == null
+                        ? null
+                        : auditObjectPath(batch.getId(), UUID.randomUUID(), spec.fileName());
+                source.setSourcePayloadRef(filePayloadRef != null ? filePayloadRef : spec.payloadRef());
                 source = sourceRepository.save(source);
 
                 if (spec.fileContent() != null) {
-                    String objectPath = auditObjectPath(batch.getId(), source.getId(), spec.fileName());
                     StoredFile stored = supabaseStorageClient.store(
                             storageProperties.getAiQuestionSourceFileBucket(),
-                            objectPath,
+                            filePayloadRef,
                             spec.mimeType(),
                             spec.fileContent()
                     );
                     uploadedObjects.add(new UploadedObject(storageProperties.getAiQuestionSourceFileBucket(), stored.objectPath()));
-                    source.setSourcePayloadRef(stored.objectPath());
-                    source = sourceRepository.save(source);
-                } else if (spec.payloadRef() != null) {
-                    source.setSourcePayloadRef(spec.payloadRef());
+                    if (!stored.objectPath().equals(source.getSourcePayloadRef())) {
+                        source.setSourcePayloadRef(stored.objectPath());
+                    }
                     source = sourceRepository.save(source);
                 }
 
@@ -653,66 +704,15 @@ public class AiQuestionDraftService {
     }
 
     private List<SourceSpec> resolveSourceSpecs(UUID courseId, AiQuestionDraftDtos.CreateBatchRequest request, List<MultipartFile> files) {
-        if (request.generationSourceIds() != null && !request.generationSourceIds().isEmpty()) {
-            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Material/RAG sources are not supported for course question generation");
-        }
         List<SourceSpec> specs = new ArrayList<>();
         specs.addAll(resolvePastedTextSpecs(request.pastedTextSources()));
         specs.addAll(resolveDocumentSpecs(files));
         specs.addAll(resolveTranscriptSpecs(courseId, request.transcriptContentIds()));
         if (specs.isEmpty()) {
-            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "At least one generation source is required");
-        }
-        return specs;
-    }
-
-    private List<SourceSpec> resolveMaterialSpecs(UUID courseId, List<UUID> generationSourceIds) {
-        if (generationSourceIds == null || generationSourceIds.isEmpty()) {
-            return List.of();
-        }
-        List<SourceSpec> specs = new ArrayList<>();
-        for (UUID sourceId : new LinkedHashSet<>(generationSourceIds)) {
-            RagMaterialSnapshot snapshot = snapshotRepository.findById(sourceId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source was not found or is not RAG-ready"));
-            if (!courseId.equals(snapshot.getCourseId())) {
-                throw new BusinessException(ErrorCode.AI_SOURCE_OUT_OF_SCOPE, "Generation source does not belong to this course");
-            }
-            if (!snapshot.isReady()) {
-                throw new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source is not RAG-ready");
-            }
-            List<RagMaterialChunk> chunks = chunkRepository.findBySnapshotIdOrderByChunkIndexAsc(snapshot.getId());
-            if (chunks.isEmpty()) {
-                throw new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source has no stable chunks");
-            }
-            List<SourceChunkSpec> chunkSpecs = chunks.stream()
-                    .map(chunk -> new SourceChunkSpec(
-                            chunk.getId(),
-                            chunk.getChunkReference(),
-                            chunk.getContentExcerpt(),
-                            chunk.getContentChecksum(),
-                            null,
-                            null
-                    ))
-                    .toList();
-            int charCount = chunkSpecs.stream().mapToInt(chunk -> chunk.excerpt().length()).sum();
-            specs.add(new SourceSpec(
-                    AiQuestionGenerationSource.KIND_MATERIAL,
-                    snapshot.getCurriculumLessonResourceId() != null ? snapshot.getCurriculumLessonResourceId() : snapshot.getLessonResourceId(),
-                    snapshot.getId(),
-                    null,
-                    snapshot.getLessonId(),
-                    snapshot.getSourceName(),
-                    snapshot.getChecksum(),
-                    snapshot.getVersion(),
-                    snapshot.getStatus(),
-                    null,
-                    null,
-                    charCount,
-                    null,
-                    null,
-                    null,
-                    chunkSpecs
-            ));
+            throw new BusinessException(
+                ErrorCode.AI_INVALID_GENERATION_CONFIG,
+                "At least one generation source is required"
+            );
         }
         return specs;
     }
@@ -732,12 +732,9 @@ public class AiQuestionDraftService {
                     AiQuestionGenerationSource.KIND_PASTED_TEXT,
                     null,
                     null,
-                    null,
-                    null,
                     name,
                     checksum(text),
                     "pasted-" + checksum(text).substring(0, 12),
-                    "ready",
                     "text/plain",
                     null,
                     text.length(),
@@ -777,12 +774,9 @@ public class AiQuestionDraftService {
                     AiQuestionGenerationSource.KIND_TEMPORARY_FILE,
                     null,
                     null,
-                    null,
-                    null,
                     fileName,
                     checksum,
                     sourceType == null ? extension.toUpperCase(Locale.ROOT) : sourceType,
-                    "ready",
                     normalizeContentType(file.getContentType(), extension),
                     (long) bytes.length,
                     text.length(),
@@ -816,7 +810,6 @@ public class AiQuestionDraftService {
                     : content.getSegments().stream()
                             .filter(segment -> normalizeSourceText(segment.getText()).length() >= 1)
                             .map(segment -> new SourceChunkSpec(
-                                    null,
                                     transcriptReference(segment),
                                     normalizeSourceText(segment.getText()),
                                     checksum(normalizeSourceText(segment.getText())),
@@ -826,14 +819,11 @@ public class AiQuestionDraftService {
                             .toList();
             specs.add(new SourceSpec(
                     AiQuestionGenerationSource.KIND_TRANSCRIPT,
-                    null,
-                    null,
                     content.getId(),
                     content.getLessonId(),
                     "Video transcript",
                     checksum(text),
                     String.valueOf(content.getRevision() == null ? 0 : content.getRevision()),
-                    "ready",
                     "text/plain",
                     null,
                     text.length(),
@@ -858,13 +848,12 @@ public class AiQuestionDraftService {
 
     private void persistSourceChunks(AiQuestionGenerationSource source, List<SourceChunkSpec> chunks) {
         if (chunks == null || chunks.isEmpty()) {
-            throw new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source has no stable chunks");
+            throw new BusinessException(ErrorCode.AI_SOURCE_INVALID, "Generation source has no usable content chunks");
         }
         for (int index = 0; index < chunks.size(); index += 1) {
             SourceChunkSpec spec = chunks.get(index);
             AiQuestionGenerationSourceChunk chunk = new AiQuestionGenerationSourceChunk();
             chunk.setGenerationSourceId(source.getId());
-            chunk.setMaterialChunkId(spec.materialChunkId());
             chunk.setChunkIndex(index);
             chunk.setChunkReference(spec.reference());
             chunk.setContentExcerpt(spec.excerpt());
@@ -922,7 +911,6 @@ public class AiQuestionDraftService {
         String excerpt = normalizeSourceText(text);
         String prefix = normalizeNullable(referencePrefix);
         return new SourceChunkSpec(
-                null,
                 (prefix == null ? "chunk" : prefix) + "-" + index,
                 excerpt,
                 checksum(excerpt),
@@ -934,7 +922,7 @@ public class AiQuestionDraftService {
     private void validateSourceTextLength(String text, int maxCharacters, String label) {
         int length = normalizeSourceText(text).length();
         if (length < MIN_SOURCE_CHARACTERS) {
-            throw new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, label + " must be at least 100 characters after cleaning");
+            throw new BusinessException(ErrorCode.AI_SOURCE_INVALID, label + " must be at least 100 characters after cleaning");
         }
         if (length > maxCharacters) {
             throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE, label + " exceeds the allowed size");
@@ -1095,8 +1083,8 @@ public class AiQuestionDraftService {
     }
 
     private int normalizeRequestedCount(Integer value) {
-        if (value == null || (value != 5 && value != 10 && value != 20)) {
-            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Requested count must be 5, 10, or 20");
+        if (value == null || value < 1 || value > 20) {
+            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Requested count must be between 1 and 20");
         }
         return value;
     }
@@ -1118,7 +1106,7 @@ public class AiQuestionDraftService {
     }
 
     private String defaultInstruction() {
-        return "Generate grounded draft questions from only the selected RAG-ready lesson materials.";
+        return "Generate grounded draft questions from only the provided source content.";
     }
 
     private List<AiQuestionDraftDtos.AnswerPayload> normalizeAnswers(List<AiQuestionDraftDtos.AnswerPayload> answers) {
@@ -1187,14 +1175,11 @@ public class AiQuestionDraftService {
                         source.getId(),
                         source.getId(),
                         source.getSourceKind(),
-                        source.getMaterialId(),
-                        source.getMaterialSnapshotId(),
                         source.getTranscriptContentId(),
                         source.getLessonId(),
                         source.getSourceName(),
                         source.getSourceChecksum(),
                         source.getSourceVersion(),
-                        source.getRagStatus(),
                         source.getMimeType(),
                         source.getFileSizeBytes(),
                         source.getNormalizedCharCount(),
@@ -1257,7 +1242,6 @@ public class AiQuestionDraftService {
         return new AiQuestionDraftDtos.EvidenceResponse(
                 evidence.getId(),
                 evidence.getGenerationSourceId(),
-                evidence.getMaterialChunkId(),
                 evidence.getSourceChunkId(),
                 evidence.getChunkReference(),
                 evidence.getSourceExcerpt(),
@@ -1357,14 +1341,11 @@ public class AiQuestionDraftService {
 
     private record SourceSpec(
             String kind,
-            UUID materialId,
-            UUID materialSnapshotId,
             UUID transcriptContentId,
             UUID lessonId,
             String sourceName,
             String checksum,
             String version,
-            String ragStatus,
             String mimeType,
             Long fileSizeBytes,
             int normalizedCharCount,
@@ -1379,7 +1360,6 @@ public class AiQuestionDraftService {
     }
 
     private record SourceChunkSpec(
-            UUID materialChunkId,
             String reference,
             String excerpt,
             String checksum,

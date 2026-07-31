@@ -25,9 +25,6 @@ public class AiQuestionGenerationSourceChunk {
     @Column(name = "generation_source_id", nullable = false)
     private UUID generationSourceId;
 
-    @Column(name = "material_chunk_id")
-    private UUID materialChunkId;
-
     @Column(name = "chunk_index", nullable = false)
     private Integer chunkIndex;
 
