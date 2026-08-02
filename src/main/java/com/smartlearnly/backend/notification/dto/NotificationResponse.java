@@ -17,6 +17,10 @@ public record NotificationResponse(
         String eventKey,
         Map<String, Object> payload,
         Instant readAt,
+        Instant deliveredAt,
+        Instant seenAt,
+        Instant clickedAt,
+        Instant archivedAt,
         Instant createdAt
 ) {
 }
