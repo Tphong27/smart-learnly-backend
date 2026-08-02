@@ -111,6 +111,10 @@ public class GoogleMeetService {
     }
 
     private GoogleOAuthSettings requireConfiguration(GoogleMeetSettings meetSettings) {
+        if (meetSettings == null) {
+            throw unavailable("Google Meet link generation is not configured");
+        }
+
         if (!meetSettings.enabled()) {
             throw unavailable("Google Meet link generation is disabled");
         }
