@@ -80,7 +80,6 @@ public class AssignmentSubmissionService {
         AssignmentSubmission saved = repository.save(submission);
         AssignmentSubmissionModel.Response response = mapToResponse(saved);
         broadcast(response, assignment, request.getStudentName());
-        emitSubmissionSubmittedNotification(assignment, saved);
         return response;
     }
 
@@ -136,6 +135,7 @@ public class AssignmentSubmissionService {
         AssignmentSubmission saved = repository.save(submission);
         AssignmentSubmissionModel.Response response = mapToResponse(saved);
         broadcast(response, assignment, request.getStudentName());
+        emitSubmissionSubmittedNotification(assignment, saved);
         return response;
     }
 
