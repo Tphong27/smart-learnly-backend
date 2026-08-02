@@ -59,6 +59,16 @@ class YoutubeTranscriptServiceTest {
                         }
                         """);
 
+        /*
+         * DEBUG FLOW:
+         * 1. Dòng 86 readValue tạo worker: language="vi", segments.size=2.
+         * 2. Dòng 87-89: worker/language/segments đều hợp lệ => if=false.
+         * 3. Vòng for dòng 93 chạy 2 lần; start/duration hữu hạn, text không blank.
+         * 4. Lần 1: transcript rỗng nên dòng 100=false; append "Xin chào".
+         * 5. Lần 2: transcript không rỗng nên thêm một space rồi append "các bạn".
+         * 6. Mỗi lần length<100000; dòng 111 return language="vi",
+         *    text="Xin chào các bạn".
+         */
         // WHEN: Service parse file output của worker.
         YoutubeTranscriptService.TranscriptResult result =
                 service(100_000).parseTranscriptWorkerOutput(output);
@@ -90,6 +100,15 @@ class YoutubeTranscriptServiceTest {
                         }
                         """);
 
+        /*
+         * DEBUG FLOW:
+         * 1. Worker có language=" EN-us " và 2 segment; điều kiện dòng 87=false.
+         * 2. Segment 1 strip thành "1234" => transcript length=4.
+         * 3. Segment 2 strip thành "56789"; dòng 100 thêm 1 space;
+         *    transcript="1234 56789", length=10.
+         * 4. Dòng 104 kiểm tra 10>maxCharacters(10)=false nên boundary được nhận.
+         * 5. Dòng 112 strip/lower language => "en-us"; dòng 111 return result.
+         */
         // WHEN: Service parse transcript với limit bằng 10.
         YoutubeTranscriptService.TranscriptResult result =
                 service(10).parseTranscriptWorkerOutput(output);
@@ -113,6 +132,15 @@ class YoutubeTranscriptServiceTest {
                 "too-long.json",
                 "{\"start\":0,\"duration\":1,\"text\":\"12345678901\"}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. worker.language="en" (do helper writeSegment), segments.size=1.
+         * 2. Vòng for: start=0, duration=1, text="12345678901" đều hợp lệ.
+         * 3. Dòng 103 append text => transcript.length=11.
+         * 4. maxTranscriptCharacters=10; dòng 104: 11>10=true.
+         * 5. Dòng 105 ném BusinessException(BUSINESS_RULE_VIOLATION), không return.
+         * 6. assertErrorCode bắt exception từ lambda và kiểm tra errorCode.
+         */
         // WHEN + THEN: Transcript vượt limit phải bị từ chối.
         assertErrorCode(
                 () -> service(10).parseTranscriptWorkerOutput(output),
@@ -131,6 +159,15 @@ class YoutubeTranscriptServiceTest {
         // GIVEN: Worker ghi literal null thay vì object.
         Path output = writeJson("null-worker.json", "null");
 
+        /*
+         * DEBUG FLOW:
+         * 1. Dòng 86 readValue(JSON null, WorkerResult.class) => worker=null.
+         * 2. Dòng 87 worker==null=true.
+         * 3. Toán tử || short-circuit: language và segments không được truy cập,
+         *    nên không phát sinh NullPointerException.
+         * 4. Dòng 89 ném BusinessException(EXTERNAL_SERVICE_UNAVAILABLE).
+         * 5. assertUnavailable bắt lỗi từ lambda và kiểm tra errorCode.
+         */
         // WHEN + THEN: Service không có transcript để sử dụng.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -147,6 +184,14 @@ class YoutubeTranscriptServiceTest {
         // GIVEN: JSON object không có language và segments.
         Path output = writeJson("empty-worker.json", "{}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. readValue tạo worker khác null nhưng language=null, segments=null.
+         * 2. Dòng 87 worker==null=false; worker.language()==null=true.
+         * 3. Do || short-circuit, isBlank và kiểm tra segments không chạy.
+         * 4. Dòng 89 ném EXTERNAL_SERVICE_UNAVAILABLE vì thiếu field bắt buộc.
+         * 5. assertUnavailable nhận BusinessException, không chạy vòng for.
+         */
         // WHEN + THEN: Output thiếu field bắt buộc phải bị từ chối.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -172,6 +217,14 @@ class YoutubeTranscriptServiceTest {
                         }
                         """);
 
+        /*
+         * DEBUG FLOW:
+         * 1. worker khác null; language="   "; segments có 1 phần tử.
+         * 2. Dòng 87: worker null=false, language null=false,
+         *    language.isBlank()=true.
+         * 3. Điều kiện || dừng tại language blank; segments chưa cần xét.
+         * 4. Dòng 89 ném EXTERNAL_SERVICE_UNAVAILABLE; vòng for không chạy.
+         */
         // WHEN + THEN: Blank language không tạo được TranscriptResult.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -190,6 +243,13 @@ class YoutubeTranscriptServiceTest {
                 "null-segments.json",
                 "{\"language\":\"en\",\"segments\":null}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. worker khác null, language="en" không null/blank.
+         * 2. Dòng 88 worker.segments()==null=true.
+         * 3. Vế segments.isEmpty() không chạy nhờ short-circuit.
+         * 4. Dòng 89 ném EXTERNAL_SERVICE_UNAVAILABLE trước vòng for.
+         */
         // WHEN + THEN: Service từ chối output không có segments.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -208,6 +268,13 @@ class YoutubeTranscriptServiceTest {
                 "empty-segments.json",
                 "{\"language\":\"en\",\"segments\":[]}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. worker/language/segments đều khác null.
+         * 2. Dòng 88: segments.isEmpty()=true.
+         * 3. Dòng 89 ném EXTERNAL_SERVICE_UNAVAILABLE.
+         * 4. Vòng for dòng 93 và return dòng 111 không chạy.
+         */
         // WHEN + THEN: Không có segment thì không có transcript.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -224,6 +291,14 @@ class YoutubeTranscriptServiceTest {
         // GIVEN: Danh sách chứa một segment null.
         Path output = writeSegment("null-segment.json", "null");
 
+        /*
+         * DEBUG FLOW:
+         * 1. Helper tạo worker language="en", segments=[null]; validation worker pass.
+         * 2. Vòng for dòng 93 lấy segment=null.
+         * 3. Dòng 94 segment==null=true; các vế text/start/duration không chạy.
+         * 4. Dòng 97 ném EXTERNAL_SERVICE_UNAVAILABLE.
+         * 5. Không append transcript; assertUnavailable bắt BusinessException.
+         */
         // WHEN + THEN: Segment null phải bị từ chối.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -242,6 +317,13 @@ class YoutubeTranscriptServiceTest {
                 "null-text.json",
                 "{\"start\":0,\"duration\":1,\"text\":null}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. Segment: start=0, duration=1, text=null.
+         * 2. Dòng 94 segment==null=false; segment.text()==null=true.
+         * 3. Toán tử || short-circuit nên text.isBlank/start/duration không chạy.
+         * 4. Dòng 97 ném EXTERNAL_SERVICE_UNAVAILABLE; không có NPE.
+         */
         // WHEN + THEN: Segment không có text phải bị từ chối.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -260,6 +342,13 @@ class YoutubeTranscriptServiceTest {
                 "blank-text.json",
                 "{\"start\":0,\"duration\":1,\"text\":\"   \"}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. Segment khác null; text="   " khác null.
+         * 2. Dòng 94 text.isBlank()=true.
+         * 3. Kiểm tra finite/start/duration phía sau không chạy do || short-circuit.
+         * 4. Dòng 97 ném EXTERNAL_SERVICE_UNAVAILABLE trước text.strip().
+         */
         // WHEN + THEN: Blank text phải bị từ chối.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -278,6 +367,13 @@ class YoutubeTranscriptServiceTest {
                 "negative-start.json",
                 "{\"start\":-1,\"duration\":1,\"text\":\"Lesson\"}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. Segment: text="Lesson", start=-1, duration=1.
+         * 2. Dòng 95: start finite=true, duration finite=true nên hai vế !finite=false.
+         * 3. Dòng 96 segment.start()<0 => -1<0=true.
+         * 4. Vế duration<=0 không chạy; dòng 97 ném unavailable.
+         */
         // WHEN + THEN: Timestamp âm là dữ liệu worker không hợp lệ.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -296,6 +392,13 @@ class YoutubeTranscriptServiceTest {
                 "zero-duration.json",
                 "{\"start\":0,\"duration\":0,\"text\":\"Lesson\"}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. start=0 và duration=0 đều là số hữu hạn.
+         * 2. Dòng 96: start<0=false; duration<=0 => 0<=0=true.
+         * 3. Dòng 97 ném EXTERNAL_SERVICE_UNAVAILABLE.
+         * 4. text không được append và TranscriptResult không được tạo.
+         */
         // WHEN + THEN: Segment không có thời lượng phải bị từ chối.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
@@ -314,7 +417,65 @@ class YoutubeTranscriptServiceTest {
                 "negative-duration.json",
                 "{\"start\":0,\"duration\":-1,\"text\":\"Lesson\"}");
 
+        /*
+         * DEBUG FLOW:
+         * 1. start=0, duration=-1, cả hai vẫn finite.
+         * 2. Dòng 96: start<0=false; duration<=0 => -1<=0=true.
+         * 3. Dòng 97 ném unavailable; dòng 99-114 không chạy.
+         */
         // WHEN + THEN: Duration âm phải bị từ chối.
+        assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
+    }
+
+    /**
+     * CODE UNDER TEST: YoutubeTranscriptService.java dòng 93-98, kiểm tra
+     * !Double.isFinite(segment.start()).
+     * Biến vào: start = "NaN", duration = 1, text = "Lesson".
+     * Mục tiêu: đi qua nhánh start không phải một số hữu hạn.
+     */
+    @Test
+    void parseTranscriptWorkerOutput_throwsUnavailable_whenSegmentStartIsNaN()
+            throws Exception {
+        // GIVEN - variables: Jackson chuyển chuỗi "NaN" thành Double.NaN.
+        Path output = writeSegment(
+                "nan-start.json",
+                "{\"start\":\"NaN\",\"duration\":1,\"text\":\"Lesson\"}");
+
+        /*
+         * DEBUG FLOW:
+         * 1. Jackson chuyển start="NaN" thành Double.NaN; duration=1.
+         * 2. Dòng 95: Double.isFinite(NaN)=false nên !isFinite(start)=true.
+         * 3. Các vế duration/start âm không chạy do || short-circuit.
+         * 4. Dòng 97 ném EXTERNAL_SERVICE_UNAVAILABLE.
+         */
+        // WHEN - code line: vòng for kiểm tra Double.isFinite(start).
+        // THEN - expected: segment không hữu hạn trả EXTERNAL_SERVICE_UNAVAILABLE.
+        assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
+    }
+
+    /**
+     * CODE UNDER TEST: YoutubeTranscriptService.java dòng 93-98, kiểm tra
+     * !Double.isFinite(segment.duration()).
+     * Biến vào: start = 0, duration = "Infinity", text = "Lesson".
+     * Mục tiêu: đi qua nhánh duration không phải một số hữu hạn.
+     */
+    @Test
+    void parseTranscriptWorkerOutput_throwsUnavailable_whenSegmentDurationIsInfinite()
+            throws Exception {
+        // GIVEN - variables: Jackson chuyển "Infinity" thành Double.POSITIVE_INFINITY.
+        Path output = writeSegment(
+                "infinite-duration.json",
+                "{\"start\":0,\"duration\":\"Infinity\",\"text\":\"Lesson\"}");
+
+        /*
+         * DEBUG FLOW:
+         * 1. Jackson tạo start=0 và duration=Double.POSITIVE_INFINITY.
+         * 2. Dòng 95: start finite=true nên vế start=false;
+         *    duration finite=false nên !isFinite(duration)=true.
+         * 3. Dòng 96 không cần xét; dòng 97 ném unavailable.
+         */
+        // WHEN - code line: vòng for kiểm tra Double.isFinite(duration).
+        // THEN - expected: duration vô hạn trả EXTERNAL_SERVICE_UNAVAILABLE.
         assertUnavailable(() -> service(100).parseTranscriptWorkerOutput(output));
     }
 
@@ -332,6 +493,14 @@ class YoutubeTranscriptServiceTest {
                 runtimeProperties(createWorkerFile());
         properties.setEnabled(false);
 
+        /*
+         * DEBUG FLOW:
+         * 1. Dòng 33 gọi validateRuntime(VIDEO_ID).
+         * 2. Dòng 118: !properties.isEnabled()=!false=true.
+         * 3. Dòng 119 ném EXTERNAL_SERVICE_UNAVAILABLE trước khối try dòng 37.
+         * 4. videoId/script/command không được kiểm tra; không tạo process/file tạm.
+         * 5. assertUnavailable bắt BusinessException từ lambda.
+         */
         // WHEN + THEN: Service dừng trước khi tạo process.
         assertUnavailable(() ->
                 new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
@@ -349,6 +518,14 @@ class YoutubeTranscriptServiceTest {
         VideoAiProperties properties =
                 runtimeProperties(createWorkerFile());
 
+        /*
+         * DEBUG FLOW:
+         * 1. enabled=true nên dòng 118=false.
+         * 2. Tham số videoId=null; dòng 121 videoId==null=true.
+         * 3. Vế videoId.matches(...) không chạy do || short-circuit.
+         * 4. Dòng 122 ném BusinessException(INVALID_REQUEST).
+         * 5. Không kiểm tra script và không vào try/process; assertErrorCode bắt lỗi.
+         */
         // WHEN + THEN: null không được truyền xuống Python.
         assertErrorCode(
                 () -> new YoutubeTranscriptService(properties).fetchYoutubeTranscript(null),
@@ -367,6 +544,13 @@ class YoutubeTranscriptServiceTest {
         VideoAiProperties properties =
                 runtimeProperties(createWorkerFile());
 
+        /*
+         * DEBUG FLOW:
+         * 1. videoId="short" khác null.
+         * 2. Dòng 121: "short".matches("[A-Za-z0-9_-]{11}")=false.
+         * 3. Điều kiện if=true; dòng 122 ném INVALID_REQUEST.
+         * 4. Script hợp lệ vẫn không được dùng và ProcessBuilder không được tạo.
+         */
         // WHEN + THEN: ID sai format không được gọi worker.
         assertErrorCode(
                 () -> new YoutubeTranscriptService(properties)
@@ -386,6 +570,14 @@ class YoutubeTranscriptServiceTest {
         VideoAiProperties properties = runtimeProperties(
                 tempDirectory.resolve("missing.py"));
 
+        /*
+         * DEBUG FLOW:
+         * 1. enabled=true, VIDEO_ID đúng regex nên qua dòng 118-123.
+         * 2. Dòng 124 script=.../missing.py, khác null.
+         * 3. Dòng 125 Files.isRegularFile(script)=false vì file không tồn tại.
+         * 4. Toán tử || dừng; Files.isReadable không cần gọi.
+         * 5. Dòng 126 ném unavailable trước khi tạo file/process.
+         */
         // WHEN + THEN: Service không thể khởi chạy script bị thiếu.
         assertUnavailable(() ->
                 new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
@@ -405,6 +597,13 @@ class YoutubeTranscriptServiceTest {
                 runtimeProperties(createWorkerFile());
         properties.setTranscriptScriptPath(null);
 
+        /*
+         * DEBUG FLOW:
+         * 1. enabled và VIDEO_ID hợp lệ.
+         * 2. Dòng 124 script=null.
+         * 3. Dòng 125 script==null=true; hai lời gọi Files phía sau không chạy.
+         * 4. Dòng 126 ném EXTERNAL_SERVICE_UNAVAILABLE; không có NPE.
+         */
         // WHEN + THEN: Service báo runtime transcript chưa sẵn sàng.
         assertUnavailable(() ->
                 new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
@@ -424,7 +623,44 @@ class YoutubeTranscriptServiceTest {
                 runtimeProperties(createWorkerFile());
         properties.setPythonCommand(" ");
 
+        /*
+         * DEBUG FLOW:
+         * 1. validateRuntime pass vì enabled, ID và script hợp lệ.
+         * 2. Dòng 38-39 tạo output/log file; dòng 41 gọi requiredArgument(" ").
+         * 3. Dòng 156 normalized=" ".trim()="".
+         * 4. Dòng 157 normalized.isEmpty()=true; dòng 161 ném unavailable.
+         * 5. Catch IOException không chạy vì đây là BusinessException.
+         * 6. finally dòng 78-80 xóa hai file tạm; không start process.
+         */
         // WHEN + THEN: Command blank không được dùng để tạo process.
+        assertUnavailable(() ->
+                new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
+    }
+
+    /**
+     * CODE UNDER TEST: YoutubeTranscriptService.java dòng 155-163, biểu thức
+     * value == null ? "" : value.trim() trong requiredArgument().
+     * Biến vào: pythonCommand = null.
+     * Mục tiêu: đi qua vế true của toán tử ba ngôi rồi nhánh normalized.isEmpty().
+     */
+    @Test
+    void fetchYoutubeTranscript_throwsUnavailable_whenPythonCommandIsNull()
+            throws Exception {
+        // GIVEN - variable: script tồn tại nhưng pythonCommand không được cấu hình.
+        VideoAiProperties properties =
+                runtimeProperties(createWorkerFile());
+        properties.setPythonCommand(null);
+
+        /*
+         * DEBUG FLOW:
+         * 1. validateRuntime pass và hai file tạm được tạo.
+         * 2. Dòng 156: value==null=true => normalized="".
+         * 3. Dòng 157 normalized.isEmpty()=true; dòng 161 ném unavailable.
+         * 4. ProcessBuilder chưa được tạo; catch IOException không bắt lỗi này.
+         * 5. finally vẫn xóa output/processLog; assertUnavailable kiểm tra code.
+         */
+        // WHEN - code line: requiredArgument(null, "Python command").
+        // THEN - expected: null được chuẩn hóa thành rỗng và trả unavailable.
         assertUnavailable(() ->
                 new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
     }
@@ -443,6 +679,13 @@ class YoutubeTranscriptServiceTest {
                 runtimeProperties(createWorkerFile());
         properties.setPythonCommand("x".repeat(257));
 
+        /*
+         * DEBUG FLOW:
+         * 1. requiredArgument nhận chuỗi 257 ký tự; trim không đổi độ dài.
+         * 2. Dòng 157: isEmpty=false; normalized.length()>256 => 257>256=true.
+         * 3. Các kiểm tra ký tự điều khiển phía sau không chạy.
+         * 4. Dòng 161 ném unavailable; finally dọn file tạm.
+         */
         // WHEN + THEN: Command quá dài phải bị từ chối.
         assertUnavailable(() ->
                 new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
@@ -462,6 +705,13 @@ class YoutubeTranscriptServiceTest {
                 runtimeProperties(createWorkerFile());
         properties.setPythonCommand("python\0bad");
 
+        /*
+         * DEBUG FLOW:
+         * 1. normalized="python\0bad": không rỗng và length<=256.
+         * 2. Dòng 158 normalized.indexOf('\0')>=0=true.
+         * 3. Kiểm tra CR/LF không chạy; dòng 161 ném unavailable.
+         * 4. Không start process; finally xóa output/log file.
+         */
         // WHEN + THEN: Command nguy hiểm không được chạy.
         assertUnavailable(() ->
                 new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
@@ -481,6 +731,13 @@ class YoutubeTranscriptServiceTest {
                 runtimeProperties(createWorkerFile());
         properties.setPythonCommand("python\rbad");
 
+        /*
+         * DEBUG FLOW:
+         * 1. Command không rỗng, không quá dài và không chứa null byte.
+         * 2. Dòng 159 normalized.contains("\r")=true.
+         * 3. Vế kiểm tra LF không chạy; dòng 161 ném unavailable.
+         * 4. finally dọn file tạm; worker không được gọi.
+         */
         // WHEN + THEN: Command nhiều dòng không được chạy.
         assertUnavailable(() ->
                 new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
@@ -500,6 +757,13 @@ class YoutubeTranscriptServiceTest {
                 runtimeProperties(createWorkerFile());
         properties.setPythonCommand("python\nbad");
 
+        /*
+         * DEBUG FLOW:
+         * 1. Các vế empty/length/null-byte/CR tại dòng 157-159 đều false.
+         * 2. Dòng 160 normalized.contains("\n")=true.
+         * 3. Dòng 161 ném EXTERNAL_SERVICE_UNAVAILABLE.
+         * 4. ProcessBuilder không start; finally xóa hai file tạm.
+         */
         // WHEN + THEN: Command nhiều dòng không được chạy.
         assertUnavailable(() ->
                 new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID));
@@ -534,6 +798,18 @@ class YoutubeTranscriptServiceTest {
                           ]
                         }
                         """)) {
+            /*
+             * DEBUG FLOW:
+             * 1. validateRuntime pass; dòng 38-39 tạo output/log file tạm.
+             * 2. Dòng 40-47 tạo command: python-test, worker path, --video-id,
+             *    VIDEO_ID, --output, output path; mock lưu mảng vào command.
+             * 3. builder.start() mock ghi JSON và trả process có exitCode=0.
+             * 4. normalizedTimeout: configured=10 phút; dòng 152 so với 5 phút
+             *    cho kết quả >0 nên timeout thực=5 phút=300000 ms.
+             * 5. process.waitFor(...)=true; exitValue!=0=false; output regular/size>0.
+             * 6. Dòng 68 parse JSON => language="vi", text="Xin chào".
+             * 7. finally xóa output/log; method return TranscriptResult.
+             */
             // WHEN: Service lấy transcript cho video ID.
             YoutubeTranscriptService.TranscriptResult result =
                     new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID);
@@ -570,6 +846,14 @@ class YoutubeTranscriptServiceTest {
 
         try (MockedConstruction<ProcessBuilder> ignored =
                      successfulProcess(process)) {
+            /*
+             * DEBUG FLOW:
+             * 1. Dòng 148 timeout=Duration.ZERO.
+             * 2. Dòng 149: timeout==null=false; isNegative=false; isZero=true.
+             * 3. Dòng 150 return Duration.ofSeconds(60).
+             * 4. Dòng 53 gọi process.waitFor(60000, MILLISECONDS); mock=true.
+             * 5. exitCode=0, output JSON hợp lệ; parse/return rồi finally dọn file.
+             */
             // WHEN: Service chạy worker.
             new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID);
 
@@ -597,6 +881,14 @@ class YoutubeTranscriptServiceTest {
 
         try (MockedConstruction<ProcessBuilder> ignored =
                      successfulProcess(process)) {
+            /*
+             * DEBUG FLOW:
+             * 1. Dòng 148 timeout=-1 giây.
+             * 2. Dòng 149: null=false; timeout.isNegative()=true;
+             *    vế isZero không cần xét.
+             * 3. Dòng 150 trả timeout mặc định 60 giây.
+             * 4. waitFor nhận 60000 ms; process exit 0 và transcript được parse.
+             */
             // WHEN: Service chạy worker.
             new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID);
 
@@ -624,6 +916,14 @@ class YoutubeTranscriptServiceTest {
 
         try (MockedConstruction<ProcessBuilder> ignored =
                      successfulProcess(process)) {
+            /*
+             * DEBUG FLOW:
+             * 1. Dòng 148 timeout=null.
+             * 2. Dòng 149 timeout==null=true; isNegative/isZero không được gọi,
+             *    tránh NullPointerException.
+             * 3. Dòng 150 trả Duration.ofSeconds(60).
+             * 4. waitFor nhận 60000 ms; worker success; finally xóa file tạm.
+             */
             // WHEN: Service chạy worker.
             new YoutubeTranscriptService(properties).fetchYoutubeTranscript(VIDEO_ID);
 
@@ -646,6 +946,16 @@ class YoutubeTranscriptServiceTest {
         // GIVEN: Python báo phụ đề bị tắt.
         Path worker = createWorkerFile();
 
+        /*
+         * DEBUG FLOW:
+         * 1. assertWorkerError tạo process: waitFor=true, exitValue=1 và log
+         *    processLog="TRANSCRIPT_DISABLED".
+         * 2. Dòng 53 timeout=false; dòng 59 exitValue()!=0 => 1!=0=true.
+         * 3. Dòng 60 đọc log; dòng 131 value="TRANSCRIPT_DISABLED".
+         * 4. Dòng 132: contains TRANSCRIPT_DISABLED=true; dòng 133 return
+         *    BusinessException(BUSINESS_RULE_VIOLATION).
+         * 5. Dòng 63 throw lỗi đó; finally xóa file; helper kiểm tra errorCode.
+         */
         // WHEN + THEN: Đây là business rule của video, không phải lỗi hệ thống.
         assertWorkerError(
                 worker,
@@ -665,6 +975,15 @@ class YoutubeTranscriptServiceTest {
         // GIVEN: Python không tìm thấy transcript dùng được.
         Path worker = createWorkerFile();
 
+        /*
+         * DEBUG FLOW:
+         * 1. Process mock exitValue=1; log="TRANSCRIPT_NOT_FOUND".
+         * 2. Dòng 59 true; readBoundedLog trả marker trên.
+         * 3. Dòng 132: contains DISABLED=false, contains NOT_FOUND=true;
+         *    nhóm điều kiện OR=true.
+         * 4. Dòng 133 tạo BUSINESS_RULE_VIOLATION; dòng 63 ném ra.
+         * 5. finally dọn file và assertWorkerError kiểm tra code.
+         */
         // WHEN + THEN: Video không đủ điều kiện tạo summary.
         assertWorkerError(
                 worker,
@@ -684,6 +1003,14 @@ class YoutubeTranscriptServiceTest {
         // GIVEN: Python cho biết video không tồn tại hoặc không truy cập được.
         Path worker = createWorkerFile();
 
+        /*
+         * DEBUG FLOW:
+         * 1. Process exit 1; processLog="VIDEO_UNAVAILABLE".
+         * 2. Dòng 132 không chứa hai transcript marker => false.
+         * 3. Dòng 138 contains("VIDEO_UNAVAILABLE")=true.
+         * 4. Dòng 139 return BusinessException(RESOURCE_NOT_FOUND);
+         *    dòng 63 ném lỗi này, finally xóa file.
+         */
         // WHEN + THEN: API trả lỗi không tìm thấy tài nguyên.
         assertWorkerError(
                 worker,
@@ -703,6 +1030,14 @@ class YoutubeTranscriptServiceTest {
         // GIVEN: YouTube tạm thời chặn worker.
         Path worker = createWorkerFile();
 
+        /*
+         * DEBUG FLOW:
+         * 1. Process exit 1; log được uppercase thành "YOUTUBE_BLOCKED".
+         * 2. Dòng 132=false; dòng 138=false.
+         * 3. Dòng 141 contains("YOUTUBE_BLOCKED")=true.
+         * 4. Dòng 142 return EXTERNAL_SERVICE_UNAVAILABLE với message blocked.
+         * 5. Dòng 63 throw; finally dọn file; helper kiểm tra code.
+         */
         // WHEN + THEN: Đây là lỗi dịch vụ ngoài tạm thời.
         assertWorkerError(
                 worker,
@@ -722,6 +1057,14 @@ class YoutubeTranscriptServiceTest {
         // GIVEN: Worker exit code 1 với lỗi không xác định.
         Path worker = createWorkerFile();
 
+        /*
+         * DEBUG FLOW:
+         * 1. Process exit 1; value="UNEXPECTED FAILURE" sau toUpperCase.
+         * 2. Các if marker tại dòng 132, 138 và 141 đều false.
+         * 3. Dòng 144 chạy nhánh mặc định, return unavailable
+         *    "Unable to get the YouTube transcript".
+         * 4. Dòng 63 throw; finally xóa file; assertWorkerError kiểm tra code.
+         */
         // WHEN + THEN: Lỗi được che thành lỗi dịch vụ ngoài thống nhất.
         assertWorkerError(
                 worker,
@@ -750,6 +1093,14 @@ class YoutubeTranscriptServiceTest {
                 new AtomicReference<>(),
                 null,
                 null)) {
+            /*
+             * DEBUG FLOW:
+             * 1. ProcessBuilder.start() mock trả process; normalized timeout=2 giây.
+             * 2. Dòng 53 process.waitFor(...)=false => điều kiện timeout=true.
+             * 3. Dòng 54 gọi destroyForcibly(); dòng 55 chờ thêm 5 giây.
+             * 4. Dòng 56 ném BusinessException(EXTERNAL_SERVICE_UNAVAILABLE).
+             * 5. Không đọc exitValue/output; finally xóa output/log file.
+             */
             // WHEN + THEN: Timeout được ánh xạ thành unavailable.
             assertUnavailable(() ->
                     new YoutubeTranscriptService(runtimeProperties(worker))
@@ -783,6 +1134,16 @@ class YoutubeTranscriptServiceTest {
                 null,
                 null)) {
             try {
+                /*
+                 * DEBUG FLOW:
+                 * 1. Dòng 53 gọi process.waitFor và mock ném InterruptedException.
+                 * 2. Luồng nhảy thẳng vào catch dòng 69; không kiểm tra exit/output.
+                 * 3. Dòng 70 gọi Thread.currentThread().interrupt() => flag=true.
+                 * 4. process đã được gán nên dòng 71 process!=null=true;
+                 *    dòng 72 destroyForcibly().
+                 * 5. Dòng 74 ném unavailable; finally service xóa file tạm.
+                 * 6. finally của test gọi Thread.interrupted() để xóa flag sau assertion.
+                 */
                 // WHEN + THEN: Service báo unavailable.
                 assertUnavailable(() ->
                         new YoutubeTranscriptService(runtimeProperties(worker))
@@ -815,7 +1176,63 @@ class YoutubeTranscriptServiceTest {
                 new AtomicReference<>(),
                 null,
                 null)) {
+            /*
+             * DEBUG FLOW:
+             * 1. output temp file được tạo ở dòng 38 nhưng mock worker không ghi JSON.
+             * 2. waitFor=true và exitValue=0 nên dòng 53/59 đều không throw.
+             * 3. Dòng 65: Files.isRegularFile(output)=true nên vế đầu=false;
+             *    Files.size(output)==0 => true.
+             * 4. Dòng 66 ném unavailable "YouTube returned no transcript".
+             * 5. finally xóa output/log; parseTranscriptWorkerOutput không chạy.
+             */
             // WHEN + THEN: Backend không trả một transcript rỗng.
+            assertUnavailable(() ->
+                    new YoutubeTranscriptService(runtimeProperties(worker))
+                            .fetchYoutubeTranscript(VIDEO_ID));
+        }
+    }
+
+    /**
+     * CODE UNDER TEST: YoutubeTranscriptService.java dòng 65-67, nhánh
+     * !Files.isRegularFile(output) trong khối try.
+     * Biến vào: exitCode = 0 nhưng worker xóa file output trước khi kết thúc.
+     * Mục tiêu: phân biệt file không tồn tại với test file tồn tại nhưng rỗng.
+     */
+    @Test
+    void fetchYoutubeTranscript_throwsUnavailable_whenWorkerDeletesOutputFile()
+            throws Exception {
+        // GIVEN - variables: script hợp lệ, process exitCode = 0.
+        Path worker = createWorkerFile();
+        Process process = completedProcess(0);
+
+        try (MockedConstruction<ProcessBuilder> ignored = mockConstruction(
+                ProcessBuilder.class,
+                (builder, context) -> {
+                    // MOCK - lưu cấu hình redirect giống ProcessBuilder thật.
+                    when(builder.redirectErrorStream(true))
+                            .thenReturn(builder);
+                    when(builder.redirectOutput(any(File.class)))
+                            .thenReturn(builder);
+
+                    // MOCK - arguments[5] là biến output truyền sau option "--output".
+                    String[] arguments =
+                            (String[]) context.arguments().get(0);
+                    when(builder.start()).thenAnswer(invocation -> {
+                        Files.deleteIfExists(Path.of(arguments[5]));
+                        return process;
+                    });
+                })) {
+            /*
+             * DEBUG FLOW:
+             * 1. Service tạo output temp ở dòng 38; builder.start mock xóa đúng
+             *    Path arguments[5] rồi trả process exitCode=0.
+             * 2. waitFor=true; exitValue!=0=false.
+             * 3. Dòng 65 Files.isRegularFile(output)=false vì file đã bị xóa;
+             *    vế Files.size không chạy do || short-circuit.
+             * 4. Dòng 66 ném unavailable; finally deleteIfExists an toàn.
+             */
+            // WHEN - code line: process thành công rồi kiểm tra Files.isRegularFile(output).
+            // THEN - expected: file đã bị xóa trả EXTERNAL_SERVICE_UNAVAILABLE.
             assertUnavailable(() ->
                     new YoutubeTranscriptService(runtimeProperties(worker))
                             .fetchYoutubeTranscript(VIDEO_ID));
@@ -843,6 +1260,15 @@ class YoutubeTranscriptServiceTest {
                     when(builder.start())
                             .thenThrow(new IOException("cannot start"));
                 })) {
+            /*
+             * DEBUG FLOW:
+             * 1. validateRuntime pass; output/log file được tạo; command hợp lệ.
+             * 2. Dòng 50 builder.start() ném IOException("cannot start");
+             *    biến process vẫn bằng null.
+             * 3. Luồng nhảy vào catch IOException dòng 75.
+             * 4. Dòng 77 ném BusinessException(EXTERNAL_SERVICE_UNAVAILABLE).
+             * 5. finally dòng 78-80 xóa hai file tạm dù process chưa start.
+             */
             // WHEN + THEN: IOException được ánh xạ thành unavailable.
             assertUnavailable(() ->
                     new YoutubeTranscriptService(runtimeProperties(worker))
@@ -867,6 +1293,15 @@ class YoutubeTranscriptServiceTest {
                 new AtomicReference<>(),
                 null,
                 "{not-json")) {
+            /*
+             * DEBUG FLOW:
+             * 1. Mock worker ghi output="{not-json", waitFor=true, exitCode=0.
+             * 2. Dòng 65 file regular và size>0 nên tiếp tục dòng 68.
+             * 3. parseTranscriptWorkerOutput dòng 86 readValue ném JsonParseException,
+             *    là subclass của IOException.
+             * 4. Exception quay về fetch và bị catch IOException dòng 75.
+             * 5. Dòng 77 ném unavailable; finally xóa output/log.
+             */
             // WHEN + THEN: JSON parser error không thoát trực tiếp ra API.
             assertUnavailable(() ->
                     new YoutubeTranscriptService(runtimeProperties(worker))

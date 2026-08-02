@@ -30,8 +30,13 @@ public class GeminiVideoSummaryService {
     @Autowired
     public GeminiVideoSummaryService(VideoAiGenerationProperties properties) {
         this(
+                // Giữ lại cấu hình được đọc từ application.yml hoặc biến môi trường.
                 properties,
+
+                // Tạo ObjectMapper và đăng ký các module Jackson cần thiết.
                 new ObjectMapper().findAndRegisterModules(),
+
+                // Tạo HTTP client với base URL và timeout từ properties.
                 createRestClient(properties));
     }
 
@@ -97,6 +102,7 @@ public class GeminiVideoSummaryService {
 
             JsonNode response = objectMapper.readTree(
                     responseBody == null ? "{}" : responseBody);
+
             String output = response.path("candidates")
                     .path(0)
                     .path("content")
@@ -104,25 +110,36 @@ public class GeminiVideoSummaryService {
                     .path(0)
                     .path("text")
                     .asText(null);
+
             return parseSummary(output);
         } catch (RestClientResponseException exception) {
+
             log.warn(
                     "Gemini video summary request failed: status={} model={}",
                     exception.getStatusCode().value(),
                     model);
-            throw unavailable();
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "AI summary generation is temporarily unavailable");
+
         } catch (IOException | RestClientException | IllegalArgumentException exception) {
+
             log.warn(
                     "Gemini video summary generation failed: model={} errorType={}",
                     model,
                     exception.getClass().getSimpleName());
-            throw unavailable();
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "AI summary generation is temporarily unavailable");
+
         }
     }
 
     private Map<String, Object> requestBody(String prompt) {
+
         Map<String, Object> generationConfig = new LinkedHashMap<>();
         generationConfig.put("responseMimeType", "application/json");
+
         generationConfig.put("responseJsonSchema", Map.of(
                 "type", "object",
                 "properties", Map.of(
@@ -148,17 +165,20 @@ public class GeminiVideoSummaryService {
                 "role", "user",
                 "parts", List.of(Map.of("text", prompt)))));
         body.put("generationConfig", generationConfig);
+
         body.put("store", false);
+
         return body;
     }
 
     private GeneratedSummary parseSummary(String output) throws IOException {
+
         if (normalize(output) == null) {
             throw new IOException("Gemini returned an empty summary");
         }
 
-        GeneratedSummary summary =
-                objectMapper.readValue(output, GeneratedSummary.class);
+        GeneratedSummary summary = objectMapper.readValue(output, GeneratedSummary.class);
+
         List<String> paragraphs = normalizeItems(summary.overviewParagraphs());
         String title = normalize(summary.keyTakeawaysTitle());
         List<String> takeaways = normalizeItems(summary.keyTakeaways());
@@ -186,14 +206,24 @@ public class GeminiVideoSummaryService {
 
     private List<String> normalizeItems(List<String> values) {
         if (values == null) {
+            // DEBUG: Không có danh sách => trả danh sách rỗng, không trả null.
             return List.of();
         }
         return values.stream()
+                // " Ý 1 " => "Ý 1"; chuỗi blank => null.
                 .map(this::normalize)
+
+                // Loại phần tử null hoặc blank.
                 .filter(value -> value != null)
+
+                // "• Ý 2", "* Ý 2" hoặc "- Ý 2" => "Ý 2".
                 .map(value -> value.replaceFirst("^[•*\\-]\\s*", ""))
+
+                // Trim lại sau khi loại ký tự bullet.
                 .map(this::normalize)
                 .filter(value -> value != null)
+
+                // Output là List<String> mới đã được làm sạch.
                 .toList();
     }
 
@@ -208,39 +238,58 @@ public class GeminiVideoSummaryService {
     }
 
     private String modelName(String value) {
+
         String model = normalize(value);
         if (model == null) {
+            // Output null báo rằng model chưa được cấu hình.
             return null;
         }
+
         return model.startsWith("models/")
                 ? model.substring("models/".length())
                 : model;
     }
 
+    /**
+     * Chọn ngôn ngữ viết summary.
+     */
     private String normalizeLanguage(String value) {
+        // " vi " => "vi"; null hoặc blank => null.
         String normalized = normalize(value);
+
         return normalized == null ? "the detected language" : normalized;
     }
 
     private String normalize(String value) {
         if (value == null) {
+            // Input null => output null.
             return null;
         }
+
+        // Ví dụ " React " => normalized="React".
         String normalized = value.trim();
+
+        // Input " " => output null; input "React" => output "React".
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private BusinessException unavailable() {
-        return new BusinessException(
-                ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                "AI summary generation is temporarily unavailable");
-    }
-
     private static RestClient createRestClient(VideoAiGenerationProperties properties) {
-        SimpleClientHttpRequestFactory factory =
-                new SimpleClientHttpRequestFactory();
+        /*
+         * DEBUG:
+         * properties.timeout = PT90S
+         * => connect timeout = 90 giây
+         * => read timeout = 90 giây
+         */
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(properties.getTimeout());
         factory.setReadTimeout(properties.getTimeout());
+
+        /*
+         * properties.apiBaseUrl =
+         * "https://generativelanguage.googleapis.com/v1beta"
+         *
+         * Output: RestClient đã có base URL và timeout, chưa gửi request.
+         */
         return RestClient.builder()
                 .baseUrl(properties.getApiBaseUrl())
                 .requestFactory(factory)

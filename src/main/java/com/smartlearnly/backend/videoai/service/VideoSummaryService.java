@@ -30,18 +30,17 @@ public class VideoSummaryService {
 
     public GenerateSummaryResponse generateVideoSummary(String youtubeUrl) {
         String videoId = extractVideoIdFromYoutubeUrl(youtubeUrl);
-        YoutubeVideoMetadata metadata =
-                metadataService.fetchYoutubeVideoMetadata(videoId);
-        YoutubeTranscriptService.TranscriptResult transcript =
-                transcriptService.fetchYoutubeTranscript(videoId);
-        GeneratedSummary summary =
-                summaryService.generateSummaryFromTranscript(
-                        transcript.language(),
-                        transcript.text());
+        YoutubeVideoMetadata metadata = metadataService.fetchYoutubeVideoMetadata(videoId);
+        YoutubeTranscriptService.TranscriptResult transcript = transcriptService.fetchYoutubeTranscript(videoId);
+        GeneratedSummary summary = summaryService.generateSummaryFromTranscript(
+                transcript.language(),
+                transcript.text());
+        long durationSeconds = metadata.durationSeconds();
         return new GenerateSummaryResponse(
                 videoId,
                 buildCanonicalYoutubeUrl(videoId),
-                Math.toIntExact((metadata.durationSeconds() + 59) / 60),
+                durationSeconds,
+                Math.toIntExact((durationSeconds + 59) / 60),
                 summary);
     }
 
@@ -58,7 +57,9 @@ public class VideoSummaryService {
             if (current != null) {
                 return current;
             }
-            throw invalidUrl();
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Enter a valid HTTPS YouTube URL");
         }
 
         if (current != null && current.equals(requested)) {
@@ -79,7 +80,9 @@ public class VideoSummaryService {
     String extractVideoIdFromYoutubeUrl(String value) {
         String normalized = normalize(value);
         if (normalized == null) {
-            throw invalidUrl();
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Enter a valid HTTPS YouTube URL");
         }
 
         try {
@@ -88,7 +91,9 @@ public class VideoSummaryService {
                     || uri.getHost() == null
                     || uri.getUserInfo() != null
                     || (uri.getPort() != -1 && uri.getPort() != 443)) {
-                throw invalidUrl();
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Enter a valid HTTPS YouTube URL");
             }
 
             String host = uri.getHost().toLowerCase(Locale.ROOT);
@@ -110,22 +115,20 @@ public class VideoSummaryService {
             }
 
             if (videoId == null || !videoId.matches("[A-Za-z0-9_-]{11}")) {
-                throw invalidUrl();
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Enter a valid HTTPS YouTube URL");
             }
             return videoId;
         } catch (URISyntaxException | IllegalArgumentException exception) {
-            throw invalidUrl();
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Enter a valid HTTPS YouTube URL");
         }
     }
 
     private String buildCanonicalYoutubeUrl(String videoId) {
         return "https://www.youtube.com/watch?v=" + videoId;
-    }
-
-    private BusinessException invalidUrl() {
-        return new BusinessException(
-                ErrorCode.INVALID_REQUEST,
-                "Enter a valid HTTPS YouTube URL");
     }
 
 }

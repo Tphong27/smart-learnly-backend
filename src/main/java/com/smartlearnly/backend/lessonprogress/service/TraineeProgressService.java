@@ -147,29 +147,21 @@ public class TraineeProgressService {
         @Transactional(readOnly = true)
         public int calculateStudentClassProgressPercent(UUID studentId, UUID courseId, UUID classId) {
                 ProgressCounts counts = calculateClassCurriculumProgress(studentId, courseId, classId);
-
                 ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
-
                 ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
-
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(),
-                                counts.flashcardTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
 
                 return calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
         }
 
-        private Optional<LessonProgress> findLessonProgress(UUID studentId, UUID courseId, UUID classId,
-                        UUID lessonIdentityId) {
+        private Optional<LessonProgress> findLessonProgress(UUID studentId, UUID courseId, UUID classId, UUID lessonIdentityId) {
                 if (classId == null) {
-                        return lessonProgressRepository.findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(
-                                        studentId, courseId, lessonIdentityId);
+                        return lessonProgressRepository.findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(studentId, courseId, lessonIdentityId);
                 }
-                return lessonProgressRepository.findByStudentIdAndClassIdAndLessonIdentityId(studentId, classId,
-                                lessonIdentityId);
+                return lessonProgressRepository.findByStudentIdAndClassIdAndLessonIdentityId(studentId, classId, lessonIdentityId);
         }
 
         private CourseProgressItemResponse buildClassProgress(UUID studentId, MyCourseResponse course) {
-
                 if (course.enrolledClass() == null) {
                         throw new BusinessException(ErrorCode.CONFLICT, "Trainee progress requires an enrolled class");
                 }
@@ -181,8 +173,7 @@ public class TraineeProgressService {
                 ProgressCounts counts = calculateClassCurriculumProgress(studentId, course.id(), classId);
                 ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
                 ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(),
-                                counts.flashcardTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
                 ProgressMetricResponse assignmentMetric = calculateAssignmentMetric(studentId, course.id(), classId);
                 int overallPercent = calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
 
@@ -267,23 +258,18 @@ public class TraineeProgressService {
                 return progressCounts(lessons, progressByLessonIdentityId);
         }
 
-        private ProgressCounts progressCounts(List<CurriculumLesson> lessons,
-                        Map<UUID, LessonProgress> progressByLessonIdentityId) {
+        private ProgressCounts progressCounts(List<CurriculumLesson> lessons, Map<UUID, LessonProgress> progressByLessonIdentityId) {
                 return new ProgressCounts(
                                 countByProgressGroup(lessons, ProgressGroup.LESSON),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
-                                                ProgressGroup.LESSON),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.LESSON),
                                 countByProgressGroup(lessons, ProgressGroup.QUIZ),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
-                                                ProgressGroup.QUIZ),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.QUIZ),
                                 countByProgressGroup(lessons, ProgressGroup.FLASHCARD),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
-                                                ProgressGroup.FLASHCARD));
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.FLASHCARD));
         }
 
         private ProgressCounts calculateClassCurriculumProgress(UUID studentId, UUID courseId, UUID classId) {
-                CurriculumResolution resolution = curriculumResolutionService
-                                .resolveTraineeProgress(courseId, classId, studentId);
+                CurriculumResolution resolution = curriculumResolutionService.resolveTraineeProgress(courseId, classId, studentId);
                 List<CurriculumLesson> lessons = orderedCurriculumLessons(resolution.version()).stream()
                                 .filter(this::isVisibleForLearningProgress)
                                 .toList();
@@ -299,19 +285,15 @@ public class TraineeProgressService {
 
                 return new ProgressCounts(
                                 countByProgressGroup(lessons, ProgressGroup.LESSON),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
-                                                ProgressGroup.LESSON),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.LESSON),
                                 countByProgressGroup(lessons, ProgressGroup.QUIZ),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
-                                                ProgressGroup.QUIZ),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.QUIZ),
                                 countByProgressGroup(lessons, ProgressGroup.FLASHCARD),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
-                                                ProgressGroup.FLASHCARD));
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.FLASHCARD));
         }
 
         private ProgressMetricResponse calculateAssignmentMetric(UUID studentId, UUID courseId, UUID classId) {
-                List<Assignment> assignments = assignmentRepository.findAvailableForStudent(studentId, courseId,
-                                classId, false);
+                List<Assignment> assignments = assignmentRepository.findAvailableForStudent(studentId, courseId, classId, false);
                 int total = assignments.size();
                 int completed = (int) assignments.stream().filter(assignment -> assignmentSubmissionRepository
                                 .findByAssignmentIdAndStudentId(assignment.getId(), studentId)

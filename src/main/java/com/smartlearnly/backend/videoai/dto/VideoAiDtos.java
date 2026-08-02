@@ -15,6 +15,7 @@ public final class VideoAiDtos {
         public record GenerateSummaryResponse(
                         String videoId,
                         String videoUrl,
+                        long durationSeconds,
                         int durationMinutes,
                         GeneratedSummary summary) {
         }

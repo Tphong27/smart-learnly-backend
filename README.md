@@ -84,7 +84,69 @@ Use `run-dev.example.ps1` as the non-secret template for a local `run-dev.ps1`.
 .\mvnw.cmd spring-boot:run
 ```
 
+### Test coverage
+
+On Windows, run:
+
+```powershell
+.\run-coverage.ps1
+```
+
+The script selects a JDK 17+ installation, runs `clean verify` through a
+temporary ASCII drive alias and always removes the alias afterwards. This
+avoids the Java agent startup failure caused by non-ASCII repository paths such
+as `Đồ án`.
+
+JaCoCo writes the coverage data and reports to:
+
+- HTML: `target/site/jacoco/index.html`
+- XML: `target/site/jacoco/jacoco.xml`
+- CSV: `target/site/jacoco/jacoco.csv`
+- Execution data: `target/jacoco.exec`
+
+Open the HTML report and select
+`com.smartlearnly.backend.videoai` to inspect line, branch and method coverage
+for the YouTube summary flow. Coverage is report-only and does not currently
+fail the build.
+
+On systems where the repository path is already ASCII, the equivalent Maven
+command is:
+
+```powershell
+.\mvnw.cmd clean verify
+```
+
 Swagger UI is available at `http://localhost:8080/swagger-ui.html`.
+
+## Video AI with local faster-whisper
+
+Video lessons can produce a timestamped transcript, captions, summary, chapters,
+key points and reviewable flashcard candidates. Generation is always started
+manually after HLS processing finishes; learners only receive instructor-published
+content for the current video version.
+
+Install the local transcription runtime using
+[`scripts/video-ai/README.md`](scripts/video-ai/README.md), then configure:
+
+```text
+APP_VIDEO_AI_ENABLED=true
+APP_VIDEO_AI_TRANSCRIPTION_ENABLED=true
+APP_VIDEO_AI_TRANSCRIPTION_PYTHON_COMMAND=<absolute path to the venv Python executable>
+APP_VIDEO_AI_TRANSCRIPTION_MODEL_CACHE_DIRECTORY=<writable model cache directory>
+APP_VIDEO_AI_GENERATION_ENABLED=true
+VIDEO_AI_GEMINI_API_KEY=<backend-only Gemini API key>
+APP_HLS_AI_AUDIO_BUCKET=<private R2 bucket>
+```
+
+For the GitHub Actions provider, configure repository variable
+`R2_AI_AUDIO_BUCKET` with the exact same private bucket name. This bucket must
+not have a public/custom domain; the workflow excludes `ai/*` from the playback
+bucket and uploads the derivative separately.
+
+Keep all feature flags disabled until the Python runtime, private bucket and Gemini
+key are configured. Existing HLS videos created before the AI audio derivative was
+introduced must be uploaded again. `faster-whisper` has no transcription API fee,
+but local compute, model storage, R2 and Gemini usage can still incur costs.
 
 To seed three development course categories while using the `dev` profile:
 
