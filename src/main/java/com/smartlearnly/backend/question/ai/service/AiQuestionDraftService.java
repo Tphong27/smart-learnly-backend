@@ -35,10 +35,6 @@ import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.learning.module.entity.CourseModule;
 import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
-import com.smartlearnly.backend.rag.entity.RagMaterialChunk;
-import com.smartlearnly.backend.rag.entity.RagMaterialSnapshot;
-import com.smartlearnly.backend.rag.repository.RagMaterialChunkRepository;
-import com.smartlearnly.backend.rag.repository.RagMaterialSnapshotRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.videoai.entity.VideoAiContent;
 import com.smartlearnly.backend.videoai.entity.VideoAiTranscriptSegment;
@@ -89,8 +85,6 @@ public class AiQuestionDraftService {
     private final CourseAccessService courseAccessService;
     private final CurrentUserService currentUserService;
     private final CourseModuleRepository courseModuleRepository;
-    private final RagMaterialSnapshotRepository snapshotRepository;
-    private final RagMaterialChunkRepository chunkRepository;
     private final AiQuestionGenerationBatchRepository batchRepository;
     private final AiQuestionGenerationSourceRepository sourceRepository;
     private final AiQuestionGenerationDraftRepository draftRepository;
@@ -447,7 +441,6 @@ public class AiQuestionDraftService {
             evidence.setGenerationSourceId(generatedEvidence.generationSourceId());
             AiQuestionGenerationSourceChunk sourceChunk = sourceChunkRepository.findById(generatedEvidence.chunkId()).orElse(null);
             evidence.setSourceChunkId(sourceChunk == null ? null : sourceChunk.getId());
-            evidence.setMaterialChunkId(sourceChunk == null ? generatedEvidence.chunkId() : sourceChunk.getMaterialChunkId());
             evidence.setChunkReference(normalizeRequired(generatedEvidence.chunkReference(), "Evidence chunk reference is required"));
             evidence.setSourceExcerpt(normalizeRequired(generatedEvidence.excerpt(), "Evidence excerpt is required"));
             evidence.setStartMs(sourceChunk == null ? null : sourceChunk.getStartMs());
@@ -632,14 +625,11 @@ public class AiQuestionDraftService {
             AiQuestionGenerationSource source = new AiQuestionGenerationSource();
             source.setBatchId(batch.getId());
                 source.setSourceKind(spec.kind());
-                source.setMaterialId(spec.materialId());
-                source.setMaterialSnapshotId(spec.materialSnapshotId());
                 source.setTranscriptContentId(spec.transcriptContentId());
                 source.setLessonId(spec.lessonId());
                 source.setSourceName(spec.sourceName());
                 source.setSourceChecksum(spec.checksum());
                 source.setSourceVersion(spec.version());
-                source.setRagStatus(spec.ragStatus());
                 source.setMimeType(spec.mimeType());
                 source.setFileSizeBytes(spec.fileSizeBytes());
                 source.setNormalizedCharCount(spec.normalizedCharCount());
@@ -685,57 +675,6 @@ public class AiQuestionDraftService {
         return specs;
     }
 
-    private List<SourceSpec> resolveMaterialSpecs(UUID courseId, List<UUID> generationSourceIds) {
-        if (generationSourceIds == null || generationSourceIds.isEmpty()) {
-            return List.of();
-        }
-        List<SourceSpec> specs = new ArrayList<>();
-        for (UUID sourceId : new LinkedHashSet<>(generationSourceIds)) {
-            RagMaterialSnapshot snapshot = snapshotRepository.findById(sourceId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source was not found or is not RAG-ready"));
-            if (!courseId.equals(snapshot.getCourseId())) {
-                throw new BusinessException(ErrorCode.AI_SOURCE_OUT_OF_SCOPE, "Generation source does not belong to this course");
-            }
-            if (!snapshot.isReady()) {
-                throw new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source is not RAG-ready");
-            }
-            List<RagMaterialChunk> chunks = chunkRepository.findBySnapshotIdOrderByChunkIndexAsc(snapshot.getId());
-            if (chunks.isEmpty()) {
-                throw new BusinessException(ErrorCode.AI_SOURCE_NOT_RAG_READY, "Generation source has no stable chunks");
-            }
-            List<SourceChunkSpec> chunkSpecs = chunks.stream()
-                    .map(chunk -> new SourceChunkSpec(
-                            chunk.getId(),
-                            chunk.getChunkReference(),
-                            chunk.getContentExcerpt(),
-                            chunk.getContentChecksum(),
-                            null,
-                            null
-                    ))
-                    .toList();
-            int charCount = chunkSpecs.stream().mapToInt(chunk -> chunk.excerpt().length()).sum();
-            specs.add(new SourceSpec(
-                    AiQuestionGenerationSource.KIND_MATERIAL,
-                    snapshot.getCurriculumLessonResourceId() != null ? snapshot.getCurriculumLessonResourceId() : snapshot.getLessonResourceId(),
-                    snapshot.getId(),
-                    null,
-                    snapshot.getLessonId(),
-                    snapshot.getSourceName(),
-                    snapshot.getChecksum(),
-                    snapshot.getVersion(),
-                    snapshot.getStatus(),
-                    null,
-                    null,
-                    charCount,
-                    null,
-                    null,
-                    null,
-                    chunkSpecs
-            ));
-        }
-        return specs;
-    }
-
     private List<SourceSpec> resolvePastedTextSpecs(List<AiQuestionDraftDtos.PastedTextSourceRequest> pastedTextSources) {
         if (pastedTextSources == null || pastedTextSources.isEmpty()) {
             return List.of();
@@ -751,12 +690,9 @@ public class AiQuestionDraftService {
                     AiQuestionGenerationSource.KIND_PASTED_TEXT,
                     null,
                     null,
-                    null,
-                    null,
                     name,
                     checksum(text),
                     "pasted-" + checksum(text).substring(0, 12),
-                    "ready",
                     "text/plain",
                     null,
                     text.length(),
@@ -796,12 +732,9 @@ public class AiQuestionDraftService {
                     AiQuestionGenerationSource.KIND_TEMPORARY_FILE,
                     null,
                     null,
-                    null,
-                    null,
                     fileName,
                     checksum,
                     sourceType == null ? extension.toUpperCase(Locale.ROOT) : sourceType,
-                    "ready",
                     normalizeContentType(file.getContentType(), extension),
                     (long) bytes.length,
                     text.length(),
@@ -835,7 +768,6 @@ public class AiQuestionDraftService {
                     : content.getSegments().stream()
                             .filter(segment -> normalizeSourceText(segment.getText()).length() >= 1)
                             .map(segment -> new SourceChunkSpec(
-                                    null,
                                     transcriptReference(segment),
                                     normalizeSourceText(segment.getText()),
                                     checksum(normalizeSourceText(segment.getText())),
@@ -845,14 +777,11 @@ public class AiQuestionDraftService {
                             .toList();
             specs.add(new SourceSpec(
                     AiQuestionGenerationSource.KIND_TRANSCRIPT,
-                    null,
-                    null,
                     content.getId(),
                     content.getLessonId(),
                     "Video transcript",
                     checksum(text),
                     String.valueOf(content.getRevision() == null ? 0 : content.getRevision()),
-                    "ready",
                     "text/plain",
                     null,
                     text.length(),
@@ -883,7 +812,6 @@ public class AiQuestionDraftService {
             SourceChunkSpec spec = chunks.get(index);
             AiQuestionGenerationSourceChunk chunk = new AiQuestionGenerationSourceChunk();
             chunk.setGenerationSourceId(source.getId());
-            chunk.setMaterialChunkId(spec.materialChunkId());
             chunk.setChunkIndex(index);
             chunk.setChunkReference(spec.reference());
             chunk.setContentExcerpt(spec.excerpt());
@@ -941,7 +869,6 @@ public class AiQuestionDraftService {
         String excerpt = normalizeSourceText(text);
         String prefix = normalizeNullable(referencePrefix);
         return new SourceChunkSpec(
-                null,
                 (prefix == null ? "chunk" : prefix) + "-" + index,
                 excerpt,
                 checksum(excerpt),
@@ -1206,14 +1133,14 @@ public class AiQuestionDraftService {
                         source.getId(),
                         source.getId(),
                         source.getSourceKind(),
-                        source.getMaterialId(),
-                        source.getMaterialSnapshotId(),
+                        null,
+                        null,
                         source.getTranscriptContentId(),
                         source.getLessonId(),
                         source.getSourceName(),
                         source.getSourceChecksum(),
                         source.getSourceVersion(),
-                        source.getRagStatus(),
+                        null,
                         source.getMimeType(),
                         source.getFileSizeBytes(),
                         source.getNormalizedCharCount(),
@@ -1276,7 +1203,7 @@ public class AiQuestionDraftService {
         return new AiQuestionDraftDtos.EvidenceResponse(
                 evidence.getId(),
                 evidence.getGenerationSourceId(),
-                evidence.getMaterialChunkId(),
+                null,
                 evidence.getSourceChunkId(),
                 evidence.getChunkReference(),
                 evidence.getSourceExcerpt(),
@@ -1376,14 +1303,11 @@ public class AiQuestionDraftService {
 
     private record SourceSpec(
             String kind,
-            UUID materialId,
-            UUID materialSnapshotId,
             UUID transcriptContentId,
             UUID lessonId,
             String sourceName,
             String checksum,
             String version,
-            String ragStatus,
             String mimeType,
             Long fileSizeBytes,
             int normalizedCharCount,
@@ -1398,7 +1322,6 @@ public class AiQuestionDraftService {
     }
 
     private record SourceChunkSpec(
-            UUID materialChunkId,
             String reference,
             String excerpt,
             String checksum,

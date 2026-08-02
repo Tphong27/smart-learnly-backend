@@ -66,6 +66,15 @@ public class TransactionController {
         return ApiResponse.success("Transactions loaded successfully", result);
     }
 
+    @GetMapping("/filter-options")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @Operation(summary = "Get transaction filter options for admin monitoring")
+    public ApiResponse<TransactionFilterOptionsResponse> getFilterOptions() {
+        return ApiResponse.success(
+                "Transaction filter options loaded successfully",
+                transactionQueryService.getFilterOptions());
+    }
+
     @GetMapping("/{transactionId}")
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
     @Operation(summary = "Get transaction detail")

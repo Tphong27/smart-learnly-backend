@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.commerce.dto.TransactionFilterOptionsResponse;
 import com.smartlearnly.backend.commerce.dto.TransactionResponse;
 import com.smartlearnly.backend.commerce.entity.PaymentGateway;
 import com.smartlearnly.backend.commerce.entity.PaymentTransaction;
@@ -16,6 +17,7 @@ import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -94,6 +96,30 @@ class TransactionQueryServiceTest {
         when(paymentTransactionRepository.findById(transaction.getId())).thenReturn(Optional.of(transaction));
 
         assertThatThrownBy(() -> transactionQueryService.getTransaction(transaction.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).errorCode())
+                .isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void getFilterOptionsShouldReturnDistinctValuesForAdmin() {
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(paymentTransactionRepository.findDistinctStatuses()).thenReturn(List.of("PENDING", "SUCCESS"));
+        when(paymentTransactionRepository.findDistinctPaymentGateways()).thenReturn(List.of("SEPAY"));
+        when(paymentTransactionRepository.findDistinctCurrencies()).thenReturn(List.of("VND"));
+
+        TransactionFilterOptionsResponse response = transactionQueryService.getFilterOptions();
+
+        assertThat(response.statuses()).containsExactly("PENDING", "SUCCESS");
+        assertThat(response.paymentGateways()).containsExactly("SEPAY");
+        assertThat(response.currencies()).containsExactly("VND");
+    }
+
+    @Test
+    void getFilterOptionsShouldRejectTrainee() {
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(owner);
+
+        assertThatThrownBy(() -> transactionQueryService.getFilterOptions())
                 .isInstanceOf(BusinessException.class)
                 .extracting(error -> ((BusinessException) error).errorCode())
                 .isEqualTo(ErrorCode.FORBIDDEN);
