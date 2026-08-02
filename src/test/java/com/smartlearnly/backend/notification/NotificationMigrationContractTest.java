@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 class NotificationMigrationContractTest {
     private static final Path MIGRATION =
             Path.of("src/main/resources/db/migration/V78__notification_foundation.sql");
+    private static final Path LIFECYCLE_MIGRATION =
+            Path.of("src/main/resources/db/migration/V79__notification_lifecycle_and_delivery.sql");
 
     @Test
     void migrationShouldDefineNotificationFoundation() throws Exception {
@@ -38,5 +40,26 @@ class NotificationMigrationContractTest {
                 .isEqualTo("action_url");
         assertThat(Notification.class.getDeclaredField("eventKey").getAnnotation(Column.class).name())
                 .isEqualTo("event_key");
+        assertThat(Notification.class.getDeclaredField("deliveredAt").getAnnotation(Column.class).name())
+                .isEqualTo("delivered_at");
+        assertThat(Notification.class.getDeclaredField("seenAt").getAnnotation(Column.class).name())
+                .isEqualTo("seen_at");
+        assertThat(Notification.class.getDeclaredField("clickedAt").getAnnotation(Column.class).name())
+                .isEqualTo("clicked_at");
+        assertThat(Notification.class.getDeclaredField("archivedAt").getAnnotation(Column.class).name())
+                .isEqualTo("archived_at");
+    }
+
+    @Test
+    void lifecycleMigrationShouldDefineArchiveDeliveryAndRetentionIndexes() throws Exception {
+        String sql = Files.readString(LIFECYCLE_MIGRATION);
+
+        assertThat(sql).contains("ADD COLUMN IF NOT EXISTS delivered_at timestamptz");
+        assertThat(sql).contains("ADD COLUMN IF NOT EXISTS seen_at timestamptz");
+        assertThat(sql).contains("ADD COLUMN IF NOT EXISTS clicked_at timestamptz");
+        assertThat(sql).contains("ADD COLUMN IF NOT EXISTS archived_at timestamptz");
+        assertThat(sql).contains("idx_notifications_user_active_created_at");
+        assertThat(sql).contains("idx_notifications_user_active_unread_created_at");
+        assertThat(sql).contains("idx_notifications_retention_cleanup");
     }
 }

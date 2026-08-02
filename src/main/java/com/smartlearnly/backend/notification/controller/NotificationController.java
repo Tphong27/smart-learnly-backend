@@ -2,6 +2,7 @@ package com.smartlearnly.backend.notification.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.notification.dto.ArchivedCountResponse;
 import com.smartlearnly.backend.notification.dto.NotificationResponse;
 import com.smartlearnly.backend.notification.dto.UnreadCountResponse;
 import com.smartlearnly.backend.notification.service.NotificationService;
@@ -67,11 +68,35 @@ public class NotificationController {
                 notificationService.markRead(notificationId));
     }
 
+    @PatchMapping("/{notificationId}/clicked")
+    @Operation(summary = "Record a click on one notification")
+    public ApiResponse<NotificationResponse> recordClick(@PathVariable UUID notificationId) {
+        return ApiResponse.success(
+                "Notification click recorded",
+                notificationService.recordClick(notificationId));
+    }
+
+    @PatchMapping("/{notificationId}/archive")
+    @Operation(summary = "Archive one notification")
+    public ApiResponse<NotificationResponse> archive(@PathVariable UUID notificationId) {
+        return ApiResponse.success(
+                "Notification archived",
+                notificationService.archive(notificationId));
+    }
+
     @PatchMapping("/read-all")
     @Operation(summary = "Mark all current user's notifications as read")
     public ApiResponse<UnreadCountResponse> markAllRead() {
         return ApiResponse.success(
                 "Notifications marked as read",
                 notificationService.markAllRead());
+    }
+
+    @PatchMapping("/archive-all")
+    @Operation(summary = "Archive all current user's notifications")
+    public ApiResponse<ArchivedCountResponse> archiveAll() {
+        return ApiResponse.success(
+                "Notifications archived",
+                notificationService.archiveAll());
     }
 }

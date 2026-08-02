@@ -65,6 +65,18 @@ public class Notification {
     @Column(name = "read_at")
     private Instant readAt;
 
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
+    @Column(name = "seen_at")
+    private Instant seenAt;
+
+    @Column(name = "clicked_at")
+    private Instant clickedAt;
+
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -79,6 +91,9 @@ public class Notification {
         }
         if (createdAt == null) {
             createdAt = now;
+        }
+        if (deliveredAt == null) {
+            deliveredAt = now;
         }
         if (payload == null) {
             payload = new LinkedHashMap<>();

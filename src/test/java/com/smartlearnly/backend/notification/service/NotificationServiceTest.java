@@ -18,6 +18,7 @@ import com.smartlearnly.backend.notification.entity.NotificationType;
 import com.smartlearnly.backend.notification.repository.NotificationRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -73,7 +74,7 @@ class NotificationServiceTest {
     @Test
     void unreadCountShouldUseCurrentUser() {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        when(notificationRepository.countByUserIdAndReadAtIsNull(user.getId())).thenReturn(3L);
+        when(notificationRepository.countByUserIdAndReadAtIsNullAndArchivedAtIsNull(user.getId())).thenReturn(3L);
 
         assertThat(service.unreadCount().unreadCount()).isEqualTo(3L);
     }
@@ -82,21 +83,22 @@ class NotificationServiceTest {
     void markReadShouldOnlyLoadOwnedNotification() {
         Notification notification = sample(NotificationType.ASSIGNMENT, null);
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        when(notificationRepository.findByIdAndUserId(notification.getId(), user.getId()))
+        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notification.getId(), user.getId()))
                 .thenReturn(Optional.of(notification));
         when(notificationRepository.save(notification)).thenReturn(notification);
 
         NotificationResponse response = service.markRead(notification.getId());
 
         assertThat(response.readAt()).isNotNull();
-        verify(notificationRepository).findByIdAndUserId(notification.getId(), user.getId());
+        assertThat(response.seenAt()).isNotNull();
+        verify(notificationRepository).findByIdAndUserIdAndArchivedAtIsNull(notification.getId(), user.getId());
     }
 
     @Test
     void markReadShouldRejectMissingOrUnownedNotification() {
         UUID notificationId = UUID.randomUUID();
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        when(notificationRepository.findByIdAndUserId(notificationId, user.getId()))
+        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notificationId, user.getId()))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.markRead(notificationId))
@@ -108,12 +110,53 @@ class NotificationServiceTest {
     @Test
     void markAllReadShouldUpdateOnlyCurrentUser() {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        when(notificationRepository.countByUserIdAndReadAtIsNull(user.getId())).thenReturn(0L);
+        when(notificationRepository.countByUserIdAndReadAtIsNullAndArchivedAtIsNull(user.getId())).thenReturn(0L);
 
         var response = service.markAllRead();
 
         assertThat(response.unreadCount()).isZero();
         verify(notificationRepository).markAllReadForUser(eq(user.getId()), any(Instant.class));
+    }
+
+    @Test
+    void recordClickShouldSetReadSeenAndClickedForOwnedNotification() {
+        Notification notification = sample(NotificationType.COURSE, null);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notification.getId(), user.getId()))
+                .thenReturn(Optional.of(notification));
+        when(notificationRepository.save(notification)).thenReturn(notification);
+
+        NotificationResponse response = service.recordClick(notification.getId());
+
+        assertThat(response.readAt()).isNotNull();
+        assertThat(response.seenAt()).isNotNull();
+        assertThat(response.clickedAt()).isNotNull();
+    }
+
+    @Test
+    void archiveShouldHideOwnedNotificationAndMarkItRead() {
+        Notification notification = sample(NotificationType.SYSTEM, null);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notification.getId(), user.getId()))
+                .thenReturn(Optional.of(notification));
+        when(notificationRepository.save(notification)).thenReturn(notification);
+
+        NotificationResponse response = service.archive(notification.getId());
+
+        assertThat(response.readAt()).isNotNull();
+        assertThat(response.seenAt()).isNotNull();
+        assertThat(response.archivedAt()).isNotNull();
+    }
+
+    @Test
+    void archiveAllShouldUpdateOnlyCurrentUser() {
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(notificationRepository.archiveAllForUser(eq(user.getId()), any(Instant.class))).thenReturn(4);
+
+        var response = service.archiveAll();
+
+        assertThat(response.archivedCount()).isEqualTo(4);
+        verify(notificationRepository).archiveAllForUser(eq(user.getId()), any(Instant.class));
     }
 
     @Test
@@ -162,6 +205,78 @@ class NotificationServiceTest {
 
         assertThat(result).isEmpty();
         verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void emitAllShouldSaveUniqueNonDuplicateNotificationsInBatch() {
+        UUID firstReferenceId = UUID.randomUUID();
+        UUID secondReferenceId = UUID.randomUUID();
+        when(notificationRepository.saveAll(any()))
+                .thenAnswer(invocation -> {
+                    Iterable<Notification> iterable = invocation.getArgument(0);
+                    List<Notification> saved = new ArrayList<>();
+                    iterable.forEach(notification -> {
+                        notification.setId(UUID.randomUUID());
+                        notification.setCreatedAt(Instant.now());
+                        saved.add(notification);
+                    });
+                    return saved;
+                });
+
+        List<NotificationResponse> result = service.emitAll(List.of(
+                new NotificationCreateCommand(
+                        user.getId(),
+                        NotificationType.CLASS,
+                        "Class updated",
+                        null,
+                        "CLASS",
+                        firstReferenceId,
+                        null,
+                        null,
+                        "class:" + firstReferenceId + ":updated",
+                        Map.of()),
+                new NotificationCreateCommand(
+                        user.getId(),
+                        NotificationType.CLASS,
+                        "Class updated duplicate",
+                        null,
+                        "CLASS",
+                        firstReferenceId,
+                        null,
+                        null,
+                        "class:" + firstReferenceId + ":updated",
+                        Map.of()),
+                new NotificationCreateCommand(
+                        user.getId(),
+                        NotificationType.CLASS,
+                        "Class restored",
+                        null,
+                        "CLASS",
+                        secondReferenceId,
+                        null,
+                        null,
+                        "class:" + secondReferenceId + ":restored",
+                        Map.of())));
+
+        assertThat(result).hasSize(2);
+        verify(notificationRepository).saveAll(any());
+        verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void cleanupShouldRejectMissingCutoff() {
+        assertThatThrownBy(() -> service.cleanupReadOrArchivedCreatedBefore(null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).errorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    void cleanupShouldDeleteReadOrArchivedBeforeCutoff() {
+        Instant cutoff = Instant.now().minusSeconds(3600);
+        when(notificationRepository.deleteReadOrArchivedCreatedBefore(cutoff)).thenReturn(7);
+
+        assertThat(service.cleanupReadOrArchivedCreatedBefore(cutoff)).isEqualTo(7);
     }
 
     @Test

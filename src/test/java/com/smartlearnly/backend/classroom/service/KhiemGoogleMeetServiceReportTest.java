@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleOAuthSettings;
 import com.smartlearnly.backend.classroom.config.GoogleMeetProperties;
 import com.smartlearnly.backend.classroom.dto.MeetingUrlResponse;
@@ -58,6 +59,8 @@ class KhiemGoogleMeetServiceReportTest {
 
     @Test
     void UTCID_KHIEM_BE_511_createMeetingUrl_exchangesTokenAndReturnsTrimmedUrl() {
+        when(settingsService.resolveGoogleMeetSettings())
+                .thenReturn(new GoogleMeetSettings(true, "fake-refresh-token"));
         when(settingsService.resolveGoogleSettings()).thenReturn(
                 new GoogleOAuthSettings(
                         "fake-client-id",
@@ -91,7 +94,8 @@ class KhiemGoogleMeetServiceReportTest {
 
     @Test
     void UTCID_KHIEM_BE_512_createMeetingUrl_rejectsDisabledIntegration() {
-        properties.setEnabled(false);
+        when(settingsService.resolveGoogleMeetSettings())
+                .thenReturn(new GoogleMeetSettings(false, "fake-refresh-token"));
 
         assertThatThrownBy(service::createMeetingUrl)
                 .isInstanceOfSatisfying(BusinessException.class, error -> {
@@ -103,7 +107,8 @@ class KhiemGoogleMeetServiceReportTest {
 
     @Test
     void UTCID_KHIEM_BE_513_createMeetingUrl_rejectsIncompleteConfiguration() {
-        properties.setRefreshToken(" ");
+        when(settingsService.resolveGoogleMeetSettings())
+                .thenReturn(new GoogleMeetSettings(true, " "));
         when(settingsService.resolveGoogleSettings()).thenReturn(
                 new GoogleOAuthSettings(
                         "fake-client-id",
