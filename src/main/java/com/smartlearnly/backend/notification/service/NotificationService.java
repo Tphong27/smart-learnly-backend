@@ -26,7 +26,6 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,13 +45,13 @@ public class NotificationService {
     public PageResponse<NotificationResponse> list(String statusValue, String typeValue, int page, int size) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         NotificationReadStatus status = NotificationReadStatus.from(statusValue);
-        NotificationType type = parseType(typeValue);
+        String type = toDatabaseType(parseType(typeValue));
         Page<Notification> result = notificationRepository.findForUser(
                 actor.getId(),
                 status != NotificationReadStatus.UNREAD,
                 status != NotificationReadStatus.READ,
                 type,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+                PageRequest.of(page, size));
         return new PageResponse<>(
                 result.getContent().stream().map(this::toResponse).toList(),
                 result.getNumber(),
@@ -70,6 +69,10 @@ public class NotificationService {
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Notification type is invalid");
         }
+    }
+
+    private static String toDatabaseType(NotificationType type) {
+        return type == null ? null : type.name().toLowerCase(Locale.ROOT);
     }
 
     @Transactional(readOnly = true)

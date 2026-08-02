@@ -1,7 +1,6 @@
 package com.smartlearnly.backend.notification.repository;
 
 import com.smartlearnly.backend.notification.entity.Notification;
-import com.smartlearnly.backend.notification.entity.NotificationType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,21 +12,31 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
-    @Query("""
-            SELECT notification
-            FROM Notification notification
-            WHERE notification.userId = :userId
-              AND notification.archivedAt IS NULL
-              AND (:type IS NULL OR notification.type = :type)
-              AND (:includeRead = true OR notification.readAt IS NULL)
-              AND (:includeUnread = true OR notification.readAt IS NOT NULL)
-            ORDER BY notification.createdAt DESC
-            """)
+    @Query(value = """
+            SELECT notification.*
+            FROM public.notifications notification
+            WHERE notification.user_id = :userId
+              AND notification.archived_at IS NULL
+              AND (:type IS NULL OR notification.type = CAST(:type AS public.notification_type))
+              AND (:includeRead = true OR notification.read_at IS NULL)
+              AND (:includeUnread = true OR notification.read_at IS NOT NULL)
+            ORDER BY notification.created_at DESC
+            """,
+            countQuery = """
+                    SELECT COUNT(*)
+                    FROM public.notifications notification
+                    WHERE notification.user_id = :userId
+                      AND notification.archived_at IS NULL
+                      AND (:type IS NULL OR notification.type = CAST(:type AS public.notification_type))
+                      AND (:includeRead = true OR notification.read_at IS NULL)
+                      AND (:includeUnread = true OR notification.read_at IS NOT NULL)
+                    """,
+            nativeQuery = true)
     Page<Notification> findForUser(
             @Param("userId") UUID userId,
             @Param("includeRead") boolean includeRead,
             @Param("includeUnread") boolean includeUnread,
-            @Param("type") NotificationType type,
+            @Param("type") String type,
             Pageable pageable);
 
     Optional<Notification> findByIdAndUserId(UUID id, UUID userId);

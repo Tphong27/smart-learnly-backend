@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,7 +60,7 @@ class NotificationServiceTest {
                 eq(user.getId()),
                 eq(false),
                 eq(true),
-                eq(NotificationType.PAYMENT),
+                eq("payment"),
                 any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(unread), PageRequest.of(0, 20), 1));
 
@@ -69,6 +70,98 @@ class NotificationServiceTest {
         assertThat(response.items().get(0).id()).isEqualTo(unread.getId());
         assertThat(response.page()).isZero();
         assertThat(response.totalItems()).isEqualTo(1);
+    }
+
+    @Test
+    void listWithoutTypeFilterShouldPassNullTypeAndPreservePaginationTotals() {
+        Notification notification = sample(NotificationType.SYSTEM, null);
+        PageRequest pageable = PageRequest.of(2, 5);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(notificationRepository.findForUser(
+                eq(user.getId()),
+                eq(true),
+                eq(true),
+                isNull(),
+                any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(notification), pageable, 17));
+
+        var response = service.list("all", null, 2, 5);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.page()).isEqualTo(2);
+        assertThat(response.size()).isEqualTo(5);
+        assertThat(response.totalItems()).isEqualTo(17);
+        assertThat(response.totalPages()).isEqualTo(4);
+
+        ArgumentCaptor<PageRequest> pageableCaptor = ArgumentCaptor.forClass(PageRequest.class);
+        verify(notificationRepository).findForUser(
+                eq(user.getId()),
+                eq(true),
+                eq(true),
+                isNull(),
+                pageableCaptor.capture());
+        assertThat(pageableCaptor.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(5);
+        assertThat(pageableCaptor.getValue().getSort().isUnsorted()).isTrue();
+    }
+
+    @Test
+    void listShouldAcceptUppercasePaymentTypeFilter() {
+        Notification notification = sample(NotificationType.PAYMENT, null);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(notificationRepository.findForUser(
+                eq(user.getId()),
+                eq(true),
+                eq(true),
+                eq("payment"),
+                any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(notification), PageRequest.of(0, 20), 1));
+
+        var response = service.list("all", "PAYMENT", 0, 20);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).type()).isEqualTo(NotificationType.PAYMENT);
+    }
+
+    @Test
+    void listShouldAcceptHyphenatedTypeFilter() {
+        Notification notification = sample(NotificationType.AI_SUGGESTION, null);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(notificationRepository.findForUser(
+                eq(user.getId()),
+                eq(true),
+                eq(true),
+                eq("ai_suggestion"),
+                any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(notification), PageRequest.of(0, 20), 1));
+
+        var response = service.list("all", "ai-suggestion", 0, 20);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).type()).isEqualTo(NotificationType.AI_SUGGESTION);
+    }
+
+    @Test
+    void listShouldPassReadStatusFlags() {
+        Notification notification = sample(NotificationType.COURSE, Instant.now());
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        when(notificationRepository.findForUser(
+                eq(user.getId()),
+                eq(true),
+                eq(false),
+                isNull(),
+                any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(notification), PageRequest.of(0, 20), 1));
+
+        var response = service.list("read", null, 0, 20);
+
+        assertThat(response.items()).hasSize(1);
+        verify(notificationRepository).findForUser(
+                eq(user.getId()),
+                eq(true),
+                eq(false),
+                isNull(),
+                any(PageRequest.class));
     }
 
     @Test
