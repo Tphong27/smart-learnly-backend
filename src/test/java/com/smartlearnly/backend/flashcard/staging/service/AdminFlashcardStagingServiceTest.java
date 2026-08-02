@@ -18,6 +18,7 @@ import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveTemporaryFlashcardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
@@ -25,6 +26,7 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.RejectStagingCardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.TemporaryFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.UpdateStagingCardRequest;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
@@ -1354,6 +1356,91 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void previewCourseQuestionsReturnsTemporaryCandidatesWithoutStagingWritesAndMarksDuplicatesUnselected() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UUID courseId = flashcardSet.getLesson().getCourse().getId();
+        UUID moduleId = UUID.randomUUID();
+        Question duplicateQuestion = question(courseId, moduleId, "Question 1");
+        Question readyQuestion = question(courseId, moduleId, "Question 2");
+        QuestionAnswer duplicateAnswer = answer(duplicateQuestion.getId(), "Correct 1", true, 0);
+        QuestionAnswer readyAnswer = answer(readyQuestion.getId(), "Correct 2", true, 0);
+        FlashcardCard current = flashcardCard(
+                flashcardSet,
+                "<p>Question 1</p><p>Options:</p><p>1. Correct 1</p>",
+                "correct&nbsp;1"
+        );
+
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(questionRepository.findAllById(List.of(duplicateQuestion.getId(), readyQuestion.getId())))
+                .thenReturn(List.of(duplicateQuestion, readyQuestion));
+        when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(
+                List.of(duplicateQuestion.getId(), readyQuestion.getId())))
+                .thenReturn(List.of(duplicateAnswer, readyAnswer));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(current));
+
+        var response = service.previewCourseQuestions(
+                flashcardSet.getId(),
+                new ImportCourseQuestionsRequest(List.of(duplicateQuestion.getId(), readyQuestion.getId()))
+        );
+
+        assertThat(response.sourceType()).isEqualTo("COURSE_QUESTIONS");
+        assertThat(response.requestedCount()).isEqualTo(2);
+        assertThat(response.cards()).hasSize(2);
+        assertThat(response.cards().get(0).duplicate()).isTrue();
+        assertThat(response.cards().get(0).selected()).isFalse();
+        assertThat(response.cards().get(0).issues()).contains("Matches Current Flashcards");
+        assertThat(response.cards().get(1).duplicate()).isFalse();
+        assertThat(response.cards().get(1).selected()).isTrue();
+        verify(stagingBatchRepository, never()).save(any());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void approveTemporarySkipsInvalidAndDuplicateCandidatesWhileCreatingValidCards() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardCard existing = flashcardCard(flashcardSet, "Existing", "Back");
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(existing));
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(3);
+        when(flashcardCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> {
+                card.setId(UUID.randomUUID());
+                card.setCreatedAt(Instant.now());
+                card.setUpdatedAt(Instant.now());
+            });
+            return cards;
+        });
+
+        var response = service.approveTemporary(
+                flashcardSet.getId(),
+                new ApproveTemporaryFlashcardsRequest(List.of(
+                        temporaryCard("<p>Unique</p>", "One"),
+                        temporaryCard("Existing", "Back"),
+                        temporaryCard(" ", " "),
+                        temporaryCard("unique", " one ")
+                ))
+        );
+
+        assertThat(response.requested()).isEqualTo(4);
+        assertThat(response.created()).isEqualTo(1);
+        assertThat(response.duplicateSkipped()).isEqualTo(2);
+        assertThat(response.invalidSkipped()).isEqualTo(1);
+        assertThat(response.createdCards()).hasSize(1);
+        assertThat(response.createdCards().get(0).frontText()).isEqualTo("<p>Unique</p>");
+        assertThat(response.createdCards().get(0).orderIndex()).isEqualTo(4);
+        ArgumentCaptor<List<FlashcardCard>> cardsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(flashcardCardRepository).saveAll(cardsCaptor.capture());
+        assertThat(cardsCaptor.getValue()).hasSize(1);
+        verify(stagingBatchRepository, never()).save(any());
+        verify(stagingCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void sourceQuestionsReturnsOnlySameCourseQuestions() {
         FlashcardSet flashcardSet = flashcardSet();
         UUID moduleId = UUID.randomUUID();
@@ -1633,6 +1720,21 @@ class AdminFlashcardStagingServiceTest {
         card.setCreatedAt(Instant.now());
         card.setUpdatedAt(Instant.now());
         return card;
+    }
+
+    private TemporaryFlashcardCardRequest temporaryCard(String frontText, String backText) {
+        return new TemporaryFlashcardCardRequest(
+                UUID.randomUUID(),
+                null,
+                frontText,
+                null,
+                backText,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     private Question question(UUID courseId, UUID moduleId, String questionText) {

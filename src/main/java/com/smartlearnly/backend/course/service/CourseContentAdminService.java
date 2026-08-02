@@ -25,6 +25,7 @@ import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
+import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
@@ -63,6 +64,7 @@ public class CourseContentAdminService {
     private final QuizContentValidator quizContentValidator;
     private final CourseAccessService courseAccessService;
     private final VideoSummaryService videoSummaryService;
+    private final FlashcardSetRepository flashcardSetRepository;
 
     // SECTION READ OPERATIONS
     @Transactional(readOnly = true)
@@ -380,6 +382,8 @@ public class CourseContentAdminService {
 
         CurriculumLesson saved = lessonRepository.save(lesson);
 
+        synchronizeFlashcardSetTitle(saved);
+
         audit(
                 "LESSON_UPDATED",
                 "CURRICULUM_LESSON",
@@ -560,6 +564,17 @@ public class CourseContentAdminService {
                     )
                     .forEach(lesson::addResource);
         }
+    }
+
+    private void synchronizeFlashcardSetTitle(CurriculumLesson lesson) {
+        if (lesson.getType() != LessonType.FLASHCARD) {
+            return;
+        }
+        flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId())
+                .ifPresent(flashcardSet -> {
+                    flashcardSet.setTitle(lesson.getTitle());
+                    flashcardSetRepository.save(flashcardSet);
+                });
     }
 
     // CURRICULUM VERSION LOOKUP

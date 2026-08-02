@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.flashcard.staging.dto;
 
+import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardCardResponse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -217,5 +218,76 @@ public final class AdminFlashcardStagingDtos {
     public record RejectStagingCardsResponse(
             int rejectedCount
     ) {
+    }
+
+    public record TemporaryFlashcardCandidateBatchResponse(
+            UUID id,
+            UUID flashcardSetId,
+            UUID lessonId,
+            UUID curriculumLessonId,
+            UUID courseId,
+            String sourceType,
+            String sourceName,
+            int requestedCount,
+            int candidateCount,
+            List<TemporaryFlashcardCandidateResponse> cards
+    ) {
+    }
+
+    public record TemporaryFlashcardCandidateResponse(
+            UUID id,
+            UUID sourceQuestionId,
+            String frontText,
+            String backText,
+            String frontImageUrl,
+            String backImageUrl,
+            String hint,
+            String explanation,
+            String sourceExcerpt,
+            boolean selected,
+            boolean duplicate,
+            boolean invalid,
+            List<String> issues,
+            Integer sortOrder
+    ) {
+        public TemporaryFlashcardCandidateResponse {
+            issues = issues == null ? List.of() : List.copyOf(issues);
+        }
+    }
+
+    public record ApproveTemporaryFlashcardsRequest(
+            @NotEmpty(message = "At least one flashcard candidate is required")
+            @Size(max = 500, message = "Approval request must not exceed 500 candidates")
+            List<@NotNull(message = "Flashcard candidate must not be null") TemporaryFlashcardCardRequest> cards
+    ) {
+    }
+
+    public record TemporaryFlashcardCardRequest(
+            UUID id,
+            UUID sourceQuestionId,
+            String frontText,
+            @Size(max = 500, message = "Front image URL must not exceed 500 characters")
+            String frontImageUrl,
+            String backText,
+            @Size(max = 500, message = "Back image URL must not exceed 500 characters")
+            String backImageUrl,
+            String hint,
+            String explanation,
+            String sourceExcerpt,
+            @PositiveOrZero(message = "Sort order must not be negative")
+            Integer sortOrder
+    ) {
+    }
+
+    public record ApproveTemporaryFlashcardsResponse(
+            int requested,
+            int created,
+            int duplicateSkipped,
+            int invalidSkipped,
+            List<FlashcardCardResponse> createdCards
+    ) {
+        public ApproveTemporaryFlashcardsResponse {
+            createdCards = createdCards == null ? List.of() : List.copyOf(createdCards);
+        }
     }
 }
