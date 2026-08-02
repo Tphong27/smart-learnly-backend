@@ -15,26 +15,21 @@ public record CreateAdminUserRequest(
         @Size(max = 255, message = "Email must not exceed 255 characters")
         String email,
 
-        @Size(max = 500, message = "Avatar URL must not exceed 500 characters")
-        String avatarUrl,
-
         @Size(max = 20, message = "Phone number must not exceed 20 characters")
         String phoneNumber,
 
-        String bio,
-
+        @Pattern(
+                regexp = "(?i)^(GUEST|TRAINEE|TRAINER|TMO|SME|ADMIN)$",
+                message = "Role is invalid"
+        )
         String role,
 
+        @Pattern(
+                regexp = "(?i)^(pending_verify|active|inactive|banned)$",
+                message = "Status is invalid"
+        )
         String status,
 
-        Boolean emailVerified,
-
-        @NotBlank(message = "Password is required")
-        @Size(min = 8, max = 100, message = "Password must be between 8 and 100 characters")
-        @Pattern(
-                regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z\\d]).{8,100}$",
-                message = "Password must contain uppercase, lowercase, number, and special character"
-        )
-        String password
+        Boolean emailVerified
 ) {
 }

@@ -15,6 +15,8 @@ import com.smartlearnly.backend.auth.service.AuthService;
 import com.smartlearnly.backend.auth.service.AuthSessionService;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.auth.config.AuthProperties;
+import com.smartlearnly.backend.file.dto.CourseThumbnailUploadResponse;
+import com.smartlearnly.backend.file.service.CourseThumbnailService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -31,10 +33,13 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
 @Validated
 @RestController
@@ -45,6 +50,7 @@ public class AuthController {
     private final AuthService authService;
     private final AuthProperties authProperties;
     private final SystemSettingsService systemSettingsService;
+    private final CourseThumbnailService courseThumbnailService;
 
     @GetMapping("/google/config")
     @Operation(summary = "Get the public Google OAuth client ID for the sign-in button")
@@ -200,6 +206,28 @@ public class AuthController {
     })
     public com.smartlearnly.backend.common.api.ApiResponse<UserProfileResponse> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
         return com.smartlearnly.backend.common.api.ApiResponse.success("Profile updated successfully", authService.updateCurrentUserProfile(request));
+    }
+
+    @PostMapping(value = "/profile/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload and update the current user's avatar")
+    @SecurityRequirements({
+            @SecurityRequirement(name = "basicAuth"),
+            @SecurityRequirement(name = "bearerAuth")
+    })
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Avatar uploaded successfully"),
+            @ApiResponse(responseCode = "401", description = "Authentication required"),
+            @ApiResponse(responseCode = "413", description = "File exceeds size limit"),
+            @ApiResponse(responseCode = "415", description = "File type is unsupported")
+    })
+    public com.smartlearnly.backend.common.api.ApiResponse<UserProfileResponse> uploadAvatar(
+            @RequestPart("file") MultipartFile file
+    ) {
+        CourseThumbnailUploadResponse uploaded = courseThumbnailService.upload(file);
+        UserProfileResponse updated = authService.updateCurrentUserProfile(
+                new UpdateProfileRequest(null, uploaded.url(), null, null)
+        );
+        return com.smartlearnly.backend.common.api.ApiResponse.success("Avatar uploaded successfully", updated);
     }
 
     @PostMapping("/change-password")
