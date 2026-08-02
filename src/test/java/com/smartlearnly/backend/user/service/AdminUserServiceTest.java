@@ -7,9 +7,11 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.user.dto.AdminUserPageResponse;
 import com.smartlearnly.backend.user.dto.AdminUserResponse;
+import com.smartlearnly.backend.user.dto.CreateAdminUserRequest;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,17 +21,62 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @ExtendWith(MockitoExtension.class)
 class AdminUserServiceTest {
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     private AdminUserService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminUserService(userRepository);
+        service = new AdminUserService(userRepository, passwordEncoder);
+    }
+
+    @Test
+    void createShouldGeneratePasswordAndPersistOnlyBasicCreateFields() {
+        CreateAdminUserRequest request = new CreateAdminUserRequest(
+                " New User ",
+                " NEW.USER@EXAMPLE.COM ",
+                " +84901234567 ",
+                "trainee",
+                "ACTIVE",
+                true
+        );
+        when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("new.user@example.com"))
+                .thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-temporary-password");
+        when(userRepository.save(any(UserAccount.class))).thenAnswer(invocation -> {
+            UserAccount saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        AdminUserResponse response = service.create(request);
+
+        ArgumentCaptor<String> passwordCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<UserAccount> userCaptor = ArgumentCaptor.forClass(UserAccount.class);
+        org.mockito.Mockito.verify(passwordEncoder).encode(passwordCaptor.capture());
+        org.mockito.Mockito.verify(userRepository).save(userCaptor.capture());
+
+        UserAccount saved = userCaptor.getValue();
+        assertThat(passwordCaptor.getValue())
+                .startsWith("Aa1!")
+                .hasSize(40);
+        assertThat(saved.getEmail()).isEqualTo("new.user@example.com");
+        assertThat(saved.getFullName()).isEqualTo("New User");
+        assertThat(saved.getPhoneNumber()).isEqualTo("+84901234567");
+        assertThat(saved.getRole()).isEqualTo("TRAINEE");
+        assertThat(saved.getStatus()).isEqualTo("active");
+        assertThat(saved.getAvatarUrl()).isNull();
+        assertThat(saved.getBio()).isNull();
+        assertThat(saved.getEmailVerifiedAt()).isNotNull();
+        assertThat(saved.getPasswordHash()).isEqualTo("encoded-temporary-password");
+        assertThat(response.email()).isEqualTo("new.user@example.com");
     }
 
     @Test
