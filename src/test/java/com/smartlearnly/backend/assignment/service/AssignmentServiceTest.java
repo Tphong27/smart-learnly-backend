@@ -104,7 +104,11 @@ class AssignmentServiceTest {
     @Test
     void deleteAssignmentShouldRemoveSubmissionsBeforeParent() {
         UUID assignmentId = UUID.randomUUID();
-        when(assignmentRepository.existsById(assignmentId)).thenReturn(true);
+        Assignment assignment = new Assignment();
+        assignment.setId(assignmentId);
+        assignment.setTitle("Final project");
+
+        when(assignmentRepository.findById(assignmentId)).thenReturn(Optional.of(assignment));
 
         service.deleteAssignment(assignmentId);
 
@@ -117,7 +121,7 @@ class AssignmentServiceTest {
     @Test
     void deleteAssignmentShouldRejectUnknownAssignmentWithoutDeletingChildren() {
         UUID assignmentId = UUID.randomUUID();
-        when(assignmentRepository.existsById(assignmentId)).thenReturn(false);
+        when(assignmentRepository.findById(assignmentId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.deleteAssignment(assignmentId))
                 .isInstanceOf(EntityNotFoundException.class)
