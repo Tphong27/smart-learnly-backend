@@ -3,6 +3,8 @@ package com.smartlearnly.backend.flashcard.staging.controller;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveTemporaryFlashcardsRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveTemporaryFlashcardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
@@ -11,6 +13,7 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingCardResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.TemporaryFlashcardCandidateBatchResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.UpdateStagingCardRequest;
 import com.smartlearnly.backend.flashcard.staging.service.AdminFlashcardStagingService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardCourseQuestionImportService;
@@ -81,6 +84,18 @@ public class AdminFlashcardStagingController {
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
 
+    @PostMapping("/flashcard-sets/{setId}/temporary-review/import-course-questions")
+    @Operation(summary = "Create temporary flashcard candidates from course questions")
+    public ApiResponse<TemporaryFlashcardCandidateBatchResponse> temporaryCourseQuestions(
+            @PathVariable UUID setId,
+            @Valid @RequestBody ImportCourseQuestionsRequest request
+    ) {
+        return ApiResponse.success(
+                "Temporary flashcard candidates created successfully",
+                adminFlashcardStagingService.previewCourseQuestions(setId, request)
+        );
+    }
+
     @PostMapping("/flashcard-sets/{setId}/staging/generate-from-text")
     @Operation(summary = "Generate flashcard staging cards from pasted text")
     public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromText(
@@ -115,6 +130,32 @@ public class AdminFlashcardStagingController {
         );
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
+    }
+
+    @PostMapping(
+            value = "/flashcard-sets/{setId}/temporary-review/generate-from-file",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    @Operation(summary = "Create temporary flashcard candidates from an uploaded DOCX or PDF")
+    public ApiResponse<TemporaryFlashcardCandidateBatchResponse> temporaryFromFile(
+            @PathVariable UUID setId,
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @RequestParam(required = false) Integer desiredCount,
+            @RequestParam(required = false) String language,
+            @RequestParam(required = false) String difficulty,
+            @RequestParam(required = false) String generationMode
+    ) {
+        return ApiResponse.success(
+                "Temporary flashcard candidates created successfully",
+                adminFlashcardStagingService.generateTemporaryFromFile(
+                        setId,
+                        file,
+                        desiredCount,
+                        language,
+                        difficulty,
+                        generationMode
+                )
+        );
     }
 
     @PostMapping("/flashcard-sets/{setId}/staging/generate-from-transcript")
@@ -202,6 +243,18 @@ public class AdminFlashcardStagingController {
         return ApiResponse.success(
                 "Flashcard staging cards approved successfully",
                 adminFlashcardStagingService.approve(setId, request)
+        );
+    }
+
+    @PostMapping("/flashcard-sets/{setId}/temporary-review/approve")
+    @Operation(summary = "Approve temporary flashcard candidates into real flashcards")
+    public ApiResponse<ApproveTemporaryFlashcardsResponse> approveTemporary(
+            @PathVariable UUID setId,
+            @Valid @RequestBody ApproveTemporaryFlashcardsRequest request
+    ) {
+        return ApiResponse.success(
+                "Temporary flashcard candidates approved successfully",
+                adminFlashcardStagingService.approveTemporary(setId, request)
         );
     }
 }
