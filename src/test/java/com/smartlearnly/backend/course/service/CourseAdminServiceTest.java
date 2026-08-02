@@ -24,11 +24,16 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +61,10 @@ class CourseAdminServiceTest {
         private CourseAccessService courseAccessService;
         @Mock
         private CurriculumVersionRepository curriculumVersionRepository;
+        @Mock
+        private CourseEnrollmentRepository courseEnrollmentRepository;
+        @Mock
+        private NotificationService notificationService;
 
         @Mock
         private UserRepository userRepository;
@@ -76,7 +85,8 @@ class CourseAdminServiceTest {
                                 auditLogService,
                                 storageProperties,
                                 courseAccessService,
-                                curriculumVersionRepository);
+                                curriculumVersionRepository,
+                                courseEnrollmentRepository);
         }
 
         @Test
@@ -384,6 +394,72 @@ class CourseAdminServiceTest {
                 verify(curriculumVersionRepository).save(draft);
         }
 
+        @Test
+        void updatePublishedCourseShouldNotifyEnrolledLearnersWhenPublicDetailsChange() {
+                Course course = existingCourse(CourseStatus.PUBLISHED);
+                UserAccount actor = admin();
+                UUID firstStudentId = UUID.randomUUID();
+                UUID secondStudentId = UUID.randomUUID();
+                UpdateCourseRequest request = new UpdateCourseRequest();
+                request.setTitle("Updated course");
+                courseAdminService.setNotificationService(notificationService);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+                when(courseRepository.save(course)).thenAnswer(invocation -> invocation.getArgument(0));
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+                when(curriculumVersionRepository
+                                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
+                                                course.getId(), CurriculumScope.MASTER))
+                                .thenReturn(Optional.of(publishedCurriculum(course)));
+                when(courseEnrollmentRepository.findActiveOrCompletedStudentIdsByCourseId(course.getId()))
+                                .thenReturn(List.of(firstStudentId, secondStudentId));
+
+                CourseResponse response = courseAdminService.update(course.getId(), request);
+
+                assertThat(response.title()).isEqualTo("Updated course");
+                ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
+                                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+                verify(notificationService, times(2)).emit(notificationCaptor.capture());
+                assertThat(notificationCaptor.getAllValues())
+                                .extracting(NotificationCreateCommand::userId)
+                                .containsExactly(firstStudentId, secondStudentId);
+                assertThat(notificationCaptor.getAllValues())
+                                .allSatisfy(command -> {
+                                        assertThat(command.type()).isEqualTo(NotificationType.COURSE);
+                                        assertThat(command.title()).isEqualTo("Course updated");
+                                        assertThat(command.referenceType()).isEqualTo("COURSE");
+                                        assertThat(command.referenceId()).isEqualTo(course.getId());
+                                        assertThat(command.actorId()).isEqualTo(actor.getId());
+                                        assertThat(command.eventKey()).startsWith("course:" + course.getId() + ":updated:");
+                                });
+        }
+
+        @Test
+        void deleteShouldNotifyEnrolledLearnersThatCourseWasArchived() {
+                Course course = existingCourse(CourseStatus.PUBLISHED);
+                UserAccount actor = admin();
+                UUID studentId = UUID.randomUUID();
+                courseAdminService.setNotificationService(notificationService);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+                when(courseEnrollmentRepository.findActiveOrCompletedStudentIdsByCourseId(course.getId()))
+                                .thenReturn(List.of(studentId));
+
+                courseAdminService.delete(course.getId());
+
+                ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
+                                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+                verify(notificationService).emit(notificationCaptor.capture());
+                NotificationCreateCommand command = notificationCaptor.getValue();
+                assertThat(command.userId()).isEqualTo(studentId);
+                assertThat(command.type()).isEqualTo(NotificationType.COURSE);
+                assertThat(command.title()).isEqualTo("Course archived");
+                assertThat(command.referenceId()).isEqualTo(course.getId());
+                assertThat(command.actorId()).isEqualTo(actor.getId());
+                assertThat(command.eventKey()).startsWith("course:" + course.getId() + ":deleted:");
+        }
+
         private Course persist(Course course) {
                 course.setId(UUID.randomUUID());
                 course.setCreatedAt(Instant.now());
@@ -405,6 +481,17 @@ class CourseAdminServiceTest {
                 course.setCreatedAt(Instant.now());
                 course.setUpdatedAt(Instant.now());
                 return course;
+        }
+
+        private CurriculumVersion publishedCurriculum(Course course) {
+                CurriculumVersion version = new CurriculumVersion();
+                version.setId(UUID.randomUUID());
+                version.setCourseId(course.getId());
+                version.setScope(CurriculumScope.MASTER);
+                version.setStatus(CurriculumStatus.PUBLISHED);
+                version.setVersionNumber(1);
+                version.setTitle(course.getTitle());
+                return version;
         }
 
         private Category category(UUID id) {
