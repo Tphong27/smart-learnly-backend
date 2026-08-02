@@ -30,6 +30,7 @@ import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
+import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
@@ -76,6 +77,8 @@ class CourseContentAdminServiceTest {
     private CourseAccessService courseAccessService;
     @Mock
     private VideoSummaryService videoSummaryService;
+    @Mock
+    private FlashcardSetRepository flashcardSetRepository;
 
     private final CurriculumDtoMapper curriculumDtoMapper = new CurriculumDtoMapper();
 
@@ -94,7 +97,8 @@ class CourseContentAdminServiceTest {
                 auditLogService,
                 quizContentValidator,
                 courseAccessService,
-                videoSummaryService
+                videoSummaryService,
+                flashcardSetRepository
         );
     }
 

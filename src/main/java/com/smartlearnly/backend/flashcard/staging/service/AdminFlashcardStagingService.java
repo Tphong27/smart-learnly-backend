@@ -9,12 +9,15 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.service.TrainerClassCurriculumService;
+import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardCardResponse;
 import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveTemporaryFlashcardsRequest;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveTemporaryFlashcardsResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTranscriptRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.GenerateFromTextRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
@@ -24,6 +27,9 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.SourceQuestionResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingBatchResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.StagingCardResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.TemporaryFlashcardCandidateBatchResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.TemporaryFlashcardCandidateResponse;
+import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.TemporaryFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.UpdateStagingCardRequest;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
 import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
@@ -55,6 +61,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -292,6 +299,120 @@ public class AdminFlashcardStagingService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public TemporaryFlashcardCandidateBatchResponse generateTemporaryFromFile(
+            UUID setId,
+            MultipartFile file,
+            Integer desiredCount,
+            String language,
+            String difficulty,
+            String generationMode
+    ) {
+        SetContext context = resolveSetContext(setId);
+        DocumentFileInput fileInput = validateGenerateFromFileRequest(file);
+        GenerationOptions options = validateGenerationOptions(
+                desiredCount,
+                language,
+                difficulty,
+                SOURCE_TYPE_AI
+        );
+        DocumentTextExtractionResult extraction = documentTextExtractionService.extract(file);
+        String sourceType = resolveDocumentSourceType(extraction, fileInput.extension());
+        String sourceName = resolveDocumentSourceName(extraction, sourceType);
+        GenerationResult result = flashcardDocumentGenerationService.generate(new DocumentGenerationRequest(
+                extraction == null ? null : extraction.text(),
+                extraction == null ? List.of() : extraction.images(),
+                extraction == null ? List.of() : extraction.renderedPageImages(),
+                options.desiredCount(),
+                options.language(),
+                options.difficulty(),
+                sourceType,
+                sourceName
+        ));
+        List<GeneratedFlashcardCandidate> candidates = validGeneratedCandidates(
+                result == null ? List.of() : result.candidates(),
+                options.desiredCount()
+        );
+        if (candidates.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Uploaded file did not produce any flashcard candidates"
+            );
+        }
+        return toTemporaryBatchResponse(
+                context,
+                candidates.stream()
+                        .map(candidate -> new TemporaryCandidateSeed(
+                                null,
+                                candidate.frontText(),
+                                candidate.backText(),
+                                null,
+                                null,
+                                candidate.hint(),
+                                candidate.explanation(),
+                                candidate.sourceExcerpt()
+                        ))
+                        .toList(),
+                options.desiredCount(),
+                sourceType,
+                sourceName
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public TemporaryFlashcardCandidateBatchResponse previewCourseQuestions(
+            UUID setId,
+            ImportCourseQuestionsRequest request
+    ) {
+        SetContext context = resolveSetContext(setId);
+        if (request == null || request.questionIds() == null || request.questionIds().isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one question id is required");
+        }
+        assertNoDuplicates(request.questionIds(), "Question import contains duplicate ids");
+        List<Question> questions = loadQuestionsInRequestOrder(request.questionIds());
+        if (questions.size() != request.questionIds().size()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "One or more questions were not found");
+        }
+        for (Question question : questions) {
+            if (!context.course().getId().equals(question.getCourseId())) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Question must belong to the same course as the flashcard set"
+                );
+            }
+            if (question.getStatus() != QuestionStatus.APPROVED) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Only approved questions can be imported"
+                );
+            }
+        }
+
+        Map<UUID, List<QuestionAnswer>> answersByQuestionId = answersByQuestionId(questions);
+        List<TemporaryCandidateSeed> candidates = new ArrayList<>();
+        for (Question question : questions) {
+            List<QuestionAnswer> answers = answersByQuestionId.getOrDefault(question.getId(), List.of());
+            candidates.add(new TemporaryCandidateSeed(
+                    question.getId(),
+                    buildFrontText(question, answers),
+                    buildBackText(answers),
+                    null,
+                    null,
+                    null,
+                    normalizeQuestionContent(question.getExplanation()),
+                    normalizeQuestionContent(question.getQuestionText())
+            ));
+        }
+
+        return toTemporaryBatchResponse(
+                context,
+                candidates,
+                request.questionIds().size(),
+                SOURCE_TYPE_COURSE_QUESTIONS,
+                context.course().getTitle() + " - Course questions"
+        );
+    }
+
     @Transactional
     public StagingBatchResponse generateFromTranscript(UUID setId, GenerateFromTranscriptRequest request) {
         SetContext context = resolveSetContext(setId);
@@ -464,6 +585,72 @@ public class AdminFlashcardStagingService {
         return new ApproveStagingCardsResponse(
                 savedFlashcards.size(),
                 savedFlashcards.stream().map(FlashcardCard::getId).toList()
+        );
+    }
+
+    @Transactional
+    public ApproveTemporaryFlashcardsResponse approveTemporary(
+            UUID setId,
+            ApproveTemporaryFlashcardsRequest request
+    ) {
+        SetContext context = resolveSetContextForWrite(setId);
+        if (request == null || request.cards() == null || request.cards().isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one flashcard candidate is required");
+        }
+        if (request.cards().size() > MAX_STAGING_ACTION_CARD_COUNT) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Approval request must not exceed 500 candidates"
+            );
+        }
+        if (request.cards().stream().anyMatch(Objects::isNull)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard candidate must not be null");
+        }
+
+        List<FlashcardCard> existingCards = flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(setId);
+        Set<String> knownKeys = (existingCards == null ? List.<FlashcardCard>of() : existingCards)
+                .stream()
+                .map(card -> duplicateKey(card.getFrontText(), card.getBackText()))
+                .filter(this::hasDuplicateKey)
+                .collect(Collectors.toCollection(HashSet::new));
+
+        int nextOrderIndex = flashcardCardRepository.findMaxOrderIndexBySetId(setId) + 1;
+        int duplicateSkipped = 0;
+        int invalidSkipped = 0;
+        List<FlashcardCard> flashcards = new ArrayList<>();
+        for (TemporaryFlashcardCardRequest candidate : request.cards()) {
+            TemporaryCardDraft draft = toTemporaryCardDraft(candidate);
+            if (!isValidTemporaryCard(draft)) {
+                invalidSkipped += 1;
+                continue;
+            }
+
+            String duplicateKey = duplicateKey(draft.frontText(), draft.backText());
+            if (hasDuplicateKey(duplicateKey) && !knownKeys.add(duplicateKey)) {
+                duplicateSkipped += 1;
+                continue;
+            }
+
+            FlashcardCard flashcard = new FlashcardCard();
+            flashcard.setFlashcardSet(context.flashcardSet());
+            flashcard.setFrontText(draft.frontText());
+            flashcard.setFrontImageUrl(draft.frontImageUrl());
+            flashcard.setBackText(draft.backText());
+            flashcard.setBackImageUrl(draft.backImageUrl());
+            flashcard.setHint(draft.hint());
+            flashcard.setExplanation(draft.explanation());
+            flashcard.setOrderIndex(nextOrderIndex);
+            nextOrderIndex += 1;
+            flashcards.add(flashcard);
+        }
+
+        List<FlashcardCard> savedFlashcards = flashcardCardRepository.saveAll(flashcards);
+        return new ApproveTemporaryFlashcardsResponse(
+                request.cards().size(),
+                savedFlashcards.size(),
+                duplicateSkipped,
+                invalidSkipped,
+                savedFlashcards.stream().map(this::toFlashcardCardResponse).toList()
         );
     }
 
@@ -770,6 +957,125 @@ public class AdminFlashcardStagingService {
         return valid;
     }
 
+    private TemporaryFlashcardCandidateBatchResponse toTemporaryBatchResponse(
+            SetContext context,
+            List<TemporaryCandidateSeed> candidates,
+            int requestedCount,
+            String sourceType,
+            String sourceName
+    ) {
+        List<TemporaryCandidateSeed> normalizedCandidates = (candidates == null ? List.<TemporaryCandidateSeed>of() : candidates)
+                .stream()
+                .map(this::normalizeTemporaryCandidate)
+                .toList();
+        List<FlashcardCard> existingCards = flashcardCardRepository
+                .findActiveBySetIdOrderByOrderIndex(context.flashcardSet().getId());
+        Set<String> currentKeys = (existingCards == null ? List.<FlashcardCard>of() : existingCards)
+                .stream()
+                .map(card -> duplicateKey(card.getFrontText(), card.getBackText()))
+                .filter(this::hasDuplicateKey)
+                .collect(Collectors.toSet());
+        Map<String, Long> candidateKeyCounts = normalizedCandidates.stream()
+                .map(candidate -> duplicateKey(candidate.frontText(), candidate.backText()))
+                .filter(this::hasDuplicateKey)
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+
+        List<TemporaryFlashcardCandidateResponse> cards = new ArrayList<>();
+        for (int index = 0; index < normalizedCandidates.size(); index += 1) {
+            TemporaryCandidateSeed candidate = normalizedCandidates.get(index);
+            String key = duplicateKey(candidate.frontText(), candidate.backText());
+            List<String> issues = new ArrayList<>();
+            boolean invalid = !isValidTemporaryCandidate(candidate);
+            if (invalid) {
+                issues.add("At least one side needs text or an image");
+            }
+            boolean duplicate = hasDuplicateKey(key)
+                    && (currentKeys.contains(key) || candidateKeyCounts.getOrDefault(key, 0L) > 1L);
+            if (hasDuplicateKey(key) && currentKeys.contains(key)) {
+                issues.add("Matches Current Flashcards");
+            }
+            if (hasDuplicateKey(key) && candidateKeyCounts.getOrDefault(key, 0L) > 1L) {
+                issues.add("Duplicate in candidates");
+            }
+            cards.add(new TemporaryFlashcardCandidateResponse(
+                    UUID.randomUUID(),
+                    candidate.sourceQuestionId(),
+                    candidate.frontText(),
+                    candidate.backText(),
+                    candidate.frontImageUrl(),
+                    candidate.backImageUrl(),
+                    candidate.hint(),
+                    candidate.explanation(),
+                    candidate.sourceExcerpt(),
+                    !invalid && !duplicate,
+                    duplicate,
+                    invalid,
+                    issues,
+                    index
+            ));
+        }
+
+        return new TemporaryFlashcardCandidateBatchResponse(
+                UUID.randomUUID(),
+                context.flashcardSet().getId(),
+                context.lesson() == null ? context.curriculumLessonId() : context.lesson().getId(),
+                context.curriculumLessonId(),
+                context.course().getId(),
+                sourceType,
+                sourceName,
+                requestedCount,
+                cards.size(),
+                cards
+        );
+    }
+
+    private TemporaryCandidateSeed normalizeTemporaryCandidate(TemporaryCandidateSeed candidate) {
+        if (candidate == null) {
+            return new TemporaryCandidateSeed(null, null, null, null, null, null, null, null);
+        }
+        return new TemporaryCandidateSeed(
+                candidate.sourceQuestionId(),
+                normalizeNullable(candidate.frontText()),
+                normalizeNullable(candidate.backText()),
+                normalizeNullable(candidate.frontImageUrl()),
+                normalizeNullable(candidate.backImageUrl()),
+                normalizeOptionalMax(candidate.hint(), MAX_GENERATED_HINT_LENGTH),
+                normalizeOptionalMax(candidate.explanation(), MAX_GENERATED_EXPLANATION_LENGTH),
+                normalizeOptionalMax(candidate.sourceExcerpt(), MAX_GENERATED_SOURCE_EXCERPT_LENGTH)
+        );
+    }
+
+    private TemporaryCardDraft toTemporaryCardDraft(TemporaryFlashcardCardRequest candidate) {
+        return new TemporaryCardDraft(
+                normalizeNullable(candidate.frontText()),
+                normalizeNullable(candidate.frontImageUrl()),
+                normalizeNullable(candidate.backText()),
+                normalizeNullable(candidate.backImageUrl()),
+                normalizeNullable(candidate.hint()),
+                normalizeNullable(candidate.explanation())
+        );
+    }
+
+    private boolean isValidTemporaryCandidate(TemporaryCandidateSeed candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        return hasText(candidate.frontText())
+                || hasText(candidate.frontImageUrl())
+                || hasText(candidate.backText())
+                || hasText(candidate.backImageUrl());
+    }
+
+    private boolean isValidTemporaryCard(TemporaryCardDraft card) {
+        if (card == null) {
+            return false;
+        }
+        return hasText(card.frontText())
+                || hasText(card.frontImageUrl())
+                || hasText(card.backText())
+                || hasText(card.backImageUrl());
+    }
+
     private String resolveGeneratedSourceType(GenerationResult result) {
         String sourceType = normalizeNullable(result == null ? null : result.sourceType());
         if (sourceType != null && SOURCE_TYPE_AI.equals(sourceType.toUpperCase(Locale.ROOT))) {
@@ -826,7 +1132,15 @@ public class AdminFlashcardStagingService {
         if (value == null) {
             return "";
         }
-        return value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+        String decoded = HtmlUtils.htmlUnescape(value).replace('\u00A0', ' ');
+        String plainText = looksLikeHtml(decoded)
+                ? HtmlPlainTextExtractor.extract(decoded)
+                : decoded;
+        return plainText
+                .replaceAll("<[^>]+>", " ")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase(Locale.ROOT);
     }
 
     private String sanitizeOriginalFileName(String originalFileName) {
@@ -920,6 +1234,43 @@ public class AdminFlashcardStagingService {
             trainerClassCurriculumService.requireOwnedClassLessonForRead(version.getClassId(), curriculumLessonId);
         } else {
             courseAccessService.requireReadableCourse(course.getId());
+        }
+        return new SetContext(flashcardSet, null, curriculumLessonId, course);
+    }
+
+    private SetContext resolveSetContextForWrite(UUID setId) {
+        FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
+        Lesson lesson = flashcardSet.getLesson();
+        if (lesson != null) {
+            if (lesson.getCourse() == null || lesson.getCourse().getDeletedAt() != null) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
+            }
+            if (lesson.getType() != LessonType.FLASHCARD) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard set is not linked to a flashcard lesson");
+            }
+            if (courseAccessService != null) {
+                courseAccessService.requireUpdatableCourse(lesson.getCourse().getId());
+            }
+            return new SetContext(flashcardSet, lesson, null, lesson.getCourse());
+        }
+
+        UUID curriculumLessonId = flashcardSet.getCurriculumLessonId();
+        CurriculumLesson curriculumLesson = curriculumLessonId == null || curriculumLessonRepository == null ? null
+                : curriculumLessonRepository.findById(curriculumLessonId).orElse(null);
+        Course course = flashcardSet.getCourse();
+        if (curriculumLesson == null || curriculumLesson.getType() != LessonType.FLASHCARD
+                || course == null || course.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
+        }
+        var version = curriculumLesson.getSection().getCurriculumVersion();
+        if (version.getScope() == CurriculumScope.CLASS) {
+            if (version.getClassId() == null) {
+                throw new BusinessException(ErrorCode.CONFLICT, "Class curriculum is inconsistent");
+            }
+            trainerClassCurriculumService.requireOwnedClassLessonForWrite(version.getClassId(), curriculumLessonId);
+        } else if (courseAccessService != null) {
+            courseAccessService.requireUpdatableCourse(course.getId());
         }
         return new SetContext(flashcardSet, null, curriculumLessonId, course);
     }
@@ -1176,6 +1527,22 @@ public class AdminFlashcardStagingService {
         );
     }
 
+    private FlashcardCardResponse toFlashcardCardResponse(FlashcardCard card) {
+        return new FlashcardCardResponse(
+                card.getId(),
+                card.getFlashcardSet().getId(),
+                card.getFrontText(),
+                card.getFrontImageUrl(),
+                card.getBackText(),
+                card.getBackImageUrl(),
+                card.getHint(),
+                card.getExplanation(),
+                card.getOrderIndex(),
+                card.getCreatedAt(),
+                card.getUpdatedAt()
+        );
+    }
+
     private String toApiValue(Enum<?> value) {
         return value == null ? null : value.name().toLowerCase(Locale.ROOT);
     }
@@ -1343,6 +1710,28 @@ public class AdminFlashcardStagingService {
             }
             pendingLineBreak = false;
         }
+    }
+
+    private record TemporaryCandidateSeed(
+            UUID sourceQuestionId,
+            String frontText,
+            String backText,
+            String frontImageUrl,
+            String backImageUrl,
+            String hint,
+            String explanation,
+            String sourceExcerpt
+    ) {
+    }
+
+    private record TemporaryCardDraft(
+            String frontText,
+            String frontImageUrl,
+            String backText,
+            String backImageUrl,
+            String hint,
+            String explanation
+    ) {
     }
 
     private record SetContext(
