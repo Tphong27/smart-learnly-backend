@@ -12,7 +12,7 @@ class NotificationMigrationContractTest {
     private static final Path MIGRATION =
             Path.of("src/main/resources/db/migration/V78__notification_foundation.sql");
     private static final Path LIFECYCLE_MIGRATION =
-            Path.of("src/main/resources/db/migration/V79__notification_lifecycle_and_delivery.sql");
+            Path.of("src/main/resources/db/migration/V81__notification_lifecycle_and_delivery.sql");
 
     @Test
     void migrationShouldDefineNotificationFoundation() throws Exception {
