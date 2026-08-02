@@ -17,6 +17,7 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
             SELECT notification
             FROM Notification notification
             WHERE notification.userId = :userId
+              AND notification.archivedAt IS NULL
               AND (:type IS NULL OR notification.type = :type)
               AND (:includeRead = true OR notification.readAt IS NULL)
               AND (:includeUnread = true OR notification.readAt IS NOT NULL)
@@ -31,7 +32,9 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     Optional<Notification> findByIdAndUserId(UUID id, UUID userId);
 
-    long countByUserIdAndReadAtIsNull(UUID userId);
+    Optional<Notification> findByIdAndUserIdAndArchivedAtIsNull(UUID id, UUID userId);
+
+    long countByUserIdAndReadAtIsNullAndArchivedAtIsNull(UUID userId);
 
     boolean existsByUserIdAndEventKey(UUID userId, String eventKey);
 
@@ -39,9 +42,31 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Query("""
             UPDATE Notification notification
             SET notification.readAt = :now,
+                notification.seenAt = COALESCE(notification.seenAt, :now),
                 notification.updatedAt = :now
             WHERE notification.userId = :userId
+              AND notification.archivedAt IS NULL
               AND notification.readAt IS NULL
             """)
     int markAllReadForUser(@Param("userId") UUID userId, @Param("now") Instant now);
+
+    @Modifying
+    @Query("""
+            UPDATE Notification notification
+            SET notification.archivedAt = :now,
+                notification.readAt = COALESCE(notification.readAt, :now),
+                notification.seenAt = COALESCE(notification.seenAt, :now),
+                notification.updatedAt = :now
+            WHERE notification.userId = :userId
+              AND notification.archivedAt IS NULL
+            """)
+    int archiveAllForUser(@Param("userId") UUID userId, @Param("now") Instant now);
+
+    @Modifying
+    @Query("""
+            DELETE FROM Notification notification
+            WHERE (notification.archivedAt IS NOT NULL OR notification.readAt IS NOT NULL)
+              AND notification.createdAt < :cutoff
+            """)
+    int deleteReadOrArchivedCreatedBefore(@Param("cutoff") Instant cutoff);
 }
