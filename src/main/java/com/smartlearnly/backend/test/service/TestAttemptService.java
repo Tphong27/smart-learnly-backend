@@ -244,21 +244,42 @@ public class TestAttemptService {
             return;
         }
         Test test = testRepository.findById(attempt.getTestId()).orElse(null);
+        UUID testOwnerId = test == null ? null : test.getCreatedBy();
+        String status = attempt.getStatus() == null ? null : attempt.getStatus().name();
+        String title = attempt.getStatus() == AttemptStatus.EXPIRED ? "Test attempt expired" : "Test attempt submitted";
         notificationService.emit(new NotificationCreateCommand(
                 attempt.getStudentId(),
                 NotificationType.TEST,
-                attempt.getStatus() == AttemptStatus.EXPIRED ? "Test attempt expired" : "Test attempt submitted",
+                title,
                 test == null
                         ? "Your test attempt has been recorded."
                         : "Your attempt for " + test.getTitle() + " has been recorded.",
                 "TEST_ATTEMPT",
                 attempt.getId(),
                 "/test-attempts/" + attempt.getId(),
-                null,
-                "test-attempt:" + attempt.getId() + ":" + attempt.getStatus(),
+                testOwnerId,
+                "test-attempt:" + attempt.getId() + ":" + status + ":student",
                 NotificationPayloads.of(
                         "testId", attempt.getTestId(),
-                        "status", attempt.getStatus() == null ? null : attempt.getStatus().name())));
+                        "status", status)));
+        if (testOwnerId != null && !testOwnerId.equals(attempt.getStudentId())) {
+            notificationService.emit(new NotificationCreateCommand(
+                    testOwnerId,
+                    NotificationType.TEST,
+                    title,
+                    test == null
+                            ? "A learner's test attempt has been recorded."
+                            : "A learner's attempt for " + test.getTitle() + " has been recorded.",
+                    "TEST_ATTEMPT",
+                    attempt.getId(),
+                    "/test-attempts/" + attempt.getId(),
+                    attempt.getStudentId(),
+                    "test-attempt:" + attempt.getId() + ":" + status + ":owner",
+                    NotificationPayloads.of(
+                            "testId", attempt.getTestId(),
+                            "studentId", attempt.getStudentId(),
+                            "status", status)));
+        }
     }
 
     private void broadcast(TestAttemptModel.Response response, String studentName) {

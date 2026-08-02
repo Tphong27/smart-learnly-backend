@@ -21,7 +21,12 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
+import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
+import com.smartlearnly.backend.notification.entity.NotificationType;
+import com.smartlearnly.backend.notification.service.NotificationPayloads;
+import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
 import java.math.BigDecimal;
@@ -31,6 +36,7 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -52,6 +58,13 @@ public class CourseAdminService {
     private final StorageProperties storageProperties;
     private final CourseAccessService courseAccessService;
     private final CurriculumVersionRepository curriculumVersionRepository;
+    private final CourseEnrollmentRepository courseEnrollmentRepository;
+    private NotificationService notificationService;
+
+    @Autowired(required = false)
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<CourseResponse> list(
@@ -246,8 +259,9 @@ public class CourseAdminService {
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
         if (saved.getStatus() == CourseStatus.PUBLISHED) {
-            publishLatestMasterCurriculum(saved, currentUserService.requireAuthenticatedUser());
+            publishLatestMasterCurriculum(saved, actor);
         }
         if (previousStatus != saved.getStatus()) {
             AuditAction action = saved.getStatus() == CourseStatus.PUBLISHED
@@ -255,7 +269,6 @@ public class CourseAdminService {
                     : saved.getStatus() == CourseStatus.INACTIVE
                             ? AuditAction.COURSE_DEACTIVATED
                             : AuditAction.COURSE_UPDATED;
-            UserAccount actor = currentUserService.requireAuthenticatedUser();
             auditLogService.recordUser(
                     actor, action, AuditDomain.COURSE, AuditResult.SUCCESS,
                     "COURSE", saved.getId().toString(), "Course status was changed",
@@ -263,8 +276,9 @@ public class CourseAdminService {
                     java.util.Map.of("status", saved.getStatus().name()),
                     java.util.Map.of("courseTitle", saved.getTitle()));
         } else {
-            audit("COURSE_UPDATED", saved.getId());
+            auditLogService.record(actor.getEmail(), "COURSE_UPDATED", "COURSE", saved.getId().toString());
         }
+        emitCourseNotificationIfNeeded(saved, previousStatus, request, actor.getId());
         return CourseDtoMapper.toCourseResponse(saved);
     }
 
@@ -327,10 +341,97 @@ public class CourseAdminService {
     public void delete(UUID courseId) {
         courseAccessService.requireCourseManager();
         Course course = findCourse(courseId);
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
         course.setStatus(CourseStatus.INACTIVE);
         course.setDeletedAt(Instant.now());
         courseRepository.save(course);
-        audit("COURSE_DELETED", course.getId());
+        auditLogService.record(actor.getEmail(), "COURSE_DELETED", "COURSE", course.getId().toString());
+        emitCourseNotificationToLearners(
+                course,
+                "Course archived",
+                course.getTitle() + " is no longer available.",
+                "deleted",
+                actor.getId());
+    }
+
+    private void emitCourseNotificationIfNeeded(
+            Course course,
+            CourseStatus previousStatus,
+            UpdateCourseRequest request,
+            UUID actorId) {
+        if (notificationService == null || course == null || course.getId() == null) {
+            return;
+        }
+        if (previousStatus != course.getStatus()) {
+            if (course.getStatus() == CourseStatus.PUBLISHED) {
+                emitCourseNotificationToLearners(
+                        course,
+                        "Course published",
+                        course.getTitle() + " is now available.",
+                        "published",
+                        actorId);
+            } else if (course.getStatus() == CourseStatus.INACTIVE) {
+                emitCourseNotificationToLearners(
+                        course,
+                        "Course archived",
+                        course.getTitle() + " is no longer available.",
+                        "inactive",
+                        actorId);
+            }
+            return;
+        }
+        if (course.getStatus() == CourseStatus.PUBLISHED && hasPublicCourseDetailChange(request)) {
+            emitCourseNotificationToLearners(
+                    course,
+                    "Course updated",
+                    course.getTitle() + " has been updated.",
+                    "updated",
+                    actorId);
+        }
+    }
+
+    private boolean hasPublicCourseDetailChange(UpdateCourseRequest request) {
+        return request.isCategoryIdProvided()
+                || request.isTitleProvided()
+                || request.isSlugProvided()
+                || request.isShortDescriptionProvided()
+                || request.isDescriptionProvided()
+                || request.isOutcomesProvided()
+                || request.isRequirementsProvided()
+                || request.isLanguageProvided()
+                || request.isLevelProvided()
+                || request.isThumbnailUrlProvided()
+                || request.isPriceProvided()
+                || request.isDiscountedPriceProvided()
+                || request.isFreeProvided();
+    }
+
+    private void emitCourseNotificationToLearners(
+            Course course,
+            String title,
+            String body,
+            String eventSuffix,
+            UUID actorId) {
+        if (notificationService == null || course == null || course.getId() == null) {
+            return;
+        }
+        String eventKeySuffix = Long.toString(Instant.now().toEpochMilli());
+        for (UUID studentId : courseEnrollmentRepository.findActiveOrCompletedStudentIdsByCourseId(course.getId())) {
+            notificationService.emit(new NotificationCreateCommand(
+                    studentId,
+                    NotificationType.COURSE,
+                    title,
+                    body,
+                    "COURSE",
+                    course.getId(),
+                    "/courses/" + course.getId(),
+                    actorId,
+                    "course:" + course.getId() + ":" + eventSuffix + ":" + eventKeySuffix,
+                    NotificationPayloads.of(
+                            "courseId", course.getId(),
+                            "status", course.getStatus() == null ? null : course.getStatus().name(),
+                            "title", course.getTitle())));
+        }
     }
 
     private Course findCourse(UUID courseId) {
