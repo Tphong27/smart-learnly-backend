@@ -35,6 +35,9 @@ public class SePayOrder {
     @Column(name = "payment_code", nullable = false)
     private String paymentCode;
 
+    @Column(name = "transfer_content", nullable = false)
+    private String transferContent;
+
     @Column(name = "bank_account_number", nullable = false)
     private String bankAccountNumber;
 

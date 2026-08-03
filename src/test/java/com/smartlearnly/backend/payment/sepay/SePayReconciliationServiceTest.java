@@ -104,6 +104,7 @@ class SePayReconciliationServiceTest {
         sePayOrder.setOrderId(UUID.randomUUID());
         sePayOrder.setTransactionId(UUID.randomUUID());
         sePayOrder.setPaymentCode(paymentCode);
+        sePayOrder.setTransferContent("SEVQR " + paymentCode);
         sePayOrder.setBankAccountNumber("123456789");
         sePayOrder.setBankName("MBBANK");
         sePayOrder.setAccountName("SMART LEARNLY");

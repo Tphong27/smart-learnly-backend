@@ -5,6 +5,7 @@ import java.time.Instant;
 
 public record SePayPaymentInstruction(
         String paymentCode,
+        String transferContent,
         String bankAccountNumber,
         String bankName,
         String accountName,

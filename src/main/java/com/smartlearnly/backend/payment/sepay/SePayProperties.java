@@ -11,7 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class SePayProperties {
     static final String DEFAULT_QR_URL_TEMPLATE =
             "https://img.vietqr.io/image/{bankName}-{accountNumber}-compact2.png"
-                    + "?amount={amount}&addInfo={paymentCode}&accountName={accountName}";
+                    + "?amount={amount}&addInfo={transferContent}&accountName={accountName}";
     static final String DEFAULT_API_BASE_URL = "https://userapi.sepay.vn";
 
     private String webhookSecret = "";
@@ -22,5 +22,6 @@ public class SePayProperties {
     private String accountName = "";
     private Duration reconciliationInterval = Duration.ofMinutes(5);
     private String paymentCodePrefix = "SLP";
+    private String transferContentTemplate = "";
     private String qrUrlTemplate = DEFAULT_QR_URL_TEMPLATE;
 }

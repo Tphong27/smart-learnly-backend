@@ -239,7 +239,8 @@ public class SePayPaymentMatchingService {
     }
 
     private boolean isInboundPayment(SePayPaymentMatchCandidate payload) {
-        return isBlank(payload.transferType()) || "in".equalsIgnoreCase(payload.transferType().trim());
+        return !isBlank(payload.transferType())
+                && "in".equalsIgnoreCase(payload.transferType().trim());
     }
 
     private Optional<String> resolvePaymentCode(SePayPaymentMatchCandidate payload) {
@@ -285,8 +286,8 @@ public class SePayPaymentMatchingService {
     }
 
     private boolean matchesReceivingAccount(String payloadAccountNumber, String expectedAccountNumber) {
-        if (isBlank(payloadAccountNumber)) {
-            return true;
+        if (isBlank(payloadAccountNumber) || isBlank(expectedAccountNumber)) {
+            return false;
         }
         return normalizeAccount(payloadAccountNumber).equals(normalizeAccount(expectedAccountNumber));
     }

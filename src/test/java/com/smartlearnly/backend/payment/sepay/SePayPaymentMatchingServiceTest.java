@@ -143,7 +143,13 @@ class SePayPaymentMatchingServiceTest {
         when(invoiceNumberRepository.nextInvoiceNumber()).thenReturn("SLP-INV-0000000043");
         when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId)).thenReturn(List.of(item));
 
-        service.process(payload(null, "Thanh toan " + PAYMENT_CODE, "in", null, new BigDecimal("399000")));
+        service.process(payload(
+                null,
+                "SEVQR " + PAYMENT_CODE,
+                "in",
+                "123456789",
+                new BigDecimal("399000")
+        ));
 
         verify(classEnrollmentService).grantPaidClassEnrollment(
                 studentId,
@@ -189,6 +195,14 @@ class SePayPaymentMatchingServiceTest {
     }
 
     @Test
+    void processShouldMarkMismatchedWhenTransferTypeIsMissing() {
+        service.process(payload(PAYMENT_CODE, null, null, "123456789", new BigDecimal("399000")));
+
+        verify(webhookEventRepository).markMismatched(EVENT_ID, "SePay transfer is not inbound");
+        verify(sePayOrderRepository, never()).findByPaymentCodeForUpdate(any());
+    }
+
+    @Test
     void processShouldMarkMismatchedWhenReceivingBankAccountDoesNotMatch() {
         UUID transactionId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
@@ -200,6 +214,23 @@ class SePayPaymentMatchingServiceTest {
                 .thenReturn(Optional.of(order(orderId, UUID.randomUUID(), OrderStatus.PENDING)));
 
         service.process(payload(PAYMENT_CODE, null, "in", "987654321", new BigDecimal("399000")));
+
+        verify(webhookEventRepository).markMismatched(EVENT_ID, "SePay receiving account did not match");
+        verify(paymentTransactionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void processShouldMarkMismatchedWhenReceivingBankAccountIsMissing() {
+        UUID transactionId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        SePayOrder sePayOrder = sePayOrder(orderId, transactionId);
+        when(sePayOrderRepository.findByPaymentCodeForUpdate(PAYMENT_CODE)).thenReturn(Optional.of(sePayOrder));
+        when(paymentTransactionRepository.findByIdForUpdate(transactionId))
+                .thenReturn(Optional.of(transaction(transactionId, orderId, UUID.randomUUID(), TransactionStatus.PENDING)));
+        when(orderRepository.findByIdForUpdate(orderId))
+                .thenReturn(Optional.of(order(orderId, UUID.randomUUID(), OrderStatus.PENDING)));
+
+        service.process(payload(PAYMENT_CODE, null, "in", null, new BigDecimal("399000")));
 
         verify(webhookEventRepository).markMismatched(EVENT_ID, "SePay receiving account did not match");
         verify(paymentTransactionRepository, never()).saveAndFlush(any());
@@ -340,6 +371,7 @@ class SePayPaymentMatchingServiceTest {
         sePayOrder.setOrderId(orderId);
         sePayOrder.setTransactionId(transactionId);
         sePayOrder.setPaymentCode(PAYMENT_CODE);
+        sePayOrder.setTransferContent("SEVQR " + PAYMENT_CODE);
         sePayOrder.setBankAccountNumber("123456789");
         sePayOrder.setBankName("MBBANK");
         sePayOrder.setAccountName("SMART LEARNLY");

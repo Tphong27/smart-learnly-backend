@@ -72,9 +72,10 @@ public class SePayReconciliationService {
         }
         catch (RuntimeException exception) {
             log.warn(
-                    "SePay reconciliation query failed for paymentCode={} errorType={}",
+                    "SePay reconciliation query failed for paymentCode={} errorType={} message={}",
                     sePayOrder.getPaymentCode(),
-                    exception.getClass().getSimpleName()
+                    exception.getClass().getSimpleName(),
+                    exception.getMessage()
             );
             return new ReconciliationItemSummary(0, 0, 1, 0);
         }

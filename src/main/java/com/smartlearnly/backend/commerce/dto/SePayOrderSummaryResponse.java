@@ -7,6 +7,7 @@ import java.util.UUID;
 public record SePayOrderSummaryResponse(
         UUID id,
         String paymentCode,
+        String transferContent,
         String bankAccountNumber,
         String bankName,
         String accountName,
