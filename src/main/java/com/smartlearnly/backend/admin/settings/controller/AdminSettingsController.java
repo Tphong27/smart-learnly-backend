@@ -18,6 +18,7 @@ import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.Goo
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.QuestionImageImportSettings;
 import com.smartlearnly.backend.auth.service.EmailService;
 import com.smartlearnly.backend.common.api.ApiResponse;
+import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -73,7 +74,7 @@ public class AdminSettingsController {
         settingsService.put(SettingKeys.EMAIL_FROM_NAME, request.fromName(), false, actor);
         settingsService.put(SettingKeys.EMAIL_FROM_EMAIL, request.fromEmail(), false, actor);
         putOptionalText(SettingKeys.EMAIL_REPLY_TO, request.replyTo(), actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_EMAIL", "system_settings", "email");
+        auditLogService.recordAction(actorLabel(), AuditAction.SETTINGS_UPDATE_EMAIL, "system_settings", "email");
         return getEmailSettings();
     }
 
@@ -123,7 +124,12 @@ public class AdminSettingsController {
         settingsService.put(SettingKeys.GOOGLE_CLIENT_ID, request.clientId(), true, actor);
         settingsService.put(SettingKeys.GOOGLE_CLIENT_SECRET, request.clientSecret(), true, actor);
         settingsService.put(SettingKeys.GOOGLE_SCOPE, request.scope(), false, actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_OAUTH_GOOGLE", "system_settings", "oauth.google");
+        auditLogService.recordAction(
+                actorLabel(),
+                AuditAction.SETTINGS_UPDATE_OAUTH_GOOGLE,
+                "system_settings",
+                "oauth.google"
+        );
         return getGoogleOAuth();
     }
 
@@ -148,7 +154,12 @@ public class AdminSettingsController {
         UUID actor = currentUserId();
         settingsService.put(SettingKeys.GOOGLE_MEET_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())), false, actor);
         putOptionalSecret(SettingKeys.GOOGLE_MEET_REFRESH_TOKEN, request.refreshToken(), actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_GOOGLE_MEET", "system_settings", "google_meet");
+        auditLogService.recordAction(
+                actorLabel(),
+                AuditAction.SETTINGS_UPDATE_GOOGLE_MEET,
+                "system_settings",
+                "google_meet"
+        );
         return getGoogleMeetSettings();
     }
 
@@ -182,7 +193,12 @@ public class AdminSettingsController {
         settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false, actor);
         settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB, String.valueOf(request.maxFileSizeMb()), false, actor);
         settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILES, String.valueOf(request.maxFiles()), false, actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_QUESTION_IMAGE_IMPORT", "system_settings", "question_image_import");
+        auditLogService.recordAction(
+                actorLabel(),
+                AuditAction.SETTINGS_UPDATE_QUESTION_IMAGE_IMPORT,
+                "system_settings",
+                "question_image_import"
+        );
         return getQuestionImageImportSettings();
     }
 
@@ -214,7 +230,12 @@ public class AdminSettingsController {
         settingsService.put(SettingKeys.ASSIGNMENT_AI_MODEL, request.model(), false, actor);
         settingsService.put(SettingKeys.ASSIGNMENT_AI_FALLBACK_MODEL, request.fallbackModel(), false, actor);
         settingsService.put(SettingKeys.ASSIGNMENT_AI_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false, actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_ASSIGNMENT_AI", "system_settings", "assignment_ai");
+        auditLogService.recordAction(
+                actorLabel(),
+                AuditAction.SETTINGS_UPDATE_ASSIGNMENT_AI,
+                "system_settings",
+                "assignment_ai"
+        );
         return getAssignmentAiSettings();
     }
 
