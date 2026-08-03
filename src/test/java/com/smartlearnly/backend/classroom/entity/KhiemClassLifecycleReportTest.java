@@ -32,6 +32,11 @@ class KhiemClassLifecycleReportTest {
                 REFERENCE_DATE,
                 REFERENCE_DATE,
                 null,
+                REFERENCE_DATE)).isEqualTo(ClassStatus.UPCOMING);
+        assertThat(ClassLifecycle.resolveStatus(
+                REFERENCE_DATE.minusDays(1),
+                REFERENCE_DATE.plusDays(1),
+                null,
                 REFERENCE_DATE)).isEqualTo(ClassStatus.ONGOING);
         assertThat(ClassLifecycle.resolveStatus(
                 REFERENCE_DATE.minusDays(2),

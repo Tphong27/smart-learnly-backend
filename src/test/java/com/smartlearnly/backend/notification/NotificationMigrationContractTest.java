@@ -12,7 +12,9 @@ class NotificationMigrationContractTest {
     private static final Path MIGRATION =
             Path.of("src/main/resources/db/migration/V78__notification_foundation.sql");
     private static final Path LIFECYCLE_MIGRATION =
-            Path.of("src/main/resources/db/migration/V79__notification_lifecycle_and_delivery.sql");
+            Path.of("src/main/resources/db/migration/V81__notification_lifecycle_and_delivery.sql");
+    private static final Path LEGACY_CONTENT_MIGRATION =
+            Path.of("src/main/resources/db/migration/V82__reconcile_legacy_notification_content.sql");
 
     @Test
     void migrationShouldDefineNotificationFoundation() throws Exception {
@@ -61,5 +63,14 @@ class NotificationMigrationContractTest {
         assertThat(sql).contains("idx_notifications_user_active_created_at");
         assertThat(sql).contains("idx_notifications_user_active_unread_created_at");
         assertThat(sql).contains("idx_notifications_retention_cleanup");
+    }
+
+    @Test
+    void legacyContentMigrationShouldBackfillBodyAndRelaxLegacyConstraint() throws Exception {
+        String sql = Files.readString(LEGACY_CONTENT_MIGRATION);
+
+        assertThat(sql).contains("column_name = 'content'");
+        assertThat(sql).contains("SET body = COALESCE(body, NULLIF(btrim(content::text), ''))");
+        assertThat(sql).contains("ALTER COLUMN content DROP NOT NULL");
     }
 }

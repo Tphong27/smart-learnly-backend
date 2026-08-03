@@ -47,10 +47,12 @@ class KhiemClassTrainerServiceReportTest {
     @Test
     void UTCID_KHIEM_BE_507_listMyAssignedClasses_normalizesFiltersAndCapsPageSize() {
         UserAccount trainer = trainer();
+        UUID courseId = UUID.randomUUID();
         ClassAdminProjection projection = projection(30, 5L, trainer.getId());
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
         when(classOfferingRepository.findTrainerAssignedClasses(
                 org.mockito.ArgumentMatchers.eq(trainer.getId()),
+                org.mockito.ArgumentMatchers.eq(courseId),
                 org.mockito.ArgumentMatchers.eq("ongoing"),
                 org.mockito.ArgumentMatchers.eq("%Java\\%\\_101%"),
                 org.mockito.ArgumentMatchers.any(Pageable.class)))
@@ -59,6 +61,7 @@ class KhiemClassTrainerServiceReportTest {
         PageResponse<ClassResponse> result = service.listMyAssignedClasses(
                 " ONGOING ",
                 " Java%_101 ",
+                courseId,
                 0,
                 500);
 
@@ -70,6 +73,7 @@ class KhiemClassTrainerServiceReportTest {
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
         verify(classOfferingRepository).findTrainerAssignedClasses(
                 org.mockito.ArgumentMatchers.eq(trainer.getId()),
+                org.mockito.ArgumentMatchers.eq(courseId),
                 org.mockito.ArgumentMatchers.eq("ongoing"),
                 org.mockito.ArgumentMatchers.eq("%Java\\%\\_101%"),
                 pageableCaptor.capture());
@@ -81,7 +85,7 @@ class KhiemClassTrainerServiceReportTest {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer());
 
         assertThatThrownBy(() -> service.listMyAssignedClasses(
-                "archived", null, 0, 20))
+                "archived", null, null, 0, 20))
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
     }
