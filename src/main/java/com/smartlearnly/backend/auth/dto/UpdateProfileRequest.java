@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.auth.dto;
 
+import com.smartlearnly.backend.common.validation.PhoneNumberRules;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -16,8 +17,8 @@ public record UpdateProfileRequest(
 
         @Schema(example = "+84901234567")
         @Pattern(
-                regexp = "^\\+?[0-9]{9,15}$",
-                message = "Phone number must contain 9 to 15 digits and may start with +"
+                regexp = PhoneNumberRules.VIETNAMESE_MOBILE_PATTERN,
+                message = PhoneNumberRules.VIETNAMESE_MOBILE_MESSAGE
         )
         String phoneNumber,
 

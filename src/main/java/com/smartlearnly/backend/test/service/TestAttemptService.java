@@ -56,7 +56,7 @@ public class TestAttemptService {
     public TestAttemptModel.Response startAttempt(TestAttemptModel.StartRequest request) {
         Test test = testRepository.findById(required(request.getTestId(), "testId"))
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
-        UUID studentId = required(request.getStudentId(), "studentId");
+        UUID studentId = testService.requireCurrentTraineeAccess(test.getId());
         if (!testService.isWithinSchedule(test, Instant.now())) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_RULE_VIOLATION,
@@ -101,6 +101,7 @@ public class TestAttemptService {
     public TestAttemptModel.Response submitAttempt(UUID id, TestAttemptModel.SubmitRequest request) {
         TestAttempt attempt = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
+        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
 
         if (attempt.getStatus() == AttemptStatus.SUBMITTED
                 || attempt.getStatus() == AttemptStatus.GRADED
@@ -124,6 +125,7 @@ public class TestAttemptService {
 
     @Transactional
     public List<TestAttemptModel.Response> getAttempts(UUID testId, UUID studentId) {
+        testService.requireAttemptAccess(testId, studentId);
         return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId)
                 .stream()
                 .map(this::expireIfOverdue)
@@ -134,6 +136,7 @@ public class TestAttemptService {
 
     @Transactional
     public List<TestAttemptModel.Response> getAttemptsByTest(UUID testId) {
+        testService.requireCurrentUserCanManage(testId);
         return repository.findByTestIdOrderByStartTimeAsc(testId)
                 .stream()
                 .map(this::expireIfOverdue)
@@ -146,11 +149,13 @@ public class TestAttemptService {
     public TestAttemptModel.Response getAttemptById(UUID attemptId) {
         TestAttempt attempt = repository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
+        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
         return mapToResponse(refreshFinalGrade(expireIfOverdue(attempt)));
     }
 
     @Transactional
     public void reopenAttempt(UUID testId, UUID studentId) {
+        testService.requireCurrentUserCanManage(testId);
         List<TestAttempt> attempts = repository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId);
         if (attempts.isEmpty()) {
             return;

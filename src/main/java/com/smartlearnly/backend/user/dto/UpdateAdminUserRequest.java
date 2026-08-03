@@ -1,6 +1,8 @@
 package com.smartlearnly.backend.user.dto;
 
+import com.smartlearnly.backend.common.validation.PhoneNumberRules;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record UpdateAdminUserRequest(
@@ -12,10 +14,22 @@ public record UpdateAdminUserRequest(
         String email,
 
         @Size(max = 20, message = "Phone number must not exceed 20 characters")
+        @Pattern(
+                regexp = PhoneNumberRules.VIETNAMESE_MOBILE_PATTERN,
+                message = PhoneNumberRules.VIETNAMESE_MOBILE_MESSAGE
+        )
         String phoneNumber,
 
+        @Pattern(
+                regexp = "(?i)^(GUEST|TRAINEE|TRAINER|TMO|SME|ADMIN)$",
+                message = "Role is invalid"
+        )
         String role,
 
+        @Pattern(
+                regexp = "(?i)^(pending_verify|active|inactive|banned)$",
+                message = "Status is invalid"
+        )
         String status,
 
         Boolean emailVerified

@@ -4,6 +4,8 @@ package com.smartlearnly.backend.test.service;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
@@ -43,6 +45,7 @@ public class TestService {
     private final TestAttemptRepository testAttemptRepository;
     private final StudentTestAnswerRepository studentTestAnswerRepository;
     private final CurriculumSectionRepository curriculumSectionRepository;
+    private final ClassOfferingRepository classOfferingRepository;
     private NotificationService notificationService;
     private ClassEnrollmentRepository notificationClassEnrollmentRepository;
     private CourseEnrollmentRepository notificationCourseEnrollmentRepository;
@@ -61,6 +64,8 @@ public class TestService {
             TestModel.CreateRequest request) {
 
         validateSchedule(request.getOpensAt(), request.getClosesAt());
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        validateClassScope(request.getClassId(), request.getCourseId(), actor);
 
         Test test = new Test();
 
@@ -90,8 +95,7 @@ public class TestService {
         test.setOpensAt(request.getOpensAt());
         test.setClosesAt(request.getClosesAt());
         ensureAccessCode(test);
-        test.setCreatedBy(
-                currentUserService.requireAuthenticatedUser().getId());
+        test.setCreatedBy(actor.getId());
 
         Test saved = testRepository.save(test);
 
@@ -124,14 +128,14 @@ public class TestService {
         return responses;
     }
 
-    public List<TestModel.Response> getMyTests(UUID courseId) {
+    public List<TestModel.Response> getMyTests(UUID courseId, UUID classId) {
 
-        UUID currentUserId =
-                currentUserService.requireAuthenticatedUser().getId();
-        List<Test> tests =
-                courseId == null
-                        ? testRepository.findByCreatedBy(currentUserId)
-                        : testRepository.findByCreatedByAndCourseId(currentUserId, courseId);
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        UUID staffScope = isPrivilegedStaff(actor) ? null : actor.getId();
+        List<Test> tests = testRepository.findStaffTests(
+                staffScope,
+                courseId,
+                classId);
 
         List<TestModel.Response> responses =
                 new ArrayList<>();
@@ -143,6 +147,66 @@ public class TestService {
         return responses;
     }
 
+    public List<TestModel.Response> getAvailableTests(
+            UUID courseId,
+            UUID classId,
+            Boolean isFlashtest) {
+
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        if (!isTrainee(actor)) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "Only trainees can view class tests");
+        }
+
+        return testRepository.findAvailableForStudent(
+                        actor.getId(),
+                        courseId,
+                        classId,
+                        isFlashtest)
+                .stream()
+                .map(test -> mapToResponse(test, false))
+                .toList();
+    }
+
+    public UUID requireCurrentTraineeAccess(UUID testId) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        if (!isTrainee(actor)) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "Only trainees can start a test attempt");
+        }
+
+        Test test = testRepository.findById(testId)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        requireTestAccess(test, actor);
+        return actor.getId();
+    }
+
+    public void requireAttemptAccess(UUID testId, UUID studentId) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        Test test = testRepository.findById(testId)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+
+        if (isTrainee(actor)) {
+            if (!actor.getId().equals(studentId)) {
+                throw new BusinessException(
+                        ErrorCode.FORBIDDEN,
+                        "You cannot access another trainee's attempt");
+            }
+            requireTestAccess(test, actor);
+            return;
+        }
+
+        requireManageAccess(test, actor);
+    }
+
+    public void requireCurrentUserCanManage(UUID testId) {
+        Test test = testRepository.findById(testId)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        requireManageAccess(test, currentUserService.requireAuthenticatedUser());
+    }
+
     public TestModel.Response getTestById(UUID id) {
 
         Test test = testRepository.findById(id)
@@ -151,6 +215,7 @@ public class TestService {
                                 "Test not found"));
 
         UserAccount actor = currentUserService.requireAuthenticatedUser();
+        requireTestAccess(test, actor);
         boolean includeAccessCode = canManageTests(actor);
         return mapToResponse(
                 includeAccessCode ? ensureAccessCode(test) : test,
@@ -165,6 +230,7 @@ public class TestService {
                 .orElseThrow(() ->
                         new EntityNotFoundException(
                                 "Test not found"));
+        requireTestAccess(test, currentUserService.requireAuthenticatedUser());
         test = ensureAccessCode(test);
 
         TestModel.AccessCodeVerifyResponse response =
@@ -184,6 +250,8 @@ public class TestService {
                 .orElseThrow(() ->
                         new EntityNotFoundException(
                                 "Test not found"));
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        requireManageAccess(test, actor);
 
         Instant nextOpensAt = request.getOpensAt() != null
                 ? request.getOpensAt()
@@ -192,6 +260,14 @@ public class TestService {
                 ? request.getClosesAt()
                 : test.getClosesAt();
         validateSchedule(nextOpensAt, nextClosesAt);
+
+        UUID nextClassId = request.getClassId() != null
+                ? request.getClassId()
+                : test.getClassId();
+        UUID nextCourseId = request.getCourseId() != null
+                ? request.getCourseId()
+                : test.getCourseId();
+        validateClassScope(nextClassId, nextCourseId, actor);
 
         boolean isFlashTest = Boolean.TRUE.equals(test.getIsFlashtest()) ||
                 Boolean.TRUE.equals(request.getIsFlashtest());
@@ -206,7 +282,6 @@ public class TestService {
 
         if (request.getModuleId() != null) test.setModuleId(request.getModuleId());
         if (request.getCurriculumSectionId() != null) {
-            UUID nextCourseId = request.getCourseId() != null ? request.getCourseId() : test.getCourseId();
             validateCurriculumSection(nextCourseId, request.getCurriculumSectionId());
             test.setCurriculumSectionId(request.getCurriculumSectionId());
         }
@@ -249,6 +324,7 @@ public class TestService {
 
         Test test = testRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        requireManageAccess(test, currentUserService.requireAuthenticatedUser());
         if (Boolean.TRUE.equals(test.getIsPublished())) {
             emitTestNotificationToStudents(
                     test,
@@ -382,6 +458,82 @@ public class TestService {
             case "ADMIN", "TMO", "SME", "TRAINER" -> true;
             default -> false;
         };
+    }
+
+    private boolean isPrivilegedStaff(UserAccount actor) {
+        String role = actor.getRole();
+        return role != null && switch (role.toUpperCase()) {
+            case "ADMIN", "TMO", "SME" -> true;
+            default -> false;
+        };
+    }
+
+    private boolean isTrainee(UserAccount actor) {
+        return actor.getRole() != null && "TRAINEE".equalsIgnoreCase(actor.getRole());
+    }
+
+    private void requireTestAccess(Test test, UserAccount actor) {
+        if (isTrainee(actor)) {
+            if (testRepository.existsAvailableForStudent(test.getId(), actor.getId())) {
+                return;
+            }
+        } else if (isPrivilegedStaff(actor)
+                || (canManageTests(actor)
+                && testRepository.existsManagedByStaff(test.getId(), actor.getId()))) {
+            return;
+        }
+
+        throw new BusinessException(
+                ErrorCode.FORBIDDEN,
+                "This test does not belong to one of your classes");
+    }
+
+    private void requireManageAccess(Test test, UserAccount actor) {
+        if (isPrivilegedStaff(actor)
+                || (canManageTests(actor)
+                && testRepository.existsManagedByStaff(test.getId(), actor.getId()))) {
+            return;
+        }
+
+        throw new BusinessException(
+                ErrorCode.FORBIDDEN,
+                "You cannot manage tests outside your assigned classes");
+    }
+
+    private void validateClassScope(
+            UUID classId,
+            UUID courseId,
+            UserAccount actor) {
+        if (classId == null) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "A class is required for every test");
+        }
+        if (courseId == null) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "A course is required for every test");
+        }
+
+        ClassOffering classOffering = classOfferingRepository
+                .findByIdAndDeletedAtIsNull(classId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "Selected class was not found"));
+
+        if (!courseId.equals(classOffering.getCourseId())) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Selected class does not belong to this course");
+        }
+
+        if (!isPrivilegedStaff(actor)
+                && (!"TRAINER".equalsIgnoreCase(actor.getRole())
+                || !actor.getId().equals(classOffering.getTrainerId()))) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "You can only create tests for classes assigned to you");
+        }
     }
 
     private Test ensureAccessCode(Test test) {
