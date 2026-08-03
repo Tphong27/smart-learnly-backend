@@ -53,7 +53,7 @@ public class QuestionService {
     private final CourseAccessService courseAccessService;
 
     @Transactional(readOnly = true)
-    public PageResponse<QuestionModel.Response> listByCourse(UUID courseId, UUID moduleId, String search, String type, String status, Short difficulty, int page, int size) {
+    public PageResponse<QuestionModel.Response> listByCourse(UUID courseId, UUID moduleId, String search, String type, String status, boolean includeArchived, Short difficulty, int page, int size) {
         courseAccessService.requireReadableCourse(courseId);
         String normalizedSearch = normalizeNullable(search);
         String normalizedType = type == null || type.isBlank()
@@ -68,6 +68,7 @@ public class QuestionService {
                 normalizedSearch,
                 normalizedType,
                 normalizedStatus,
+                includeArchived,
                 difficulty,
                 PageRequest.of(page, size)
         );
