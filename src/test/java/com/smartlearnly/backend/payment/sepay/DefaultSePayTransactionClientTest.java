@@ -6,11 +6,15 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayRuntimeSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -22,9 +26,11 @@ class DefaultSePayTransactionClientTest {
         SePayProperties sePayProperties = new SePayProperties();
         sePayProperties.setApiToken("fake-api-token");
         sePayProperties.setApiBaseUrl("https://sepay.example.test/");
+        SystemSettingsService settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings("fake-api-token", "fake-webhook-secret"));
         RestClient.Builder restClientBuilder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
-        DefaultSePayTransactionClient client = new DefaultSePayTransactionClient(sePayProperties, restClientBuilder);
+        DefaultSePayTransactionClient client = new DefaultSePayTransactionClient(sePayProperties, settingsService, restClientBuilder);
         server.expect(requestTo("https://sepay.example.test/v2/transactions"
                         + "?q=SLPABC123DEF456"
                         + "&transfer_type=in"
@@ -71,8 +77,11 @@ class DefaultSePayTransactionClientTest {
     void findTransactionsShouldRejectMissingTokenWithoutExposingSecrets() {
         SePayProperties sePayProperties = new SePayProperties();
         sePayProperties.setWebhookSecret("fake-webhook-secret");
+        SystemSettingsService settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings("", "fake-webhook-secret"));
         DefaultSePayTransactionClient client = new DefaultSePayTransactionClient(
                 sePayProperties,
+                settingsService,
                 RestClient.builder()
         );
 

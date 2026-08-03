@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.payment.sepay;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -20,16 +21,18 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Service
 public class DefaultSePayTransactionClient implements SePayTransactionClient {
     private final SePayProperties sePayProperties;
+    private final SystemSettingsService systemSettingsService;
     private final RestClient restClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    public DefaultSePayTransactionClient(SePayProperties sePayProperties) {
-        this(sePayProperties, RestClient.builder());
+    public DefaultSePayTransactionClient(SePayProperties sePayProperties, SystemSettingsService systemSettingsService) {
+        this(sePayProperties, systemSettingsService, RestClient.builder());
     }
 
-    DefaultSePayTransactionClient(SePayProperties sePayProperties, RestClient.Builder restClientBuilder) {
+    DefaultSePayTransactionClient(SePayProperties sePayProperties, SystemSettingsService systemSettingsService, RestClient.Builder restClientBuilder) {
         this.sePayProperties = sePayProperties;
+        this.systemSettingsService = systemSettingsService;
         this.restClient = restClientBuilder.build();
     }
 
@@ -39,7 +42,7 @@ public class DefaultSePayTransactionClient implements SePayTransactionClient {
         try {
             String response = restClient.get()
                     .uri(buildUri(query))
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + sePayProperties.getApiToken())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + systemSettingsService.resolveSePayRuntimeSettings().apiToken())
                     .retrieve()
                     .body(String.class);
             return parseTransactions(response);
@@ -90,7 +93,7 @@ public class DefaultSePayTransactionClient implements SePayTransactionClient {
     }
 
     private void validateConfiguration() {
-        if (sePayProperties.getApiToken() == null || sePayProperties.getApiToken().isBlank()) {
+        if (!systemSettingsService.resolveSePayRuntimeSettings().hasApiToken()) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
                     "SePay transaction service is not configured"

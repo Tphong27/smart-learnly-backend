@@ -2,11 +2,14 @@ package com.smartlearnly.backend.payment.sepay;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayRuntimeSettings;
 import com.smartlearnly.backend.commerce.entity.SePayOrder;
 import com.smartlearnly.backend.commerce.entity.SePayOrderStatus;
 import com.smartlearnly.backend.commerce.repository.SePayOrderRepository;
@@ -33,13 +36,17 @@ class SePayReconciliationServiceTest {
     private SePayPaymentMatchingService paymentMatchingService;
 
     private SePayProperties sePayProperties;
+    private SystemSettingsService settingsService;
     private SePayReconciliationService service;
 
     @BeforeEach
     void setUp() {
         sePayProperties = new SePayProperties();
+        settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings("", ""));
         service = new SePayReconciliationService(
                 sePayProperties,
+                settingsService,
                 sePayOrderRepository,
                 sePayTransactionClient,
                 paymentMatchingService
@@ -55,7 +62,7 @@ class SePayReconciliationServiceTest {
 
     @Test
     void reconcileShouldQueryPendingSePayOrdersAndPassCandidatesToMatchingFlow() {
-        sePayProperties.setApiToken("fake-api-token");
+        when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings("fake-api-token", "secret"));
         SePayOrder sePayOrder = sePayOrder("SLPABC123DEF456", new BigDecimal("399000"));
         SePayTransactionCandidate candidate = candidate("SLPABC123DEF456", new BigDecimal("399000"));
         when(sePayOrderRepository.findByStatusInOrderByCreatedAtAsc(any(), any(Pageable.class)))
@@ -77,7 +84,7 @@ class SePayReconciliationServiceTest {
 
     @Test
     void reconcileShouldNotInvokeMatchingWhenApiFailureOccurs() {
-        sePayProperties.setApiToken("fake-api-token");
+        when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings("fake-api-token", "secret"));
         SePayOrder sePayOrder = sePayOrder("SLPABC123DEF456", new BigDecimal("399000"));
         when(sePayOrderRepository.findByStatusInOrderByCreatedAtAsc(any(), any(Pageable.class)))
                 .thenReturn(List.of(sePayOrder));

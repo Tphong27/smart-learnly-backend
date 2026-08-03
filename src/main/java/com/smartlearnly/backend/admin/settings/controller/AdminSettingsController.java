@@ -10,14 +10,22 @@ import com.smartlearnly.backend.admin.settings.dto.GoogleOAuthSettingsResponse;
 import com.smartlearnly.backend.admin.settings.dto.GoogleOAuthSettingsUpdateRequest;
 import com.smartlearnly.backend.admin.settings.dto.QuestionImageImportSettingsResponse;
 import com.smartlearnly.backend.admin.settings.dto.QuestionImageImportSettingsUpdateRequest;
+import com.smartlearnly.backend.admin.settings.dto.SePayBankDisplaySettingsResponse;
+import com.smartlearnly.backend.admin.settings.dto.SePayBankDisplaySettingsUpdateRequest;
+import com.smartlearnly.backend.admin.settings.dto.SePayReconciliationRunResponse;
+import com.smartlearnly.backend.admin.settings.dto.SePayRuntimeSettingsResponse;
+import com.smartlearnly.backend.admin.settings.dto.SePayRuntimeSettingsUpdateRequest;
 import com.smartlearnly.backend.admin.settings.dto.TestEmailRequest;
 import com.smartlearnly.backend.admin.settings.service.SettingKeys;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.QuestionImageImportSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayBankDisplaySettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayRuntimeSettings;
 import com.smartlearnly.backend.auth.service.EmailService;
 import com.smartlearnly.backend.common.api.ApiResponse;
+import com.smartlearnly.backend.payment.sepay.SePayReconciliationService;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -49,6 +57,7 @@ public class AdminSettingsController {
     private final EmailService emailService;
     private final AuditLogService auditLogService;
     private final AuthenticatedUserResolver authenticatedUserResolver;
+    private final SePayReconciliationService sePayReconciliationService;
 
     @GetMapping("/email")
     @Operation(summary = "Get current email settings (secret masked)")
@@ -186,6 +195,62 @@ public class AdminSettingsController {
         return getQuestionImageImportSettings();
     }
 
+    @GetMapping("/integrations/sepay/bank-display")
+    @Operation(summary = "Get current SePay bank display settings")
+    public ApiResponse<SePayBankDisplaySettingsResponse> getSePayBankDisplaySettings() {
+        return ApiResponse.success("SePay bank display settings loaded", toSePayBankDisplayResponse());
+    }
+
+    @PutMapping("/integrations/sepay/bank-display")
+    @Transactional
+    @Operation(summary = "Update SePay bank display settings")
+    public ApiResponse<SePayBankDisplaySettingsResponse> updateSePayBankDisplaySettings(
+            @Valid @RequestBody SePayBankDisplaySettingsUpdateRequest request
+    ) {
+        UUID actor = currentUserId();
+        settingsService.put(SettingKeys.SEPAY_ACCOUNT_NUMBER, request.accountNumber().trim(), false, actor);
+        settingsService.put(SettingKeys.SEPAY_BANK_NAME, request.bankName().trim(), false, actor);
+        settingsService.put(SettingKeys.SEPAY_ACCOUNT_NAME, request.accountName().trim(), false, actor);
+        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_SEPAY_BANK_DISPLAY", "system_settings", "payment.sepay.bank_display");
+        return getSePayBankDisplaySettings();
+    }
+
+    @GetMapping("/integrations/sepay/runtime")
+    @Operation(summary = "Get current SePay runtime secret settings (secret masked)")
+    public ApiResponse<SePayRuntimeSettingsResponse> getSePayRuntimeSettings() {
+        return ApiResponse.success("SePay runtime settings loaded", toSePayRuntimeResponse());
+    }
+
+    @PutMapping("/integrations/sepay/runtime")
+    @Transactional
+    @Operation(summary = "Update SePay runtime secret settings")
+    public ApiResponse<SePayRuntimeSettingsResponse> updateSePayRuntimeSettings(
+            @Valid @RequestBody SePayRuntimeSettingsUpdateRequest request
+    ) {
+        UUID actor = currentUserId();
+        putOptionalSecret(SettingKeys.SEPAY_API_TOKEN, request.apiToken(), actor);
+        putOptionalSecret(SettingKeys.SEPAY_WEBHOOK_SECRET, request.webhookSecret(), actor);
+        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_SEPAY_RUNTIME", "system_settings", "payment.sepay.runtime");
+        return getSePayRuntimeSettings();
+    }
+
+    @PostMapping("/integrations/sepay/reconciliation/run")
+    @Operation(summary = "Run SePay reconciliation immediately")
+    public ApiResponse<SePayReconciliationRunResponse> runSePayReconciliationNow() {
+        var summary = sePayReconciliationService.reconcileNow();
+        auditLogService.record(actorLabel(), "PAYMENT_RECONCILED", "sepay_reconciliation", "manual");
+        return ApiResponse.success(
+                summary.queryFailures() > 0 || summary.candidateFailures() > 0
+                        ? "SePay reconciliation completed with some failures"
+                        : "SePay reconciliation completed",
+                new SePayReconciliationRunResponse(
+                        summary.pendingOrders(),
+                        summary.queriedOrders(),
+                        summary.matchedCandidates(),
+                        summary.queryFailures(),
+                        summary.candidateFailures()));
+    }
+
     @GetMapping("/ai/assignment-draft")
     @Operation(summary = "Get current assignment AI draft settings (secret masked)")
     public ApiResponse<AssignmentAiSettingsResponse> getAssignmentAiSettings() {
@@ -216,6 +281,24 @@ public class AdminSettingsController {
         settingsService.put(SettingKeys.ASSIGNMENT_AI_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false, actor);
         auditLogService.record(actorLabel(), "SETTINGS_UPDATE_ASSIGNMENT_AI", "system_settings", "assignment_ai");
         return getAssignmentAiSettings();
+    }
+
+    private SePayBankDisplaySettingsResponse toSePayBankDisplayResponse() {
+        SePayBankDisplaySettings settings = settingsService.resolveSePayBankDisplaySettings();
+        return new SePayBankDisplaySettingsResponse(
+                settings.accountNumber(),
+                settings.bankName(),
+                settings.accountName(),
+                settings.isConfigured());
+    }
+
+    private SePayRuntimeSettingsResponse toSePayRuntimeResponse() {
+        SePayRuntimeSettings settings = settingsService.resolveSePayRuntimeSettings();
+        return new SePayRuntimeSettingsResponse(
+                settings.hasApiToken(),
+                settings.hasWebhookSecret(),
+                settingsService.hasValue(SettingKeys.SEPAY_API_TOKEN),
+                settingsService.hasValue(SettingKeys.SEPAY_WEBHOOK_SECRET));
     }
 
     private void putOptionalText(String key, String value, UUID actor) {

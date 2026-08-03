@@ -3,9 +3,13 @@ package com.smartlearnly.backend.payment.sepay;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayRuntimeSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.nio.charset.StandardCharsets;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -23,6 +27,7 @@ class SePayWebhookSignatureVerifierTest {
             "{\"id\":92704,\"transferAmount\":5000000}".getBytes(StandardCharsets.UTF_8);
 
     private SePayProperties sePayProperties;
+    private SystemSettingsService settingsService;
     private SePayWebhookSignatureVerifier verifier;
 
     @BeforeEach
@@ -30,8 +35,11 @@ class SePayWebhookSignatureVerifierTest {
         sePayProperties = new SePayProperties();
         sePayProperties.setWebhookSecret(SECRET);
         sePayProperties.setApiToken(API_TOKEN);
+        settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings(API_TOKEN, SECRET));
         verifier = new SePayWebhookSignatureVerifier(
                 sePayProperties,
+                settingsService,
                 Clock.fixed(Instant.ofEpochSecond(NOW), ZoneOffset.UTC)
         );
     }
@@ -81,7 +89,7 @@ class SePayWebhookSignatureVerifierTest {
 
     @Test
     void verifyShouldRejectMissingSecretWithoutExposingToken() {
-        sePayProperties.setWebhookSecret("");
+        when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings(API_TOKEN, ""));
         String signature = signature(NOW, RAW_BODY, SECRET);
 
         assertThatThrownBy(() -> verifier.verify(RAW_BODY, signature, Long.toString(NOW)))

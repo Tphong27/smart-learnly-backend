@@ -32,6 +32,13 @@ public final class SettingKeys {
     public static final String QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB = "question_image_import.max_file_size_mb";
     public static final String QUESTION_IMAGE_IMPORT_MAX_FILES = "question_image_import.max_files";
 
+    // SePay checkout bank display settings.
+    public static final String SEPAY_ACCOUNT_NUMBER = "payment.sepay.account_number";
+    public static final String SEPAY_BANK_NAME = "payment.sepay.bank_name";
+    public static final String SEPAY_ACCOUNT_NAME = "payment.sepay.account_name";
+    public static final String SEPAY_API_TOKEN = "payment.sepay.api_token";
+    public static final String SEPAY_WEBHOOK_SECRET = "payment.sepay.webhook_secret";
+
     // Assignment AI draft.
     public static final String ASSIGNMENT_AI_ENABLED = "assignment_ai.enabled";
     public static final String ASSIGNMENT_AI_PROVIDER = "assignment_ai.provider";

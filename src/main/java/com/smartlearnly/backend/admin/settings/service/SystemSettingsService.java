@@ -4,6 +4,7 @@ import com.smartlearnly.backend.admin.settings.entity.SystemSetting;
 import com.smartlearnly.backend.admin.settings.repository.SystemSettingRepository;
 import com.smartlearnly.backend.assignment.service.AssignmentAiDraftProperties;
 import com.smartlearnly.backend.classroom.config.GoogleMeetProperties;
+import com.smartlearnly.backend.payment.sepay.SePayProperties;
 import com.smartlearnly.backend.question.image.QuestionImageImportProperties;
 import java.time.Duration;
 import java.util.Map;
@@ -40,6 +41,7 @@ public class SystemSettingsService {
     private final GoogleMeetProperties googleMeetProperties;
     private final QuestionImageImportProperties questionImageImportProperties;
     private final AssignmentAiDraftProperties assignmentAiDraftProperties;
+    private final SePayProperties sePayProperties;
 
     public SystemSettingsService(
             SystemSettingRepository repository,
@@ -51,7 +53,8 @@ public class SystemSettingsService {
             @Value("${app.auth.google-client-secret:}") String envGoogleClientSecret,
             GoogleMeetProperties googleMeetProperties,
             QuestionImageImportProperties questionImageImportProperties,
-            AssignmentAiDraftProperties assignmentAiDraftProperties) {
+            AssignmentAiDraftProperties assignmentAiDraftProperties,
+            SePayProperties sePayProperties) {
         this.repository = repository;
         this.cipher = cipher;
         this.envResendApiUrl = envResendApiUrl;
@@ -62,6 +65,7 @@ public class SystemSettingsService {
         this.googleMeetProperties = googleMeetProperties;
         this.questionImageImportProperties = questionImageImportProperties;
         this.assignmentAiDraftProperties = assignmentAiDraftProperties;
+        this.sePayProperties = sePayProperties;
     }
 
     public boolean secretStorageEnabled() {
@@ -165,6 +169,19 @@ public class SystemSettingsService {
                 getOrDefault(SettingKeys.ASSIGNMENT_AI_MODEL, assignmentAiDraftProperties.getModel()),
                 getOrDefault(SettingKeys.ASSIGNMENT_AI_FALLBACK_MODEL, assignmentAiDraftProperties.getFallbackModel()),
                 getLongOrDefault(SettingKeys.ASSIGNMENT_AI_TIMEOUT_SECONDS, assignmentAiDraftProperties.getTimeout().toSeconds()));
+    }
+
+    public SePayBankDisplaySettings resolveSePayBankDisplaySettings() {
+        return new SePayBankDisplaySettings(
+                getOrDefault(SettingKeys.SEPAY_ACCOUNT_NUMBER, sePayProperties.getAccountNumber()),
+                getOrDefault(SettingKeys.SEPAY_BANK_NAME, sePayProperties.getBankName()),
+                getOrDefault(SettingKeys.SEPAY_ACCOUNT_NAME, sePayProperties.getAccountName()));
+    }
+
+    public SePayRuntimeSettings resolveSePayRuntimeSettings() {
+        return new SePayRuntimeSettings(
+                getOrDefault(SettingKeys.SEPAY_API_TOKEN, sePayProperties.getApiToken()),
+                getOrDefault(SettingKeys.SEPAY_WEBHOOK_SECRET, sePayProperties.getWebhookSecret()));
     }
 
     private boolean getBooleanOrDefault(String key, boolean fallback) {
@@ -284,6 +301,29 @@ public class SystemSettingsService {
 
         public boolean isConfigured() {
             return apiKey != null && !apiKey.isBlank();
+        }
+    }
+
+    public record SePayBankDisplaySettings(
+            String accountNumber,
+            String bankName,
+            String accountName) {
+        public boolean isConfigured() {
+            return accountNumber != null && !accountNumber.isBlank()
+                    && bankName != null && !bankName.isBlank()
+                    && accountName != null && !accountName.isBlank();
+        }
+    }
+
+    public record SePayRuntimeSettings(
+            String apiToken,
+            String webhookSecret) {
+        public boolean hasApiToken() {
+            return apiToken != null && !apiToken.isBlank();
+        }
+
+        public boolean hasWebhookSecret() {
+            return webhookSecret != null && !webhookSecret.isBlank();
         }
     }
 }

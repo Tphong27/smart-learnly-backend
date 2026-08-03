@@ -1,5 +1,7 @@
 package com.smartlearnly.backend.payment.sepay;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayBankDisplaySettings;
 import com.smartlearnly.backend.commerce.repository.SePayOrderRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -22,6 +24,7 @@ public class DefaultSePayPaymentInstructionService implements SePayPaymentInstru
 
     private final SePayProperties sePayProperties;
     private final SePayOrderRepository sePayOrderRepository;
+    private final SystemSettingsService systemSettingsService;
 
     @Override
     public SePayPaymentInstruction createInstruction(SePayPaymentInstructionRequest request) {
@@ -29,9 +32,10 @@ public class DefaultSePayPaymentInstructionService implements SePayPaymentInstru
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "SePay payment amount must be greater than 0");
         }
 
-        String accountNumber = requireDisplayConfig(sePayProperties.getAccountNumber());
-        String bankName = requireDisplayConfig(sePayProperties.getBankName());
-        String accountName = requireDisplayConfig(sePayProperties.getAccountName());
+        SePayBankDisplaySettings settings = systemSettingsService.resolveSePayBankDisplaySettings();
+        String accountNumber = requireDisplayConfig(settings.accountNumber());
+        String bankName = requireDisplayConfig(settings.bankName());
+        String accountName = requireDisplayConfig(settings.accountName());
         String paymentCode = generateUniquePaymentCode();
 
         return new SePayPaymentInstruction(

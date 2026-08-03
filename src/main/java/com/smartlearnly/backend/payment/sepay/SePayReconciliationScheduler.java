@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.payment.sepay;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +12,7 @@ import org.springframework.stereotype.Component;
 public class SePayReconciliationScheduler {
     private static final Logger log = LoggerFactory.getLogger(SePayReconciliationScheduler.class);
 
-    private final SePayProperties sePayProperties;
+    private final SystemSettingsService systemSettingsService;
     private final SePayReconciliationService reconciliationService;
 
     @Scheduled(
@@ -27,6 +28,6 @@ public class SePayReconciliationScheduler {
     }
 
     private boolean hasApiToken() {
-        return sePayProperties.getApiToken() != null && !sePayProperties.getApiToken().isBlank();
+        return systemSettingsService.resolveSePayRuntimeSettings().hasApiToken();
     }
 }
