@@ -21,6 +21,7 @@ public interface MyCourseProjection {
     UUID getEnrollmentId();
     String getEnrollmentStatus();
     Instant getEnrollmentDate();
+    String getLearningType();
 
     String getCourseStatus();
     Instant getAccessBlockedAt();

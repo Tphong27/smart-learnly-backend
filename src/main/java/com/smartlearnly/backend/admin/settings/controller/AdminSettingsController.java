@@ -26,6 +26,7 @@ import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SeP
 import com.smartlearnly.backend.auth.service.EmailService;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.payment.sepay.SePayReconciliationService;
+import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -66,8 +67,7 @@ public class AdminSettingsController {
                 settingsService.hasValue(SettingKeys.EMAIL_API_KEY),
                 settingsService.getOrDefault(SettingKeys.EMAIL_FROM_NAME, null),
                 settingsService.getOrDefault(SettingKeys.EMAIL_FROM_EMAIL, null),
-                settingsService.getOrDefault(SettingKeys.EMAIL_REPLY_TO, null)
-        );
+                settingsService.getOrDefault(SettingKeys.EMAIL_REPLY_TO, null));
         return ApiResponse.success("Email settings loaded", response);
     }
 
@@ -75,14 +75,13 @@ public class AdminSettingsController {
     @Transactional
     @Operation(summary = "Update email settings")
     public ApiResponse<EmailSettingsResponse> updateEmailSettings(
-            @Valid @RequestBody EmailSettingsUpdateRequest request
-    ) {
+            @Valid @RequestBody EmailSettingsUpdateRequest request) {
         UUID actor = currentUserId();
         settingsService.put(SettingKeys.EMAIL_API_KEY, request.apiKey(), true, actor);
         settingsService.put(SettingKeys.EMAIL_FROM_NAME, request.fromName(), false, actor);
         settingsService.put(SettingKeys.EMAIL_FROM_EMAIL, request.fromEmail(), false, actor);
         putOptionalText(SettingKeys.EMAIL_REPLY_TO, request.replyTo(), actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_EMAIL", "system_settings", "email");
+        auditLogService.recordAction(actorLabel(), AuditAction.SETTINGS_UPDATE_EMAIL, "system_settings", "email");
         return getEmailSettings();
     }
 
@@ -104,8 +103,7 @@ public class AdminSettingsController {
         } catch (RuntimeException exception) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "Failed to send test email. Check the email configuration."
-            );
+                    "Failed to send test email. Check the email configuration.");
         }
         return ApiResponse.success("Test email sent to " + recipient);
     }
@@ -117,8 +115,7 @@ public class AdminSettingsController {
                 settingsService.hasValue(SettingKeys.GOOGLE_CLIENT_ID),
                 settingsService.hasValue(SettingKeys.GOOGLE_CLIENT_SECRET),
                 settingsService.getOrDefault(SettingKeys.GOOGLE_SCOPE, "openid,profile,email"),
-                GOOGLE_REDIRECT_URI_HINT
-        );
+                GOOGLE_REDIRECT_URI_HINT);
         return ApiResponse.success("Google OAuth settings loaded", response);
     }
 
@@ -126,13 +123,16 @@ public class AdminSettingsController {
     @Transactional
     @Operation(summary = "Update Google OAuth settings")
     public ApiResponse<GoogleOAuthSettingsResponse> updateGoogleOAuth(
-            @Valid @RequestBody GoogleOAuthSettingsUpdateRequest request
-    ) {
+            @Valid @RequestBody GoogleOAuthSettingsUpdateRequest request) {
         UUID actor = currentUserId();
         settingsService.put(SettingKeys.GOOGLE_CLIENT_ID, request.clientId(), true, actor);
         settingsService.put(SettingKeys.GOOGLE_CLIENT_SECRET, request.clientSecret(), true, actor);
         settingsService.put(SettingKeys.GOOGLE_SCOPE, request.scope(), false, actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_OAUTH_GOOGLE", "system_settings", "oauth.google");
+        auditLogService.recordAction(
+                actorLabel(),
+                AuditAction.SETTINGS_UPDATE_OAUTH_GOOGLE,
+                "system_settings",
+                "oauth.google");
         return getGoogleOAuth();
     }
 
@@ -143,8 +143,7 @@ public class AdminSettingsController {
         GoogleMeetSettingsResponse response = new GoogleMeetSettingsResponse(
                 settings.enabled(),
                 settingsService.hasValue(SettingKeys.GOOGLE_MEET_REFRESH_TOKEN)
-                        || (settings.refreshToken() != null && !settings.refreshToken().isBlank())
-        );
+                        || (settings.refreshToken() != null && !settings.refreshToken().isBlank()));
         return ApiResponse.success("Google Meet settings loaded", response);
     }
 
@@ -152,12 +151,16 @@ public class AdminSettingsController {
     @Transactional
     @Operation(summary = "Update Google Meet integration settings")
     public ApiResponse<GoogleMeetSettingsResponse> updateGoogleMeetSettings(
-            @Valid @RequestBody GoogleMeetSettingsUpdateRequest request
-    ) {
+            @Valid @RequestBody GoogleMeetSettingsUpdateRequest request) {
         UUID actor = currentUserId();
-        settingsService.put(SettingKeys.GOOGLE_MEET_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())), false, actor);
+        settingsService.put(SettingKeys.GOOGLE_MEET_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())),
+                false, actor);
         putOptionalSecret(SettingKeys.GOOGLE_MEET_REFRESH_TOKEN, request.refreshToken(), actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_GOOGLE_MEET", "system_settings", "google_meet");
+        auditLogService.recordAction(
+                actorLabel(),
+                AuditAction.SETTINGS_UPDATE_GOOGLE_MEET,
+                "system_settings",
+                "google_meet");
         return getGoogleMeetSettings();
     }
 
@@ -172,8 +175,7 @@ public class AdminSettingsController {
                 settings.model(),
                 settings.timeoutSeconds(),
                 settings.maxFileSizeMb(),
-                settings.maxFiles()
-        );
+                settings.maxFiles());
         return ApiResponse.success("Question image import settings loaded", response);
     }
 
@@ -181,17 +183,24 @@ public class AdminSettingsController {
     @Transactional
     @Operation(summary = "Update question image import settings")
     public ApiResponse<QuestionImageImportSettingsResponse> updateQuestionImageImportSettings(
-            @Valid @RequestBody QuestionImageImportSettingsUpdateRequest request
-    ) {
+            @Valid @RequestBody QuestionImageImportSettingsUpdateRequest request) {
         UUID actor = currentUserId();
-        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())), false, actor);
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_ENABLED,
+                String.valueOf(Boolean.TRUE.equals(request.enabled())), false, actor);
         settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_PROVIDER, request.provider(), false, actor);
         putOptionalSecret(SettingKeys.QUESTION_IMAGE_IMPORT_API_KEY, request.apiKey(), actor);
         settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MODEL, request.model(), false, actor);
-        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false, actor);
-        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB, String.valueOf(request.maxFileSizeMb()), false, actor);
-        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILES, String.valueOf(request.maxFiles()), false, actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_QUESTION_IMAGE_IMPORT", "system_settings", "question_image_import");
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()),
+                false, actor);
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB, String.valueOf(request.maxFileSizeMb()),
+                false, actor);
+        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILES, String.valueOf(request.maxFiles()), false,
+                actor);
+        auditLogService.recordAction(
+                actorLabel(),
+                AuditAction.SETTINGS_UPDATE_QUESTION_IMAGE_IMPORT,
+                "system_settings",
+                "question_image_import");
         return getQuestionImageImportSettings();
     }
 
@@ -205,13 +214,13 @@ public class AdminSettingsController {
     @Transactional
     @Operation(summary = "Update SePay bank display settings")
     public ApiResponse<SePayBankDisplaySettingsResponse> updateSePayBankDisplaySettings(
-            @Valid @RequestBody SePayBankDisplaySettingsUpdateRequest request
-    ) {
+            @Valid @RequestBody SePayBankDisplaySettingsUpdateRequest request) {
         UUID actor = currentUserId();
         settingsService.put(SettingKeys.SEPAY_ACCOUNT_NUMBER, request.accountNumber().trim(), false, actor);
         settingsService.put(SettingKeys.SEPAY_BANK_NAME, request.bankName().trim(), false, actor);
         settingsService.put(SettingKeys.SEPAY_ACCOUNT_NAME, request.accountName().trim(), false, actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_SEPAY_BANK_DISPLAY", "system_settings", "payment.sepay.bank_display");
+        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_SEPAY_BANK_DISPLAY", "system_settings",
+                "payment.sepay.bank_display");
         return getSePayBankDisplaySettings();
     }
 
@@ -225,12 +234,12 @@ public class AdminSettingsController {
     @Transactional
     @Operation(summary = "Update SePay runtime secret settings")
     public ApiResponse<SePayRuntimeSettingsResponse> updateSePayRuntimeSettings(
-            @Valid @RequestBody SePayRuntimeSettingsUpdateRequest request
-    ) {
+            @Valid @RequestBody SePayRuntimeSettingsUpdateRequest request) {
         UUID actor = currentUserId();
         putOptionalSecret(SettingKeys.SEPAY_API_TOKEN, request.apiToken(), actor);
         putOptionalSecret(SettingKeys.SEPAY_WEBHOOK_SECRET, request.webhookSecret(), actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_SEPAY_RUNTIME", "system_settings", "payment.sepay.runtime");
+        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_SEPAY_RUNTIME", "system_settings",
+                "payment.sepay.runtime");
         return getSePayRuntimeSettings();
     }
 
@@ -261,8 +270,7 @@ public class AdminSettingsController {
                 settings.isConfigured(),
                 settings.model(),
                 settings.fallbackModel(),
-                settings.timeoutSeconds()
-        );
+                settings.timeoutSeconds());
         return ApiResponse.success("Assignment AI settings loaded", response);
     }
 
@@ -270,16 +278,21 @@ public class AdminSettingsController {
     @Transactional
     @Operation(summary = "Update assignment AI draft settings")
     public ApiResponse<AssignmentAiSettingsResponse> updateAssignmentAiSettings(
-            @Valid @RequestBody AssignmentAiSettingsUpdateRequest request
-    ) {
+            @Valid @RequestBody AssignmentAiSettingsUpdateRequest request) {
         UUID actor = currentUserId();
-        settingsService.put(SettingKeys.ASSIGNMENT_AI_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())), false, actor);
+        settingsService.put(SettingKeys.ASSIGNMENT_AI_ENABLED, String.valueOf(Boolean.TRUE.equals(request.enabled())),
+                false, actor);
         settingsService.put(SettingKeys.ASSIGNMENT_AI_PROVIDER, request.provider(), false, actor);
         putOptionalSecret(SettingKeys.ASSIGNMENT_AI_API_KEY, request.apiKey(), actor);
         settingsService.put(SettingKeys.ASSIGNMENT_AI_MODEL, request.model(), false, actor);
         settingsService.put(SettingKeys.ASSIGNMENT_AI_FALLBACK_MODEL, request.fallbackModel(), false, actor);
-        settingsService.put(SettingKeys.ASSIGNMENT_AI_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false, actor);
-        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_ASSIGNMENT_AI", "system_settings", "assignment_ai");
+        settingsService.put(SettingKeys.ASSIGNMENT_AI_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false,
+                actor);
+        auditLogService.recordAction(
+                actorLabel(),
+                AuditAction.SETTINGS_UPDATE_ASSIGNMENT_AI,
+                "system_settings",
+                "assignment_ai");
         return getAssignmentAiSettings();
     }
 

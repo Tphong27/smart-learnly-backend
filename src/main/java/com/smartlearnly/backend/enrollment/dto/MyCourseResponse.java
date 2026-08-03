@@ -17,6 +17,7 @@ public record MyCourseResponse(
         UUID enrollmentId,
         String enrollmentStatus,
         Instant enrollmentDate,
+        String learningType,
         String courseStatus,
         boolean accessAllowed,
         String accessBlockedReason,

@@ -158,6 +158,7 @@ public class AdminFlashcardStagingService {
                 keyword,
                 null,
                 parsedStatus == null ? null : toApiValue(parsedStatus),
+                true,
                 difficulty,
                 Pageable.unpaged()
         ).stream()

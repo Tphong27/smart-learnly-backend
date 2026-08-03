@@ -116,6 +116,7 @@ class QuestionServiceTest {
                 eq("java"),
                 eq("multiple_choice"),
                 eq("draft"),
+                eq(false),
                 eq((short) 2),
                 eq(PageRequest.of(0, 20))
         )).thenReturn(new PageImpl<>(List.of(question), PageRequest.of(0, 20), 1));
@@ -126,6 +127,7 @@ class QuestionServiceTest {
                 " java ",
                 "multiple-choice",
                 "draft",
+                false,
                 (short) 2,
                 0,
                 20

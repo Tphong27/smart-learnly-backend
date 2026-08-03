@@ -19,6 +19,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
               AND (CAST(:search AS text) IS NULL OR LOWER(q.question_text) LIKE CONCAT('%', LOWER(CAST(:search AS text)), '%'))
               AND (CAST(:type AS text) IS NULL OR q.question_type::text = CAST(:type AS text))
               AND (CAST(:status AS text) IS NULL OR q.status::text = CAST(:status AS text))
+              AND (CAST(:includeArchived AS boolean) = TRUE OR q.status::text <> 'archived')
               AND (CAST(:difficulty AS smallint) IS NULL OR q.difficulty = CAST(:difficulty AS smallint))
             ORDER BY q.updated_at DESC
             """,
@@ -30,6 +31,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
               AND (CAST(:search AS text) IS NULL OR LOWER(q.question_text) LIKE CONCAT('%', LOWER(CAST(:search AS text)), '%'))
               AND (CAST(:type AS text) IS NULL OR q.question_type::text = CAST(:type AS text))
               AND (CAST(:status AS text) IS NULL OR q.status::text = CAST(:status AS text))
+              AND (CAST(:includeArchived AS boolean) = TRUE OR q.status::text <> 'archived')
               AND (CAST(:difficulty AS smallint) IS NULL OR q.difficulty = CAST(:difficulty AS smallint))
             """,
             nativeQuery = true)
@@ -39,6 +41,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
             @Param("search") String search,
             @Param("type") String type,
             @Param("status") String status,
+            @Param("includeArchived") boolean includeArchived,
             @Param("difficulty") Short difficulty,
             Pageable pageable
     );

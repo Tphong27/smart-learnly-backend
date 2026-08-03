@@ -79,4 +79,30 @@ class AuditLogServiceTest {
         assertThat(captor.getValue().getAction()).isEqualTo("SECTION_CREATED");
         assertThat(captor.getValue().getDomain()).isEqualTo("CONTENT");
     }
+
+    @Test
+    void typedBridgeShouldRecordGoogleMeetSettingsUpdateInSystemDomain() {
+        AuditLogService service = new AuditLogService(auditLogRepository, sanitizer, userRepository);
+        UserAccount actor = new UserAccount();
+        actor.setId(UUID.randomUUID());
+        actor.setEmail("admin@example.com");
+        actor.setRole("ADMIN");
+        when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(actor.getEmail()))
+                .thenReturn(Optional.of(actor));
+        when(auditLogRepository.save(any(AuditLog.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.recordAction(
+                actor.getEmail(),
+                AuditAction.SETTINGS_UPDATE_GOOGLE_MEET,
+                "system_settings",
+                "google_meet"
+        );
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getAction()).isEqualTo("SETTINGS_UPDATE_GOOGLE_MEET");
+        assertThat(captor.getValue().getDomain()).isEqualTo("SYSTEM");
+        assertThat(captor.getValue().getTargetType()).isEqualTo("system_settings");
+        assertThat(captor.getValue().getTargetId()).isEqualTo("google_meet");
+    }
 }

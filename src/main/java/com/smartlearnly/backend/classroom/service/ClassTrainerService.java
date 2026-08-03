@@ -29,6 +29,7 @@ public class ClassTrainerService {
     public PageResponse<ClassResponse> listMyAssignedClasses(
             String status,
             String keyword,
+            UUID courseId,
             int page,
             int size) {
         UserAccount trainer = currentUserService.requireAuthenticatedUser();
@@ -38,6 +39,7 @@ public class ClassTrainerService {
 
         Page<ClassAdminProjection> result = classOfferingRepository.findTrainerAssignedClasses(
                 trainer.getId(),
+                courseId,
                 normalizedStatus,
                 keywordPattern,
                 PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));

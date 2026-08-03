@@ -45,7 +45,11 @@ public class AuditLogService {
     /** Backward-compatible bridge for existing business services. */
     @Transactional
     public void record(String actorEmail, String actionValue, String targetType, String targetId) {
-        AuditAction action = AuditAction.valueOf(actionValue);
+        recordAction(actorEmail, AuditAction.valueOf(actionValue), targetType, targetId);
+    }
+
+    @Transactional
+    public void recordAction(String actorEmail, AuditAction action, String targetType, String targetId) {
         AuditDomain domain = domainFor(action);
         UserAccount actor = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(actorEmail).orElse(null);
         record(new AuditEvent(

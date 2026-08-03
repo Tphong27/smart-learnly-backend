@@ -141,6 +141,10 @@ public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecif
                     WHEN :sort = 'POPULAR'
                     THEN c.is_featured
                 END DESC,
+                CASE
+                    WHEN :sort = 'NEWEST'
+                    THEN c.updated_at
+                END DESC,
                 c.created_at DESC,
                 c.id ASC
             """, countQuery = """

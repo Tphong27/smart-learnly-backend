@@ -23,7 +23,7 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
                     OR LOWER(category.slug) LIKE LOWER(CONCAT('%', CAST(:keyword AS text), '%')))
               AND (CAST(:active AS boolean) IS NULL OR category.is_active = CAST(:active AS boolean))
               AND (CAST(:parentId AS uuid) IS NULL OR category.parent_id = CAST(:parentId AS uuid))
-            ORDER BY category.sort_order ASC, LOWER(category.name) ASC
+            ORDER BY LOWER(category.name) ASC, LOWER(category.slug) ASC
             """, nativeQuery = true)
     List<Category> search(
             @Param("keyword") String keyword,
@@ -41,7 +41,7 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
                     OR LOWER(category.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS text), '%'))
                     OR LOWER(category.slug) LIKE LOWER(CONCAT('%', CAST(:keyword AS text), '%')))
               AND (CAST(:parentId AS uuid) IS NULL OR parent.id = CAST(:parentId AS uuid))
-            ORDER BY category.sort_order ASC, LOWER(category.name) ASC
+            ORDER BY LOWER(category.name) ASC, LOWER(category.slug) ASC
             """, nativeQuery = true)
     List<Category> searchPublicActive(
             @Param("keyword") String keyword,

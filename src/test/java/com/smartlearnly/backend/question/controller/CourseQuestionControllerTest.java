@@ -81,7 +81,7 @@ class CourseQuestionControllerTest {
                 null,
                 null,
                 null);
-        when(questionService.listByCourse(courseId, null, "java", null, null, null, 0, 10_000))
+        when(questionService.listByCourse(courseId, null, "java", null, null, true, null, 0, 10_000))
                 .thenReturn(new PageResponse<>(List.of(first, second), 0, 10_000, 2, 1));
 
         var response = controller.export(courseId, null, "java", null, null, null);
@@ -94,7 +94,7 @@ class CourseQuestionControllerTest {
         assertThat(csv).startsWith("id,module_id,type,status,question_text\n");
         assertThat(csv).contains("\"What is \"\"Java\"\"?\"");
         assertThat(csv).contains(",\"true_false\",\"approved\",");
-        verify(questionService).listByCourse(courseId, null, "java", null, null, null, 0, 10_000);
+        verify(questionService).listByCourse(courseId, null, "java", null, null, true, null, 0, 10_000);
     }
 
     @Test
@@ -105,6 +105,7 @@ class CourseQuestionControllerTest {
                 eq("search"),
                 eq("multiple_choice"),
                 eq("draft"),
+                eq(false),
                 eq((short) 2),
                 eq(1),
                 eq(25)))
@@ -116,6 +117,7 @@ class CourseQuestionControllerTest {
                 "search",
                 "multiple_choice",
                 "draft",
+                false,
                 (short) 2,
                 1,
                 25);

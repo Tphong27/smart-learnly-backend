@@ -3,6 +3,7 @@ package com.smartlearnly.backend.flashcard.staging.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -1448,7 +1449,7 @@ class AdminFlashcardStagingServiceTest {
         Question otherCourseQuestion = question(UUID.randomUUID(), moduleId, "Other course");
         QuestionAnswer answer = answer(sameCourseQuestion.getId(), "Correct", true, 0);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any()))
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(sameCourseQuestion, otherCourseQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(sameCourseQuestion.getId())))
                 .thenReturn(List.of(answer));
@@ -1476,7 +1477,7 @@ class AdminFlashcardStagingServiceTest {
         Question approvedImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Approved import");
         Question notImportedQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Not imported");
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any()))
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(draftImportedQuestion, approvedImportedQuestion, notImportedQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(anyList()))
                 .thenReturn(List.of());
@@ -1499,7 +1500,7 @@ class AdminFlashcardStagingServiceTest {
     void sourceQuestionsUseNativeSearchForStatusAndDifficultyFilters() {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any()))
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
         List<SourceQuestionResponse> response = service.listSourceQuestions(
@@ -1519,6 +1520,7 @@ class AdminFlashcardStagingServiceTest {
                 any(),
                 any(),
                 statusCaptor.capture(),
+                anyBoolean(),
                 difficultyCaptor.capture(),
                 any()
         );
@@ -1532,7 +1534,7 @@ class AdminFlashcardStagingServiceTest {
         UUID moduleId = UUID.randomUUID();
         Question rejectedQuestion = question(flashcardSet.getLesson().getCourse().getId(), moduleId, "Rejected import");
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), any(), any()))
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(rejectedQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(rejectedQuestion.getId())))
                 .thenReturn(List.of());

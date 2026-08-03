@@ -35,6 +35,7 @@ class ClassControllerSecurityTest {
         assertThatThrownBy(() -> classController.listMyAssignedClasses(
                 null,
                 null,
+                null,
                 0,
                 20))
                 .isInstanceOf(AccessDeniedException.class);

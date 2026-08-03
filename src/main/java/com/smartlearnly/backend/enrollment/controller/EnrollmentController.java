@@ -48,7 +48,7 @@ public class EnrollmentController {
 
     @GetMapping("/my-courses")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "List active courses for the authenticated trainee")
+    @Operation(summary = "List separate online-course and class-course learning entries")
     public ApiResponse<List<MyCourseResponse>> getMyCourses() {
         return ApiResponse.success(courseEnrollmentService.getMyCourses());
     }

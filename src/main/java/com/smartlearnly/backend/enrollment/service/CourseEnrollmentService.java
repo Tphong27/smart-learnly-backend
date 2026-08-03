@@ -22,6 +22,7 @@ import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatusHistory;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentTransitionSource;
 import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
+import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.EnrollmentHistoryProjection;
 import com.smartlearnly.backend.enrollment.repository.EnrollmentStatusHistoryRepository;
 import com.smartlearnly.backend.enrollment.repository.MyCourseProjection;
@@ -32,9 +33,11 @@ import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.payment.repository.SuccessfulPaymentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -49,6 +52,7 @@ public class CourseEnrollmentService {
 
         private final CourseRepository courseRepository;
         private final CourseEnrollmentRepository courseEnrollmentRepository;
+        private final ClassEnrollmentRepository classEnrollmentRepository;
         private final EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
         private final SuccessfulPaymentRepository successfulPaymentRepository;
         private final CurrentUserService currentUserService;
@@ -178,73 +182,6 @@ public class CourseEnrollmentService {
         }
 
         @Transactional
-        public EnrollmentResponse grantFreeClassCourseEnrollment(UUID studentId, UUID courseId, UUID classId) {
-                Course course = requirePublishedCourse(courseId);
-                CourseEnrollment existing = courseEnrollmentRepository
-                                .findByCourseIdAndStudentIdForUpdate(courseId, studentId)
-                                .orElse(null);
-
-                if (hasAccess(existing)) {
-                        return toEnrollmentResponse(existing, true, false);
-                }
-
-                CourseEnrollment enrollment;
-                EnrollmentStatus fromStatus;
-
-                if (existing == null) {
-                        enrollment = new CourseEnrollment();
-                        enrollment.setCourseId(courseId);
-                        enrollment.setStudentId(studentId);
-                        fromStatus = null;
-                } else {
-                        ensureReactivatable(existing.getStatus());
-                        enrollment = existing;
-                        fromStatus = existing.getStatus();
-                }
-
-                enrollment.setStatus(EnrollmentStatus.ACTIVE);
-                CourseEnrollment saved = courseEnrollmentRepository.save(enrollment);
-                recordCourseTransition(
-                                saved,
-                                fromStatus,
-                                EnrollmentStatus.ACTIVE,
-                                EnrollmentTransitionSource.FREE_ENROLLMENT,
-                                null,
-                                fromStatus == null
-                                                ? "Course access granted by free class enrollment"
-                                                : "Course access reactivated by free class enrollment");
-
-                AuditAction auditAction = fromStatus == null
-                                ? AuditAction.ENROLLMENT_CREATED
-                                : AuditAction.ENROLLMENT_REACTIVATED;
-
-                auditLogService.recordSystem(
-                                "free-class-enrollment",
-                                auditAction,
-                                AuditDomain.ENROLLMENT,
-                                AuditResult.SUCCESS,
-                                "COURSE_ENROLLMENT",
-                                saved.getId().toString(),
-                                "Course access was granted by a free class enrollment",
-                                java.util.Map.of(
-                                                "studentId", studentId,
-                                                "courseId", courseId,
-                                                "classId", classId),
-                                "free-class:" + classId,
-                                null);
-
-                emitCourseEnrollmentNotification(
-                                studentId,
-                                saved.getId(),
-                                course,
-                                fromStatus == null ? "Course access granted" : "Course access reactivated",
-                                "You now have course access through your class enrollment.",
-                                "course-enrollment:" + saved.getId() + ":free-class");
-
-                return toEnrollmentResponse(saved, false, fromStatus != null);
-        }
-
-        @Transactional
         public EnrollmentResponse grantPaidCourseEnrollment(
                         UUID studentId,
                         UUID courseId,
@@ -346,8 +283,12 @@ public class CourseEnrollmentService {
         @Transactional(readOnly = true)
         public List<MyCourseResponse> getMyCourses() {
                 UUID studentId = currentUserService.requireAuthenticatedUser().getId();
-                return courseEnrollmentRepository.findActiveMyCourses(studentId)
-                                .stream()
+                return Stream.concat(
+                                courseEnrollmentRepository.findActiveMyCourses(studentId).stream(),
+                                classEnrollmentRepository.findActiveMyClasses(studentId).stream())
+                                .sorted(Comparator.comparing(
+                                                MyCourseProjection::getEnrollmentDate,
+                                                Comparator.nullsLast(Comparator.reverseOrder())))
                                 .map(this::toMyCourseResponse)
                                 .toList();
         }
@@ -501,6 +442,7 @@ public class CourseEnrollmentService {
                                 course.getEnrollmentId(),
                                 course.getEnrollmentStatus(),
                                 course.getEnrollmentDate(),
+                                course.getLearningType(),
                                 course.getCourseStatus(),
                                 course.getAccessBlockedAt() == null,
                                 course.getAccessBlockReason(),

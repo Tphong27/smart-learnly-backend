@@ -9,16 +9,19 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/test-attempts")
 @RequiredArgsConstructor
+@PreAuthorize("isAuthenticated()")
 public class TestAttemptController {
 
     private final TestAttemptService service;
 
     @PostMapping("/start")
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<TestAttemptModel.Response>
     startAttempt(
             @Valid @RequestBody
@@ -33,6 +36,7 @@ public class TestAttemptController {
     }
 
     @PutMapping("/{id}/submit")
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<TestAttemptModel.Response>
     submitAttempt(
             @PathVariable UUID id,
@@ -44,6 +48,7 @@ public class TestAttemptController {
     }
 
     @GetMapping("/test/{testId}/student/{studentId}")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<TestAttemptModel.Response>>
     getAttempts(
             @PathVariable UUID testId,
@@ -56,18 +61,21 @@ public class TestAttemptController {
     }
 
     @GetMapping("/test/{testId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<TestAttemptModel.Response>>
     getAttemptsByTest(@PathVariable UUID testId) {
         return ResponseEntity.ok(service.getAttemptsByTest(testId));
     }
 
     @GetMapping("/{attemptId}")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<TestAttemptModel.Response> getAttemptById(
             @PathVariable UUID attemptId) {
         return ResponseEntity.ok(service.getAttemptById(attemptId));
     }
 
     @PutMapping("/test/{testId}/student/{studentId}/reopen")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<Void> reopenAttempt(
             @PathVariable UUID testId,
             @PathVariable UUID studentId) {
