@@ -41,8 +41,6 @@ class ClassEnrollmentServiceTest {
     @Mock
     private SuccessfulPaymentRepository successfulPaymentRepository;
     @Mock
-    private CourseEnrollmentService courseEnrollmentService;
-    @Mock
     private AuditLogService auditLogService;
     @Mock
     private CurrentUserService currentUserService;
@@ -55,14 +53,13 @@ class ClassEnrollmentServiceTest {
                 classEnrollmentRepository,
                 enrollmentStatusHistoryRepository,
                 successfulPaymentRepository,
-                courseEnrollmentService,
                 auditLogService,
                 currentUserService
         );
     }
 
         @Test
-        void successfulPaymentAndAvailableCapacityShouldCreateClassAndCourseEnrollment() {
+        void successfulPaymentAndAvailableCapacityShouldCreateOnlyClassEnrollment() {
                 UUID studentId = UUID.randomUUID();
                 UUID transactionId = UUID.randomUUID();
                 ClassOffering classOffering = classOffering(2);
@@ -97,11 +94,6 @@ class ClassEnrollmentServiceTest {
                                 transactionId);
 
                 assertThat(result.getStatus()).isEqualTo(EnrollmentStatus.ACTIVE);
-
-                verify(courseEnrollmentService).grantPaidCourseEnrollment(
-                                studentId,
-                                classOffering.getCourseId(),
-                                transactionId);
 
                 verify(enrollmentStatusHistoryRepository)
                                 .save(any(EnrollmentStatusHistory.class));
@@ -168,8 +160,6 @@ class ClassEnrollmentServiceTest {
 
                 verify(classEnrollmentRepository, never()).save(any());
 
-                verify(courseEnrollmentService, never())
-                                .grantPaidCourseEnrollment(any(), any(), any());
         }
 
         @Test

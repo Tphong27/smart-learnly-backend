@@ -40,7 +40,6 @@ public class ClassEnrollmentService {
     private final ClassEnrollmentRepository classEnrollmentRepository;
     private final EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
     private final SuccessfulPaymentRepository successfulPaymentRepository;
-    private final CourseEnrollmentService courseEnrollmentService;
     private final AuditLogService auditLogService;
     private final CurrentUserService currentUserService;
     private NotificationService notificationService;
@@ -65,11 +64,6 @@ public class ClassEnrollmentService {
                 .orElse(null);
 
         if (hasAccess(existing)) {
-            courseEnrollmentService.grantFreeClassCourseEnrollment(
-                    student.getId(),
-                    classOffering.getCourseId(),
-                    classId);
-
             return toResponse(
                     existing,
                     classOffering.getCourseId(),
@@ -115,11 +109,6 @@ public class ClassEnrollmentService {
                 fromStatus == null
                         ? "Initial free class enrollment"
                         : "Free class enrollment reactivation");
-
-        courseEnrollmentService.grantFreeClassCourseEnrollment(
-                student.getId(),
-                classOffering.getCourseId(),
-                classId);
 
         AuditAction auditAction = fromStatus == null
                 ? AuditAction.ENROLLMENT_CREATED
@@ -187,11 +176,6 @@ public class ClassEnrollmentService {
                 .orElse(null);
 
         if (hasAccess(existing)) {
-            courseEnrollmentService.grantPaidCourseEnrollment(
-                    studentId,
-                    classOffering.getCourseId(),
-                    transactionId);
-
             return existing;
         }
 
@@ -232,11 +216,6 @@ public class ClassEnrollmentService {
                 fromStatus == null
                         ? "Initial paid class enrollment"
                         : "Paid class enrollment reactivation");
-
-        courseEnrollmentService.grantPaidCourseEnrollment(
-                studentId,
-                classOffering.getCourseId(),
-                transactionId);
 
         AuditAction auditAction = fromStatus == null
                 ? AuditAction.ENROLLMENT_CREATED

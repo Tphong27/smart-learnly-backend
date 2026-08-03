@@ -367,6 +367,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                 ON class_enrollment.class_id = class_offering.id
             WHERE class_offering.deleted_at IS NULL
               AND class_offering.trainer_id = :trainerId
+              AND (CAST(:courseId AS uuid) IS NULL OR class_offering.course_id = CAST(:courseId AS uuid))
               AND (:status IS NULL OR class_offering.status::text = :status)
               AND (
                   :keyword IS NULL
@@ -383,6 +384,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             JOIN public.courses course ON course.id = class_offering.course_id
             WHERE class_offering.deleted_at IS NULL
               AND class_offering.trainer_id = :trainerId
+              AND (CAST(:courseId AS uuid) IS NULL OR class_offering.course_id = CAST(:courseId AS uuid))
               AND (:status IS NULL OR class_offering.status::text = :status)
               AND (
                   :keyword IS NULL
@@ -392,6 +394,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             """, nativeQuery = true)
     Page<ClassAdminProjection> findTrainerAssignedClasses(
             @Param("trainerId") UUID trainerId,
+            @Param("courseId") UUID courseId,
             @Param("status") String status,
             @Param("keyword") String keyword,
             Pageable pageable);
@@ -491,7 +494,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                     CASE
                         WHEN class_offering.end_date < :today
                             THEN 'completed'::public.class_status
-                        WHEN class_offering.start_date > :today
+                        WHEN class_offering.start_date >= :today
                             THEN 'upcoming'::public.class_status
                         ELSE 'ongoing'::public.class_status
                     END AS desired_status

@@ -21,9 +21,20 @@ class ClassLifecycleTest {
     }
 
     @Test
-    void shouldResolveOngoingOnStartDate() {
+    void shouldResolveUpcomingOnStartDate() {
         ClassStatus status = ClassLifecycle.resolveStatus(
                 TODAY,
+                TODAY.plusMonths(1),
+                ClassStatus.UPCOMING,
+                TODAY);
+
+        assertThat(status).isEqualTo(ClassStatus.UPCOMING);
+    }
+
+    @Test
+    void shouldResolveOngoingAfterStartDate() {
+        ClassStatus status = ClassLifecycle.resolveStatus(
+                TODAY.minusDays(1),
                 TODAY.plusMonths(1),
                 ClassStatus.UPCOMING,
                 TODAY);

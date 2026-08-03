@@ -134,10 +134,11 @@ public class ClassController {
     public ApiResponse<PageResponse<ClassResponse>> listMyAssignedClasses(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) UUID courseId,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ApiResponse.success("Assigned classes loaded successfully",
-                classTrainerService.listMyAssignedClasses(status, keyword, page, size));
+                classTrainerService.listMyAssignedClasses(status, keyword, courseId, page, size));
     }
 
     @GetMapping("/trainer/classes/{classId}")
