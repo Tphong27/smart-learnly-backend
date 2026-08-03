@@ -10,12 +10,15 @@ import com.smartlearnly.backend.admin.settings.dto.GoogleOAuthSettingsResponse;
 import com.smartlearnly.backend.admin.settings.dto.GoogleOAuthSettingsUpdateRequest;
 import com.smartlearnly.backend.admin.settings.dto.QuestionImageImportSettingsResponse;
 import com.smartlearnly.backend.admin.settings.dto.QuestionImageImportSettingsUpdateRequest;
+import com.smartlearnly.backend.admin.settings.dto.SePayBankDisplaySettingsResponse;
+import com.smartlearnly.backend.admin.settings.dto.SePayBankDisplaySettingsUpdateRequest;
 import com.smartlearnly.backend.admin.settings.dto.TestEmailRequest;
 import com.smartlearnly.backend.admin.settings.service.SettingKeys;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.QuestionImageImportSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayBankDisplaySettings;
 import com.smartlearnly.backend.auth.service.EmailService;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.audit.AuditLogService;
@@ -186,6 +189,26 @@ public class AdminSettingsController {
         return getQuestionImageImportSettings();
     }
 
+    @GetMapping("/integrations/sepay/bank-display")
+    @Operation(summary = "Get current SePay bank display settings")
+    public ApiResponse<SePayBankDisplaySettingsResponse> getSePayBankDisplaySettings() {
+        return ApiResponse.success("SePay bank display settings loaded", toSePayBankDisplayResponse());
+    }
+
+    @PutMapping("/integrations/sepay/bank-display")
+    @Transactional
+    @Operation(summary = "Update SePay bank display settings")
+    public ApiResponse<SePayBankDisplaySettingsResponse> updateSePayBankDisplaySettings(
+            @Valid @RequestBody SePayBankDisplaySettingsUpdateRequest request
+    ) {
+        UUID actor = currentUserId();
+        settingsService.put(SettingKeys.SEPAY_ACCOUNT_NUMBER, request.accountNumber().trim(), false, actor);
+        settingsService.put(SettingKeys.SEPAY_BANK_NAME, request.bankName().trim(), false, actor);
+        settingsService.put(SettingKeys.SEPAY_ACCOUNT_NAME, request.accountName().trim(), false, actor);
+        auditLogService.record(actorLabel(), "SETTINGS_UPDATE_SEPAY_BANK_DISPLAY", "system_settings", "payment.sepay.bank_display");
+        return getSePayBankDisplaySettings();
+    }
+
     @GetMapping("/ai/assignment-draft")
     @Operation(summary = "Get current assignment AI draft settings (secret masked)")
     public ApiResponse<AssignmentAiSettingsResponse> getAssignmentAiSettings() {
@@ -216,6 +239,15 @@ public class AdminSettingsController {
         settingsService.put(SettingKeys.ASSIGNMENT_AI_TIMEOUT_SECONDS, String.valueOf(request.timeoutSeconds()), false, actor);
         auditLogService.record(actorLabel(), "SETTINGS_UPDATE_ASSIGNMENT_AI", "system_settings", "assignment_ai");
         return getAssignmentAiSettings();
+    }
+
+    private SePayBankDisplaySettingsResponse toSePayBankDisplayResponse() {
+        SePayBankDisplaySettings settings = settingsService.resolveSePayBankDisplaySettings();
+        return new SePayBankDisplaySettingsResponse(
+                settings.accountNumber(),
+                settings.bankName(),
+                settings.accountName(),
+                settings.isConfigured());
     }
 
     private void putOptionalText(String key, String value, UUID actor) {

@@ -30,6 +30,18 @@ Google Meet settings now include:
 
 Google client ID and client secret continue to come from the Google OAuth settings group. Base URLs and timeout remain environment-backed operational defaults.
 
+### SePay Payment Display
+
+SePay checkout display settings now include:
+
+- `accountNumber`
+- `bankName`
+- `accountName`
+
+These values are not secret because checkout returns them to learners for bank transfer instructions. Admin updates are stored as database overrides and take effect for new checkout orders without an application restart. If no database override exists, checkout falls back to `SEPAY_ACCOUNT_NUMBER`, `SEPAY_BANK_NAME`, and `SEPAY_ACCOUNT_NAME` from environment or `application.yml`.
+
+Existing pending orders keep the bank details captured when the order was created, so changing settings only affects new checkout instructions.
+
 ### AI Integrations
 
 AI settings now include:

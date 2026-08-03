@@ -3,11 +3,14 @@ package com.smartlearnly.backend.payment.sepay;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayBankDisplaySettings;
 import com.smartlearnly.backend.commerce.repository.SePayOrderRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -24,6 +27,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class DefaultSePayPaymentInstructionServiceTest {
     @Mock
     private SePayOrderRepository sePayOrderRepository;
+
+    @Mock
+    private SystemSettingsService systemSettingsService;
 
     private SePayProperties sePayProperties;
     private DefaultSePayPaymentInstructionService service;
@@ -43,7 +49,9 @@ class DefaultSePayPaymentInstructionServiceTest {
                         + "&amount={amount}"
                         + "&order={orderCode}"
         );
-        service = new DefaultSePayPaymentInstructionService(sePayProperties, sePayOrderRepository);
+        lenient().when(systemSettingsService.resolveSePayBankDisplaySettings())
+                .thenReturn(new SePayBankDisplaySettings("123 456/789", "MB Bank", "Smart Learnly"));
+        service = new DefaultSePayPaymentInstructionService(sePayProperties, sePayOrderRepository, systemSettingsService);
     }
 
     @Test
@@ -69,6 +77,22 @@ class DefaultSePayPaymentInstructionServiceTest {
     }
 
     @Test
+    void createInstructionShouldUseSystemSettingsOverStaticProperties() {
+        sePayProperties.setAccountNumber("env-account");
+        sePayProperties.setBankName("Env Bank");
+        sePayProperties.setAccountName("Env Account");
+        when(systemSettingsService.resolveSePayBankDisplaySettings())
+                .thenReturn(new SePayBankDisplaySettings("db-account", "DB Bank", "DB Account"));
+        when(sePayOrderRepository.existsByPaymentCode(anyString())).thenReturn(false);
+
+        SePayPaymentInstruction instruction = service.createInstruction(request(new BigDecimal("1000")));
+
+        assertThat(instruction.bankAccountNumber()).isEqualTo("db-account");
+        assertThat(instruction.bankName()).isEqualTo("DB Bank");
+        assertThat(instruction.accountName()).isEqualTo("DB Account");
+    }
+
+    @Test
     void createInstructionShouldRejectNullZeroAndNegativeAmounts() {
         assertInvalidAmount(null);
         assertInvalidAmount(BigDecimal.ZERO);
@@ -80,7 +104,8 @@ class DefaultSePayPaymentInstructionServiceTest {
     void createInstructionShouldRejectMissingDisplayConfigurationWithoutExposingSecrets() {
         sePayProperties.setWebhookSecret("webhook-secret-test-value");
         sePayProperties.setApiToken("api-token-test-value");
-        sePayProperties.setAccountName(" ");
+        when(systemSettingsService.resolveSePayBankDisplaySettings())
+                .thenReturn(new SePayBankDisplaySettings("123456789", "MB Bank", " "));
 
         assertThatThrownBy(() -> service.createInstruction(request(new BigDecimal("1000"))))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
