@@ -49,13 +49,14 @@ public class CourseQuestionController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "true") boolean includeArchived,
             @RequestParam(required = false) Short difficulty,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
         return ApiResponse.success(
                 "Questions loaded successfully",
-                questionService.listByCourse(courseId, moduleId, search, type, status, difficulty, page, size)
+                questionService.listByCourse(courseId, moduleId, search, type, status, includeArchived, difficulty, page, size)
         );
     }
 
@@ -129,6 +130,7 @@ public class CourseQuestionController {
                 search,
                 type,
                 status,
+                true,
                 difficulty,
                 0,
                 10_000

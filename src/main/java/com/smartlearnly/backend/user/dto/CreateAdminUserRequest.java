@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.user.dto;
 
+import com.smartlearnly.backend.common.validation.PhoneNumberRules;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -16,6 +17,10 @@ public record CreateAdminUserRequest(
         String email,
 
         @Size(max = 20, message = "Phone number must not exceed 20 characters")
+        @Pattern(
+                regexp = PhoneNumberRules.VIETNAMESE_MOBILE_PATTERN,
+                message = PhoneNumberRules.VIETNAMESE_MOBILE_MESSAGE
+        )
         String phoneNumber,
 
         @Pattern(

@@ -22,6 +22,6 @@ public record CreateCourseRequest(
                 @DecimalMin(value = "0.00", message = "Course price must be greater than or equal to 0") BigDecimal price,
                 @DecimalMin(value = "0.00", message = "Discounted price must be greater than or equal to 0") BigDecimal discountedPrice,
                 Boolean isFree,
-                @Pattern(regexp = "(?i)draft|published|inactive", message = "Course status must be draft, published, or inactive") String status,
+                @Pattern(regexp = "(?i)draft", message = "New courses must be created as draft") String status,
                 UUID assignedSmeId) {
 }

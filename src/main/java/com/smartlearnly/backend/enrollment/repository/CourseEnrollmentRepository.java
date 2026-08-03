@@ -56,58 +56,33 @@ public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollme
                 enrollment.id AS "enrollmentId",
                 enrollment.status::text AS "enrollmentStatus",
                 enrollment.enrollment_date AS "enrollmentDate",
+                'COURSE' AS "learningType",
 
                 course.status::text AS "courseStatus",
                 course.access_blocked_at AS "accessBlockedAt",
                 course.access_block_reason AS "accessBlockReason",
 
-                class_enrollment.id AS "classEnrollmentId",
-                class_offering.id AS "classId",
-                class_offering.class_name AS "className",
-                class_offering.status::text AS "classStatus",
-                trainer.full_name AS "classTrainerName",
-                class_offering.schedule_description AS "classScheduleDescription",
-                class_offering.start_date AS "classStartDate",
-                class_offering.end_date AS "classEndDate",
-                class_offering.max_students AS "classMaxStudents",
-                (
-                    SELECT COUNT(*)
-                    FROM public.class_enrollments active_class_enrollment
-                    WHERE active_class_enrollment.class_id = class_offering.id
-                      AND active_class_enrollment.status = 'active'::public.enroll_status
-                ) AS "classActiveEnrollmentCount"
+                NULL::uuid AS "classEnrollmentId",
+                NULL::uuid AS "classId",
+                NULL::text AS "className",
+                NULL::text AS "classStatus",
+                NULL::text AS "classTrainerName",
+                NULL::text AS "classScheduleDescription",
+                NULL::date AS "classStartDate",
+                NULL::date AS "classEndDate",
+                NULL::integer AS "classMaxStudents",
+                NULL::bigint AS "classActiveEnrollmentCount"
             FROM public.course_enrollments enrollment
             JOIN public.courses course
                 ON course.id = enrollment.course_id
             JOIN public.categories category
                 ON category.id = course.category_id
-            LEFT JOIN public.class_enrollments class_enrollment
-                ON class_enrollment.student_id = enrollment.student_id
-               AND class_enrollment.status IN (
-                    'active'::public.enroll_status,
-                    'completed'::public.enroll_status
-               )
-               AND EXISTS (
-                    SELECT 1
-                    FROM public.classes class_check
-                    WHERE class_check.id = class_enrollment.class_id
-                      AND class_check.course_id = course.id
-                      AND class_check.deleted_at IS NULL
-               )
-            LEFT JOIN public.classes class_offering
-                ON class_offering.id = class_enrollment.class_id
-               AND class_offering.course_id = course.id
-               AND class_offering.deleted_at IS NULL
-            LEFT JOIN public.users trainer
-                ON trainer.id = class_offering.trainer_id
             WHERE enrollment.student_id = :studentId
               AND enrollment.status IN (
                   'active'::public.enroll_status,
                   'completed'::public.enroll_status
               )
-            ORDER BY enrollment.enrollment_date DESC,
-                     class_offering.start_date ASC NULLS LAST,
-                     enrollment.id ASC
+            ORDER BY enrollment.enrollment_date DESC, enrollment.id ASC
             """, nativeQuery = true)
     List<MyCourseProjection> findActiveMyCourses(@Param("studentId") UUID studentId);
 

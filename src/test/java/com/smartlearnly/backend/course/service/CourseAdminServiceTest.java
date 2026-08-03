@@ -140,7 +140,7 @@ class CourseAdminServiceTest {
         }
 
         @Test
-        void createPublishedCourseShouldAlsoCreatePublishedMasterCurriculum() {
+        void createShouldRemainDraftWhenPublishedStatusReachesService() {
                 UUID categoryId = UUID.randomUUID();
                 UserAccount admin = admin();
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
@@ -148,29 +148,8 @@ class CourseAdminServiceTest {
                 when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("published-course")).thenReturn(false);
                 when(courseRepository.save(any(Course.class)))
                                 .thenAnswer(invocation -> persist(invocation.getArgument(0)));
-                when(curriculumVersionRepository
-                                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
-                                                any(UUID.class),
-                                                org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER)))
-                                .thenReturn(Optional.empty());
-                when(curriculumVersionRepository.findMaxMasterVersionNumber(
-                                any(UUID.class), org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER)))
-                                .thenReturn(0);
-                when(curriculumVersionRepository.save(any(CurriculumVersion.class))).thenAnswer(invocation -> {
-                        CurriculumVersion version = invocation.getArgument(0);
-                        if (version.getId() == null) {
-                                version.setId(UUID.randomUUID());
-                        }
-                        return version;
-                });
-                when(curriculumVersionRepository
-                                .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
-                                                any(UUID.class),
-                                                org.mockito.ArgumentMatchers.eq(CurriculumScope.MASTER),
-                                                org.mockito.ArgumentMatchers.eq(CurriculumStatus.PUBLISHED)))
-                                .thenReturn(Optional.empty());
 
-                courseAdminService.create(new CreateCourseRequest(
+                CourseResponse response = courseAdminService.create(new CreateCourseRequest(
                                 categoryId,
                                 "Published course",
                                 null,
@@ -187,12 +166,18 @@ class CourseAdminServiceTest {
                                 "published",
                                 null));
 
+                assertThat(response.status()).isEqualTo("draft");
+
+                ArgumentCaptor<Course> courseCaptor = ArgumentCaptor.forClass(Course.class);
+                verify(courseRepository).save(courseCaptor.capture());
+                assertThat(courseCaptor.getValue().getStatus()).isEqualTo(CourseStatus.DRAFT);
+
                 ArgumentCaptor<CurriculumVersion> versionCaptor = ArgumentCaptor.forClass(CurriculumVersion.class);
-                verify(curriculumVersionRepository, times(2)).save(versionCaptor.capture());
-                CurriculumVersion published = versionCaptor.getAllValues().get(1);
-                assertThat(published.getStatus()).isEqualTo(CurriculumStatus.PUBLISHED);
-                assertThat(published.getPublishedAt()).isNotNull();
-                assertThat(published.getCreatedBy()).isEqualTo(admin.getId());
+                verify(curriculumVersionRepository).save(versionCaptor.capture());
+                CurriculumVersion draft = versionCaptor.getValue();
+                assertThat(draft.getStatus()).isEqualTo(CurriculumStatus.DRAFT);
+                assertThat(draft.getPublishedAt()).isNull();
+                assertThat(draft.getCreatedBy()).isEqualTo(admin.getId());
         }
 
         @Test

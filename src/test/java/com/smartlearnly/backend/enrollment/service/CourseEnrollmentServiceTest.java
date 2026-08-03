@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,12 +16,15 @@ import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.enrollment.dto.EnrollmentResponse;
+import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
 import com.smartlearnly.backend.enrollment.entity.CourseEnrollment;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatus;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentStatusHistory;
 import com.smartlearnly.backend.enrollment.entity.EnrollmentTransitionSource;
+import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.EnrollmentStatusHistoryRepository;
+import com.smartlearnly.backend.enrollment.repository.MyCourseProjection;
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.entity.NotificationType;
 import com.smartlearnly.backend.notification.service.NotificationService;
@@ -28,6 +32,7 @@ import com.smartlearnly.backend.payment.repository.SuccessfulPaymentRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +48,8 @@ class CourseEnrollmentServiceTest {
     private CourseRepository courseRepository;
     @Mock
     private CourseEnrollmentRepository courseEnrollmentRepository;
+    @Mock
+    private ClassEnrollmentRepository classEnrollmentRepository;
     @Mock
     private EnrollmentStatusHistoryRepository enrollmentStatusHistoryRepository;
     @Mock
@@ -61,6 +68,7 @@ class CourseEnrollmentServiceTest {
         service = new CourseEnrollmentService(
                 courseRepository,
                 courseEnrollmentRepository,
+                classEnrollmentRepository,
                 enrollmentStatusHistoryRepository,
                 successfulPaymentRepository,
                 currentUserService,
@@ -120,6 +128,37 @@ class CourseEnrollmentServiceTest {
         assertThat(response.alreadyEnrolled()).isTrue();
         verify(courseEnrollmentRepository, never()).save(any());
         verify(enrollmentStatusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void sameCourseShouldAppearAsSeparateOnlineAndClassLearningEntries() {
+        UUID studentId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        Instant onlineEnrollmentDate = Instant.parse("2026-08-01T00:00:00Z");
+        Instant classEnrollmentDate = Instant.parse("2026-08-03T00:00:00Z");
+
+        MyCourseProjection online = mock(MyCourseProjection.class);
+        when(online.getId()).thenReturn(courseId);
+        when(online.getLearningType()).thenReturn("COURSE");
+        when(online.getEnrollmentDate()).thenReturn(onlineEnrollmentDate);
+
+        MyCourseProjection classLearning = mock(MyCourseProjection.class);
+        when(classLearning.getId()).thenReturn(courseId);
+        when(classLearning.getLearningType()).thenReturn("CLASS");
+        when(classLearning.getEnrollmentDate()).thenReturn(classEnrollmentDate);
+        when(classLearning.getClassId()).thenReturn(classId);
+
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(studentId));
+        when(courseEnrollmentRepository.findActiveMyCourses(studentId)).thenReturn(List.of(online));
+        when(classEnrollmentRepository.findActiveMyClasses(studentId)).thenReturn(List.of(classLearning));
+
+        List<MyCourseResponse> response = service.getMyCourses();
+
+        assertThat(response).extracting(MyCourseResponse::learningType)
+                .containsExactly("CLASS", "COURSE");
+        assertThat(response.get(0).enrolledClass().id()).isEqualTo(classId);
+        assertThat(response.get(1).enrolledClass()).isNull();
     }
 
     @Test

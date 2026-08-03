@@ -182,14 +182,11 @@ public class CourseAdminService {
         course.setPrice(request.price() == null ? BigDecimal.ZERO : request.price());
         course.setDiscountedPrice(request.discountedPrice());
         course.setFree(Boolean.TRUE.equals(request.isFree()));
-        course.setStatus(parseCourseStatus(request.status(), CourseStatus.DRAFT));
+        course.setStatus(CourseStatus.DRAFT);
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
-        CurriculumVersion masterCurriculum = findOrCreateLatestMasterCurriculum(saved, creator);
-        if (saved.getStatus() == CourseStatus.PUBLISHED) {
-            publishMasterCurriculum(saved, masterCurriculum);
-        }
+        findOrCreateLatestMasterCurriculum(saved, creator);
         auditLogService.record(creator.getEmail(), "COURSE_CREATED", "COURSE", saved.getId().toString());
         return CourseDtoMapper.toCourseResponse(saved);
     }
