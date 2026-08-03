@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.user.dto;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record AdminUserResponse(
@@ -8,6 +9,10 @@ public record AdminUserResponse(
         String fullName,
         String avatarUrl,
         String role,
-        String status
+        String status,
+        String phoneNumber,
+        boolean emailVerified,
+        Instant lastLoginAt,
+        Instant createdAt
 ) {
 }

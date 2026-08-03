@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.user.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -8,8 +9,12 @@ import static org.mockito.Mockito.when;
 import com.smartlearnly.backend.user.dto.AdminUserPageResponse;
 import com.smartlearnly.backend.user.dto.AdminUserResponse;
 import com.smartlearnly.backend.user.dto.CreateAdminUserRequest;
+import com.smartlearnly.backend.user.dto.UpdateAdminUserRequest;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.user.repository.UserRepository;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -123,7 +128,11 @@ class AdminUserServiceTest {
                 "Trainer Name",
                 "https://example.com/avatar.png",
                 "TRAINER",
-                "active"
+                "active",
+                null,
+                false,
+                null,
+                null
         ));
     }
 
@@ -155,6 +164,76 @@ class AdminUserServiceTest {
         assertThat(keywordCaptor.getValue()).isNull();
         assertThat(pageableCaptor.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(20);
+    }
+
+    @Test
+    void getShouldReturnNonDeletedUser() {
+        UserAccount trainer = user("trainer@example.com", "Trainer Name", "TRAINER", "active");
+        when(userRepository.findByIdAndDeletedAtIsNull(trainer.getId())).thenReturn(Optional.of(trainer));
+
+        AdminUserResponse response = service.get(trainer.getId());
+
+        assertThat(response.id()).isEqualTo(trainer.getId());
+        assertThat(response.email()).isEqualTo("trainer@example.com");
+    }
+
+    @Test
+    void getShouldRejectMissingOrDeletedUser() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.get(userId))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).errorCode())
+                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
+    @Test
+    void updateShouldNormalizeAndPersistEditableFields() {
+        UserAccount trainer = user("trainer@example.com", "Trainer Name", "TRAINER", "active");
+        trainer.setEmailVerifiedAt(Instant.now());
+        when(userRepository.findByIdAndDeletedAtIsNull(trainer.getId())).thenReturn(Optional.of(trainer));
+        when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("updated@example.com"))
+                .thenReturn(Optional.empty());
+        when(userRepository.save(trainer)).thenReturn(trainer);
+
+        AdminUserResponse response = service.update(trainer.getId(), new UpdateAdminUserRequest(
+                " Updated Trainer ",
+                " UPDATED@EXAMPLE.COM ",
+                " ",
+                "sme",
+                "INACTIVE",
+                false
+        ));
+
+        assertThat(trainer.getFullName()).isEqualTo("Updated Trainer");
+        assertThat(trainer.getEmail()).isEqualTo("updated@example.com");
+        assertThat(trainer.getPhoneNumber()).isNull();
+        assertThat(trainer.getRole()).isEqualTo("SME");
+        assertThat(trainer.getStatus()).isEqualTo("inactive");
+        assertThat(trainer.getEmailVerifiedAt()).isNull();
+        assertThat(response.emailVerified()).isFalse();
+    }
+
+    @Test
+    void updateShouldRejectEmailOwnedByAnotherActiveUser() {
+        UserAccount trainer = user("trainer@example.com", "Trainer Name", "TRAINER", "active");
+        UserAccount owner = user("owner@example.com", "Owner", "TRAINEE", "active");
+        when(userRepository.findByIdAndDeletedAtIsNull(trainer.getId())).thenReturn(Optional.of(trainer));
+        when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("owner@example.com"))
+                .thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> service.update(trainer.getId(), new UpdateAdminUserRequest(
+                null,
+                "owner@example.com",
+                null,
+                null,
+                null,
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).errorCode())
+                .isEqualTo(ErrorCode.CONFLICT);
     }
 
     private UserAccount user(String email, String fullName, String role, String status) {

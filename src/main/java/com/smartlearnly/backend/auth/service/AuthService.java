@@ -62,7 +62,11 @@ public class AuthService {
 
     @Transactional
     public void register(RegisterRequest request) {
-        validatePasswordConfirmation(request.password(), request.confirmPassword());
+        if (!request.password().equals(request.confirmPassword())) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Password confirmation does not match");
+        }
         String email = normalizeEmail(request.email());
         if (userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email).isPresent()) {
             throw new BusinessException(ErrorCode.CONFLICT, "Email already exists");
@@ -105,8 +109,7 @@ public class AuthService {
                     : ErrorCode.ACCOUNT_INACTIVE;
             auditLogService.recordAuthentication(
                     user, email, AuditAction.LOGIN_FAILED, AuditResult.DENIED,
-                    "Login was denied", ipAddress, deviceInfo, errorCode.name()
-            );
+                    "Login was denied", ipAddress, deviceInfo, errorCode.name());
             throw new BusinessException(errorCode);
         }
         if (user.getPasswordHash() == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
@@ -121,8 +124,7 @@ public class AuthService {
                     locked ? "Login was blocked" : "Login failed",
                     ipAddress,
                     deviceInfo,
-                    locked ? ErrorCode.ACCOUNT_LOCKED.name() : ErrorCode.INVALID_CREDENTIALS.name()
-            );
+                    locked ? ErrorCode.ACCOUNT_LOCKED.name() : ErrorCode.INVALID_CREDENTIALS.name());
             throw new BusinessException(locked ? ErrorCode.ACCOUNT_LOCKED : ErrorCode.INVALID_CREDENTIALS);
         }
 
@@ -140,8 +142,7 @@ public class AuthService {
     public AuthSessionService.IssuedSession loginWithGoogle(
             GoogleLoginRequest request,
             String deviceInfo,
-            String ipAddress
-    ) {
+            String ipAddress) {
         GoogleIdTokenService.GoogleIdentity identity = googleIdTokenService.verify(request.idToken());
         String email = normalizeEmail(identity.email());
         UserAccount user = userRepository.findByGoogleIdAndDeletedAtIsNull(identity.subject())
@@ -170,8 +171,7 @@ public class AuthService {
         if (user != null) {
             auditLogService.recordAuthentication(
                     user, user.getEmail(), AuditAction.LOGOUT_SUCCEEDED, AuditResult.SUCCESS,
-                    "Logout succeeded", null, null, null
-            );
+                    "Logout succeeded", null, null, null);
         }
     }
 
@@ -192,8 +192,7 @@ public class AuthService {
             emailService.sendPasswordResetLink(
                     user.getEmail(),
                     user.getFullName(),
-                    authProperties.getFrontendBaseUrl() + "/reset-password?token=" + rawToken
-            );
+                    authProperties.getFrontendBaseUrl() + "/reset-password?token=" + rawToken);
             auditLogService.record(user.getEmail(), "PASSWORD_RESET_REQUESTED", "USER", user.getId().toString());
         });
     }
@@ -214,21 +213,18 @@ public class AuthService {
         OtpVerification otp = otpVerificationRepository
                 .findTopByEmailIgnoreCaseAndPurposeAndVerifiedAtIsNullOrderByCreatedAtDesc(
                         email,
-                        OtpVerification.EMAIL_VERIFY_PURPOSE
-                )
+                        OtpVerification.EMAIL_VERIFY_PURPOSE)
                 .filter(savedOtp -> savedOtp.isUsable(now))
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.INVALID_OR_EXPIRED_TOKEN,
-                        "Email verification OTP is invalid or expired"
-                ));
+                        "Email verification OTP is invalid or expired"));
 
         if (!passwordEncoder.matches(request.otpCode(), otp.getOtpHash())) {
             otp.setAttempts(otp.getAttempts() + 1);
             otpVerificationRepository.save(otp);
             throw new BusinessException(
                     ErrorCode.INVALID_OR_EXPIRED_TOKEN,
-                    "Email verification OTP is invalid or expired"
-            );
+                    "Email verification OTP is invalid or expired");
         }
 
         UserAccount user = otp.getUser();
@@ -247,15 +243,18 @@ public class AuthService {
 
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        validatePasswordConfirmation(request.newPassword(), request.confirmPassword());
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Password confirmation does not match");
+        }
 
         Instant now = Instant.now();
         PasswordResetToken token = passwordResetTokenRepository.findByTokenHash(hashToken(request.token()))
                 .filter(savedToken -> savedToken.isUsable(now))
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.INVALID_OR_EXPIRED_TOKEN,
-                        "Password reset token is invalid or expired"
-                ));
+                        "Password reset token is invalid or expired"));
 
         UserAccount user = token.getUser();
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
@@ -299,8 +298,7 @@ public class AuthService {
         if (!changed) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
-                    "At least one profile field must be provided"
-            );
+                    "At least one profile field must be provided");
         }
 
         UserAccount savedUser = userRepository.save(user);
@@ -310,26 +308,27 @@ public class AuthService {
 
     @Transactional
     public void changeCurrentUserPassword(ChangePasswordRequest request) {
-        validatePasswordConfirmation(request.newPassword(), request.confirmPassword());
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Password confirmation does not match");
+        }
 
         UserAccount user = getAuthenticatedUser();
         if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "Password change is not available for this account"
-            );
+                    "Password change is not available for this account");
         }
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new BusinessException(
                     ErrorCode.INVALID_CREDENTIALS,
-                    "Current password is incorrect"
-            );
+                    "Current password is incorrect");
         }
         if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "New password must be different from the current password"
-            );
+                    "New password must be different from the current password");
         }
 
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
@@ -375,20 +374,17 @@ public class AuthService {
         long recentRequests = otpVerificationRepository.countByEmailIgnoreCaseAndPurposeAndCreatedAtAfter(
                 user.getEmail(),
                 OtpVerification.EMAIL_VERIFY_PURPOSE,
-                now.minus(authProperties.getEmailVerificationRequestWindow())
-        );
+                now.minus(authProperties.getEmailVerificationRequestWindow()));
         if (recentRequests >= authProperties.getEmailVerificationRequestLimit()) {
             throw new BusinessException(
                     ErrorCode.RATE_LIMIT_EXCEEDED,
-                    "Too many verification OTP requests. Please try again later"
-            );
+                    "Too many verification OTP requests. Please try again later");
         }
 
         otpVerificationRepository.markAllUnverifiedAsVerified(
                 user.getId(),
                 OtpVerification.EMAIL_VERIFY_PURPOSE,
-                now
-        );
+                now);
 
         String otpCode = generateOtpCode();
         OtpVerification otp = new OtpVerification();
@@ -405,8 +401,7 @@ public class AuthService {
         emailService.sendVerificationOtp(
                 user.getEmail(),
                 user.getFullName(),
-                otpCode
-        );
+                otpCode);
     }
 
     private void registerFailedLogin(UserAccount user, Instant now) {
@@ -425,8 +420,7 @@ public class AuthService {
             String ipAddress,
             String userAgent,
             String method,
-            String status
-    ) {
+            String status) {
         LoginHistory history = new LoginHistory();
         history.setUser(user);
         history.setEmail(email);
@@ -445,12 +439,12 @@ public class AuthService {
             return userRepository.findByIdAndDeletedAtIsNull(currentUser.id())
                     .orElseThrow(() -> new BusinessException(
                             ErrorCode.RESOURCE_NOT_FOUND,
-                            "Authenticated user was not found"
-                    ));
+                            "Authenticated user was not found"));
         }
 
         if (currentUser.authUserId() != null) {
-            Optional<UserAccount> userByAuthUserId = userRepository.findByAuthUserIdAndDeletedAtIsNull(currentUser.authUserId());
+            Optional<UserAccount> userByAuthUserId = userRepository
+                    .findByAuthUserIdAndDeletedAtIsNull(currentUser.authUserId());
             if (userByAuthUserId.isPresent()) {
                 return userByAuthUserId.get();
             }
@@ -460,11 +454,11 @@ public class AuthService {
             return userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(currentUser.email())
                     .orElseThrow(() -> new BusinessException(
                             ErrorCode.RESOURCE_NOT_FOUND,
-                            "Authenticated user was not found"
-                    ));
+                            "Authenticated user was not found"));
         }
 
-        throw new BusinessException(ErrorCode.UNAUTHENTICATED, "Authenticated user identity is missing required claims");
+        throw new BusinessException(ErrorCode.UNAUTHENTICATED,
+                "Authenticated user identity is missing required claims");
     }
 
     private UserProfileResponse toUserProfileResponse(UserAccount user) {
@@ -480,8 +474,7 @@ public class AuthService {
                 user.isEmailVerified(),
                 user.getEmailVerifiedAt(),
                 user.getCreatedAt(),
-                user.getUpdatedAt()
-        );
+                user.getUpdatedAt());
     }
 
     private void logDebugToken(String tokenType, String email, String rawToken, Instant expiresAt) {
@@ -491,17 +484,7 @@ public class AuthService {
                     tokenType,
                     email,
                     rawToken,
-                    expiresAt
-            );
-        }
-    }
-
-    private void validatePasswordConfirmation(String newPassword, String confirmPassword) {
-        if (!newPassword.equals(confirmPassword)) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "Password confirmation does not match"
-            );
+                    expiresAt);
         }
     }
 
@@ -520,8 +503,7 @@ public class AuthService {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash);
-        }
-        catch (NoSuchAlgorithmException exception) {
+        } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 algorithm is not available", exception);
         }
     }

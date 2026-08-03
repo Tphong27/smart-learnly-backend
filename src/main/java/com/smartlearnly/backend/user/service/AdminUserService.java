@@ -3,6 +3,7 @@ package com.smartlearnly.backend.user.service;
 import com.smartlearnly.backend.user.dto.AdminUserPageResponse;
 import com.smartlearnly.backend.user.dto.AdminUserResponse;
 import com.smartlearnly.backend.user.dto.CreateAdminUserRequest;
+import com.smartlearnly.backend.user.dto.UpdateAdminUserRequest;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -69,6 +70,66 @@ public class AdminUserService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public AdminUserResponse get(UUID userId) {
+        return userRepository.findByIdAndDeletedAtIsNull(userId)
+                .map(this::toResponse)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "User was not found"));
+    }
+
+    @Transactional
+    public AdminUserResponse update(UUID userId, UpdateAdminUserRequest request) {
+        UserAccount user = userRepository.findByIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "User was not found"));
+        boolean provided = false;
+
+        if (request.fullName() != null) {
+            user.setFullName(requireUpdateText(request.fullName(), "Full name must not be blank"));
+            provided = true;
+        }
+        if (request.email() != null) {
+            String email = requireUpdateText(request.email(), "Email must not be blank")
+                    .toLowerCase(Locale.ROOT);
+            if (!email.equalsIgnoreCase(user.getEmail())) {
+                userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email)
+                        .filter(existing -> !existing.getId().equals(userId))
+                        .ifPresent(existing -> {
+                            throw new BusinessException(ErrorCode.CONFLICT, "Email already exists");
+                        });
+                user.setEmail(email);
+            }
+            provided = true;
+        }
+        if (request.phoneNumber() != null) {
+            user.setPhoneNumber(normalizeNullable(request.phoneNumber()));
+            provided = true;
+        }
+        if (request.role() != null) {
+            user.setRole(normalizeRole(request.role()));
+            provided = true;
+        }
+        if (request.status() != null) {
+            user.setStatus(request.status().trim().toLowerCase(Locale.ROOT));
+            provided = true;
+        }
+        if (request.emailVerified() != null) {
+            if (request.emailVerified()) {
+                if (user.getEmailVerifiedAt() == null) {
+                    user.setEmailVerifiedAt(Instant.now());
+                }
+            } else {
+                user.setEmailVerifiedAt(null);
+            }
+            provided = true;
+        }
+
+        if (!provided) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one user field must be provided");
+        }
+
+        return toResponse(userRepository.save(user));
+    }
+
     private int normalizeSize(int size) {
         if (size <= 0) {
             return DEFAULT_PAGE_SIZE;
@@ -108,6 +169,14 @@ public class AdminUserService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    private String requireUpdateText(String value, String message) {
+        String normalized = normalizeNullable(value);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
+        }
+        return normalized;
+    }
+
     private String generateTemporaryPassword() {
         return "Aa1!" + UUID.randomUUID();
     }
@@ -119,7 +188,11 @@ public class AdminUserService {
                 user.getFullName(),
                 user.getAvatarUrl(),
                 user.getRole(),
-                user.getStatus()
+                user.getStatus(),
+                user.getPhoneNumber(),
+                user.getEmailVerifiedAt() != null,
+                user.getLastLoginAt(),
+                user.getCreatedAt()
         );
     }
 }
