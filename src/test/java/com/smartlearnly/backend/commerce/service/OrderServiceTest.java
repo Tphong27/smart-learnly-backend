@@ -234,6 +234,7 @@ class OrderServiceTest {
         sePayOrder.setOrderId(transaction.getOrderId());
         sePayOrder.setTransactionId(transaction.getId());
         sePayOrder.setPaymentCode("SLPTESTCODE01");
+        sePayOrder.setTransferContent("SEVQR SLPTESTCODE01");
         sePayOrder.setBankAccountNumber("0123456789");
         sePayOrder.setBankName("VCB");
         sePayOrder.setAccountName("SMART LEARNLY");

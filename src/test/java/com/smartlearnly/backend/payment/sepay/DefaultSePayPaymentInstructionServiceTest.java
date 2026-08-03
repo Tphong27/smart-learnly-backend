@@ -61,6 +61,7 @@ class DefaultSePayPaymentInstructionServiceTest {
         SePayPaymentInstruction instruction = service.createInstruction(request(new BigDecimal("399000")));
 
         assertThat(instruction.paymentCode()).startsWith("SLP").matches("SLP[0-9A-Z]{12}");
+        assertThat(instruction.transferContent()).isEqualTo(instruction.paymentCode());
         assertThat(instruction.bankAccountNumber()).isEqualTo("123 456/789");
         assertThat(instruction.bankName()).isEqualTo("MB Bank");
         assertThat(instruction.accountName()).isEqualTo("Smart Learnly");
@@ -74,6 +75,45 @@ class DefaultSePayPaymentInstructionServiceTest {
                 .contains("amount=399000")
                 .contains("order=SLP-ORDER-20260619%2F001");
         verify(sePayOrderRepository).existsByPaymentCode(instruction.paymentCode());
+    }
+
+    @Test
+    void createInstructionShouldPrefixVietinBankTransferContentWithSevqr() {
+        sePayProperties.setQrUrlTemplate(
+                "https://qr.example/pay?content={transferContent}&code={paymentCode}"
+        );
+        when(systemSettingsService.resolveSePayBankDisplaySettings())
+                .thenReturn(new SePayBankDisplaySettings("123456789", "VietinBank", "Smart Learnly"));
+        when(sePayOrderRepository.existsByPaymentCode(anyString())).thenReturn(false);
+
+        SePayPaymentInstruction instruction = service.createInstruction(request(new BigDecimal("10000")));
+
+        assertThat(instruction.transferContent()).isEqualTo("SEVQR " + instruction.paymentCode());
+        assertThat(instruction.qrUrl())
+                .contains("content=SEVQR%20" + instruction.paymentCode())
+                .contains("code=" + instruction.paymentCode());
+    }
+
+    @Test
+    void createInstructionShouldSupportConfiguredTransferContentTemplate() {
+        sePayProperties.setTransferContentTemplate("ORDER {paymentCode}");
+        sePayProperties.setQrUrlTemplate("https://qr.example/pay?content={transferContent}");
+        when(sePayOrderRepository.existsByPaymentCode(anyString())).thenReturn(false);
+
+        SePayPaymentInstruction instruction = service.createInstruction(request(new BigDecimal("10000")));
+
+        assertThat(instruction.transferContent()).isEqualTo("ORDER " + instruction.paymentCode());
+        assertThat(instruction.qrUrl()).contains("content=ORDER%20" + instruction.paymentCode());
+    }
+
+    @Test
+    void createInstructionShouldRejectTransferContentTemplateWithoutPaymentCode() {
+        sePayProperties.setTransferContentTemplate("SEVQR");
+        when(sePayOrderRepository.existsByPaymentCode(anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createInstruction(request(new BigDecimal("10000"))))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE));
     }
 
     @Test

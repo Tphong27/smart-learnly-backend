@@ -312,6 +312,7 @@ public class OrderService {
         return new SePayOrderSummaryResponse(
                 sePayOrder.getId(),
                 sePayOrder.getPaymentCode(),
+                sePayOrder.getTransferContent(),
                 sePayOrder.getBankAccountNumber(),
                 sePayOrder.getBankName(),
                 sePayOrder.getAccountName(),

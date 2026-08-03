@@ -10,6 +10,7 @@ public record CheckoutResponse(
         UUID transactionId,
         String paymentGateway,
         String paymentCode,
+        String transferContent,
         BigDecimal amount,
         String currency,
         String bankAccountNumber,

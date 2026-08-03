@@ -13,13 +13,18 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 public class DefaultSePayTransactionClient implements SePayTransactionClient {
+    private static final Logger log = LoggerFactory.getLogger(DefaultSePayTransactionClient.class);
+
     private final SePayProperties sePayProperties;
     private final SystemSettingsService systemSettingsService;
     private final RestClient restClient;
@@ -47,7 +52,20 @@ public class DefaultSePayTransactionClient implements SePayTransactionClient {
                     .body(String.class);
             return parseTransactions(response);
         }
+        catch (RestClientResponseException exception) {
+            int status = exception.getStatusCode().value();
+            log.warn("SePay transaction API returned HTTP {}", status);
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "SePay transaction service returned HTTP " + status
+            );
+        }
         catch (RestClientException | IOException | IllegalArgumentException exception) {
+            log.warn(
+                    "SePay transaction API call failed errorType={} causeType={}",
+                    exception.getClass().getSimpleName(),
+                    exception.getCause() == null ? "none" : exception.getCause().getClass().getSimpleName()
+            );
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
                     "SePay transaction service is unavailable"
@@ -71,7 +89,12 @@ public class DefaultSePayTransactionClient implements SePayTransactionClient {
 
     private List<SePayTransactionCandidate> parseTransactions(String response) throws IOException {
         JsonNode root = objectMapper.readTree(response == null ? "{}" : response);
-        JsonNode transactions = root.isArray() ? root : root.get("transactions");
+        JsonNode transactions = root.isArray() ? root : root.get("data");
+        if (transactions == null || !transactions.isArray()) {
+            // Keep the legacy envelope readable for installations that still proxy
+            // SePay API v1 responses while the default client uses API v2.
+            transactions = root.get("transactions");
+        }
         if (transactions == null || !transactions.isArray()) {
             return List.of();
         }

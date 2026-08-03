@@ -141,6 +141,7 @@ class CheckoutServiceTest {
                 when(sePayInstructionServices.getIfAvailable())
                                 .thenReturn(request -> new SePayPaymentInstruction(
                                                 "SLPABC123",
+                                                "SLPABC123",
                                                 "123456789",
                                                 "MBBANK",
                                                 "SMART LEARNLY",
@@ -164,6 +165,7 @@ class CheckoutServiceTest {
                 assertThat(response.transactionId()).isNotNull();
                 assertThat(response.paymentGateway()).isEqualTo("SEPAY");
                 assertThat(response.paymentCode()).isEqualTo("SLPABC123");
+                assertThat(response.transferContent()).isEqualTo("SLPABC123");
                 assertThat(response.amount()).isEqualByComparingTo("399000");
                 assertThat(response.status()).isEqualTo("PENDING");
 
@@ -257,6 +259,7 @@ class CheckoutServiceTest {
                 when(sePayInstructionServices.getIfAvailable())
                                 .thenReturn(request -> new SePayPaymentInstruction(
                                                 "SLPCOURSE1",
+                                                "SLPCOURSE1",
                                                 "123456789",
                                                 "MBBANK",
                                                 "SMART LEARNLY",
@@ -324,6 +327,7 @@ class CheckoutServiceTest {
 
                 when(sePayInstructionServices.getIfAvailable())
                                 .thenReturn(request -> new SePayPaymentInstruction(
+                                                "SLPDISCOUNT",
                                                 "SLPDISCOUNT",
                                                 "123456789",
                                                 "MBBANK",

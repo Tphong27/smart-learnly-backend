@@ -158,6 +158,7 @@ public class CheckoutService {
                 transaction.getId(),
                 PaymentGateway.SEPAY.name(),
                 sePayOrder.getPaymentCode(),
+                sePayOrder.getTransferContent(),
                 sePayOrder.getAmount(),
                 order.getCurrency(),
                 sePayOrder.getBankAccountNumber(),
@@ -299,6 +300,7 @@ public class CheckoutService {
             Instant expectedExpiresAt) {
         if (instruction == null
                 || isBlank(instruction.paymentCode())
+                || isBlank(instruction.transferContent())
                 || isBlank(instruction.bankAccountNumber())
                 || isBlank(instruction.bankName())
                 || isBlank(instruction.accountName())
@@ -318,6 +320,7 @@ public class CheckoutService {
         sePayOrder.setOrderId(orderId);
         sePayOrder.setTransactionId(transactionId);
         sePayOrder.setPaymentCode(instruction.paymentCode());
+        sePayOrder.setTransferContent(instruction.transferContent());
         sePayOrder.setBankAccountNumber(instruction.bankAccountNumber());
         sePayOrder.setBankName(instruction.bankName());
         sePayOrder.setAccountName(instruction.accountName());

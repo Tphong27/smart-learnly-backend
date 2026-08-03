@@ -92,6 +92,7 @@ app:
             account-name: ${SEPAY_ACCOUNT_NAME:${APP_PAYMENT_SEPAY_ACCOUNT_NAME:}}
             reconciliation-interval: ${SEPAY_RECONCILIATION_INTERVAL:PT5M}
             payment-code-prefix: ${SEPAY_PAYMENT_CODE_PREFIX:SLP}
+            transfer-content-template: ${SEPAY_TRANSFER_CONTENT_TEMPLATE:}
     storage:
         provider: ${APP_STORAGE_PROVIDER:supabase}
         supabase-url: ${SUPABASE_URL:}

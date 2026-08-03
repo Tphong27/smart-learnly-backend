@@ -21,6 +21,7 @@ public class DefaultSePayPaymentInstructionService implements SePayPaymentInstru
     private static final int MAX_PAYMENT_CODE_ATTEMPTS = 5;
     private static final int PAYMENT_CODE_SUFFIX_LENGTH = 12;
     private static final String DEFAULT_PAYMENT_CODE_PREFIX = "SLP";
+    private static final String VIETINBANK_TRANSFER_PREFIX = "SEVQR";
 
     private final SePayProperties sePayProperties;
     private final SePayOrderRepository sePayOrderRepository;
@@ -37,13 +38,15 @@ public class DefaultSePayPaymentInstructionService implements SePayPaymentInstru
         String bankName = requireDisplayConfig(settings.bankName());
         String accountName = requireDisplayConfig(settings.accountName());
         String paymentCode = generateUniquePaymentCode();
+        String transferContent = resolveTransferContent(paymentCode, bankName);
 
         return new SePayPaymentInstruction(
                 paymentCode,
+                transferContent,
                 accountNumber,
                 bankName,
                 accountName,
-                buildQrUrl(request, paymentCode, accountNumber, bankName, accountName),
+                buildQrUrl(request, paymentCode, transferContent, accountNumber, bankName, accountName),
                 request.amount(),
                 request.expiresAt()
         );
@@ -87,9 +90,35 @@ public class DefaultSePayPaymentInstructionService implements SePayPaymentInstru
         return builder.toString().toUpperCase(Locale.ROOT);
     }
 
+    private String resolveTransferContent(String paymentCode, String bankName) {
+        String configuredTemplate = sePayProperties.getTransferContentTemplate();
+        String template = isBlank(configuredTemplate)
+                ? defaultTransferContentTemplate(bankName)
+                : configuredTemplate.trim();
+        String transferContent = template.replace("{paymentCode}", paymentCode).trim();
+
+        if (!transferContent.contains(paymentCode)) {
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "SePay transfer content template must contain {paymentCode}"
+            );
+        }
+        return transferContent;
+    }
+
+    private String defaultTransferContentTemplate(String bankName) {
+        String normalizedBankName = bankName.replaceAll("[^A-Za-z0-9]", "")
+                .toUpperCase(Locale.ROOT);
+        if (normalizedBankName.contains("VIETINBANK")) {
+            return VIETINBANK_TRANSFER_PREFIX + " {paymentCode}";
+        }
+        return "{paymentCode}";
+    }
+
     private String buildQrUrl(
             SePayPaymentInstructionRequest request,
             String paymentCode,
+            String transferContent,
             String accountNumber,
             String bankName,
             String accountName
@@ -99,6 +128,7 @@ public class DefaultSePayPaymentInstructionService implements SePayPaymentInstru
                 : sePayProperties.getQrUrlTemplate();
         Map<String, String> placeholders = Map.of(
                 "paymentCode", paymentCode,
+                "transferContent", transferContent,
                 "accountNumber", accountNumber,
                 "bankName", bankName,
                 "accountName", accountName,
