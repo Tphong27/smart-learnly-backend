@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.payment.sepay;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.nio.charset.StandardCharsets;
@@ -17,20 +18,22 @@ public class SePayWebhookSignatureVerifier {
     private static final long TIMESTAMP_TOLERANCE_SECONDS = 300;
 
     private final SePayProperties sePayProperties;
+    private final SystemSettingsService systemSettingsService;
     private final Clock clock;
 
     @Autowired
-    public SePayWebhookSignatureVerifier(SePayProperties sePayProperties) {
-        this(sePayProperties, Clock.systemUTC());
+    public SePayWebhookSignatureVerifier(SePayProperties sePayProperties, SystemSettingsService systemSettingsService) {
+        this(sePayProperties, systemSettingsService, Clock.systemUTC());
     }
 
-    SePayWebhookSignatureVerifier(SePayProperties sePayProperties, Clock clock) {
+    SePayWebhookSignatureVerifier(SePayProperties sePayProperties, SystemSettingsService systemSettingsService, Clock clock) {
         this.sePayProperties = sePayProperties;
+        this.systemSettingsService = systemSettingsService;
         this.clock = clock;
     }
 
     public long verify(byte[] rawBody, String signature, String timestampHeader) {
-        String secret = sePayProperties.getWebhookSecret();
+        String secret = systemSettingsService.resolveSePayRuntimeSettings().webhookSecret();
         if (secret == null || secret.isBlank()) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,

@@ -30,17 +30,34 @@ Google Meet settings now include:
 
 Google client ID and client secret continue to come from the Google OAuth settings group. Base URLs and timeout remain environment-backed operational defaults.
 
-### SePay Payment Display
+### SePay
 
-SePay checkout display settings now include:
+SePay settings now include two groups:
+
+Bank display:
 
 - `accountNumber`
 - `bankName`
 - `accountName`
 
-These values are not secret because checkout returns them to learners for bank transfer instructions. Admin updates are stored as database overrides and take effect for new checkout orders without an application restart. If no database override exists, checkout falls back to `SEPAY_ACCOUNT_NUMBER`, `SEPAY_BANK_NAME`, and `SEPAY_ACCOUNT_NAME` from environment or `application.yml`.
+Runtime secrets:
 
-Existing pending orders keep the bank details captured when the order was created, so changing settings only affects new checkout instructions.
+- `apiToken`
+- `webhookSecret`
+
+Bank display values are not secret because checkout returns them to learners for bank transfer instructions. `apiToken` and `webhookSecret` are treated as secrets, stored encrypted at rest when `SETTINGS_ENCRYPTION_KEY` is configured, and exposed back to the UI only through boolean flags such as `hasApiToken` and `hasWebhookSecret`.
+
+Admin updates are stored as database overrides and take effect without an application restart. If no database override exists, runtime resolution falls back to the existing environment or `application.yml` values:
+
+- `SEPAY_ACCOUNT_NUMBER`
+- `SEPAY_BANK_NAME`
+- `SEPAY_ACCOUNT_NAME`
+- `SEPAY_API_TOKEN`
+- `SEPAY_WEBHOOK_SECRET`
+
+Existing pending orders keep the bank details captured when the order was created, so changing bank display settings only affects new checkout instructions.
+
+The admin UI also exposes a manual "Run SePay reconciliation now" action. This triggers an immediate SePay API scan for pending orders and is useful when testing locally or when a webhook is delayed.
 
 ### AI Integrations
 

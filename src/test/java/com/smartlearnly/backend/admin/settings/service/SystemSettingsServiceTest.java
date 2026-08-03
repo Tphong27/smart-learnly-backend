@@ -69,6 +69,38 @@ class SystemSettingsServiceTest {
     }
 
     @Test
+    void resolveSePayRuntimeSettingsShouldUsePropertyFallbackWhenNoDbOverrideExists() {
+        when(repository.findAll()).thenReturn(List.of());
+        SePayProperties properties = sePayProperties("env-account", "Env Bank", "Env Account");
+        properties.setApiToken("env-token");
+        properties.setWebhookSecret("env-secret");
+
+        SystemSettingsService service = newService(properties);
+        SystemSettingsService.SePayRuntimeSettings settings = service.resolveSePayRuntimeSettings();
+
+        assertThat(settings.apiToken()).isEqualTo("env-token");
+        assertThat(settings.webhookSecret()).isEqualTo("env-secret");
+        assertThat(settings.hasApiToken()).isTrue();
+        assertThat(settings.hasWebhookSecret()).isTrue();
+    }
+
+    @Test
+    void resolveSePayRuntimeSettingsShouldPreferDbOverrides() {
+        when(repository.findAll()).thenReturn(List.of(
+                setting(SettingKeys.SEPAY_API_TOKEN, "db-token"),
+                setting(SettingKeys.SEPAY_WEBHOOK_SECRET, "db-secret")));
+        SePayProperties properties = sePayProperties("env-account", "Env Bank", "Env Account");
+        properties.setApiToken("env-token");
+        properties.setWebhookSecret("env-secret");
+
+        SystemSettingsService service = newService(properties);
+        SystemSettingsService.SePayRuntimeSettings settings = service.resolveSePayRuntimeSettings();
+
+        assertThat(settings.apiToken()).isEqualTo("db-token");
+        assertThat(settings.webhookSecret()).isEqualTo("db-secret");
+    }
+
+    @Test
     void sePayBankDisplaySettingsShouldReportIncompleteConfig() {
         SystemSettingsService.SePayBankDisplaySettings settings =
                 new SystemSettingsService.SePayBankDisplaySettings("123", "", "Smart Learnly");

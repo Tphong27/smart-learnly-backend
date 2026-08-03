@@ -178,6 +178,12 @@ public class SystemSettingsService {
                 getOrDefault(SettingKeys.SEPAY_ACCOUNT_NAME, sePayProperties.getAccountName()));
     }
 
+    public SePayRuntimeSettings resolveSePayRuntimeSettings() {
+        return new SePayRuntimeSettings(
+                getOrDefault(SettingKeys.SEPAY_API_TOKEN, sePayProperties.getApiToken()),
+                getOrDefault(SettingKeys.SEPAY_WEBHOOK_SECRET, sePayProperties.getWebhookSecret()));
+    }
+
     private boolean getBooleanOrDefault(String key, boolean fallback) {
         String value = getRawValue(key);
         if (value == null || value.isBlank()) {
@@ -306,6 +312,18 @@ public class SystemSettingsService {
             return accountNumber != null && !accountNumber.isBlank()
                     && bankName != null && !bankName.isBlank()
                     && accountName != null && !accountName.isBlank();
+        }
+    }
+
+    public record SePayRuntimeSettings(
+            String apiToken,
+            String webhookSecret) {
+        public boolean hasApiToken() {
+            return apiToken != null && !apiToken.isBlank();
+        }
+
+        public boolean hasWebhookSecret() {
+            return webhookSecret != null && !webhookSecret.isBlank();
         }
     }
 }
