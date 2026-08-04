@@ -1,13 +1,13 @@
 package com.smartlearnly.backend.curriculum.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
-import com.smartlearnly.backend.course.dto.LessonRequest;
-import com.smartlearnly.backend.course.dto.LessonResourceRequest;
-import com.smartlearnly.backend.course.dto.LessonResourceResponse;
-import com.smartlearnly.backend.course.dto.LessonResponse;
-import com.smartlearnly.backend.course.dto.ReorderRequest;
-import com.smartlearnly.backend.course.dto.SectionRequest;
-import com.smartlearnly.backend.course.dto.SectionResponse;
+import com.smartlearnly.backend.curriculum.dto.LessonRequest;
+import com.smartlearnly.backend.curriculum.dto.LessonResourceRequest;
+import com.smartlearnly.backend.curriculum.dto.LessonResourceResponse;
+import com.smartlearnly.backend.curriculum.dto.LessonResponse;
+import com.smartlearnly.backend.curriculum.dto.ReorderRequest;
+import com.smartlearnly.backend.curriculum.dto.SectionRequest;
+import com.smartlearnly.backend.curriculum.dto.SectionResponse;
 import com.smartlearnly.backend.curriculum.dto.ClassCurriculumEditorResponse;
 import com.smartlearnly.backend.curriculum.service.TrainerClassCurriculumService;
 import io.swagger.v3.oas.annotations.Operation;

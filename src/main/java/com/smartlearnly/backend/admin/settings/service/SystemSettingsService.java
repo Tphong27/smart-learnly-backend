@@ -2,9 +2,9 @@ package com.smartlearnly.backend.admin.settings.service;
 
 import com.smartlearnly.backend.admin.settings.entity.SystemSetting;
 import com.smartlearnly.backend.admin.settings.repository.SystemSettingRepository;
-import com.smartlearnly.backend.assignment.service.AssignmentAiDraftProperties;
-import com.smartlearnly.backend.classroom.config.GoogleMeetProperties;
-import com.smartlearnly.backend.payment.sepay.SePayProperties;
+import com.smartlearnly.backend.assignment.ai.config.AssignmentAiDraftProperties;
+import com.smartlearnly.backend.classroom.schedule.config.GoogleMeetProperties;
+import com.smartlearnly.backend.payment.sepay.config.SePayProperties;
 import com.smartlearnly.backend.question.image.QuestionImageImportProperties;
 import java.time.Duration;
 import java.util.Map;
