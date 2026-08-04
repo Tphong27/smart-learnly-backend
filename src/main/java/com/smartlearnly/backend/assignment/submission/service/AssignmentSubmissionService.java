@@ -174,10 +174,18 @@ public class AssignmentSubmissionService {
                     "Score must be between 0 and 10");
         }
 
-        submission.setScore(request.getScore());
-        submission.setAiFeedback(request.getAiFeedback());
-        submission.setTrainerFeedback(request.getTrainerFeedback());
-        submission.setStatus(request.getStatus());
+        if (request.getScore() != null) {
+            submission.setScore(request.getScore());
+        }
+        if (request.getAiFeedback() != null) {
+            submission.setAiFeedback(request.getAiFeedback());
+        }
+        if (request.getTrainerFeedback() != null) {
+            submission.setTrainerFeedback(request.getTrainerFeedback());
+        }
+        if (request.getStatus() != null) {
+            submission.setStatus(request.getStatus());
+        }
         // The grader identity must come from the authenticated session, never
         // from a client-controlled request field.
         submission.setGradedBy(currentUserService.requireAuthenticatedUser().getId());

@@ -60,11 +60,12 @@ public class AssignmentService {
     public AssignmentModel.Response createAssignment(
             AssignmentModel.CreateRequest request) {
 
-        validateLessonForClass(request.getClassId(), request.getLessonId());
+        UUID classId = resolveClassId(request.getClassId(), request.getLessonId());
+        validateLessonForClass(classId, request.getLessonId());
 
         Assignment assignment = new Assignment();
 
-        assignment.setClassId(request.getClassId());
+        assignment.setClassId(classId);
         assignment.setLessonId(request.getLessonId());
         assignment.setTitle(request.getTitle());
         assignment.setDescription(request.getDescription());
@@ -396,6 +397,9 @@ public class AssignmentService {
 
         ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class was not found"));
+        if (lessonBelongsDirectlyToClass(classOffering, classId, lessonId)) {
+            return;
+        }
         CurriculumResolution resolution = curriculumResolutionService.resolveClassEffectivePublished(
                 classOffering.getCourseId(),
                 classId);
@@ -411,14 +415,40 @@ public class AssignmentService {
         }
     }
 
+    /**
+     * Chấp nhận lesson nằm trực tiếp trong một curriculum version của đúng lớp.
+     * Trường hợp này bao gồm lesson mới trong draft, chưa có bản tương đương ở
+     * curriculum published để cơ chế đối chiếu identity phía dưới tìm thấy.
+     */
+    private boolean lessonBelongsDirectlyToClass(
+            ClassOffering classOffering,
+            UUID classId,
+            UUID lessonId) {
+        return curriculumLessonRepository.findById(lessonId)
+                .map(CurriculumLesson::getCurriculumVersionId)
+                .flatMap(curriculumVersionRepository::findById)
+                .filter(version -> classId.equals(version.getClassId()))
+                .filter(version -> classOffering.getCourseId().equals(version.getCourseId()))
+                .isPresent();
+    }
+
     private UUID resolveClassId(Assignment assignment) {
-        if (assignment.getClassId() != null) {
-            return assignment.getClassId();
+        return resolveClassId(assignment.getClassId(), assignment.getLessonId());
+    }
+
+    /**
+     * Lấy phạm vi lớp trực tiếp từ curriculum lesson khi client không gửi lại classId.
+     * Lesson thuộc master curriculum vẫn giữ classId null; lesson của class draft/published
+     * luôn kế thừa classId từ curriculum version chứa nó.
+     */
+    private UUID resolveClassId(UUID requestedClassId, UUID lessonId) {
+        if (requestedClassId != null) {
+            return requestedClassId;
         }
-        if (assignment.getLessonId() == null) {
+        if (lessonId == null) {
             return null;
         }
-        return curriculumLessonRepository.findById(assignment.getLessonId())
+        return curriculumLessonRepository.findById(lessonId)
                 .flatMap(lesson -> curriculumVersionRepository.findById(lesson.getCurriculumVersionId()))
                 .map(version -> version.getClassId())
                 .orElse(null);
