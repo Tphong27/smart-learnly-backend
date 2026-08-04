@@ -137,6 +137,34 @@ class AssignmentSubmissionServiceTest {
     }
 
     @Test
+    void gradeSubmissionShouldPreserveExistingFeedbackWhenOnlyScoreChanges() {
+        UserAccount trainer = new UserAccount();
+        trainer.setId(UUID.randomUUID());
+        trainer.setRole("TRAINER");
+        Assignment assignment = assignment(UUID.randomUUID());
+        AssignmentSubmission submission = new AssignmentSubmission();
+        submission.setId(UUID.randomUUID());
+        submission.setAssignmentId(assignment.getId());
+        submission.setStudentId(UUID.randomUUID());
+        submission.setStatus(SubmissionStatus.SUBMITTED);
+        submission.setTrainerFeedback("Keep this feedback");
+
+        AssignmentSubmissionModel.GradeRequest request = new AssignmentSubmissionModel.GradeRequest();
+        request.setScore(new BigDecimal("9"));
+        request.setStatus(SubmissionStatus.GRADED);
+
+        when(submissionRepository.findById(submission.getId())).thenReturn(Optional.of(submission));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
+        when(submissionRepository.save(submission)).thenReturn(submission);
+        when(assignmentRepository.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+
+        AssignmentSubmissionModel.Response response = service.gradeSubmission(submission.getId(), request);
+
+        assertThat(response.getTrainerFeedback()).isEqualTo("Keep this feedback");
+        assertThat(response.getScore()).isEqualByComparingTo("9");
+    }
+
+    @Test
     void startAssignmentShouldRejectTraineeImpersonation() {
         UserAccount trainee = trainee();
         AssignmentSubmissionModel.StartRequest request = new AssignmentSubmissionModel.StartRequest();

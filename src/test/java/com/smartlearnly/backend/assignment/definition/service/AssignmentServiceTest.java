@@ -106,6 +106,43 @@ class AssignmentServiceTest {
     }
 
     @Test
+    void createAssignmentShouldTakeClassIdFromLessonCurriculum() {
+        UUID lessonId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        UserAccount trainer = new UserAccount();
+        trainer.setId(UUID.randomUUID());
+        trainer.setRole("TRAINER");
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(classId);
+        classOffering.setCourseId(courseId);
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(versionId);
+        version.setCourseId(courseId);
+        version.setClassId(classId);
+        CurriculumLesson lesson = new CurriculumLesson();
+        lesson.setId(lessonId);
+        lesson.setCurriculumVersionId(versionId);
+        AssignmentModel.CreateRequest request = new AssignmentModel.CreateRequest();
+        request.setLessonId(lessonId);
+        request.setTitle("Class assignment");
+
+        when(curriculumLessonRepository.findById(lessonId)).thenReturn(Optional.of(lesson));
+        when(curriculumVersionRepository.findById(versionId)).thenReturn(Optional.of(version));
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId))
+                .thenReturn(Optional.of(classOffering));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
+        when(assignmentRepository.save(any(Assignment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AssignmentModel.Response response = service.createAssignment(request);
+
+        assertThat(response.getClassId()).isEqualTo(classId);
+        verify(assignmentRepository).save(any(Assignment.class));
+        verify(curriculumResolutionService, never()).resolveClassEffectivePublished(any(), any());
+    }
+
+    @Test
     void updateAssignmentShouldAttachLegacyAssignmentToTrainerClass() {
         UUID assignmentId = UUID.randomUUID();
         UUID classId = UUID.randomUUID();
