@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.classroom.service;
+package com.smartlearnly.backend.classroom.admin.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -17,6 +17,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.classroom.trainer.service.ClassTrainerService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;

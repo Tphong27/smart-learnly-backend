@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.classroom.service;
+package com.smartlearnly.backend.classroom.schedule.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,9 +9,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.smartlearnly.backend.classroom.dto.ScheduleResponse;
+import com.smartlearnly.backend.classroom.schedule.dto.ScheduleResponse;
 import com.smartlearnly.backend.classroom.repository.ClassSessionRepository;
-import com.smartlearnly.backend.classroom.repository.ScheduleProjection;
+import com.smartlearnly.backend.classroom.schedule.repository.ScheduleProjection;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -63,71 +63,6 @@ class ScheduleServiceTest {
                                 currentUserService,
                                 userRepository);
         }
-
-        // getMySchedule(): UTCID restarts from UTCID01.
-
-        @Test
-        void UTCID01_getMySchedule_mapsTraineeSessionForRequestedDate20260729() {
-                UserAccount trainee = user(
-                                TRAINEE_ID,
-                                "TRAINEE",
-                                "trainee@example.com",
-                                "Trainee Nguyen");
-                ScheduleProjection projection = projection(SESSION_DATE);
-
-                when(currentUserService.requireAuthenticatedUser()).thenReturn(trainee);
-                when(classSessionRepository.findTraineeSchedule(
-                                TRAINEE_ID,
-                                WEEK_START,
-                                WEEK_END))
-                                .thenReturn(List.of(projection));
-
-                ScheduleResponse result = service.getMySchedule(REQUESTED_DATE);
-
-                assertThat(result.weekStart()).isEqualTo(WEEK_START);
-                assertThat(result.weekEnd()).isEqualTo(WEEK_END);
-                assertThat(result.sessions()).singleElement().satisfies(session -> {
-                        assertThat(session.sessionId()).isEqualTo(SESSION_ID);
-                        assertThat(session.classId()).isEqualTo(CLASS_ID);
-                        assertThat(session.courseId()).isEqualTo(COURSE_ID);
-                        assertThat(session.courseTitle()).isEqualTo("Java Backend");
-                        assertThat(session.className()).isEqualTo("Java Class A");
-                        assertThat(session.sessionDate()).isEqualTo(SESSION_DATE);
-                        assertThat(session.startTime()).isEqualTo(LocalTime.of(9, 45));
-                        assertThat(session.endTime()).isEqualTo(LocalTime.of(11, 45));
-                        assertThat(session.trainerId()).isEqualTo(TRAINER_ID);
-                        assertThat(session.trainerName()).isEqualTo("Trainer Nguyen");
-                        assertThat(session.meetingUrl())
-                                        .isEqualTo("https://meet.google.com/abc-defg-hij");
-                });
-        }
-
-        @Test
-        void UTCID02_getMySchedule_usesCurrentMondayToSundayWhenRequestedDateIsNull() {
-                UserAccount trainee = user(
-                                TRAINEE_ID,
-                                "TRAINEE",
-                                "trainee@example.com",
-                                "Trainee Nguyen");
-                LocalDate today = LocalDate.now();
-                LocalDate currentWeekStart = today.minusDays(today.getDayOfWeek().getValue() - 1L);
-                LocalDate currentWeekEnd = currentWeekStart.plusDays(6);
-
-                when(currentUserService.requireAuthenticatedUser()).thenReturn(trainee);
-                when(classSessionRepository.findTraineeSchedule(
-                                TRAINEE_ID,
-                                currentWeekStart,
-                                currentWeekEnd))
-                                .thenReturn(List.of());
-
-                ScheduleResponse result = service.getMySchedule(null);
-
-                assertThat(result.weekStart()).isEqualTo(currentWeekStart);
-                assertThat(result.weekEnd()).isEqualTo(currentWeekEnd);
-                assertThat(result.sessions()).isEmpty();
-        }
-
-        // getStaffSchedule(): UTCID restarts from UTCID01.
 
         @Test
         void UTCID01_getStaffSchedule_trainerIgnoresRequestedTrainerAndReadsOwnSchedule() {

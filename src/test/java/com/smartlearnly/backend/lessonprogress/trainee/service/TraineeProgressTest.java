@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.lessonprogress.service;
+package com.smartlearnly.backend.lessonprogress.trainee.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,9 +30,9 @@ import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
-import com.smartlearnly.backend.lessonprogress.dto.CourseProgressItemResponse;
-import com.smartlearnly.backend.lessonprogress.dto.LessonProgressResponse;
-import com.smartlearnly.backend.lessonprogress.dto.TraineeProgressResponse;
+import com.smartlearnly.backend.lessonprogress.trainee.dto.CourseProgressItemResponse;
+import com.smartlearnly.backend.lessonprogress.trainee.dto.LessonProgressResponse;
+import com.smartlearnly.backend.lessonprogress.trainee.dto.TraineeProgressResponse;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -571,6 +571,7 @@ class TraineeProgressTest {
                                 className,
                                 "upcoming",
                                 "Trainer",
+                                null,
                                 "Monday 08:00-10:00",
                                 FIXED_DATE.plusDays(1),
                                 FIXED_DATE.plusMonths(1),

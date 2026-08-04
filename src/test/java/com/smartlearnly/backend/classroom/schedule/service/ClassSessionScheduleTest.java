@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.classroom.service;
+package com.smartlearnly.backend.classroom.schedule.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

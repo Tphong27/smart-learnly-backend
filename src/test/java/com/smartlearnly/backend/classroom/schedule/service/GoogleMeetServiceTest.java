@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.classroom.service;
+package com.smartlearnly.backend.classroom.schedule.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -17,8 +17,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleOAuthSettings;
-import com.smartlearnly.backend.classroom.config.GoogleMeetProperties;
-import com.smartlearnly.backend.classroom.dto.MeetingUrlResponse;
+import com.smartlearnly.backend.classroom.schedule.config.GoogleMeetProperties;
+import com.smartlearnly.backend.classroom.schedule.dto.MeetingUrlResponse;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.net.SocketTimeoutException;

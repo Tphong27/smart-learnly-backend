@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.classroom.service;
+package com.smartlearnly.backend.classroom.analytics.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -6,13 +6,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.smartlearnly.backend.classroom.dto.ClassAnalyticsResponse;
+import com.smartlearnly.backend.classroom.admin.service.ClassAdminService;
+import com.smartlearnly.backend.classroom.analytics.dto.ClassAnalyticsResponse;
+import com.smartlearnly.backend.classroom.analytics.dto.StudentPerformanceQuery;
+import com.smartlearnly.backend.classroom.analytics.repository.ClassAnalyticsRepository;
 import com.smartlearnly.backend.classroom.dto.ClassResponse;
-import com.smartlearnly.backend.classroom.dto.StudentPerformanceQuery;
-import com.smartlearnly.backend.classroom.repository.ClassAnalyticsRepository;
+import com.smartlearnly.backend.classroom.trainer.service.ClassTrainerService;
+import com.smartlearnly.backend.lessonprogress.trainee.service.TraineeProgressService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
-import com.smartlearnly.backend.lessonprogress.service.TraineeProgressService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;

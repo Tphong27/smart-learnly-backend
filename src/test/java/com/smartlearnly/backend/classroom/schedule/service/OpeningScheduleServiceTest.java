@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.classroom.service;
+package com.smartlearnly.backend.classroom.schedule.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,10 +9,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.smartlearnly.backend.classroom.dto.OpeningScheduleItemResponse;
+import com.smartlearnly.backend.classroom.opening.dto.OpeningScheduleItemResponse;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
-import com.smartlearnly.backend.classroom.repository.OpeningScheduleProjection;
+import com.smartlearnly.backend.classroom.opening.repository.OpeningScheduleProjection;
 import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.classroom.opening.service.OpeningScheduleService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.math.BigDecimal;

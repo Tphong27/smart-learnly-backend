@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.classroom.service;
+package com.smartlearnly.backend.classroom.admin.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,14 +9,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doAnswer;
+// import static org.mockito.Mockito.doAnswer;
 
 import com.smartlearnly.backend.classroom.dto.ClassResponse;
-import com.smartlearnly.backend.classroom.dto.RestoreClassRequest;
+import com.smartlearnly.backend.classroom.admin.dto.RestoreClassRequest;
 import com.smartlearnly.backend.classroom.entity.ClassLifecycle;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.entity.ClassStatus;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.classroom.schedule.service.ClassSessionScheduleService;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
