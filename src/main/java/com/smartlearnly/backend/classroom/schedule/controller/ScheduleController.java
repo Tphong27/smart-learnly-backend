@@ -23,18 +23,6 @@ public class ScheduleController {
 
     private final ScheduleService scheduleService;
 
-    @GetMapping("/learning/schedule")
-    @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Get authenticated trainee weekly schedule")
-    // Trả lịch tuần của học viên đang đăng nhập.
-    public ApiResponse<ScheduleResponse> getMySchedule(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekStart) {
-
-        return ApiResponse.success(
-                "Trainee schedule loaded successfully",
-                scheduleService.getMySchedule(weekStart));
-    }
-
     @GetMapping("/staff/schedule")
     @PreAuthorize("hasAnyRole('TRAINER', 'TMO')")
     @Operation(summary = "Get trainer teaching schedule", description = "Trainer can only view their own schedule")

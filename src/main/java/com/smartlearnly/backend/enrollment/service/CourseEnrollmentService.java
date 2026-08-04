@@ -418,6 +418,7 @@ public class CourseEnrollmentService {
                                 course.getClassName(),
                                 course.getClassStatus(),
                                 course.getClassTrainerName(),
+                                course.getClassMeetingUrl(),
                                 course.getClassScheduleDescription(),
                                 course.getClassStartDate(),
                                 course.getClassEndDate(),

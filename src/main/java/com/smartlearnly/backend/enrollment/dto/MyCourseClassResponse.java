@@ -8,6 +8,7 @@ public record MyCourseClassResponse(
         String className,
         String status,
         String trainerName,
+        String meetingUrl,
         String scheduleDescription,
         LocalDate startDate,
         LocalDate endDate,

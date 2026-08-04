@@ -80,7 +80,10 @@ public class TraineeProgressService {
                                 inProgressCourseItems);
         }
 
-        /** Ghi nhận hoặc đảo trạng thái hoàn thành của một bài học sau khi kiểm tra quyền học. */
+        /**
+         * Ghi nhận hoặc đảo trạng thái hoàn thành của một bài học sau khi kiểm tra
+         * quyền học.
+         */
         @Transactional
         public LessonProgressResponse updateLessonProgress(UUID lessonId, UUID requestedCourseId, UUID classId,
                         boolean completed) {
@@ -152,17 +155,24 @@ public class TraineeProgressService {
                 ProgressCounts counts = calculateClassCurriculumProgress(studentId, courseId, classId);
                 ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
                 ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(),
+                                counts.flashcardTotal());
 
                 return calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
         }
 
-        /** Tìm tiến độ theo đúng phạm vi online hoặc lớp học để không lẫn dữ liệu giữa hai luồng. */
-        private Optional<LessonProgress> findLessonProgress(UUID studentId, UUID courseId, UUID classId, UUID lessonIdentityId) {
+        /**
+         * Tìm tiến độ theo đúng phạm vi online hoặc lớp học để không lẫn dữ liệu giữa
+         * hai luồng.
+         */
+        private Optional<LessonProgress> findLessonProgress(UUID studentId, UUID courseId, UUID classId,
+                        UUID lessonIdentityId) {
                 if (classId == null) {
-                        return lessonProgressRepository.findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(studentId, courseId, lessonIdentityId);
+                        return lessonProgressRepository.findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(
+                                        studentId, courseId, lessonIdentityId);
                 }
-                return lessonProgressRepository.findByStudentIdAndClassIdAndLessonIdentityId(studentId, classId, lessonIdentityId);
+                return lessonProgressRepository.findByStudentIdAndClassIdAndLessonIdentityId(studentId, classId,
+                                lessonIdentityId);
         }
 
         /** Tạo một dòng tiến độ cho khóa học mà học viên học qua lớp. */
@@ -178,7 +188,8 @@ public class TraineeProgressService {
                 ProgressCounts counts = calculateClassCurriculumProgress(studentId, course.id(), classId);
                 ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
                 ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(),
+                                counts.flashcardTotal());
                 ProgressMetricResponse assignmentMetric = calculateAssignmentMetric(studentId, course.id(), classId);
                 int overallPercent = calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
 
@@ -190,6 +201,10 @@ public class TraineeProgressService {
                                 classId,
                                 classEnrollmentId,
                                 className,
+                                course.enrolledClass().meetingUrl(),
+                                course.enrolledClass().scheduleDescription(),
+                                course.enrolledClass().startDate(),
+                                course.enrolledClass().endDate(),
 
                                 course.title(),
                                 course.category() == null ? "Course" : course.category().name(),
@@ -215,7 +230,8 @@ public class TraineeProgressService {
                 ProgressCounts counts = calculateOnlineCurriculumProgress(studentId, course.id());
                 ProgressMetricResponse lessonMetric = metric("Lesson", counts.lessonCompleted(), counts.lessonTotal());
                 ProgressMetricResponse quizMetric = metric("Quiz", counts.quizCompleted(), counts.quizTotal());
-                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(), counts.flashcardTotal());
+                ProgressMetricResponse flashcardMetric = metric("Flashcard", counts.flashcardCompleted(),
+                                counts.flashcardTotal());
                 int overallPercent = calculateOverallPercent(lessonMetric, quizMetric, flashcardMetric);
                 return new CourseProgressItemResponse(
                                 course.id(),
@@ -225,6 +241,10 @@ public class TraineeProgressService {
                                 null, // classId
                                 null, // classEnrollmentId
                                 null, // className
+                                null, // classMeetingUrl
+                                null, // classScheduleDescription
+                                null, // classStartDate
+                                null, // classEndDate
 
                                 course.title(),
                                 course.category() == null ? "Course" : course.category().name(),
@@ -266,19 +286,27 @@ public class TraineeProgressService {
         }
 
         /** Nhóm lesson theo loại nghiệp vụ và đếm số lesson đã hoàn thành. */
-        private ProgressCounts progressCounts(List<CurriculumLesson> lessons, Map<UUID, LessonProgress> progressByLessonIdentityId) {
+        private ProgressCounts progressCounts(List<CurriculumLesson> lessons,
+                        Map<UUID, LessonProgress> progressByLessonIdentityId) {
                 return new ProgressCounts(
                                 countByProgressGroup(lessons, ProgressGroup.LESSON),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.LESSON),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.LESSON),
                                 countByProgressGroup(lessons, ProgressGroup.QUIZ),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.QUIZ),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.QUIZ),
                                 countByProgressGroup(lessons, ProgressGroup.FLASHCARD),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.FLASHCARD));
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.FLASHCARD));
         }
 
-        /** Tính số bài đã hoàn thành và tổng số bài của curriculum phiên bản dành cho lớp. */
+        /**
+         * Tính số bài đã hoàn thành và tổng số bài của curriculum phiên bản dành cho
+         * lớp.
+         */
         private ProgressCounts calculateClassCurriculumProgress(UUID studentId, UUID courseId, UUID classId) {
-                CurriculumResolution resolution = curriculumResolutionService.resolveTraineeProgress(courseId, classId, studentId);
+                CurriculumResolution resolution = curriculumResolutionService.resolveTraineeProgress(courseId, classId,
+                                studentId);
                 List<CurriculumLesson> lessons = orderedCurriculumLessons(resolution.version()).stream()
                                 .filter(this::isVisibleForLearningProgress)
                                 .toList();
@@ -294,16 +322,20 @@ public class TraineeProgressService {
 
                 return new ProgressCounts(
                                 countByProgressGroup(lessons, ProgressGroup.LESSON),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.LESSON),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.LESSON),
                                 countByProgressGroup(lessons, ProgressGroup.QUIZ),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.QUIZ),
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.QUIZ),
                                 countByProgressGroup(lessons, ProgressGroup.FLASHCARD),
-                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId, ProgressGroup.FLASHCARD));
+                                countCompletedCurriculumByProgressGroup(lessons, progressByLessonIdentityId,
+                                                ProgressGroup.FLASHCARD));
         }
 
         /** Tính chỉ số hoàn thành bài tập trong lớp cho học viên. */
         private ProgressMetricResponse calculateAssignmentMetric(UUID studentId, UUID courseId, UUID classId) {
-                List<Assignment> assignments = assignmentRepository.findAvailableForStudent(studentId, courseId, classId, false);
+                List<Assignment> assignments = assignmentRepository.findAvailableForStudent(studentId, courseId,
+                                classId, false);
                 int total = assignments.size();
                 int completed = (int) assignments.stream().filter(assignment -> assignmentSubmissionRepository
                                 .findByAssignmentIdAndStudentId(assignment.getId(), studentId)
@@ -330,7 +362,10 @@ public class TraineeProgressService {
                                                 "Class not found"));
         }
 
-        /** Trả về lesson trong curriculum theo đúng thứ tự section, lesson để tính tiến độ ổn định. */
+        /**
+         * Trả về lesson trong curriculum theo đúng thứ tự section, lesson để tính tiến
+         * độ ổn định.
+         */
         private List<CurriculumLesson> orderedCurriculumLessons(CurriculumVersion version) {
                 return version.getSections().stream()
                                 .sorted(Comparator

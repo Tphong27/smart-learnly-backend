@@ -33,6 +33,7 @@ public interface MyCourseProjection {
     String getClassStatus();
     String getClassTrainerName();
     String getClassScheduleDescription();
+    String getClassMeetingUrl();
     LocalDate getClassStartDate();
     LocalDate getClassEndDate();
     Integer getClassMaxStudents();

@@ -72,6 +72,7 @@ public interface ClassEnrollmentRepository extends JpaRepository<ClassEnrollment
                             class_offering.class_name AS "className",
                             class_offering.status::text AS "classStatus",
                             trainer.full_name AS "classTrainerName",
+                            class_offering.meeting_url AS "classMeetingUrl",
                             class_offering.schedule_description AS "classScheduleDescription",
                             class_offering.start_date AS "classStartDate",
                             class_offering.end_date AS "classEndDate",
