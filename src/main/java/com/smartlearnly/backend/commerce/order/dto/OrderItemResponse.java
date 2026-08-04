@@ -1,0 +1,16 @@
+package com.smartlearnly.backend.commerce.order.dto;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+public record OrderItemResponse(
+        UUID id,
+        UUID courseId,
+        UUID classId,
+        String className,
+        String itemTitle,
+        BigDecimal unitPrice,
+        BigDecimal discountAmount,
+        BigDecimal finalAmount
+) {
+}

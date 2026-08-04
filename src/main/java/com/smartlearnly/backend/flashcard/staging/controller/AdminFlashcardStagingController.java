@@ -17,6 +17,7 @@ import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.UpdateStagingCardRequest;
 import com.smartlearnly.backend.flashcard.staging.service.AdminFlashcardStagingService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardCourseQuestionImportService;
+import com.smartlearnly.backend.flashcard.staging.service.FlashcardStagingGenerationService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardStagingCardEditService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -52,6 +53,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class AdminFlashcardStagingController {
     private final AdminFlashcardStagingService adminFlashcardStagingService;
     private final FlashcardCourseQuestionImportService flashcardCourseQuestionImportService;
+    private final FlashcardStagingGenerationService flashcardStagingGenerationService;
     private final FlashcardStagingCardEditService flashcardStagingCardEditService;
 
     @GetMapping("/flashcard-sets/{setId}/staging/source-questions")
@@ -65,7 +67,13 @@ public class AdminFlashcardStagingController {
     ) {
         return ApiResponse.success(
                 "Flashcard staging source questions loaded successfully",
-                adminFlashcardStagingService.listSourceQuestions(setId, moduleId, keyword, difficulty, "approved")
+                flashcardCourseQuestionImportService.listSourceQuestions(
+                        setId,
+                        moduleId,
+                        keyword,
+                        difficulty,
+                        "approved"
+                )
         );
     }
 
@@ -92,7 +100,7 @@ public class AdminFlashcardStagingController {
     ) {
         return ApiResponse.success(
                 "Temporary flashcard candidates created successfully",
-                adminFlashcardStagingService.previewCourseQuestions(setId, request)
+                flashcardCourseQuestionImportService.previewCourseQuestions(setId, request)
         );
     }
 
@@ -102,7 +110,7 @@ public class AdminFlashcardStagingController {
             @PathVariable UUID setId,
             @Valid @RequestBody GenerateFromTextRequest request
     ) {
-        StagingBatchResponse response = adminFlashcardStagingService.generateFromText(setId, request);
+        StagingBatchResponse response = flashcardStagingGenerationService.generateFromText(setId, request);
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
@@ -120,7 +128,7 @@ public class AdminFlashcardStagingController {
             @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String generationMode
     ) {
-        StagingBatchResponse response = adminFlashcardStagingService.generateFromFile(
+        StagingBatchResponse response = flashcardStagingGenerationService.generateFromFile(
                 setId,
                 file,
                 desiredCount,
@@ -147,7 +155,7 @@ public class AdminFlashcardStagingController {
     ) {
         return ApiResponse.success(
                 "Temporary flashcard candidates created successfully",
-                adminFlashcardStagingService.generateTemporaryFromFile(
+                flashcardStagingGenerationService.generateTemporaryFromFile(
                         setId,
                         file,
                         desiredCount,
@@ -164,7 +172,7 @@ public class AdminFlashcardStagingController {
             @PathVariable UUID setId,
             @Valid @RequestBody GenerateFromTranscriptRequest request
     ) {
-        StagingBatchResponse response = adminFlashcardStagingService.generateFromTranscript(setId, request);
+        StagingBatchResponse response = flashcardStagingGenerationService.generateFromTranscript(setId, request);
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
@@ -182,7 +190,7 @@ public class AdminFlashcardStagingController {
             @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String generationMode
     ) {
-        StagingBatchResponse response = adminFlashcardStagingService.generateFromTranscriptFile(
+        StagingBatchResponse response = flashcardStagingGenerationService.generateFromTranscriptFile(
                 setId,
                 file,
                 desiredCount,

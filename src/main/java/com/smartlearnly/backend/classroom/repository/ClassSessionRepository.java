@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.classroom.repository;
 
+import com.smartlearnly.backend.classroom.schedule.repository.ScheduleProjection;
 import com.smartlearnly.backend.classroom.entity.ClassSession;
 import java.time.LocalDate;
 import java.util.List;
@@ -11,9 +12,11 @@ import org.springframework.data.repository.query.Param;
 public interface ClassSessionRepository
         extends JpaRepository<ClassSession, UUID> {
 
+    /** Lấy các buổi học sắp tới của một lớp theo thời gian tăng dần. */
     List<ClassSession> findByClassIdAndSessionDateGreaterThanEqualOrderBySessionDateAscStartTimeAsc(UUID classId,
             LocalDate fromDate);
 
+    /** Lấy lịch tuần của học viên từ các lớp mà họ đã ghi danh hợp lệ. */
     @Query(value = """
             SELECT
                 class_session.id AS "sessionId",
@@ -64,6 +67,7 @@ public interface ClassSessionRepository
             @Param("weekStart") LocalDate weekStart,
             @Param("weekEnd") LocalDate weekEnd);
 
+    /** Lấy lịch tuần của giảng viên hoặc nhân sự theo người dạy được lọc. */
     @Query(value = """
             SELECT
                 class_session.id AS "sessionId",
@@ -107,6 +111,7 @@ public interface ClassSessionRepository
             @Param("weekStart") LocalDate weekStart,
             @Param("weekEnd") LocalDate weekEnd);
 
+    /** Lấy các buổi học lân cận để kiểm tra xung đột lịch của giảng viên. */
     @Query(value = """
             SELECT class_session.*
             FROM public.class_sessions class_session

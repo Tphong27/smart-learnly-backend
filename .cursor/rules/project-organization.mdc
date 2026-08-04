@@ -1,0 +1,7 @@
+---
+description: Mandatory Smart Learnly backend organization rules
+alwaysApply: true
+---
+
+Read and follow `/AGENTS.md` before changing backend code. Its core simplicity
+and dead-code rules are self-contained and mandatory.

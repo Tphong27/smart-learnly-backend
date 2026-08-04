@@ -3,23 +3,30 @@ package com.smartlearnly.backend.flashcard.staging.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ImportCourseQuestionsRequest;
+import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingBatch;
+import com.smartlearnly.backend.flashcard.staging.entity.FlashcardStagingCard;
+import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingBatchRepository;
 import com.smartlearnly.backend.flashcard.staging.repository.FlashcardStagingCardRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.question.entity.Question;
+import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
+import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
+import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,11 +41,17 @@ class FlashcardCourseQuestionImportServiceTest {
     @Mock
     private FlashcardSetRepository flashcardSetRepository;
     @Mock
+    private FlashcardCardRepository flashcardCardRepository;
+    @Mock
+    private FlashcardStagingBatchRepository stagingBatchRepository;
+    @Mock
     private QuestionRepository questionRepository;
     @Mock
     private FlashcardStagingCardRepository stagingCardRepository;
     @Mock
-    private AdminFlashcardStagingService adminFlashcardStagingService;
+    private QuestionAnswerRepository questionAnswerRepository;
+    @Mock
+    private CurrentUserService currentUserService;
 
     private FlashcardCourseQuestionImportService importService;
 
@@ -46,9 +59,12 @@ class FlashcardCourseQuestionImportServiceTest {
     void setUp() {
         importService = new FlashcardCourseQuestionImportService(
                 flashcardSetRepository,
-                questionRepository,
+                flashcardCardRepository,
+                stagingBatchRepository,
                 stagingCardRepository,
-                adminFlashcardStagingService
+                questionRepository,
+                questionAnswerRepository,
+                currentUserService
         );
     }
 
@@ -64,7 +80,6 @@ class FlashcardCourseQuestionImportServiceTest {
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
-        verify(adminFlashcardStagingService, never()).importCourseQuestions(any(), any());
     }
 
     @Test
@@ -80,7 +95,6 @@ class FlashcardCourseQuestionImportServiceTest {
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
-        verify(adminFlashcardStagingService, never()).importCourseQuestions(any(), any());
     }
 
     @Test
@@ -97,7 +111,6 @@ class FlashcardCourseQuestionImportServiceTest {
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
-        verify(adminFlashcardStagingService, never()).importCourseQuestions(any(), any());
     }
 
     @Test
@@ -115,26 +128,43 @@ class FlashcardCourseQuestionImportServiceTest {
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.CONFLICT));
-        verify(adminFlashcardStagingService, never()).importCourseQuestions(any(), any());
     }
 
     @Test
-    void importCourseQuestionsShouldDelegateApprovedQuestionInCourse() {
+    void importCourseQuestionsShouldPersistApprovedQuestionInCourse() {
         FlashcardSet set = flashcardSet();
         Question approvedQuestion = question(set.getLesson().getCourse().getId(), QuestionStatus.APPROVED);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
         when(questionRepository.findAllById(List.of(approvedQuestion.getId()))).thenReturn(List.of(approvedQuestion));
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any())).thenReturn(List.of());
+        QuestionAnswer correctAnswer = new QuestionAnswer();
+        correctAnswer.setId(UUID.randomUUID());
+        correctAnswer.setQuestionId(approvedQuestion.getId());
+        correctAnswer.setAnswerText("Correct");
+        correctAnswer.setIsCorrect(true);
+        correctAnswer.setOrderIndex(0);
+        when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(any()))
+                .thenReturn(List.of(correctAnswer));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(new UserAccount());
+        when(stagingBatchRepository.save(any())).thenAnswer(invocation -> {
+            FlashcardStagingBatch batch = invocation.getArgument(0);
+            batch.setId(UUID.randomUUID());
+            return batch;
+        });
+        when(stagingCardRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<FlashcardStagingCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> card.setId(UUID.randomUUID()));
+            return cards;
+        });
 
-        importService.importCourseQuestions(
+        var response = importService.importCourseQuestions(
                 set.getId(),
                 new ImportCourseQuestionsRequest(List.of(approvedQuestion.getId()))
         );
 
-        verify(adminFlashcardStagingService).importCourseQuestions(
-                set.getId(),
-                new ImportCourseQuestionsRequest(List.of(approvedQuestion.getId()))
-        );
+        assertThat(response.cards()).hasSize(1);
+        verify(stagingBatchRepository).save(any());
+        verify(stagingCardRepository).saveAll(any());
     }
 
     private FlashcardSet flashcardSet() {

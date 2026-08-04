@@ -51,6 +51,7 @@ SEPAY_ACCOUNT_NUMBER=replace-with-bank-account-number
 SEPAY_BANK_NAME=replace-with-bank-name
 SEPAY_ACCOUNT_NAME=replace-with-bank-account-name
 SEPAY_PAYMENT_CODE_PREFIX=SLP
+SEPAY_TRANSFER_CONTENT_TEMPLATE=
 SEPAY_RECONCILIATION_INTERVAL=PT5M
 SEPAY_API_TOKEN=replace-with-sepay-api-token
 SEPAY_API_BASE_URL=https://userapi.sepay.vn
@@ -59,8 +60,22 @@ SEPAY_API_BASE_URL=https://userapi.sepay.vn
 `SEPAY_ACCOUNT_NUMBER`, `SEPAY_BANK_NAME`, and `SEPAY_ACCOUNT_NAME` are
 required to generate checkout payment instructions. `SEPAY_API_TOKEN` and
 `SEPAY_API_BASE_URL` are used by reconciliation for missed webhooks. Use
-placeholder values in shared examples only; never commit real bank account
+`SEPAY_TRANSFER_CONTENT_TEMPLATE` only to override bank-specific transfer
+content. When it is empty and the configured bank is VietinBank, checkout
+automatically uses `SEVQR {paymentCode}`.
+Use placeholder values in shared examples only; never commit real bank account
 values or payment secrets.
+
+The SePay webhook URL is:
+
+```text
+https://<public-backend-domain>/api/v1/payments/webhooks/sepay
+```
+
+Configure it as an inbound, JSON, HMAC-SHA256 webhook in SePay and use the
+same secret for both SePay and `SEPAY_WEBHOOK_SECRET`. For the complete local,
+Test mode, production, and troubleshooting checklist, see
+[`docs/SEPAY_SETUP_GUIDE_VI.md`](docs/SEPAY_SETUP_GUIDE_VI.md).
 
 The sending domain `mail.smartlearnly.online` must remain verified in Resend. When
 `RESEND_API_KEY` is empty, email delivery is skipped. Set `APP_AUTH_DEBUG_LOG_TOKENS=true`
