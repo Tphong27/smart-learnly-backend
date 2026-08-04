@@ -110,8 +110,7 @@ class ClassAdminServiceTest {
 
                 ClassResponse response = service.create(request);
 
-                assertThat(response.meetingUrl())
-                                .isEqualTo("https://meet.google.com/abc-defg-hij");
+                assertThat(response.meetingUrl()).isEqualTo("https://meet.google.com/abc-defg-hij");
                 assertThat(response.className()).isEqualTo("Spring Cohort");
                 assertThat(response.maxStudents()).isEqualTo(25);
                 assertThat(response.availableSeats()).isEqualTo(25);
