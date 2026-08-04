@@ -1,9 +1,9 @@
 package com.smartlearnly.backend.curriculum.service;
 
-import com.smartlearnly.backend.course.dto.LessonResourceResponse;
-import com.smartlearnly.backend.course.dto.LessonResponse;
-import com.smartlearnly.backend.course.dto.ModuleResponse;
-import com.smartlearnly.backend.course.dto.SectionResponse;
+import com.smartlearnly.backend.curriculum.dto.LessonResourceResponse;
+import com.smartlearnly.backend.curriculum.dto.LessonResponse;
+import com.smartlearnly.backend.curriculum.dto.ModuleResponse;
+import com.smartlearnly.backend.curriculum.dto.SectionResponse;
 import com.smartlearnly.backend.curriculum.dto.ClassCurriculumBindingResponse;
 import com.smartlearnly.backend.curriculum.dto.CurriculumLessonResponse;
 import com.smartlearnly.backend.curriculum.dto.CurriculumMetadataResponse;
@@ -18,11 +18,11 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
-import com.smartlearnly.backend.learning.dto.LearningContentResponse;
-import com.smartlearnly.backend.learning.dto.LearningLessonResponse;
-import com.smartlearnly.backend.learning.dto.LearningResourceResponse;
-import com.smartlearnly.backend.learning.dto.LearningSectionResponse;
-import com.smartlearnly.backend.learning.dto.LearningStats;
+import com.smartlearnly.backend.learning.content.dto.LearningContentResponse;
+import com.smartlearnly.backend.learning.content.dto.LearningLessonResponse;
+import com.smartlearnly.backend.learning.content.dto.LearningResourceResponse;
+import com.smartlearnly.backend.learning.content.dto.LearningSectionResponse;
+import com.smartlearnly.backend.learning.content.dto.LearningStats;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import java.util.Comparator;
 import java.util.List;
@@ -33,6 +33,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class CurriculumDtoMapper {
+    /** Chuyển một phiên bản giáo trình sang dữ liệu trả về cho quản trị. */
     public CurriculumVersionResponse toCurriculumVersionResponse(CurriculumVersion version) {
         return new CurriculumVersionResponse(
                 version.getId(),
@@ -52,6 +53,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển một phần giáo trình cùng các bài học đã sắp xếp sang DTO quản trị. */
     public CurriculumSectionResponse toCurriculumSectionResponse(CurriculumSection section) {
         return new CurriculumSectionResponse(
                 section.getId(),
@@ -65,6 +67,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển bài học trong giáo trình sang DTO quản trị, bao gồm tài nguyên đính kèm. */
     public CurriculumLessonResponse toCurriculumLessonResponse(CurriculumLesson lesson) {
         return new CurriculumLessonResponse(
                 lesson.getId(),
@@ -87,6 +90,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển tài nguyên của bài học sang DTO quản trị. */
     public CurriculumResourceResponse toCurriculumResourceResponse(CurriculumLessonResource resource) {
         return new CurriculumResourceResponse(
                 resource.getId(),
@@ -101,6 +105,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển liên kết giữa lớp học và giáo trình sang DTO để quản trị trạng thái tùy biến. */
     public ClassCurriculumBindingResponse toBindingResponse(ClassCurriculumBinding binding) {
         return new ClassCurriculumBindingResponse(
                 binding.getId(),
@@ -115,6 +120,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển section của giáo trình sang định dạng section cũ mà API khóa học đang công khai. */
     public SectionResponse toSectionResponse(CurriculumSection section) {
         CurriculumVersion version = section.getCurriculumVersion();
         return new SectionResponse(
@@ -127,6 +133,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển section của giáo trình sang định dạng module cũ để giữ nguyên JSON contract. */
     public ModuleResponse toModuleResponse(CurriculumSection section) {
         CurriculumVersion version = section.getCurriculumVersion();
         return new ModuleResponse(
@@ -140,6 +147,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển bài học giáo trình sang DTO bài học của API khóa học. */
     public LessonResponse toLessonResponse(CurriculumLesson lesson) {
         CurriculumVersion version = lesson.getSection().getCurriculumVersion();
         return new LessonResponse(
@@ -162,6 +170,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển tài nguyên giáo trình sang DTO tài nguyên của API khóa học. */
     public LessonResourceResponse toLessonResourceResponse(CurriculumLessonResource resource) {
         return new LessonResourceResponse(
                 resource.getId(),
@@ -174,6 +183,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Tạo nội dung học đầy đủ cho học viên từ giáo trình và các bài đã hoàn thành. */
     public LearningContentResponse toLearningContentResponse(
             CurriculumVersion version,
             String courseTitle,
@@ -188,6 +198,7 @@ public class CurriculumDtoMapper {
                 false);
     }
 
+    /** Tạo nội dung học đầy đủ kèm metadata về nguồn giáo trình. */
     public LearningContentResponse toLearningContentResponse(
             CurriculumVersion version,
             String courseTitle,
@@ -203,6 +214,7 @@ public class CurriculumDtoMapper {
                 false);
     }
 
+    /** Tạo nội dung xem trước chỉ gồm các bài được cho phép preview. */
     public LearningContentResponse toPreviewLearningContentResponse(
             CurriculumVersion version,
             String courseTitle,
@@ -217,6 +229,7 @@ public class CurriculumDtoMapper {
                 true);
     }
 
+    /** Gom dữ liệu giáo trình thành nội dung học, đồng thời lọc theo chế độ xem trước khi cần. */
     private LearningContentResponse toLearningContentResponse(
             CurriculumVersion version,
             String courseTitle,
@@ -242,12 +255,14 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển section sang dữ liệu học viên khi không ở chế độ xem trước. */
     public LearningSectionResponse toLearningSectionResponse(
             CurriculumSection section,
             Set<UUID> completedLessonIds) {
         return toLearningSectionResponse(section, completedLessonIds, false);
     }
 
+    /** Chuyển section sang dữ liệu học viên, chỉ giữ bài đã xuất bản và đúng phạm vi truy cập. */
     private LearningSectionResponse toLearningSectionResponse(
             CurriculumSection section,
             Set<UUID> completedLessonIds,
@@ -268,6 +283,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Chuyển bài học sang dữ liệu học viên và gắn trạng thái hoàn thành hiện tại. */
     public LearningLessonResponse toLearningLessonResponse(CurriculumLesson lesson, boolean completed) {
         List<LearningResourceResponse> resources = orderedResources(lesson).stream()
                 .map(resource -> new LearningResourceResponse(
@@ -293,6 +309,7 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Tạo metadata mô tả nguồn và phạm vi của giáo trình đang được sử dụng. */
     public CurriculumMetadataResponse toMetadata(CurriculumVersion version, UUID classId, String source) {
         boolean customized = version.getScope() == CurriculumScope.CLASS;
         return new CurriculumMetadataResponse(
@@ -305,10 +322,12 @@ public class CurriculumDtoMapper {
         );
     }
 
+    /** Xác định nguồn giáo trình mà học viên đang học. */
     public String learningSource(CurriculumVersion version) {
         return version.getScope() == CurriculumScope.CLASS ? "class_published" : "master_inherited";
     }
 
+    /** Xác định nguồn giáo trình mà màn hình biên tập cần hiển thị. */
     public String editorSource(CurriculumVersion version) {
         if (version.getStatus() == CurriculumStatus.DRAFT) {
             return "class_draft";
@@ -316,11 +335,13 @@ public class CurriculumDtoMapper {
         return learningSource(version);
     }
 
+    /** Chuyển trạng thái tùy biến curriculum binding về chuỗi API ổn định. */
     public String bindingState(ClassCurriculumBinding binding) {
         CurriculumCustomizationState state = binding.getCustomizationState();
         return state == null ? null : state.name().toLowerCase(Locale.ROOT);
     }
 
+    /** Sắp xếp section theo thứ tự nghiệp vụ ổn định trước khi trả về client. */
     private List<CurriculumSection> orderedSections(CurriculumVersion version) {
         return version.getSections().stream()
                 .sorted(Comparator
@@ -330,6 +351,7 @@ public class CurriculumDtoMapper {
                 .toList();
     }
 
+    /** Sắp xếp bài học trong section theo thứ tự nghiệp vụ ổn định. */
     private List<CurriculumLesson> orderedLessons(CurriculumSection section) {
         return section.getLessons().stream()
                 .sorted(Comparator
@@ -339,6 +361,7 @@ public class CurriculumDtoMapper {
                 .toList();
     }
 
+    /** Sắp xếp tài nguyên của bài học theo thứ tự nghiệp vụ ổn định. */
     private List<CurriculumLessonResource> orderedResources(CurriculumLesson lesson) {
         return lesson.getResources().stream()
                 .sorted(Comparator
@@ -348,6 +371,7 @@ public class CurriculumDtoMapper {
                 .toList();
     }
 
+    /** Tính thống kê bài học để hiển thị tiến độ và tổng quan khóa học. */
     private LearningStats calculateStats(List<LearningSectionResponse> sections) {
         int totalVideos = 0;
         int totalDocuments = 0;
@@ -380,10 +404,12 @@ public class CurriculumDtoMapper {
                 totalDurationSeconds);
     }
 
+    /** Chuẩn hóa enum thành chữ thường cho JSON contract. */
     private String enumLower(Enum<?> value) {
         return value == null ? null : value.name().toLowerCase(Locale.ROOT);
     }
 
+    /** Chuẩn hóa enum thành chữ hoa cho JSON contract. */
     private String enumUpper(Enum<?> value) {
         return value == null ? null : value.name();
     }

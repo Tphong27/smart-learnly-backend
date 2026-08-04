@@ -12,7 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.security.CurrentUserService;
-import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.entity.Question;

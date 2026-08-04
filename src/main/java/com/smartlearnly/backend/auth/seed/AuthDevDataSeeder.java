@@ -1,8 +1,9 @@
 package com.smartlearnly.backend.auth.seed;
 
-import com.smartlearnly.backend.auth.dto.ForgotPasswordRequest;
-import com.smartlearnly.backend.auth.dto.ResendVerificationRequest;
-import com.smartlearnly.backend.auth.service.AuthService;
+import com.smartlearnly.backend.auth.password.service.AuthPasswordService;
+import com.smartlearnly.backend.auth.password.dto.ForgotPasswordRequest;
+import com.smartlearnly.backend.auth.registration.dto.ResendVerificationRequest;
+import com.smartlearnly.backend.auth.registration.service.AuthRegistrationService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -34,8 +35,10 @@ public class AuthDevDataSeeder implements ApplicationRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final AuthService authService;
+    private final AuthPasswordService passwordService;
+    private final AuthRegistrationService registrationService;
 
+    // Tạo các tài khoản auth mẫu và token cần thiết cho việc kiểm thử local.
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
@@ -43,7 +46,7 @@ public class AuthDevDataSeeder implements ApplicationRunner {
         seedPendingUser();
         seedGoogleOnlyUser();
 
-        authService.forgotPassword(new ForgotPasswordRequest(ACTIVE_EMAIL));
+        passwordService.forgotPassword(new ForgotPasswordRequest(ACTIVE_EMAIL));
         resendVerificationOtpForSeed();
 
         log.info("Dev auth seed ready");
@@ -53,9 +56,10 @@ public class AuthDevDataSeeder implements ApplicationRunner {
         log.info("Password reset token for {} was generated. Verification OTP for {} was requested.", ACTIVE_EMAIL, PENDING_EMAIL);
     }
 
+    // Yêu cầu lại OTP mẫu nhưng cho phép bỏ qua khi quota dev đã hết.
     private void resendVerificationOtpForSeed() {
         try {
-            authService.resendVerification(new ResendVerificationRequest(PENDING_EMAIL));
+            registrationService.resendVerification(new ResendVerificationRequest(PENDING_EMAIL));
         }
         catch (BusinessException exception) {
             if (exception.errorCode() != ErrorCode.RATE_LIMIT_EXCEEDED) {
@@ -68,6 +72,7 @@ public class AuthDevDataSeeder implements ApplicationRunner {
         }
     }
 
+    // Tạo hoặc đặt lại trainee đang hoạt động với dữ liệu đăng nhập cố định cho local.
     private void seedActiveUser() {
         UserAccount user = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(ACTIVE_EMAIL)
                 .orElseGet(UserAccount::new);
@@ -86,6 +91,7 @@ public class AuthDevDataSeeder implements ApplicationRunner {
         userRepository.save(user);
     }
 
+    // Tạo hoặc đặt lại trainee chờ xác thực để kiểm thử luồng OTP.
     private void seedPendingUser() {
         UserAccount user = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(PENDING_EMAIL)
                 .orElseGet(UserAccount::new);
@@ -104,6 +110,7 @@ public class AuthDevDataSeeder implements ApplicationRunner {
         userRepository.save(user);
     }
 
+    // Tạo hoặc đặt lại tài khoản chỉ đăng nhập Google để kiểm thử nhánh không có mật khẩu.
     private void seedGoogleOnlyUser() {
         UserAccount user = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(GOOGLE_EMAIL)
                 .orElseGet(UserAccount::new);

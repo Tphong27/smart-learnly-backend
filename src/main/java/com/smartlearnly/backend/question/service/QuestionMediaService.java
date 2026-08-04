@@ -10,7 +10,7 @@ import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
-import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import java.io.IOException;

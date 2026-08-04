@@ -2,7 +2,7 @@ package com.smartlearnly.backend.question.service;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
-import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.file.service.FileStorageService;
 import com.smartlearnly.backend.question.dto.QuestionAnswerMediaResponse;

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
 import com.smartlearnly.backend.question.ai.service.AiQuestionDraftService;
+import com.smartlearnly.backend.question.ai.service.AiQuestionSourceService;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,8 @@ class CourseAiQuestionDraftControllerTest {
 
     @Mock
     private AiQuestionDraftService aiQuestionDraftService;
+    @Mock
+    private AiQuestionSourceService aiQuestionSourceService;
 
     private CourseAiQuestionDraftController controller;
     private UUID courseId;
@@ -29,7 +32,9 @@ class CourseAiQuestionDraftControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new CourseAiQuestionDraftController(aiQuestionDraftService);
+        controller = new CourseAiQuestionDraftController(
+                aiQuestionDraftService,
+                aiQuestionSourceService);
         courseId = UUID.randomUUID();
         batchId = UUID.randomUUID();
         draftId = UUID.randomUUID();
@@ -40,7 +45,7 @@ class CourseAiQuestionDraftControllerTest {
     void sourceCapabilities_returnsServiceResponse() {
         AiQuestionDraftDtos.SourceCapabilitiesResponse capabilities =
                 new AiQuestionDraftDtos.SourceCapabilitiesResponse(100, 50_000, 1024, 200_000, 8, 300_000, List.of("text/plain"), List.of("txt"));
-        when(aiQuestionDraftService.sourceCapabilities(courseId)).thenReturn(capabilities);
+        when(aiQuestionSourceService.sourceCapabilities(courseId)).thenReturn(capabilities);
 
         var response = controller.sourceCapabilities(courseId);
 
@@ -52,7 +57,7 @@ class CourseAiQuestionDraftControllerTest {
     void sources_returnsServiceResponse() {
         AiQuestionDraftDtos.SourceOptionResponse source =
                 new AiQuestionDraftDtos.SourceOptionResponse(sourceId, sourceId, courseId, null, null, "transcript", "Video transcript", null, "vi", 60L, "checksum", "1", 1, 120, null);
-        when(aiQuestionDraftService.listSources(courseId)).thenReturn(List.of(source));
+        when(aiQuestionSourceService.listSources(courseId)).thenReturn(List.of(source));
 
         var response = controller.sources(courseId);
 
@@ -123,7 +128,7 @@ class CourseAiQuestionDraftControllerTest {
     void sourceDownloadUrl_returnsSignedUrlFromService() {
         AiQuestionDraftDtos.SourceDownloadUrlResponse signedUrl =
                 new AiQuestionDraftDtos.SourceDownloadUrlResponse("https://signed.example.com", null, "source.txt", "text/plain", 123L);
-        when(aiQuestionDraftService.sourceDownloadUrl(courseId, batchId, sourceId)).thenReturn(signedUrl);
+        when(aiQuestionSourceService.sourceDownloadUrl(courseId, batchId, sourceId)).thenReturn(signedUrl);
 
         var response = controller.sourceDownloadUrl(courseId, batchId, sourceId);
 

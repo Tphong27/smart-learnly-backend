@@ -1,5 +1,7 @@
 package com.smartlearnly.backend.classroom.repository;
 
+import com.smartlearnly.backend.classroom.admin.repository.ClassStatusOptionProjection;
+import com.smartlearnly.backend.classroom.opening.repository.OpeningScheduleProjection;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
@@ -17,8 +19,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UUID> {
+    /** Tìm lớp còn hiệu lực theo id, không lấy lớp đã bị xóa mềm. */
     Optional<ClassOffering> findByIdAndDeletedAtIsNull(UUID id);
 
+    /** Tìm trang lớp đang mở đăng ký theo các bộ lọc công khai. */
     @Query(value = """
             SELECT
                 cls.id AS "classId",
@@ -126,6 +130,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             @Param("maxPrice") BigDecimal maxPrice,
             Pageable pageable);
 
+    /** Tìm chi tiết một lớp đang mở đăng ký để hiển thị cho người học. */
     @Query(value = """
             SELECT
                 class_offering.id AS "classId",
@@ -174,6 +179,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
     Optional<OpeningScheduleProjection> findOpeningScheduleDetail(
             @Param("classId") UUID classId);
 
+    /** Tìm thông tin lớp cho màn quản trị, bao gồm khóa học và giảng viên. */
     @Query(value = """
             SELECT
                 class_offering.id AS "id",
@@ -204,11 +210,13 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             """, nativeQuery = true)
     Optional<ClassAdminProjection> findAdminClassById(@Param("classId") UUID classId);
 
+    /** Khóa bản ghi lớp còn hiệu lực trước khi cập nhật trạng thái hoặc thông tin quan trọng. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select classOffering from ClassOffering classOffering "
             + "where classOffering.id = :id and classOffering.deletedAt is null")
     Optional<ClassOffering> findByIdForUpdate(@Param("id") UUID id);
 
+    /** Tìm danh sách lớp cho quản trị với bộ lọc khóa học, giảng viên, trạng thái và từ khóa. */
     @Query(value = """
             SELECT
                 class_offering.id AS "id",
@@ -263,6 +271,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             @Param("keyword") String keyword,
             Pageable pageable);
 
+    /** Tìm chi tiết lớp quản trị cùng tổng số học viên đang hoạt động. */
     @Query(value = """
             SELECT
                 class_offering.id AS "id",
@@ -294,6 +303,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             """, nativeQuery = true)
     Optional<ClassAdminProjection> findAdminClassDetail(@Param("classId") UUID classId);
 
+    /** Kiểm tra lớp đã có dữ liệu giao dịch hoặc ghi danh để bảo vệ lịch sử thương mại. */
     @Query(value = """
             SELECT EXISTS (
                 SELECT 1 FROM public.class_enrollments enrollment
@@ -308,6 +318,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             """, nativeQuery = true)
     boolean hasCommercialHistory(@Param("classId") UUID classId);
 
+    /** Tìm các lớp công khai còn có thể học của một khóa học. */
     @Query(value = """
             SELECT
                 class_offering.id AS "id",
@@ -340,6 +351,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             """, nativeQuery = true)
     List<CoursePublicProjection> findPublicClassesByCourseId(@Param("courseId") UUID courseId);
 
+    /** Tìm danh sách lớp được phân công cho một giảng viên. */
     @Query(value = """
             SELECT
                 class_offering.id AS "id",
@@ -399,6 +411,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             @Param("keyword") String keyword,
             Pageable pageable);
 
+    /** Tìm chi tiết lớp mà giảng viên đang được phân công quản lý. */
     @Query(value = """
             SELECT
                 class_offering.id AS "id",
@@ -433,6 +446,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             @Param("classId") UUID classId,
             @Param("trainerId") UUID trainerId);
 
+    /** Lấy các trạng thái lớp hợp lệ từ enum cơ sở dữ liệu để hiển thị lựa chọn quản trị. */
     @Query(value = """
             SELECT
                 e.enumlabel AS "value",
@@ -446,6 +460,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             """, nativeQuery = true)
     List<ClassStatusOptionProjection> findClassStatusOptions();
 
+    /** Tìm lớp còn hoạt động để dùng ở các màn hình cần chọn lớp. */
     @Query(value = """
             SELECT
                 class_offering.id AS "id",
@@ -486,6 +501,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             @Param("courseId") UUID courseId,
             @Param("trainerId") UUID trainerId);
 
+    /** Đồng bộ trạng thái vòng đời của các lớp theo ngày hiện tại. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
             WITH desired_statuses AS (

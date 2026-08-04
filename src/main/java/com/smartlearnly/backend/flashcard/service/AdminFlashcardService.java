@@ -17,7 +17,7 @@ import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
-import com.smartlearnly.backend.course.service.CourseAccessService;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;

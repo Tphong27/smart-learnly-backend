@@ -3,6 +3,7 @@ package com.smartlearnly.backend.question.ai.controller;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
 import com.smartlearnly.backend.question.ai.service.AiQuestionDraftService;
+import com.smartlearnly.backend.question.ai.service.AiQuestionSourceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,17 +35,18 @@ import org.springframework.web.multipart.MultipartFile;
 @SecurityRequirement(name = "bearerAuth")
 public class CourseAiQuestionDraftController {
     private final AiQuestionDraftService aiQuestionDraftService;
+    private final AiQuestionSourceService aiQuestionSourceService;
 
     @GetMapping("/source-capabilities")
     @Operation(summary = "Get supported AI question generation source limits")
     public ApiResponse<AiQuestionDraftDtos.SourceCapabilitiesResponse> sourceCapabilities(@PathVariable UUID courseId) {
-        return ApiResponse.success("AI generation source capabilities loaded successfully", aiQuestionDraftService.sourceCapabilities(courseId));
+        return ApiResponse.success("AI generation source capabilities loaded successfully", aiQuestionSourceService.sourceCapabilities(courseId));
     }
 
     @GetMapping("/sources")
     @Operation(summary = "List transcript sources for AI question generation")
     public ApiResponse<List<AiQuestionDraftDtos.SourceOptionResponse>> sources(@PathVariable UUID courseId) {
-        return ApiResponse.success("AI generation sources loaded successfully", aiQuestionDraftService.listSources(courseId));
+        return ApiResponse.success("AI generation sources loaded successfully", aiQuestionSourceService.listSources(courseId));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -89,7 +91,7 @@ public class CourseAiQuestionDraftController {
             @PathVariable UUID batchId,
             @PathVariable UUID sourceId
     ) {
-        return ApiResponse.success("AI generation source download URL created successfully", aiQuestionDraftService.sourceDownloadUrl(courseId, batchId, sourceId));
+        return ApiResponse.success("AI generation source download URL created successfully", aiQuestionSourceService.sourceDownloadUrl(courseId, batchId, sourceId));
     }
 
     @GetMapping("/{batchId}/items")

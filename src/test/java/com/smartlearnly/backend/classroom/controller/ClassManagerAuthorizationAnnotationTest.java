@@ -2,6 +2,8 @@ package com.smartlearnly.backend.classroom.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.smartlearnly.backend.classroom.admin.controller.AdminClassController;
+import com.smartlearnly.backend.classroom.analytics.controller.ClassAnalyticsController;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
@@ -14,14 +16,14 @@ class ClassManagerAuthorizationAnnotationTest {
 
     @Test
     void classManagementEndpointsShouldAllowAdminAndTmo() {
-        assertClassManagerAccess(ClassController.class, "listStatusOptions");
-        assertClassManagerAccess(ClassController.class, "generateMeetingUrl");
-        assertClassManagerAccess(ClassController.class, "listAdminClasses");
-        assertClassManagerAccess(ClassController.class, "getAdminClass");
-        assertClassManagerAccess(ClassController.class, "createClass");
-        assertClassManagerAccess(ClassController.class, "updateClass");
-        assertClassManagerAccess(ClassController.class, "cancelClass");
-        assertClassManagerAccess(ClassController.class, "deleteClass");
+        assertClassManagerAccess(AdminClassController.class, "listStatusOptions");
+        assertClassManagerAccess(AdminClassController.class, "generateMeetingUrl");
+        assertClassManagerAccess(AdminClassController.class, "listAdminClasses");
+        assertClassManagerAccess(AdminClassController.class, "getAdminClass");
+        assertClassManagerAccess(AdminClassController.class, "createClass");
+        assertClassManagerAccess(AdminClassController.class, "updateClass");
+        assertClassManagerAccess(AdminClassController.class, "cancelClass");
+        assertClassManagerAccess(AdminClassController.class, "deleteClass");
     }
 
     @Test

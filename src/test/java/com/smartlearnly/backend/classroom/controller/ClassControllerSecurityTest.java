@@ -2,6 +2,8 @@ package com.smartlearnly.backend.classroom.controller;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.smartlearnly.backend.classroom.admin.controller.AdminClassController;
+import com.smartlearnly.backend.classroom.trainer.controller.TrainerClassController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,12 +16,14 @@ import org.springframework.test.context.ActiveProfiles;
 class ClassControllerSecurityTest {
 
     @Autowired
-    private ClassController classController;
+    private AdminClassController adminClassController;
+    @Autowired
+    private TrainerClassController trainerClassController;
 
     @Test
     @WithMockUser(username = "trainee@smartlearnly.dev", roles = "TRAINEE")
     void listAdminClassesShouldRejectTrainee() {
-        assertThatThrownBy(() -> classController.listAdminClasses(
+        assertThatThrownBy(() -> adminClassController.listAdminClasses(
                 null,
                 null,
                 null,
@@ -32,7 +36,7 @@ class ClassControllerSecurityTest {
     @Test
     @WithMockUser(username = "admin@smartlearnly.dev", roles = "ADMIN")
     void listTrainerClassesShouldRejectAdmin() {
-        assertThatThrownBy(() -> classController.listMyAssignedClasses(
+        assertThatThrownBy(() -> trainerClassController.listMyAssignedClasses(
                 null,
                 null,
                 null,
@@ -44,7 +48,7 @@ class ClassControllerSecurityTest {
     @Test
     @WithMockUser(username = "trainer@smartlearnly.dev", roles = "TRAINER")
     void generateMeetingUrlShouldRejectTrainer() {
-        assertThatThrownBy(() -> classController.generateMeetingUrl())
+        assertThatThrownBy(() -> adminClassController.generateMeetingUrl())
                 .isInstanceOf(
                         AccessDeniedException.class);
     }

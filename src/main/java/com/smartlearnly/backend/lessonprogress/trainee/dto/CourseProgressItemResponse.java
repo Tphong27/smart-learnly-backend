@@ -1,0 +1,27 @@
+package com.smartlearnly.backend.lessonprogress.trainee.dto;
+
+import java.util.UUID;
+
+public record CourseProgressItemResponse(
+        UUID id,
+        UUID courseId,
+        UUID enrollmentId,
+
+        UUID classId,
+        UUID classEnrollmentId,
+        String className,
+
+        String title,
+        String categoryName,
+        String enrollmentStatus,
+        String courseStatus,
+        boolean accessAllowed,
+        String accessBlockedReason,
+        String thumbnailUrl,
+        int overallPercent,
+        ProgressMetricResponse lesson,
+        ProgressMetricResponse quiz,
+        ProgressMetricResponse flashcard,
+        ProgressMetricResponse assignment
+) {
+}

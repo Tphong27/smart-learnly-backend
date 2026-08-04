@@ -1,9 +1,9 @@
 package com.smartlearnly.backend.curriculum.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
-import com.smartlearnly.backend.course.dto.ReorderRequest;
+import com.smartlearnly.backend.curriculum.dto.ReorderRequest;
 import com.smartlearnly.backend.curriculum.service.TrainerLessonQuestionService;
-import com.smartlearnly.backend.test.dto.TestQuestionModel;
+import com.smartlearnly.backend.test.definition.dto.TestQuestionModel;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;

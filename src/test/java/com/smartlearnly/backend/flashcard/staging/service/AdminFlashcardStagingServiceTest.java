@@ -90,6 +90,8 @@ class AdminFlashcardStagingServiceTest {
     private FlashcardTranscriptTextExtractionService transcriptTextExtractionService;
 
     private AdminFlashcardStagingService service;
+    private FlashcardStagingGenerationService generationService;
+    private FlashcardCourseQuestionImportService courseQuestionImportService;
 
     @BeforeEach
     void setUp() {
@@ -98,13 +100,27 @@ class AdminFlashcardStagingServiceTest {
                 flashcardCardRepository,
                 stagingBatchRepository,
                 stagingCardRepository,
-                questionRepository,
-                questionAnswerRepository,
+                currentUserService
+        );
+        generationService = new FlashcardStagingGenerationService(
+                flashcardSetRepository,
+                flashcardCardRepository,
+                stagingBatchRepository,
+                stagingCardRepository,
                 currentUserService,
                 flashcardTextGenerationService,
                 flashcardDocumentGenerationService,
                 documentTextExtractionService,
                 transcriptTextExtractionService
+        );
+        courseQuestionImportService = new FlashcardCourseQuestionImportService(
+                flashcardSetRepository,
+                flashcardCardRepository,
+                stagingBatchRepository,
+                stagingCardRepository,
+                questionRepository,
+                questionAnswerRepository,
+                currentUserService
         );
     }
 
@@ -136,7 +152,7 @@ class AdminFlashcardStagingServiceTest {
             return cards;
         });
 
-        StagingBatchResponse response = service.importCourseQuestions(
+        StagingBatchResponse response = courseQuestionImportService.importCourseQuestions(
                 flashcardSet.getId(),
                 new ImportCourseQuestionsRequest(List.of(firstQuestion.getId(), secondQuestion.getId()))
         );
@@ -187,7 +203,7 @@ class AdminFlashcardStagingServiceTest {
             return cards;
         });
 
-        StagingBatchResponse response = service.importCourseQuestions(
+        StagingBatchResponse response = courseQuestionImportService.importCourseQuestions(
                 flashcardSet.getId(),
                 new ImportCourseQuestionsRequest(List.of(question.getId()))
         );
@@ -210,13 +226,12 @@ class AdminFlashcardStagingServiceTest {
         );
         QuestionAnswer answer = answer(question.getId(), "Only option", false, 0);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
         when(questionRepository.findAllById(List.of(question.getId()))).thenReturn(List.of(question));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(question.getId())))
                 .thenReturn(List.of(answer));
         when(stagingBatchRepository.save(any(FlashcardStagingBatch.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThatThrownBy(() -> service.importCourseQuestions(
+        assertThatThrownBy(() -> courseQuestionImportService.importCourseQuestions(
                 flashcardSet.getId(),
                 new ImportCourseQuestionsRequest(List.of(question.getId()))
         ))
@@ -250,7 +265,7 @@ class AdminFlashcardStagingServiceTest {
             return cards;
         });
 
-        StagingBatchResponse response = service.generateFromText(
+        StagingBatchResponse response = generationService.generateFromText(
                 flashcardSet.getId(),
                 new GenerateFromTextRequest(longSourceText(), 2, null, "medium", "AI")
         );
@@ -283,7 +298,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromText(
+        assertThatThrownBy(() -> generationService.generateFromText(
                 flashcardSet.getId(),
                 new GenerateFromTextRequest("   ", null, null, null, null)
         ))
@@ -300,7 +315,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromText(
+        assertThatThrownBy(() -> generationService.generateFromText(
                 flashcardSet.getId(),
                 new GenerateFromTextRequest("This source text is intentionally too short.", null, null, null, null)
         ))
@@ -317,7 +332,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromText(
+        assertThatThrownBy(() -> generationService.generateFromText(
                 flashcardSet.getId(),
                 new GenerateFromTextRequest(longSourceText(), 31, null, null, null)
         ))
@@ -336,7 +351,7 @@ class AdminFlashcardStagingServiceTest {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
         when(flashcardTextGenerationService.generate(any())).thenReturn(new GenerationResult("TEXT", List.of()));
 
-        assertThatThrownBy(() -> service.generateFromText(
+        assertThatThrownBy(() -> generationService.generateFromText(
                 flashcardSet.getId(),
                 new GenerateFromTextRequest(longSourceText(), 10, null, null, null)
         ))
@@ -367,7 +382,7 @@ class AdminFlashcardStagingServiceTest {
         });
         when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        StagingBatchResponse response = service.generateFromText(
+        StagingBatchResponse response = generationService.generateFromText(
                 flashcardSet.getId(),
                 new GenerateFromTextRequest(longSourceText(), 10, null, null, null)
         );
@@ -421,7 +436,7 @@ class AdminFlashcardStagingServiceTest {
             return cards;
         });
 
-        StagingBatchResponse response = service.generateFromFile(
+        StagingBatchResponse response = generationService.generateFromFile(
                 flashcardSet.getId(),
                 file,
                 5,
@@ -479,7 +494,7 @@ class AdminFlashcardStagingServiceTest {
         });
         when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        StagingBatchResponse response = service.generateFromFile(
+        StagingBatchResponse response = generationService.generateFromFile(
                 flashcardSet.getId(),
                 file,
                 null,
@@ -501,7 +516,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromFile(
+        assertThatThrownBy(() -> generationService.generateFromFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.txt", "text/plain", "content".getBytes()),
                 null,
@@ -512,7 +527,7 @@ class AdminFlashcardStagingServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
 
-        assertThatThrownBy(() -> service.generateFromFile(
+        assertThatThrownBy(() -> generationService.generateFromFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.pdf", "text/plain", "content".getBytes()),
                 null,
@@ -532,7 +547,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromFile(
+        assertThatThrownBy(() -> generationService.generateFromFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.pdf", "application/pdf", new byte[0]),
                 null,
@@ -563,7 +578,7 @@ class AdminFlashcardStagingServiceTest {
                 "Uploaded PDF does not contain enough readable text to create flashcards. Scanned PDF pages could not be read."
         ));
 
-        assertThatThrownBy(() -> service.generateFromFile(
+        assertThatThrownBy(() -> generationService.generateFromFile(
                 flashcardSet.getId(),
                 file,
                 null,
@@ -584,7 +599,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromFile(
+        assertThatThrownBy(() -> generationService.generateFromFile(
                 flashcardSet.getId(),
                 pdfFile(),
                 31,
@@ -624,7 +639,7 @@ class AdminFlashcardStagingServiceTest {
             return cards;
         });
 
-        StagingBatchResponse response = service.generateFromTranscript(
+        StagingBatchResponse response = generationService.generateFromTranscript(
                 flashcardSet.getId(),
                 new GenerateFromTranscriptRequest(
                         transcriptSourceText(),
@@ -653,7 +668,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromTranscript(
+        assertThatThrownBy(() -> generationService.generateFromTranscript(
                 flashcardSet.getId(),
                 new GenerateFromTranscriptRequest("   ", null, null, null, null, null)
         ))
@@ -675,7 +690,7 @@ class AdminFlashcardStagingServiceTest {
                 "Too short."
         ));
 
-        assertThatThrownBy(() -> service.generateFromTranscript(
+        assertThatThrownBy(() -> generationService.generateFromTranscript(
                 flashcardSet.getId(),
                 new GenerateFromTranscriptRequest(transcriptSourceText(), null, null, null, null, null)
         ))
@@ -691,7 +706,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromTranscript(
+        assertThatThrownBy(() -> generationService.generateFromTranscript(
                 flashcardSet.getId(),
                 new GenerateFromTranscriptRequest(transcriptSourceText(), null, 31, null, null, null)
         ))
@@ -723,7 +738,7 @@ class AdminFlashcardStagingServiceTest {
         });
         when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        StagingBatchResponse response = service.generateFromTranscriptFile(
+        StagingBatchResponse response = generationService.generateFromTranscriptFile(
                 flashcardSet.getId(),
                 file,
                 null,
@@ -758,7 +773,7 @@ class AdminFlashcardStagingServiceTest {
         });
         when(stagingCardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        StagingBatchResponse response = service.generateFromTranscriptFile(
+        StagingBatchResponse response = generationService.generateFromTranscriptFile(
                 flashcardSet.getId(),
                 file,
                 null,
@@ -777,7 +792,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromTranscriptFile(
+        assertThatThrownBy(() -> generationService.generateFromTranscriptFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.txt", "text/plain", transcriptSourceText().getBytes()),
                 null,
@@ -797,7 +812,7 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
 
-        assertThatThrownBy(() -> service.generateFromTranscriptFile(
+        assertThatThrownBy(() -> generationService.generateFromTranscriptFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.srt", "text/plain", new byte[0]),
                 null,
@@ -842,10 +857,9 @@ class AdminFlashcardStagingServiceTest {
         FlashcardSet flashcardSet = flashcardSet();
         Question question = question(UUID.randomUUID(), UUID.randomUUID(), "Wrong course");
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
         when(questionRepository.findAllById(List.of(question.getId()))).thenReturn(List.of(question));
 
-        assertThatThrownBy(() -> service.importCourseQuestions(
+        assertThatThrownBy(() -> courseQuestionImportService.importCourseQuestions(
                 flashcardSet.getId(),
                 new ImportCourseQuestionsRequest(List.of(question.getId()))
         ))
@@ -865,17 +879,16 @@ class AdminFlashcardStagingServiceTest {
                 "Already imported"
         );
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor());
         when(questionRepository.findAllById(List.of(question.getId()))).thenReturn(List.of(question));
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of(question.getId()));
 
-        assertThatThrownBy(() -> service.importCourseQuestions(
+        assertThatThrownBy(() -> courseQuestionImportService.importCourseQuestions(
                 flashcardSet.getId(),
                 new ImportCourseQuestionsRequest(List.of(question.getId()))
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.CONFLICT));
 
         verify(stagingBatchRepository, never()).save(any());
         verify(stagingCardRepository, never()).saveAll(anyList());
@@ -1381,7 +1394,7 @@ class AdminFlashcardStagingServiceTest {
         when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
                 .thenReturn(List.of(current));
 
-        var response = service.previewCourseQuestions(
+        var response = courseQuestionImportService.previewCourseQuestions(
                 flashcardSet.getId(),
                 new ImportCourseQuestionsRequest(List.of(duplicateQuestion.getId(), readyQuestion.getId()))
         );
@@ -1454,7 +1467,7 @@ class AdminFlashcardStagingServiceTest {
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(sameCourseQuestion.getId())))
                 .thenReturn(List.of(answer));
 
-        List<SourceQuestionResponse> response = service.listSourceQuestions(
+        List<SourceQuestionResponse> response = courseQuestionImportService.listSourceQuestions(
                 flashcardSet.getId(),
                 null,
                 null,
@@ -1484,7 +1497,7 @@ class AdminFlashcardStagingServiceTest {
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of(draftImportedQuestion.getId(), approvedImportedQuestion.getId()));
 
-        List<SourceQuestionResponse> response = service.listSourceQuestions(
+        List<SourceQuestionResponse> response = courseQuestionImportService.listSourceQuestions(
                 flashcardSet.getId(),
                 null,
                 null,
@@ -1503,7 +1516,7 @@ class AdminFlashcardStagingServiceTest {
         when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        List<SourceQuestionResponse> response = service.listSourceQuestions(
+        List<SourceQuestionResponse> response = courseQuestionImportService.listSourceQuestions(
                 flashcardSet.getId(),
                 null,
                 null,
@@ -1541,7 +1554,7 @@ class AdminFlashcardStagingServiceTest {
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of());
 
-        List<SourceQuestionResponse> response = service.listSourceQuestions(
+        List<SourceQuestionResponse> response = courseQuestionImportService.listSourceQuestions(
                 flashcardSet.getId(),
                 null,
                 null,
