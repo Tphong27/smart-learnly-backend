@@ -556,6 +556,7 @@ class TraineeProgressTest {
                                 "ACTIVE",
                                 FIXED_INSTANT,
                                 "PUBLISHED",
+                                null,
                                 true,
                                 null,
                                 null);
@@ -590,6 +591,7 @@ class TraineeProgressTest {
                                 "ACTIVE",
                                 FIXED_INSTANT,
                                 "PUBLISHED",
+                                null,
                                 true,
                                 null,
                                 enrolledClass);

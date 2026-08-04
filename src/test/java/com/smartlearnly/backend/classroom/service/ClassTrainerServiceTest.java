@@ -83,6 +83,7 @@ class ClassTrainerServiceTest {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
         when(classOfferingRepository.findTrainerAssignedClasses(
                 eq(TRAINER_ID),
+                isNull(),
                 eq("ongoing"),
                 eq("%Java\\%\\_Backend\\\\2026%"),
                 any(Pageable.class)))
@@ -91,6 +92,7 @@ class ClassTrainerServiceTest {
         PageResponse<ClassResponse> result = service.listMyAssignedClasses(
                 "  ONGOING  ",
                 "  Java%_Backend\\2026  ",
+                null,
                 2,
                 500);
 
@@ -122,6 +124,7 @@ class ClassTrainerServiceTest {
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
         verify(classOfferingRepository).findTrainerAssignedClasses(
                 eq(TRAINER_ID),
+                isNull(),
                 eq("ongoing"),
                 eq("%Java\\%\\_Backend\\\\2026%"),
                 pageableCaptor.capture());
@@ -140,10 +143,12 @@ class ClassTrainerServiceTest {
                 eq(TRAINER_ID),
                 isNull(),
                 isNull(),
+                isNull(),
                 eq(PageRequest.of(0, 20))))
                 .thenReturn(repositoryPage);
 
         PageResponse<ClassResponse> result = service.listMyAssignedClasses(
+                null,
                 null,
                 null,
                 0,
@@ -164,18 +169,21 @@ class ClassTrainerServiceTest {
                 eq(TRAINER_ID),
                 isNull(),
                 isNull(),
+                isNull(),
                 eq(PageRequest.of(0, 10))))
                 .thenReturn(repositoryPage);
 
         PageResponse<ClassResponse> result = service.listMyAssignedClasses(
                 "   ",
                 "   ",
+                null,
                 0,
                 10);
 
         assertThat(result.items()).isEmpty();
         verify(classOfferingRepository).findTrainerAssignedClasses(
                 TRAINER_ID,
+                null,
                 null,
                 null,
                 PageRequest.of(0, 10));
@@ -190,6 +198,7 @@ class ClassTrainerServiceTest {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
         when(classOfferingRepository.findTrainerAssignedClasses(
                 TRAINER_ID,
+                null,
                 "upcoming",
                 "%Spring Boot%",
                 PageRequest.of(0, 20)))
@@ -198,6 +207,7 @@ class ClassTrainerServiceTest {
         PageResponse<ClassResponse> result = service.listMyAssignedClasses(
                 "uPcOmInG",
                 "Spring Boot",
+                null,
                 0,
                 20);
 
@@ -211,6 +221,7 @@ class ClassTrainerServiceTest {
         assertThatThrownBy(() -> service.listMyAssignedClasses(
                 "archived",
                 "Java Backend",
+                null,
                 0,
                 20))
                 .isInstanceOfSatisfying(BusinessException.class, error -> {
@@ -220,7 +231,7 @@ class ClassTrainerServiceTest {
                 });
 
         verify(classOfferingRepository, never()).findTrainerAssignedClasses(
-                any(), any(), any(), any());
+                any(), any(), any(), any(), any());
     }
 
     @Test
@@ -233,6 +244,7 @@ class ClassTrainerServiceTest {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
         when(classOfferingRepository.findTrainerAssignedClasses(
                 TRAINER_ID,
+                null,
                 "completed",
                 null,
                 PageRequest.of(0, 20)))
@@ -240,6 +252,7 @@ class ClassTrainerServiceTest {
 
         PageResponse<ClassResponse> result = service.listMyAssignedClasses(
                 "COMPLETED",
+                null,
                 null,
                 0,
                 20);
