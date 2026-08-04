@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -16,6 +17,13 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 DEFAULT_SPREADSHEET_ID = "1VX5JxJClV1dsZIEElCP5l73Dw-_YIleTs3KH_iLYo4o"
 TEMPLATE_SHEET_TITLE = "extractVideoId"
 MAX_WRITE_RETRIES = 7
+TEST_CASE_HEADER_ROW = 7
+TEST_CASE_START_COLUMN = 5
+TEMPLATE_END_COLUMN = 19
+MISSING = object()
+
+ResultKey = tuple[str, str]
+ExecutionResults = dict[ResultKey, "ExecutedCase"]
 
 
 @dataclass(frozen=True)
@@ -45,7 +53,122 @@ def repository_root() -> Path:
 
 def load_manifest() -> dict[str, Any]:
     path = Path(__file__).with_name("khiem-complex-method-cases.json")
-    return json.loads(path.read_text(encoding="utf-8"))
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    validate_manifest(manifest)
+    return manifest
+
+
+def validate_manifest(manifest: dict[str, Any]) -> None:
+    methods = manifest.get("methods")
+    if not isinstance(methods, list) or not methods:
+        raise ValueError("Manifest must contain a non-empty 'methods' list.")
+
+    required_method_fields = (
+        "moduleName",
+        "methodName",
+        "functionCode",
+        "sheetName",
+        "testClass",
+        "description",
+        "cases",
+    )
+    sheet_names: set[str] = set()
+    function_codes: set[str] = set()
+    test_names_by_class: set[ResultKey] = set()
+
+    for method_index, method in enumerate(methods, start=1):
+        location = f"methods[{method_index - 1}]"
+        for field in required_method_fields:
+            if field not in method:
+                raise ValueError(f"{location} is missing '{field}'.")
+
+        sheet_name = str(method["sheetName"]).strip()
+        if not sheet_name:
+            raise ValueError(f"{location}.sheetName must not be blank.")
+        if len(sheet_name) > 100 or re.search(r"[:\\/?*\[\]]", sheet_name):
+            raise ValueError(
+                f"{location}.sheetName is not a valid Google Sheets title: "
+                f"{sheet_name!r}"
+            )
+        if sheet_name in sheet_names:
+            raise ValueError(
+                f"Each method needs a different sheetName; duplicate: "
+                f"{sheet_name!r}"
+            )
+        sheet_names.add(sheet_name)
+
+        function_code = str(method["functionCode"]).strip()
+        if function_code in function_codes:
+            raise ValueError(
+                f"Each method needs a different functionCode; duplicate: "
+                f"{function_code!r}"
+            )
+        function_codes.add(function_code)
+
+        cases = method["cases"]
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(f"{location}.cases must be a non-empty list.")
+
+        canonical_ids: list[str] = []
+        for case_index, case in enumerate(cases, start=1):
+            case_location = f"{location}.cases[{case_index - 1}]"
+            for field in ("javaTestName", "type"):
+                if field not in case:
+                    raise ValueError(
+                        f"{case_location} is missing '{field}'."
+                    )
+
+            case_type = str(case["type"]).upper()
+            if case_type not in {"N", "A", "B"}:
+                raise ValueError(
+                    f"{case_location}.type must be N, A, or B."
+                )
+
+            result_key = (
+                str(method["testClass"]),
+                normalize_test_name(str(case["javaTestName"])),
+            )
+            if result_key in test_names_by_class:
+                raise ValueError(
+                    "javaTestName must be unique inside a testClass: "
+                    f"{result_key[0]}.{result_key[1]}"
+                )
+            test_names_by_class.add(result_key)
+
+            preconditions = case.get("preconditions", MISSING)
+            if preconditions is not MISSING and not isinstance(
+                preconditions,
+                dict,
+            ):
+                raise ValueError(
+                    f"{case_location}.preconditions must be an object."
+                )
+
+            confirm = case.get("confirm", MISSING)
+            if confirm is not MISSING and not isinstance(confirm, dict):
+                raise ValueError(
+                    f"{case_location}.confirm must be an object."
+                )
+
+            declared_id = str(case.get("id", "")).strip().upper()
+            if re.fullmatch(r"UTCID\d+", declared_id):
+                canonical_ids.append(declared_id)
+
+        if canonical_ids and len(canonical_ids) != len(cases):
+            raise ValueError(
+                f"{location}: either every case or no case must use the "
+                "short UTCID01-style id."
+            )
+        if canonical_ids:
+            expected_ids = [
+                f"UTCID{index:02d}"
+                for index in range(1, len(cases) + 1)
+            ]
+            if canonical_ids != expected_ids:
+                raise ValueError(
+                    f"{location}: case ids must restart at UTCID01 and be "
+                    f"sequential; expected {expected_ids}."
+                )
 
 
 def surefire_report_path(test_class: str) -> Path:
@@ -74,8 +197,8 @@ def first_failure_line(node: ET.Element) -> str:
 
 def read_surefire_results(
     manifest: dict[str, Any],
-) -> dict[str, ExecutedCase]:
-    results: dict[str, ExecutedCase] = {}
+) -> ExecutionResults:
+    results: ExecutionResults = {}
     test_classes = {
         method["testClass"]
         for method in manifest["methods"]
@@ -107,22 +230,54 @@ def read_surefire_results(
                     else ExecutedCase("P", "Passed as expected", duration)
                 )
 
-            results[test_name] = executed
+            results[(test_class, test_name)] = executed
 
     expected_names = {
-        case["javaTestName"]
+        (
+            method["testClass"],
+            normalize_test_name(case["javaTestName"]),
+        )
         for method in manifest["methods"]
         for case in method["cases"]
     }
     missing = expected_names.difference(results)
-    for test_name in missing:
-        results[test_name] = ExecutedCase(
+    for result_key in missing:
+        results[result_key] = ExecutedCase(
             "U",
             "Test case was not present in the fresh Surefire XML report",
             0,
         )
 
     return results
+
+
+def result_key(
+    method: dict[str, Any],
+    case: dict[str, Any],
+) -> ResultKey:
+    return (
+        method["testClass"],
+        normalize_test_name(case["javaTestName"]),
+    )
+
+
+def case_result(
+    method: dict[str, Any],
+    case: dict[str, Any],
+    results: ExecutionResults,
+) -> ExecutedCase:
+    return results[result_key(method, case)]
+
+
+def expected_results(
+    manifest: dict[str, Any],
+    results: ExecutionResults,
+) -> list[ExecutedCase]:
+    return [
+        case_result(method, case, results)
+        for method in manifest["methods"]
+        for case in method["cases"]
+    ]
 
 
 def sheets_service():
@@ -206,6 +361,18 @@ def quote_sheet(title: str) -> str:
     return "'" + title.replace("'", "''") + "'"
 
 
+def a1_column(column: int) -> str:
+    if column < 1:
+        raise ValueError("A1 column number must be positive.")
+
+    letters: list[str] = []
+    current = column
+    while current:
+        current, remainder = divmod(current - 1, 26)
+        letters.append(chr(ord("A") + remainder))
+    return "".join(reversed(letters))
+
+
 def read_values(
     service,
     spreadsheet_id: str,
@@ -233,7 +400,7 @@ def get_cell(rows: list[list[Any]], row: int, column: int) -> str:
 
 def case_counts(
     method: dict[str, Any],
-    results: dict[str, ExecutedCase],
+    results: ExecutionResults,
 ) -> dict[str, int]:
     counts = {
         "P": 0,
@@ -244,69 +411,153 @@ def case_counts(
         "B": 0,
     }
     for case in method["cases"]:
-        counts[results[case["javaTestName"]].status] += 1
-        counts[case["type"]] += 1
+        counts[case_result(method, case, results).status] += 1
+        counts[str(case["type"]).upper()] += 1
     return counts
 
 
-def grouped_case_values(
-    method: dict[str, Any],
-    value_getter,
+def report_value(value: Any) -> str:
+    if value is None:
+        return "null"
+    if value is True:
+        return "TRUE"
+    if value is False:
+        return "FALSE"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(value, str) and value == "":
+        return '""'
+    return str(value)
+
+
+def group_indexed_values(
+    indexed_values: list[tuple[int, Any]],
 ) -> list[tuple[str, list[int]]]:
     grouped: dict[str, list[int]] = {}
-    for case_index, case in enumerate(method["cases"]):
-        value = str(value_getter(case)).strip()
-        grouped.setdefault(value, []).append(case_index)
+    for case_index, value in indexed_values:
+        grouped.setdefault(report_value(value), []).append(case_index)
     return list(grouped.items())
+
+
+def case_preconditions(case: dict[str, Any]) -> dict[str, Any]:
+    detailed = case.get("preconditions", MISSING)
+    if detailed is not MISSING:
+        return detailed
+
+    if "input" in case:
+        return {"Input / mocked state": case["input"]}
+    return {}
+
+
+def precondition_groups(
+    method: dict[str, Any],
+) -> list[tuple[str, list[tuple[str, list[int]]]]]:
+    field_names: list[str] = []
+    values_by_field: dict[str, list[tuple[int, Any]]] = {}
+
+    for case_index, case in enumerate(method["cases"]):
+        for field_name, value in case_preconditions(case).items():
+            normalized_name = str(field_name).strip()
+            if not normalized_name:
+                raise ValueError(
+                    f"{method['functionCode']} contains a blank "
+                    "precondition name."
+                )
+            if normalized_name not in values_by_field:
+                field_names.append(normalized_name)
+                values_by_field[normalized_name] = []
+            values_by_field[normalized_name].append((case_index, value))
+
+    return [
+        (field_name, group_indexed_values(values_by_field[field_name]))
+        for field_name in field_names
+    ]
+
+
+def case_confirm(case: dict[str, Any]) -> dict[str, Any]:
+    detailed = case.get("confirm", MISSING)
+    if detailed is not MISSING:
+        return detailed
+
+    legacy: dict[str, Any] = {}
+    for key in ("return", "exception", "logMessage"):
+        if key in case:
+            legacy[key] = case[key]
+    if not legacy and "expected" in case:
+        legacy["return"] = case["expected"]
+    return legacy
+
+
+def confirm_groups(
+    method: dict[str, Any],
+) -> list[tuple[str, list[tuple[str, list[int]]]]]:
+    sections = (
+        ("return", "Return"),
+        ("exception", "Exception"),
+        ("logMessage", "Log message"),
+    )
+    result: list[tuple[str, list[tuple[str, list[int]]]]] = []
+
+    for key, label in sections:
+        indexed_values: list[tuple[int, Any]] = []
+        for case_index, case in enumerate(method["cases"]):
+            values = case_confirm(case)
+            if key in values:
+                indexed_values.append((case_index, values[key]))
+        result.append((label, group_indexed_values(indexed_values)))
+
+    return result
 
 
 def detail_sheet(
     manifest: dict[str, Any],
     method: dict[str, Any],
-    results: dict[str, ExecutedCase],
+    results: ExecutionResults,
 ) -> DetailSheet:
     case_count = len(method["cases"])
-    case_start_column = 5
+    case_start_column = TEST_CASE_START_COLUMN
     case_end_column = case_start_column + case_count - 1
-    column_count = max(18, case_end_column)
-
-    scenario_groups = grouped_case_values(
-        method,
-        lambda case: case["scenario"],
-    )
-    input_groups = grouped_case_values(
-        method,
-        lambda case: case["input"],
-    )
-    expected_groups = grouped_case_values(
-        method,
-        lambda case: case["expected"],
-    )
-    actual_groups = grouped_case_values(
-        method,
-        lambda case: results[case["javaTestName"]].actual,
-    )
+    column_count = max(TEMPLATE_END_COLUMN, case_end_column)
+    conditions = precondition_groups(method)
+    confirmations = confirm_groups(method)
 
     condition_start_row = 8
-    precondition_value_row = 9
-    scenario_label_row = 10
-    scenario_start_row = scenario_label_row + 1
-    scenario_end_row = scenario_start_row + len(scenario_groups) - 1
-    input_label_row = scenario_end_row + 1
-    input_start_row = input_label_row + 1
-    input_end_row = input_start_row + len(input_groups) - 1
-    condition_end_row = input_end_row
+    current_row = condition_start_row + 3
+    condition_rows: list[tuple[int, str, list[tuple[int, str, list[int]]]]] = []
+    for field_name, groups in conditions:
+        label_row = current_row
+        current_row += 1
+        value_rows: list[tuple[int, str, list[int]]] = []
+        if groups:
+            for value, case_indexes in groups:
+                value_rows.append((current_row, value, case_indexes))
+                current_row += 1
+        else:
+            current_row += 1
+        condition_rows.append((label_row, field_name, value_rows))
+
+    if not condition_rows:
+        current_row += 1
+    condition_end_row = current_row - 1
 
     confirm_start_row = condition_end_row + 1
-    expected_start_row = confirm_start_row + 1
-    expected_end_row = expected_start_row + len(expected_groups) - 1
-    actual_label_row = expected_end_row + 1
-    actual_start_row = actual_label_row + 1
-    actual_end_row = actual_start_row + len(actual_groups) - 1
-    confirm_end_row = actual_end_row
+    current_row = confirm_start_row
+    confirm_rows: list[tuple[int, str, list[tuple[int, str, list[int]]]]] = []
+    for label, groups in confirmations:
+        label_row = current_row
+        current_row += 1
+        value_rows: list[tuple[int, str, list[int]]] = []
+        if groups:
+            for value, case_indexes in groups:
+                value_rows.append((current_row, value, case_indexes))
+                current_row += 1
+        else:
+            current_row += 1
+        confirm_rows.append((label_row, label, value_rows))
 
+    confirm_end_row = current_row - 1
     result_start_row = confirm_end_row + 1
-    result_end_row = result_start_row + 4
+    result_end_row = result_start_row + 3
     matrix: list[list[Any]] = [
         [""] * column_count for _ in range(result_end_row)
     ]
@@ -314,12 +565,10 @@ def detail_sheet(
     def put(row: int, column: int, value: Any) -> None:
         matrix[row - 1][column - 1] = value
 
-    def put_group_rows(
-        start_row: int,
-        groups: list[tuple[str, list[int]]],
+    def put_value_rows(
+        value_rows: list[tuple[int, str, list[int]]],
     ) -> None:
-        for group_index, (value, case_indexes) in enumerate(groups):
-            row = start_row + group_index
+        for row, value, case_indexes in value_rows:
             put(row, 4, value)
             for case_index in case_indexes:
                 put(row, case_start_column + case_index, "O")
@@ -354,24 +603,14 @@ def detail_sheet(
 
     put(condition_start_row, 1, "Condition")
     put(condition_start_row, 2, "Precondition")
-    put(precondition_value_row, 4, method["preCondition"])
-    for case_index in range(case_count):
-        put(
-            precondition_value_row,
-            case_start_column + case_index,
-            "O",
-        )
-
-    put(scenario_label_row, 2, "Scenario")
-    put_group_rows(scenario_start_row, scenario_groups)
-    put(input_label_row, 2, "Input / mocked state")
-    put_group_rows(input_start_row, input_groups)
+    for label_row, field_name, value_rows in condition_rows:
+        put(label_row, 2, field_name)
+        put_value_rows(value_rows)
 
     put(confirm_start_row, 1, "Confirm")
-    put(confirm_start_row, 2, "Expected result")
-    put_group_rows(expected_start_row, expected_groups)
-    put(actual_label_row, 2, "Actual result")
-    put_group_rows(actual_start_row, actual_groups)
+    for label_row, label, value_rows in confirm_rows:
+        put(label_row, 2, label)
+        put_value_rows(value_rows)
 
     put(result_start_row, 1, "Result")
     put(
@@ -381,22 +620,31 @@ def detail_sheet(
     )
     put(result_start_row + 1, 2, "Passed/Failed")
     put(result_start_row + 2, 2, "Executed Date")
-    put(result_start_row + 3, 2, "Duration (seconds)")
-    put(result_start_row + 4, 2, "Defect ID")
+    put(result_start_row + 3, 2, "Defect ID")
 
     for case_index, case in enumerate(method["cases"]):
         column = case_start_column + case_index
-        executed = results[case["javaTestName"]]
-        put(7, column, f"UTCID{case_index + 1:02d}")
-        put(result_start_row, column, case["type"])
-        put(result_start_row + 1, column, executed.status)
-        put(result_start_row + 2, column, executed_date)
+        executed = case_result(method, case, results)
         put(
-            result_start_row + 3,
+            TEST_CASE_HEADER_ROW,
             column,
-            round(executed.duration_seconds, 3),
+            f"UTCID{case_index + 1:02d}",
         )
-        put(result_start_row + 4, column, "")
+        put(result_start_row, column, str(case["type"]).upper())
+        put(result_start_row + 1, column, executed.status)
+        put(
+            result_start_row + 2,
+            column,
+            executed_date if executed.status in {"P", "F"} else "",
+        )
+        put(result_start_row + 3, column, case.get("defectId", ""))
+
+    label_rows = tuple(
+        [condition_start_row]
+        + [row for row, _, _ in condition_rows]
+        + [row for row, _, _ in confirm_rows]
+        + list(range(result_start_row, result_end_row + 1))
+    )
 
     return DetailSheet(
         matrix=matrix,
@@ -408,18 +656,7 @@ def detail_sheet(
         result_end_row=result_end_row,
         case_start_column=case_start_column,
         case_end_column=case_end_column,
-        label_rows=(
-            condition_start_row,
-            scenario_label_row,
-            input_label_row,
-            confirm_start_row,
-            actual_label_row,
-            result_start_row,
-            result_start_row + 1,
-            result_start_row + 2,
-            result_start_row + 3,
-            result_start_row + 4,
-        ),
+        label_rows=label_rows,
     )
 
 
@@ -451,6 +688,8 @@ def method_sheet_format_requests(
         "color": black,
     }
     table_end_column = max(19, detail.case_end_column)
+    reset_end_column = max(26, table_end_column)
+    reset_end_row = max(100, detail.result_end_row)
 
     requests: list[dict[str, Any]] = [
         {
@@ -458,9 +697,9 @@ def method_sheet_format_requests(
                 "range": grid_range(
                     sheet_id,
                     7,
-                    100,
+                    reset_end_row,
                     1,
-                    26,
+                    reset_end_column,
                 )
             }
         },
@@ -504,7 +743,7 @@ def method_sheet_format_requests(
                     7,
                     7,
                     1,
-                    19,
+                    table_end_column,
                 ),
                 "cell": {
                     "userEnteredFormat": {
@@ -826,7 +1065,10 @@ def method_list_value_updates(
             method["methodName"],
             method["sheetName"],
             method["description"],
-            method["preCondition"],
+            method.get(
+                "preCondition",
+                "Input variables and mocked states are defined per UTCID.",
+            ),
         ]
         updates.append({
             "range": (
@@ -847,7 +1089,7 @@ def statics_value_updates(
     service,
     spreadsheet_id: str,
     manifest: dict[str, Any],
-    results: dict[str, ExecutedCase],
+    results: ExecutionResults,
 ) -> list[dict[str, Any]]:
     metadata = spreadsheet_metadata(service, spreadsheet_id)
     statics_id = sheet_map(metadata)["statics"]
@@ -1006,7 +1248,7 @@ def synchronize_in_batches(
     service,
     spreadsheet_id: str,
     manifest: dict[str, Any],
-    results: dict[str, ExecutedCase],
+    results: ExecutionResults,
 ) -> None:
     sheets = ensure_all_method_sheets(
         service,
@@ -1044,8 +1286,11 @@ def synchronize_in_batches(
     for method in manifest["methods"]:
         title = method["sheetName"]
         detail = detail_sheet(manifest, method, results)
+        clear_end_column = a1_column(max(26, detail.case_end_column))
+        clear_end_row = max(200, detail.result_end_row)
         clear_ranges.append(
-            f"{quote_sheet(title)}!A1:Z100"
+            f"{quote_sheet(title)}!A1:"
+            f"{clear_end_column}{clear_end_row}"
         )
         value_updates.append({
             "range": f"{quote_sheet(title)}!A1",
@@ -1102,9 +1347,10 @@ def main() -> int:
         results,
     )
 
-    passed = sum(case.status == "P" for case in results.values())
-    failed = sum(case.status == "F" for case in results.values())
-    untested = sum(case.status == "U" for case in results.values())
+    report_results = expected_results(manifest, results)
+    passed = sum(case.status == "P" for case in report_results)
+    failed = sum(case.status == "F" for case in report_results)
+    untested = sum(case.status == "U" for case in report_results)
     print(
         "Report 5.1 synchronized: "
         f"passed={passed}, failed={failed}, untested={untested}"
