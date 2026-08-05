@@ -11,6 +11,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.payment.sepay.dto.SePayWebhookPayload;
 import com.smartlearnly.backend.payment.sepay.repository.SePayWebhookEventRepository;
+import com.smartlearnly.backend.payment.sepay.webhook.SePayWebhookPayloadParser;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,15 +29,18 @@ class SePayWebhookServiceTest {
     private SePayWebhookEventRepository webhookEventRepository;
     @Mock
     private SePayPaymentMatchingService paymentMatchingService;
+    private SePayWebhookPayloadParser payloadParser;
 
     private SePayWebhookService service;
 
     @BeforeEach
     void setUp() {
+        payloadParser = new SePayWebhookPayloadParser();
         service = new SePayWebhookService(
                 signatureVerifier,
                 webhookEventRepository,
-                paymentMatchingService
+                paymentMatchingService,
+                payloadParser
         );
     }
 

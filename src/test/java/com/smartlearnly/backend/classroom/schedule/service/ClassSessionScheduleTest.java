@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.entity.ClassSession;
 import com.smartlearnly.backend.classroom.repository.ClassSessionRepository;
+import com.smartlearnly.backend.classroom.schedule.validation.ScheduleDescriptionParser;
+import com.smartlearnly.backend.classroom.schedule.validation.ScheduleValidator;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.time.LocalDate;
@@ -97,9 +99,11 @@ class ClassSessionScheduleTest {
 
         @BeforeEach
         void setUp() {
+                ObjectMapper objectMapper = new ObjectMapper();
                 service = new ClassSessionScheduleService(
-                                classSessionRepository,
-                                new ObjectMapper());
+                                new ScheduleDescriptionParser(objectMapper),
+                                new ScheduleValidator(),
+                                new SessionSyncHandler(classSessionRepository));
         }
 
         // synchronizeFutureSessions(): UTCID restarts from UTCID01.

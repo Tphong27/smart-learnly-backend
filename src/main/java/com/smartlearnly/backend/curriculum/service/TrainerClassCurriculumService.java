@@ -6,6 +6,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.curriculum.dto.ClassCurriculumEditorResponse;
 import com.smartlearnly.backend.curriculum.dto.LessonRequest;
 import com.smartlearnly.backend.curriculum.dto.LessonResourceRequest;
 import com.smartlearnly.backend.curriculum.dto.LessonResourceResponse;
@@ -13,7 +14,6 @@ import com.smartlearnly.backend.curriculum.dto.LessonResponse;
 import com.smartlearnly.backend.curriculum.dto.ReorderRequest;
 import com.smartlearnly.backend.curriculum.dto.SectionRequest;
 import com.smartlearnly.backend.curriculum.dto.SectionResponse;
-import com.smartlearnly.backend.curriculum.dto.ClassCurriculumEditorResponse;
 import com.smartlearnly.backend.curriculum.entity.ClassCurriculumBinding;
 import com.smartlearnly.backend.curriculum.entity.CurriculumCustomizationState;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
@@ -26,6 +26,10 @@ import com.smartlearnly.backend.curriculum.repository.ClassCurriculumBindingRepo
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.curriculum.util.CurriculumParseService;
+import com.smartlearnly.backend.curriculum.util.CurriculumReorderValidator;
+import com.smartlearnly.backend.curriculum.util.CurriculumRequestNormalizer;
+import com.smartlearnly.backend.curriculum.util.LessonResourceBuilder;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
@@ -33,10 +37,8 @@ import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.videoai.service.VideoSummaryService;
 import java.time.Instant;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -103,7 +105,7 @@ public class TrainerClassCurriculumService {
         CurriculumVersion draft = requireDraft(classId);
         CurriculumSection section = new CurriculumSection();
         section.setCurriculumVersion(draft);
-        section.setTitle(normalizeRequired(request.title(), "Section title is required"));
+        section.setTitle(CurriculumRequestNormalizer.normalizeRequired(request.title(), "Section title is required"));
         section.setSortOrder(request.sortOrder() == null
                 ? sectionRepository.findMaxSortOrderByCurriculumVersionId(draft.getId()) + 1
                 : request.sortOrder());
@@ -114,7 +116,7 @@ public class TrainerClassCurriculumService {
     public SectionResponse updateSection(UUID classId, UUID sectionId, SectionRequest request) {
         CurriculumVersion draft = requireDraft(classId);
         CurriculumSection section = requireDraftSection(sectionId, draft.getId());
-        section.setTitle(normalizeRequired(request.title(), "Section title is required"));
+        section.setTitle(CurriculumRequestNormalizer.normalizeRequired(request.title(), "Section title is required"));
         if (request.sortOrder() != null) {
             section.setSortOrder(request.sortOrder());
         }
@@ -134,7 +136,7 @@ public class TrainerClassCurriculumService {
         List<CurriculumSection> sections = sectionRepository.findByCurriculumVersionIdOrderBySortOrderAscCreatedAtAsc(draft.getId());
         Map<UUID, CurriculumSection> sectionsById = sections.stream()
                 .collect(LinkedHashMap::new, (map, section) -> map.put(section.getId(), section), LinkedHashMap::putAll);
-        assertReorderMatchesAllItems(request.ids(), sectionsById.keySet(), "Section");
+        CurriculumReorderValidator.assertMatchesAllItems(request.ids(), sectionsById.keySet(), "Section");
 
         int sortOrder = 0;
         for (UUID requestedId : request.ids()) {
@@ -186,7 +188,7 @@ public class TrainerClassCurriculumService {
         List<CurriculumLesson> lessons = lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(sectionId);
         Map<UUID, CurriculumLesson> lessonsById = lessons.stream()
                 .collect(LinkedHashMap::new, (map, lesson) -> map.put(lesson.getId(), lesson), LinkedHashMap::putAll);
-        assertReorderMatchesAllItems(request.ids(), lessonsById.keySet(), "Lesson");
+        CurriculumReorderValidator.assertMatchesAllItems(request.ids(), lessonsById.keySet(), "Lesson");
 
         int sortOrder = 0;
         for (UUID requestedId : request.ids()) {
@@ -206,7 +208,7 @@ public class TrainerClassCurriculumService {
         if (lesson.getResources().size() >= MAX_RESOURCES_PER_LESSON) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Lesson resources must not exceed 10 files");
         }
-        CurriculumLessonResource resource = toLessonResource(request, nextResourceSortOrder(lesson));
+        CurriculumLessonResource resource = LessonResourceBuilder.create(request, LessonResourceBuilder.nextSortOrder(lesson.getResources()));
         lesson.addResource(resource);
         CurriculumLesson saved = lessonRepository.save(lesson);
         return saved.getResources().stream()
@@ -226,7 +228,7 @@ public class TrainerClassCurriculumService {
         }
         lesson.getResources().clear();
         IntStream.range(0, safeRequests.size())
-                .mapToObj(index -> toLessonResource(safeRequests.get(index), index))
+                .mapToObj(index -> LessonResourceBuilder.create(safeRequests.get(index), index))
                 .forEach(lesson::addResource);
         CurriculumLesson saved = lessonRepository.save(lesson);
         return saved.getResources().stream()
@@ -252,7 +254,7 @@ public class TrainerClassCurriculumService {
         CurriculumLesson lesson = requireDraftLesson(lessonId, draft.getId());
         Map<UUID, CurriculumLessonResource> resourcesById = lesson.getResources().stream()
                 .collect(LinkedHashMap::new, (map, resource) -> map.put(resource.getId(), resource), LinkedHashMap::putAll);
-        assertReorderMatchesAllItems(request.ids(), resourcesById.keySet(), "Resource");
+        CurriculumReorderValidator.assertMatchesAllItems(request.ids(), resourcesById.keySet(), "Resource");
 
         int sortOrder = 0;
         for (UUID requestedId : request.ids()) {
@@ -272,22 +274,12 @@ public class TrainerClassCurriculumService {
         return mapper.toLessonResponse(lesson);
     }
 
-    /**
-     * Verify the class is owned by the current trainer (or bypassed by admin) and that
-     * the lesson belongs to the class DRAFT curriculum. Use this for mutating operations
-     * inside a trainer's class curriculum editor.
-     */
     @Transactional(readOnly = true)
     public CurriculumLesson requireOwnedClassLessonForWrite(UUID classId, UUID lessonId) {
         CurriculumVersion draft = requireDraft(classId);
         return requireDraftLesson(lessonId, draft.getId());
     }
 
-    /**
-     * Verify the class is owned by the current trainer (or bypassed by admin) and that
-     * the lesson belongs to either the class DRAFT or the class PUBLISHED curriculum
-     * (whichever is active). Use this for read-only lookups.
-     */
     @Transactional(readOnly = true)
     public CurriculumLesson requireOwnedClassLessonForRead(UUID classId, UUID lessonId) {
         UserAccount trainer = currentUserService.requireAuthenticatedUser();
@@ -319,8 +311,6 @@ public class TrainerClassCurriculumService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class curriculum draft not found"));
         assertDraftVersionForClass(draft, classOffering.getCourseId(), classId);
 
-        // Archive bản PUBLISHED trước đó (nếu có) để không đụng unique constraint
-        // uq_curriculum_versions_published_class (chỉ cho phép 1 PUBLISHED per class_id).
         Instant now = Instant.now();
         if (binding.getPublishedVersionId() != null
                 && !binding.getPublishedVersionId().equals(draft.getId())) {
@@ -330,7 +320,6 @@ public class TrainerClassCurriculumService {
                         previouslyPublished.setArchivedAt(now);
                         curriculumVersionRepository.save(previouslyPublished);
                     });
-            // flush ngay để unique index thấy bản cũ đã rời PUBLISHED trước khi promote draft.
             curriculumVersionRepository.flush();
         }
 
@@ -345,6 +334,8 @@ public class TrainerClassCurriculumService {
 
         return toEditorResponse(classId, classOffering.getCourseId(), savedBinding, published, CurriculumResolutionService.SOURCE_CLASS_PUBLISHED);
     }
+
+    // ========== Private Helper Methods ==========
 
     private CurriculumVersion requireDraft(UUID classId) {
         UserAccount trainer = currentUserService.requireAuthenticatedUser();
@@ -436,138 +427,36 @@ public class TrainerClassCurriculumService {
     }
 
     private void applyLessonRequest(CurriculumLesson lesson, LessonRequest request, boolean create) {
-        lesson.setTitle(normalizeRequired(request.title(), "Lesson title is required"));
+        lesson.setTitle(CurriculumRequestNormalizer.normalizeRequired(request.title(), "Lesson title is required"));
         String currentVideoUrl = lesson.getVideoUrl();
-        lesson.setType(parseLessonType(resolveLessonType(request), create ? LessonType.RICH_TEXT : lesson.getType()));
+        LessonType newType = CurriculumParseService.parseLessonType(request,
+                create ? LessonType.RICH_TEXT : lesson.getType());
+        lesson.setType(newType);
         lesson.setVideoUrl(videoSummaryService.normalizeLessonVideoUrl(
                 currentVideoUrl,
                 request.videoUrl(),
-                lesson.getType() == LessonType.VIDEO
+                newType == LessonType.VIDEO
         ));
-        String content = normalizeNullable(request.content());
-        if (lesson.getType() == LessonType.QUIZ) {
+        String content = CurriculumRequestNormalizer.normalizeNullable(request.content());
+        if (newType == LessonType.QUIZ) {
             quizContentValidator.validate(content);
         }
         lesson.setContent(content);
-        lesson.setAttachmentUrl(normalizeNullable(request.attachmentUrl()));
+        lesson.setAttachmentUrl(CurriculumRequestNormalizer.normalizeNullable(request.attachmentUrl()));
         lesson.setDurationSeconds(request.durationSeconds());
         if (create || request.isPreview() != null) {
             lesson.setPreview(Boolean.TRUE.equals(request.isPreview()));
         }
-        lesson.setStatus(parseLessonStatus(request.status(), create ? LessonStatus.DRAFT : lesson.getStatus()));
+        lesson.setStatus(CurriculumParseService.parseLessonStatus(request.status(),
+                create ? LessonStatus.DRAFT : lesson.getStatus()));
         if (request.resources() != null) {
             if (request.resources().size() > MAX_RESOURCES_PER_LESSON) {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST, "Lesson resources must not exceed 10 files");
             }
             lesson.getResources().clear();
             IntStream.range(0, request.resources().size())
-                    .mapToObj(index -> toLessonResource(request.resources().get(index), index))
+                    .mapToObj(index -> LessonResourceBuilder.create(request.resources().get(index), index))
                     .forEach(lesson::addResource);
         }
-    }
-
-    private LessonType parseLessonType(String value, LessonType defaultType) {
-        if (value == null || value.isBlank()) {
-            return defaultType;
-        }
-        try {
-            return LessonType.valueOf(value.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException exception) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "Lesson type must be video, pdf, rich_text, quiz, flashcard, assignment, or essay"
-            );
-        }
-    }
-
-    private String resolveLessonType(LessonRequest request) {
-        String lessonType = normalizeNullable(request.lessonType());
-        return lessonType == null ? normalizeNullable(request.type()) : lessonType;
-    }
-
-    private LessonStatus parseLessonStatus(String value, LessonStatus defaultStatus) {
-        if (value == null || value.isBlank()) {
-            return defaultStatus;
-        }
-        try {
-            return LessonStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Lesson status must be draft, published, or inactive");
-        }
-    }
-
-    private CurriculumLessonResource toLessonResource(LessonResourceRequest request, int fallbackSortOrder) {
-        CurriculumLessonResource resource = new CurriculumLessonResource();
-        String url = normalizeRequired(request.url(), "Resource URL is required");
-        resource.setUrl(url);
-        resource.setObjectPath(normalizeNullable(request.objectPath()));
-        resource.setName(resolveResourceName(request, url, fallbackSortOrder));
-        resource.setFileSize(request.fileSize());
-        resource.setContentType(normalizeNullable(request.contentType()));
-        resource.setSortOrder(request.sortOrder() == null ? fallbackSortOrder : request.sortOrder());
-        return resource;
-    }
-
-    private int nextResourceSortOrder(CurriculumLesson lesson) {
-        return lesson.getResources().stream()
-                .map(CurriculumLessonResource::getSortOrder)
-                .filter(sortOrder -> sortOrder != null)
-                .max(Integer::compareTo)
-                .orElse(-1) + 1;
-    }
-
-    private String resolveResourceName(LessonResourceRequest request, String url, int index) {
-        String name = normalizeNullable(request.name());
-        if (name == null) {
-            name = normalizeNullable(request.fileName());
-        }
-        if (name == null) {
-            name = fileNameFromUrl(url);
-        }
-        if (name == null) {
-            name = "resource-" + (index + 1);
-        }
-        if (name.length() > 255) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Resource name must not exceed 255 characters");
-        }
-        return name;
-    }
-
-    private void assertReorderMatchesAllItems(List<UUID> requestedIds, Set<UUID> existingIds, String itemName) {
-        Set<UUID> uniqueRequestedIds = new HashSet<>(requestedIds);
-        if (uniqueRequestedIds.size() != requestedIds.size()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, itemName + " reorder list contains duplicate ids");
-        }
-        if (!uniqueRequestedIds.equals(existingIds)) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    itemName + " reorder request must include every item exactly once"
-            );
-        }
-    }
-
-    private String normalizeRequired(String value, String message) {
-        String normalized = normalizeNullable(value);
-        if (normalized == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
-        }
-        return normalized;
-    }
-
-    private String normalizeNullable(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
-    }
-
-    private String fileNameFromUrl(String url) {
-        int fragmentIndex = url.indexOf('#');
-        String withoutFragment = fragmentIndex < 0 ? url : url.substring(0, fragmentIndex);
-        int queryIndex = withoutFragment.indexOf('?');
-        String withoutQuery = queryIndex < 0 ? withoutFragment : withoutFragment.substring(0, queryIndex);
-        int slashIndex = withoutQuery.lastIndexOf('/');
-        return normalizeNullable(slashIndex < 0 ? withoutQuery : withoutQuery.substring(slashIndex + 1));
     }
 }
