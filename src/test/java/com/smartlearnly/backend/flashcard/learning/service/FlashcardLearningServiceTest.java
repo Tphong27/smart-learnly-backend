@@ -15,6 +15,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.entity.CourseEnrollment;
@@ -67,6 +68,8 @@ class FlashcardLearningServiceTest {
     private ClassOfferingRepository classOfferingRepository;
     @Mock
     private CurriculumResolutionService curriculumResolutionService;
+    @Mock
+    private ClassCurriculumCompositionService compositionService;
 
     private FlashcardLearningService flashcardLearningService;
 
@@ -81,7 +84,8 @@ class FlashcardLearningServiceTest {
                 currentUserService,
                 curriculumLessonRepository,
                 classOfferingRepository,
-                curriculumResolutionService
+                curriculumResolutionService,
+                compositionService
         );
     }
 
@@ -156,7 +160,7 @@ class FlashcardLearningServiceTest {
         when(curriculumResolutionService.resolveTraineeLearning(course.getId(), classId, studentId))
                 .thenReturn(new CurriculumResolution(version, null, classId, false,
                         CurriculumResolutionService.SOURCE_MASTER_INHERITED));
-        when(curriculumLessonRepository.findEffectiveLessonReference(version.getId(), lessonReferenceId))
+        when(compositionService.resolveEffectiveLesson(any(CurriculumVersion.class), any(UUID.class)))
                 .thenReturn(Optional.of(lesson));
         when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId()))
                 .thenReturn(Optional.of(flashcardSet));
@@ -194,7 +198,7 @@ class FlashcardLearningServiceTest {
         when(curriculumResolutionService.resolveOnlineLearning(course.getId(), studentId))
                 .thenReturn(new CurriculumResolution(version, null, null, false,
                         CurriculumResolutionService.SOURCE_MASTER_PUBLIC));
-        when(curriculumLessonRepository.findEffectiveLessonReference(version.getId(), lessonReferenceId))
+        when(compositionService.resolveEffectiveLesson(any(CurriculumVersion.class), any(UUID.class)))
                 .thenReturn(Optional.of(lesson));
         when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId()))
                 .thenReturn(Optional.of(flashcardSet));

@@ -23,6 +23,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.dto.MyCourseClassResponse;
@@ -95,6 +96,9 @@ class TraineeProgressTest {
 
         @Mock
         private CurriculumLessonRepository curriculumLessonRepository;
+
+        @Mock
+        private ClassCurriculumCompositionService compositionService;
 
         @Mock
         private AssignmentRepository assignmentRepository;
@@ -310,8 +314,8 @@ class TraineeProgressTest {
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
                 when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
                                 .thenReturn(resolution(version, null));
-                when(curriculumLessonRepository.findEffectiveLessonReference(
-                                version.getId(), lesson.getLessonIdentityId()))
+                when(compositionService.resolveEffectiveLesson(
+                                any(CurriculumVersion.class), any(UUID.class)))
                                 .thenReturn(Optional.of(lesson));
                 when(lessonProgressRepository
                                 .findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(
@@ -362,8 +366,8 @@ class TraineeProgressTest {
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
                 when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
                                 .thenReturn(resolution(version, null));
-                when(curriculumLessonRepository.findEffectiveLessonReference(
-                                version.getId(), lesson.getLessonIdentityId()))
+                when(compositionService.resolveEffectiveLesson(
+                                any(CurriculumVersion.class), any(UUID.class)))
                                 .thenReturn(Optional.of(lesson));
                 when(lessonProgressRepository
                                 .findByStudentIdAndCourseIdAndClassIdIsNullAndLessonIdentityId(
@@ -495,8 +499,8 @@ class TraineeProgressTest {
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
                 when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
                                 .thenReturn(resolution(version, null));
-                when(curriculumLessonRepository.findEffectiveLessonReference(
-                                version.getId(), lessonIdentityId))
+                when(compositionService.resolveEffectiveLesson(
+                                any(CurriculumVersion.class), any(UUID.class)))
                                 .thenReturn(Optional.empty());
 
                 assertThatThrownBy(() -> service.updateLessonProgress(
@@ -523,8 +527,8 @@ class TraineeProgressTest {
                                 .thenReturn(Optional.of(classOffering));
                 when(curriculumResolutionService.resolveTraineeLearning(courseId, classId, studentId))
                                 .thenReturn(resolution(version, classId));
-                when(curriculumLessonRepository.findEffectiveLessonReference(
-                                version.getId(), lesson.getLessonIdentityId()))
+                when(compositionService.resolveEffectiveLesson(
+                                any(CurriculumVersion.class), any(UUID.class)))
                                 .thenReturn(Optional.of(lesson));
                 when(lessonProgressRepository.findByStudentIdAndClassIdAndLessonIdentityId(
                                 studentId, classId, lesson.getLessonIdentityId()))

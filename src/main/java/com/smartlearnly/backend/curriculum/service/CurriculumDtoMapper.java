@@ -29,10 +29,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class CurriculumDtoMapper {
+    private final ClassCurriculumCompositionService compositionService;
     /** Chuyển một phiên bản giáo trình sang dữ liệu trả về cho quản trị. */
     public CurriculumVersionResponse toCurriculumVersionResponse(CurriculumVersion version) {
         return new CurriculumVersionResponse(
@@ -353,7 +356,11 @@ public class CurriculumDtoMapper {
 
     /** Sắp xếp bài học trong section theo thứ tự nghiệp vụ ổn định. */
     private List<CurriculumLesson> orderedLessons(CurriculumSection section) {
-        return section.getLessons().stream()
+        CurriculumVersion version = section.getCurriculumVersion();
+        List<CurriculumLesson> lessons = compositionService.isCompositionVersion(version)
+                ? compositionService.effectiveLessons(section)
+                : section.getLessons();
+        return lessons.stream()
                 .sorted(Comparator
                         .comparing(CurriculumLesson::getSortOrder, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(CurriculumLesson::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))

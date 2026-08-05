@@ -2,3 +2,4 @@
 *.cmd text eol=crlf
 /.github/workflows/*.yml text eol=lf
 /scripts/hls/*.sh text eol=lf
+*.sql text eol=lf

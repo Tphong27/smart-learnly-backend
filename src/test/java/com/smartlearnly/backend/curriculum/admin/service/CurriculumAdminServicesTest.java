@@ -30,6 +30,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
@@ -81,13 +82,17 @@ class CurriculumAdminServicesTest {
     @Mock
     private FlashcardSetRepository flashcardSetRepository;
 
-    private final CurriculumDtoMapper curriculumDtoMapper = new CurriculumDtoMapper();
+    @Mock
+    private ClassCurriculumCompositionService compositionService;
+
+    private CurriculumDtoMapper curriculumDtoMapper;
 
     private CurriculumSectionAdminService curriculumSectionAdminService;
     private CurriculumLessonAdminService curriculumLessonAdminService;
 
     @BeforeEach
     void setUp() {
+        curriculumDtoMapper = new CurriculumDtoMapper(compositionService);
         MasterCurriculumAccessService curriculumAccessService = new MasterCurriculumAccessService(
                 courseRepository,
                 curriculumVersionRepository,

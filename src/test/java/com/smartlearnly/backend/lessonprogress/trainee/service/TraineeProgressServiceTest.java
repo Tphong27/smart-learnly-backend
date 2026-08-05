@@ -15,6 +15,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
@@ -58,6 +59,9 @@ class TraineeProgressServiceTest {
 
         @Mock
         private CurriculumLessonRepository curriculumLessonRepository;
+
+        @Mock
+        private ClassCurriculumCompositionService compositionService;
 
         @Mock
         private AssignmentRepository assignmentRepository;
@@ -106,9 +110,9 @@ class TraineeProgressServiceTest {
                                 lessonRowIdA,
                                 lessonIdentityId);
 
-                when(curriculumLessonRepository.findEffectiveLessonReference(
-                                versionA.getId(),
-                                lessonIdentityId)).thenReturn(Optional.of(lessonA));
+                when(compositionService.resolveEffectiveLesson(
+                                any(CurriculumVersion.class),
+                                any(UUID.class))).thenReturn(Optional.of(lessonA));
 
                 // There is no previous progress for this lesson in class A.
                 when(lessonProgressRepository

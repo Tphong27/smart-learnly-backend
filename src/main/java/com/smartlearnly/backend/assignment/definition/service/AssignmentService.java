@@ -11,6 +11,7 @@ import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
@@ -46,6 +47,7 @@ public class AssignmentService {
     private final CurriculumResolutionService curriculumResolutionService;
     private final CurriculumLessonRepository curriculumLessonRepository;
     private final CurriculumVersionRepository curriculumVersionRepository;
+    private final ClassCurriculumCompositionService compositionService;
     private NotificationService notificationService;
     private ClassEnrollmentRepository notificationClassEnrollmentRepository;
 
@@ -405,8 +407,8 @@ public class AssignmentService {
                 classId);
         boolean lessonBelongsToClass = resolveEquivalentLessonReferences(lessonId)
                 .stream()
-                .anyMatch(reference -> curriculumLessonRepository
-                        .findEffectiveLessonReference(resolution.version().getId(), reference)
+                .anyMatch(reference -> compositionService
+                        .resolveEffectiveLesson(resolution.version(), reference)
                         .isPresent());
         if (!lessonBelongsToClass) {
             throw new BusinessException(

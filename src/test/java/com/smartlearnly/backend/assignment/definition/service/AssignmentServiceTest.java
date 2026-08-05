@@ -20,6 +20,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -50,6 +51,8 @@ class AssignmentServiceTest {
     private CurriculumLessonRepository curriculumLessonRepository;
     @Mock
     private CurriculumVersionRepository curriculumVersionRepository;
+    @Mock
+    private ClassCurriculumCompositionService compositionService;
 
     private AssignmentService service;
 
@@ -62,7 +65,8 @@ class AssignmentServiceTest {
                 assignmentSubmissionRepository,
                 curriculumResolutionService,
                 curriculumLessonRepository,
-                curriculumVersionRepository);
+                curriculumVersionRepository,
+                compositionService);
     }
 
     @Test
@@ -175,7 +179,7 @@ class AssignmentServiceTest {
                         classId,
                         false,
                         CurriculumResolutionService.SOURCE_MASTER_INHERITED));
-        when(curriculumLessonRepository.findEffectiveLessonReference(versionId, lessonId))
+        when(compositionService.resolveEffectiveLesson(any(CurriculumVersion.class), any(UUID.class)))
                 .thenReturn(Optional.of(lesson));
         when(assignmentRepository.save(assignment)).thenReturn(assignment);
 
@@ -227,8 +231,8 @@ class AssignmentServiceTest {
                 .thenReturn(Optional.of(draftLesson));
         when(curriculumLessonRepository.findAllByLessonIdentityId(lessonIdentityId))
                 .thenReturn(List.of(draftLesson, publishedLesson));
-        when(curriculumLessonRepository.findEffectiveLessonReference(
-                eq(publishedVersionId),
+        when(compositionService.resolveEffectiveLesson(
+                any(CurriculumVersion.class),
                 any(UUID.class)))
                 .thenAnswer(invocation -> lessonIdentityId.equals(invocation.getArgument(1))
                         ? Optional.of(publishedLesson)

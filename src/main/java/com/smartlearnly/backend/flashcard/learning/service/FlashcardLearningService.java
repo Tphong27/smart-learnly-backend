@@ -26,6 +26,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -59,6 +60,7 @@ public class FlashcardLearningService {
     private final CurriculumLessonRepository curriculumLessonRepository;
     private final ClassOfferingRepository classOfferingRepository;
     private final CurriculumResolutionService curriculumResolutionService;
+    private final ClassCurriculumCompositionService compositionService;
 
     /** Liệt kê các bộ flashcard học viên có thể học cùng tiến độ tổng quan. */
     @Transactional(readOnly = true)
@@ -102,10 +104,8 @@ public class FlashcardLearningService {
                     student.getId());
         }
 
-        CurriculumLesson curriculumLesson = curriculumLessonRepository
-                .findEffectiveLessonReference(
-                        resolution.version().getId(),
-                        lessonReferenceId)
+        CurriculumLesson curriculumLesson = compositionService
+                .resolveEffectiveLesson(resolution.version(), lessonReferenceId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "Flashcard lesson was not found in this class curriculum"));

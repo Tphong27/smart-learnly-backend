@@ -14,6 +14,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
 import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
@@ -48,6 +49,7 @@ public class TraineeProgressService {
         private final ClassOfferingRepository classOfferingRepository;
         private final CurriculumResolutionService curriculumResolutionService;
         private final CurriculumLessonRepository curriculumLessonRepository;
+        private final ClassCurriculumCompositionService compositionService;
         private final AssignmentRepository assignmentRepository;
         private final AssignmentSubmissionRepository assignmentSubmissionRepository;
 
@@ -110,8 +112,8 @@ public class TraineeProgressService {
                                         student.getId());
                 }
 
-                CurriculumLesson lesson = curriculumLessonRepository
-                                .findEffectiveLessonReference(resolution.version().getId(), lessonId)
+                CurriculumLesson lesson = compositionService
+                                .resolveEffectiveLesson(resolution.version(), lessonId)
                                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
                                                 "Lesson not found in the effective curriculum"));
 
@@ -367,6 +369,9 @@ public class TraineeProgressService {
          * độ ổn định.
          */
         private List<CurriculumLesson> orderedCurriculumLessons(CurriculumVersion version) {
+                if (compositionService.isCompositionVersion(version)) {
+                        return compositionService.orderedEffectiveLessons(version);
+                }
                 return version.getSections().stream()
                                 .sorted(Comparator
                                                 .comparing(CurriculumSection::getSortOrder,
