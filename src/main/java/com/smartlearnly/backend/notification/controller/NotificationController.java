@@ -22,6 +22,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * REST controller xử lý các API liên quan đến notification của người dùng.
+ * Cung cấp endpoints để xem, đánh dấu đã đọc và lưu trữ notification.
+ */
 @RestController
 @Validated
 @RequiredArgsConstructor
@@ -32,6 +36,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController {
     private final NotificationService notificationService;
 
+    /**
+     * Lấy danh sách notification của người dùng đang đăng nhập.
+     */
     @GetMapping
     @Operation(summary = "List current user's notifications")
     public ApiResponse<PageResponse<NotificationResponse>> list(
@@ -44,6 +51,9 @@ public class NotificationController {
                 notificationService.list(status, type, page, size));
     }
 
+    /**
+     * Lấy số notification chưa đọc của người dùng.
+     */
     @GetMapping("/unread-count")
     @Operation(summary = "Get current user's unread notification count")
     public ApiResponse<UnreadCountResponse> unreadCount() {
@@ -52,6 +62,9 @@ public class NotificationController {
                 notificationService.unreadCount());
     }
 
+    /**
+     * Lấy chi tiết một notification cụ thể.
+     */
     @GetMapping("/{notificationId}")
     @Operation(summary = "Get current user's notification detail")
     public ApiResponse<NotificationResponse> get(@PathVariable UUID notificationId) {
@@ -60,6 +73,9 @@ public class NotificationController {
                 notificationService.get(notificationId));
     }
 
+    /**
+     * Đánh dấu một notification là đã đọc.
+     */
     @PatchMapping("/{notificationId}/read")
     @Operation(summary = "Mark one notification as read")
     public ApiResponse<NotificationResponse> markRead(@PathVariable UUID notificationId) {
@@ -68,6 +84,9 @@ public class NotificationController {
                 notificationService.markRead(notificationId));
     }
 
+    /**
+     * Ghi nhận thao tác click vào notification.
+     */
     @PatchMapping("/{notificationId}/clicked")
     @Operation(summary = "Record a click on one notification")
     public ApiResponse<NotificationResponse> recordClick(@PathVariable UUID notificationId) {
@@ -76,6 +95,9 @@ public class NotificationController {
                 notificationService.recordClick(notificationId));
     }
 
+    /**
+     * Lưu trữ một notification.
+     */
     @PatchMapping("/{notificationId}/archive")
     @Operation(summary = "Archive one notification")
     public ApiResponse<NotificationResponse> archive(@PathVariable UUID notificationId) {
@@ -84,6 +106,9 @@ public class NotificationController {
                 notificationService.archive(notificationId));
     }
 
+    /**
+     * Đánh dấu tất cả notification là đã đọc.
+     */
     @PatchMapping("/read-all")
     @Operation(summary = "Mark all current user's notifications as read")
     public ApiResponse<UnreadCountResponse> markAllRead() {
@@ -92,6 +117,9 @@ public class NotificationController {
                 notificationService.markAllRead());
     }
 
+    /**
+     * Lưu trữ tất cả notification.
+     */
     @PatchMapping("/archive-all")
     @Operation(summary = "Archive all current user's notifications")
     public ApiResponse<ArchivedCountResponse> archiveAll() {

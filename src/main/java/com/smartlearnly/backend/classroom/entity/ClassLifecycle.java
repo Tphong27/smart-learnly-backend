@@ -45,9 +45,8 @@ public final class ClassLifecycle {
             return ClassStatus.COMPLETED;
         }
 
-        // Class dates do not carry a start time. Keep registration open for the
-        // whole start date and transition to ONGOING on the following day.
-        if (!startDate.isBefore(today)) {
+        // Class starts today → ONGOING (registration closes, class begins)
+        if (startDate.isAfter(today)) {
             return ClassStatus.UPCOMING;
         }
 
