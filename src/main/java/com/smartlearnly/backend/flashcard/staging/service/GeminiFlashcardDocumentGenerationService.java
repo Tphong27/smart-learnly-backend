@@ -19,7 +19,6 @@ public class GeminiFlashcardDocumentGenerationService implements FlashcardDocume
                 request == null ? null : request.renderedPageImages(),
                 request == null ? 0 : request.desiredCount(),
                 request == null ? null : request.language(),
-                request == null ? null : request.difficulty(),
                 request == null ? null : request.sourceType(),
                 request == null ? null : request.sourceName()
         ));

@@ -183,12 +183,11 @@ public class PersonalFlashcardController {
             @PathVariable UUID setId,
             @RequestPart(value = "file", required = false) MultipartFile file,
             @RequestParam(defaultValue = "10") @Min(1) @Max(30) Integer desiredCount,
-            @RequestParam(defaultValue = "auto") String language,
-            @RequestParam(defaultValue = "medium") String difficulty
+            @RequestParam(defaultValue = "auto") String language
     ) {
         return ApiResponse.success(
                 "Personal flashcard candidates generated successfully",
-                personalFlashcardImportService.generateFromFile(setId, file, desiredCount, language, difficulty)
+                personalFlashcardImportService.generateFromFile(setId, file, desiredCount, language)
         );
     }
 

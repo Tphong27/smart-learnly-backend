@@ -13,7 +13,6 @@ public interface FlashcardDocumentGenerationService {
             List<DocumentImage> renderedPageImages,
             int desiredCount,
             String language,
-            String difficulty,
             String sourceType,
             String sourceName
     ) {
@@ -22,11 +21,10 @@ public interface FlashcardDocumentGenerationService {
                 List<DocumentImage> images,
                 int desiredCount,
                 String language,
-                String difficulty,
                 String sourceType,
                 String sourceName
         ) {
-            this(documentText, images, List.of(), desiredCount, language, difficulty, sourceType, sourceName);
+            this(documentText, images, List.of(), desiredCount, language, sourceType, sourceName);
         }
 
         public DocumentGenerationRequest {

@@ -96,8 +96,7 @@ class PersonalFlashcardImportServiceTest {
                 new GeneratePersonalFlashcardsFromTextRequest(
                         "Pasted source content ".repeat(8),
                         10,
-                        "vi",
-                        "hard"
+                        "vi"
                 )
         );
 
@@ -108,7 +107,6 @@ class PersonalFlashcardImportServiceTest {
         assertThat(request.sourceName()).isEqualTo("Pasted Text");
         assertThat(request.desiredCount()).isEqualTo(10);
         assertThat(request.language()).isEqualTo("vi");
-        assertThat(request.difficulty()).isEqualTo("hard");
         assertThat(response.cards()).singleElement()
                 .extracting(candidate -> candidate.sourceExcerpt())
                 .isEqualTo("Source excerpt");
@@ -127,8 +125,7 @@ class PersonalFlashcardImportServiceTest {
                 setId,
                 new MockMultipartFile("file", "lesson.pdf", "application/pdf", "content".getBytes()),
                 5,
-                "auto",
-                "medium"
+                "auto"
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
         verify(documentTextExtractionService, never()).extract(any());
@@ -157,8 +154,7 @@ class PersonalFlashcardImportServiceTest {
                 set.getId(),
                 file,
                 10,
-                "en",
-                "easy"
+                "en"
         );
 
         ArgumentCaptor<DocumentGenerationRequest> requestCaptor = ArgumentCaptor.forClass(DocumentGenerationRequest.class);

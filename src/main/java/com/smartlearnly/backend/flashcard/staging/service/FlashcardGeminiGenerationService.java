@@ -13,7 +13,6 @@ public interface FlashcardGeminiGenerationService {
             List<DocumentImage> renderedPageImages,
             int desiredCount,
             String language,
-            String difficulty,
             String sourceType,
             String sourceName,
             String sourceContentLabel
@@ -32,7 +31,6 @@ public interface FlashcardGeminiGenerationService {
                 List<DocumentImage> renderedPageImages,
                 int desiredCount,
                 String language,
-                String difficulty,
                 String sourceType,
                 String sourceName
         ) {
@@ -42,7 +40,6 @@ public interface FlashcardGeminiGenerationService {
                     renderedPageImages,
                     desiredCount,
                     language,
-                    difficulty,
                     sourceType,
                     sourceName,
                     "Document content"
@@ -53,7 +50,6 @@ public interface FlashcardGeminiGenerationService {
                 String sourceText,
                 int desiredCount,
                 String language,
-                String difficulty,
                 String sourceType,
                 String sourceName
         ) {
@@ -63,7 +59,6 @@ public interface FlashcardGeminiGenerationService {
                     List.of(),
                     desiredCount,
                     language,
-                    difficulty,
                     sourceType,
                     sourceName,
                     "Source text"

@@ -85,8 +85,7 @@ public final class PersonalFlashcardDtos {
             @Min(value = 1, message = "Desired count must be at least 1")
             @Max(value = 30, message = "Desired count must not exceed 30")
             Integer desiredCount,
-            String language,
-            String difficulty
+            String language
     ) {
     }
 

@@ -40,7 +40,6 @@ public class PersonalFlashcardImportService {
     private static final int MAX_SOURCE_TEXT_LENGTH = 20_000;
     private static final int MAX_GENERATION_COUNT = 30;
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("auto", "vi", "en");
-    private static final Set<String> SUPPORTED_DIFFICULTIES = Set.of("easy", "medium", "hard");
 
     private final FlashcardSetRepository flashcardSetRepository;
     private final FlashcardCardRepository flashcardCardRepository;
@@ -62,7 +61,6 @@ public class PersonalFlashcardImportService {
                 sourceText,
                 targetCount,
                 normalizeLanguage(request.language()),
-                normalizeDifficulty(request.difficulty()),
                 "TEXT",
                 "Pasted Text"
         ));
@@ -73,14 +71,12 @@ public class PersonalFlashcardImportService {
             UUID setId,
             MultipartFile file,
             Integer desiredCount,
-            String language,
-            String difficulty
+            String language
     ) {
         UserAccount actor = requireEligibleActor();
         requirePersonalSet(actor, setId);
         int targetCount = normalizeDesiredCount(desiredCount);
         String normalizedLanguage = normalizeLanguage(language);
-        String normalizedDifficulty = normalizeDifficulty(difficulty);
         DocumentTextExtractionResult extraction = documentTextExtractionService.extract(file);
         GenerationResult result = documentGenerationService.generate(new DocumentGenerationRequest(
                 extraction.text(),
@@ -88,7 +84,6 @@ public class PersonalFlashcardImportService {
                 extraction.renderedPageImages(),
                 targetCount,
                 normalizedLanguage,
-                normalizedDifficulty,
                 extraction.sourceType(),
                 extraction.sourceName()
         ));
@@ -267,18 +262,6 @@ public class PersonalFlashcardImportService {
         normalized = normalized.toLowerCase(Locale.ROOT);
         if (!SUPPORTED_LANGUAGES.contains(normalized)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Language must be auto, vi, or en");
-        }
-        return normalized;
-    }
-
-    private String normalizeDifficulty(String value) {
-        String normalized = normalizeNullable(value);
-        if (normalized == null) {
-            return "medium";
-        }
-        normalized = normalized.toLowerCase(Locale.ROOT);
-        if (!SUPPORTED_DIFFICULTIES.contains(normalized)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Difficulty must be easy, medium, or hard");
         }
         return normalized;
     }

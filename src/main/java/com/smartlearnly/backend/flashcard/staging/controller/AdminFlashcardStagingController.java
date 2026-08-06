@@ -125,7 +125,6 @@ public class AdminFlashcardStagingController {
             @RequestPart(value = "file", required = false) MultipartFile file,
             @RequestParam(required = false) Integer desiredCount,
             @RequestParam(required = false) String language,
-            @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String generationMode
     ) {
         StagingBatchResponse response = flashcardStagingGenerationService.generateFromFile(
@@ -133,7 +132,6 @@ public class AdminFlashcardStagingController {
                 file,
                 desiredCount,
                 language,
-                difficulty,
                 generationMode
         );
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))
@@ -150,7 +148,6 @@ public class AdminFlashcardStagingController {
             @RequestPart(value = "file", required = false) MultipartFile file,
             @RequestParam(required = false) Integer desiredCount,
             @RequestParam(required = false) String language,
-            @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String generationMode
     ) {
         return ApiResponse.success(
@@ -160,7 +157,6 @@ public class AdminFlashcardStagingController {
                         file,
                         desiredCount,
                         language,
-                        difficulty,
                         generationMode
                 )
         );
@@ -187,7 +183,6 @@ public class AdminFlashcardStagingController {
             @RequestPart(value = "file", required = false) MultipartFile file,
             @RequestParam(required = false) Integer desiredCount,
             @RequestParam(required = false) String language,
-            @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String generationMode
     ) {
         StagingBatchResponse response = flashcardStagingGenerationService.generateFromTranscriptFile(
@@ -195,7 +190,6 @@ public class AdminFlashcardStagingController {
                 file,
                 desiredCount,
                 language,
-                difficulty,
                 generationMode
         );
         return ResponseEntity.created(URI.create("/api/v1/admin/flashcard-sets/" + setId + "/staging"))

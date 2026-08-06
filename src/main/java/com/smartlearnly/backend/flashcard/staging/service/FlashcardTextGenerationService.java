@@ -9,7 +9,6 @@ public interface FlashcardTextGenerationService {
             String sourceText,
             int desiredCount,
             String language,
-            String difficulty,
             String generationMode
     ) {
     }
