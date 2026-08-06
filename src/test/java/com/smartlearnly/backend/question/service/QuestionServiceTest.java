@@ -20,6 +20,7 @@ import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.entity.Question;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
+import com.smartlearnly.backend.question.entity.QuestionAnswerMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaAttachment;
 import com.smartlearnly.backend.question.entity.QuestionMediaType;
 import com.smartlearnly.backend.question.entity.QuestionStatus;
@@ -29,6 +30,7 @@ import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -140,6 +142,36 @@ class QuestionServiceTest {
     }
 
     @Test
+    void listByCourse_passesNullFilters_whenOptionalFiltersAreBlank() {
+        when(questionRepository.searchForAdmin(
+                eq(courseId),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(true),
+                eq(null),
+                eq(PageRequest.of(1, 10))
+        )).thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 10), 0));
+
+        var response = service.listByCourse(
+                courseId,
+                null,
+                "   ",
+                " ",
+                null,
+                true,
+                null,
+                1,
+                10
+        );
+
+        assertThat(response.items()).isEmpty();
+        assertThat(response.page()).isEqualTo(1);
+        assertThat(response.size()).isEqualTo(10);
+    }
+
+    @Test
     void getInCourse_returnsQuestionWithAnswersAndFirstMediaUrls() {
         UUID answerId = UUID.randomUUID();
         Question question = question(questionId, courseId, QuestionStatus.APPROVED);
@@ -164,6 +196,61 @@ class QuestionServiceTest {
         assertThat(response.answerCount()).isEqualTo(1);
         assertThat(response.answers().get(0).answerText()).isEqualTo("Programming language");
         assertThat(response.mediaAttachments()).hasSize(2);
+    }
+
+    @Test
+    void getInCourse_mapsAnswerMediaVideoAndDefaultOrders() {
+        UUID answerId = UUID.randomUUID();
+        Question question = question(questionId, courseId, QuestionStatus.APPROVED);
+        question.setBloomLevel(null);
+        question.setImportSource("image_import");
+        QuestionAnswer answer = answer(answerId, "Programming language", true, null);
+        QuestionAnswerMediaAttachment answerMedia = answerMediaAttachment(answerId, QuestionMediaType.AUDIO, null, null);
+        QuestionMediaAttachment video = mediaAttachment(QuestionMediaType.VIDEO, "https://cdn.example.com/video.mp4", 1);
+        video.setFileSize(null);
+        video.setDisplayOrder(null);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(answerRepository.findByQuestionIdOrderByOrderIndexAsc(questionId)).thenReturn(List.of(answer));
+        when(answerMediaRepository.findByAnswerIdIn(List.of(answerId))).thenReturn(List.of(answerMedia));
+        when(mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(questionId, QuestionMediaType.IMAGE))
+                .thenReturn(List.of());
+        when(mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(questionId, QuestionMediaType.AUDIO))
+                .thenReturn(List.of());
+        when(mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(questionId, QuestionMediaType.VIDEO))
+                .thenReturn(List.of(video));
+
+        QuestionModel.Response response = service.getInCourse(courseId, questionId);
+
+        assertThat(response.bloomLevel()).isNull();
+        assertThat(response.imageUrl()).isNull();
+        assertThat(response.audioUrl()).isNull();
+        assertThat(response.mediaAttachments()).singleElement()
+                .satisfies(media -> {
+                    assertThat(media.mediaType()).isEqualTo("video");
+                    assertThat(media.size()).isZero();
+                    assertThat(media.displayOrder()).isZero();
+                });
+        assertThat(response.answers()).singleElement()
+                .satisfies(mappedAnswer -> {
+                    assertThat(mappedAnswer.orderIndex()).isZero();
+                    assertThat(mappedAnswer.media()).singleElement()
+                            .satisfies(media -> {
+                                assertThat(media.mediaType()).isEqualTo("audio");
+                                assertThat(media.size()).isZero();
+                                assertThat(media.displayOrder()).isZero();
+                            });
+                });
+    }
+
+    @Test
+    void getInCourse_throwsNotFound_whenQuestionDoesNotExist() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getInCourse(courseId, questionId))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+
+        verify(answerRepository, never()).findByQuestionIdOrderByOrderIndexAsc(any());
     }
 
     @Test
@@ -209,6 +296,40 @@ class QuestionServiceTest {
     }
 
     @Test
+    void createForCourse_defaultsStatusAndOrder_whenOptionalValuesAreBlank() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Java is platform independent.", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(questionId);
+            return saved;
+        });
+        QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
+                null,
+                moduleId,
+                " Java is platform independent. ",
+                "true_false",
+                " ",
+                (short) 1,
+                " ",
+                null,
+                List.of(
+                        new QuestionModel.AnswerRequest(null, null, "True", true, null, null, null),
+                        new QuestionModel.AnswerRequest(null, null, "False", false, null, null, null)
+                )
+        );
+
+        QuestionModel.Response response = service.createForCourse(courseId, request);
+
+        assertThat(response.status()).isEqualTo("draft");
+        assertThat(response.bloomLevel()).isNull();
+        ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
+        verify(answerRepository, times(2)).save(answerCaptor.capture());
+        assertThat(answerCaptor.getAllValues()).extracting(QuestionAnswer::getOrderIndex)
+                .containsExactly(1, 2);
+    }
+
+    @Test
     void createForCourse_throwsBusinessRuleViolation_whenQuestionTextAlreadyExists() {
         when(questionRepository.existsActiveDuplicateInCourse(courseId, "What is Java?", null))
                 .thenReturn(true);
@@ -242,6 +363,180 @@ class QuestionServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
                 .hasMessageContaining("Question module is required");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void createForCourse_throwsInvalidRequest_whenModuleBelongsToAnotherCourse() {
+        UUID invalidModuleId = UUID.randomUUID();
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "What is Java?", null))
+                .thenReturn(false);
+        when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
+                invalidModuleId,
+                courseId,
+                CourseModule.STATUS_ACTIVE
+        )).thenReturn(false);
+        QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
+                null,
+                invalidModuleId,
+                "What is Java?",
+                "multiple_choice",
+                "remember",
+                (short) 2,
+                "Basic Java question",
+                "draft",
+                answers()
+        );
+
+        assertThatThrownBy(() -> service.createForCourse(courseId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessageContaining("module must belong");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void createForCourse_throwsInvalidRequest_whenQuestionTextIsBlank() {
+        QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
+                null,
+                moduleId,
+                " ",
+                "multiple_choice",
+                "remember",
+                (short) 2,
+                null,
+                "draft",
+                answers()
+        );
+
+        assertThatThrownBy(() -> service.createForCourse(courseId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessageContaining("Question text is required");
+
+        verify(questionRepository, never()).existsActiveDuplicateInCourse(any(), any(), any());
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void createForCourse_throwsInvalidRequest_whenStatusIsInvalid() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "What is Java?", null))
+                .thenReturn(false);
+        QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
+                null,
+                moduleId,
+                "What is Java?",
+                "multiple_choice",
+                "remember",
+                (short) 2,
+                null,
+                "published",
+                answers()
+        );
+
+        assertThatThrownBy(() -> service.createForCourse(courseId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessageContaining("Question status is invalid");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void createForCourse_throwsInvalidRequest_whenBloomLevelIsInvalid() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "What is Java?", null))
+                .thenReturn(false);
+        QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
+                null,
+                moduleId,
+                "What is Java?",
+                "multiple_choice",
+                "unknown",
+                (short) 2,
+                null,
+                "draft",
+                answers()
+        );
+
+        assertThatThrownBy(() -> service.createForCourse(courseId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessageContaining("Bloom level is invalid");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void createForCourse_throwsInvalidRequest_whenAnswersAreMissing() {
+        QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
+                null,
+                moduleId,
+                "What is Java?",
+                "multiple_choice",
+                "remember",
+                (short) 2,
+                null,
+                "draft",
+                null
+        );
+
+        assertThatThrownBy(() -> service.createForCourse(courseId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessageContaining("At least two answers are required");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void createForCourse_throwsInvalidRequest_whenAnswerTextIsBlank() {
+        QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
+                null,
+                moduleId,
+                "What is Java?",
+                "multiple_choice",
+                "remember",
+                (short) 2,
+                null,
+                "draft",
+                List.of(
+                        answerRequest("Programming language", true, 1),
+                        answerRequest(" ", false, 2)
+                )
+        );
+
+        assertThatThrownBy(() -> service.createForCourse(courseId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessageContaining("Answer text is required");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void createForCourse_throwsInvalidRequest_whenTrueFalseHasWrongAnswerCount() {
+        QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
+                null,
+                moduleId,
+                "Java is a programming language.",
+                "true_false",
+                "remember",
+                (short) 1,
+                null,
+                "draft",
+                List.of(
+                        answerRequest("True", true, 1),
+                        answerRequest("False", false, 2),
+                        answerRequest("Maybe", false, 3)
+                )
+        );
+
+        assertThatThrownBy(() -> service.createForCourse(courseId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessageContaining("exactly two answers");
 
         verify(questionRepository, never()).save(any());
     }
@@ -420,6 +715,31 @@ class QuestionServiceTest {
     }
 
     @Test
+    void updateInCourse_keepsCurrentStatus_whenStatusIsBlank() {
+        Question existing = question(questionId, courseId, QuestionStatus.APPROVED);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(existing));
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Updated question?", questionId))
+                .thenReturn(false);
+        when(questionRepository.save(existing)).thenReturn(existing);
+        QuestionModel.UpdateRequest request = new QuestionModel.UpdateRequest(
+                null,
+                moduleId,
+                "Updated question?",
+                "multiple_choice",
+                "understand",
+                (short) 3,
+                "Updated explanation",
+                " ",
+                answers()
+        );
+
+        QuestionModel.Response response = service.updateInCourse(courseId, questionId, request);
+
+        assertThat(response.status()).isEqualTo("approved");
+        assertThat(existing.getStatus()).isEqualTo(QuestionStatus.APPROVED);
+    }
+
+    @Test
     void archiveInCourse_setsArchivedStatus_whenQuestionIsActive() {
         Question question = question(questionId, courseId, QuestionStatus.DRAFT);
         when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
@@ -441,6 +761,18 @@ class QuestionServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
                 .hasMessageContaining("already archived");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void archiveInCourse_throwsNotFound_whenQuestionBelongsToAnotherCourse() {
+        Question question = question(questionId, otherCourseId, QuestionStatus.DRAFT);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> service.archiveInCourse(courseId, questionId))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
 
         verify(questionRepository, never()).save(any());
     }
@@ -479,6 +811,155 @@ class QuestionServiceTest {
     }
 
     @Test
+    void importBatchForCourse_defaultsUnknownImportSourceToExcel() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Imported question?", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        QuestionImportDtos.ImportRow row = importRow(
+                2,
+                "Imported question?",
+                "multiple_choice",
+                List.of("A", "B"),
+                "A",
+                moduleId);
+
+        service.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(List.of(row), "manual-upload"));
+
+        verify(questionMediaImportService).attachImportedMedia(
+                any(Question.class),
+                eq(row.imageFiles()),
+                eq(row.audioFiles()),
+                eq("excel_import"));
+    }
+
+    @Test
+    void importBatchForCourse_preservesImageImportSource() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Imported question?", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        QuestionImportDtos.ImportRow row = importRow(
+                2,
+                "Imported question?",
+                "multiple_choice",
+                List.of("A", "B"),
+                "A",
+                moduleId);
+
+        service.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(List.of(row), "image-import"));
+
+        verify(questionMediaImportService).attachImportedMedia(
+                any(Question.class),
+                eq(row.imageFiles()),
+                eq(row.audioFiles()),
+                eq("image_import"));
+    }
+
+    @Test
+    void importReviewedRowsForCourse_marksQuestionsAsAiGeneratedAndUsesImportSourceForMedia() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "AI imported?", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        QuestionImportDtos.ImportRow row = importRow(
+                6,
+                "AI imported?",
+                "multiple_choice",
+                List.of("A", "B", "C"),
+                "C",
+                moduleId);
+
+        List<Question> saved = service.importReviewedRowsForCourse(courseId, List.of(row), true, "ai_generation");
+
+        assertThat(saved).singleElement()
+                .satisfies(question -> {
+                    assertThat(question.getIsAiGenerated()).isTrue();
+                    assertThat(question.getImportSource()).isEqualTo("ai_generation");
+                });
+        verify(questionMediaImportService).attachImportedMedia(
+                any(Question.class),
+                eq(row.imageFiles()),
+                eq(row.audioFiles()),
+                eq("ai_generation"));
+    }
+
+    @Test
+    void importReviewedRowsForCourse_handlesTrueFalseFalseAnswer() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Java is only a database.", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        QuestionImportDtos.ImportRow row = importRow(
+                7,
+                "Java is only a database.",
+                "true_false",
+                List.of("True", "False"),
+                "false",
+                moduleId);
+
+        service.importReviewedRowsForCourse(courseId, List.of(row), false, null);
+
+        ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
+        verify(answerRepository, times(2)).save(answerCaptor.capture());
+        assertThat(answerCaptor.getAllValues()).extracting(QuestionAnswer::getAnswerText)
+                .containsExactly("True", "False");
+        assertThat(answerCaptor.getAllValues()).extracting(QuestionAnswer::getIsCorrect)
+                .containsExactly(false, true);
+    }
+
+    @Test
+    void importReviewedRowsForCourse_handlesTrueFalseTrueAnswerWhenTrueIsSecondOption() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Java is a programming language.", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        QuestionImportDtos.ImportRow row = importRow(
+                8,
+                "Java is a programming language.",
+                "true_false",
+                List.of("False", "True"),
+                "true",
+                moduleId);
+
+        service.importReviewedRowsForCourse(courseId, List.of(row), false, null);
+
+        ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
+        verify(answerRepository, times(2)).save(answerCaptor.capture());
+        assertThat(answerCaptor.getAllValues()).extracting(QuestionAnswer::getIsCorrect)
+                .containsExactly(false, true);
+    }
+
+    @Test
+    void importReviewedRowsForCourse_throwsInvalidRequest_whenRowsAreEmpty() {
+        assertThatThrownBy(() -> service.importReviewedRowsForCourse(courseId, List.of(), false, null))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessageContaining("At least one question row is required");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
     void importBatchForCourse_throwsValidationFailed_whenRowContainsInvalidCorrectAnswer() {
         QuestionImportDtos.ImportRow row = importRow(
                 4,
@@ -497,6 +978,117 @@ class QuestionServiceTest {
 
         verify(questionRepository, never()).save(any());
         verify(answerRepository, never()).save(any());
+    }
+
+    @Test
+    void importBatchForCourse_throwsValidationFailed_whenDuplicateExistsAfterRowValidation() {
+        QuestionImportDtos.ImportRow row = importRow(
+                4,
+                "Imported question?",
+                "multiple_choice",
+                List.of("A", "B"),
+                "A",
+                moduleId);
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Imported question?", null))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(List.of(row), "excel")))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining("already exists in this course");
+
+        verify(questionRepository, never()).save(any());
+        verify(answerRepository, never()).save(any());
+    }
+
+    @Test
+    void importBatchForCourse_reportsOnlyFirstFiveRowErrorsAndRemainingCount() {
+        List<QuestionImportDtos.ImportRow> rows = List.of(
+                importRow(1, " ", "multiple_choice", List.of("A", "B"), "A", moduleId),
+                importRow(2, "Question 2", "essay", List.of("A", "B"), "A", moduleId),
+                importRow(3, "Question 3", "multiple_choice", List.of("A"), "A", moduleId),
+                importRow(4, "Question 4", "multiple_choice", List.of("A", "B", "C", "D", "E", "F", "G"), "A", moduleId),
+                importRow(5, "Question 5", "multiple_choice", List.of("A", "B"), "AA", moduleId),
+                importRow(6, "Question 6", "multiple_choice", List.of("A", "B"), "Z", moduleId)
+        );
+
+        assertThatThrownBy(() -> service.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(rows, "excel")))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining("Row 1")
+                .hasMessageContaining("Row 5")
+                .hasMessageContaining("And 1 more rows with errors")
+                .satisfies(throwable -> assertThat(throwable).hasMessageNotContaining("Row 6"));
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void importBatchForCourse_collectsBoundaryValidationErrors() {
+        UUID invalidModuleId = UUID.randomUUID();
+        when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
+                invalidModuleId,
+                courseId,
+                CourseModule.STATUS_ACTIVE
+        )).thenReturn(false);
+        when(questionMediaImportService.validateMediaReferences(List.of("bad-image"), List.of("bad-audio")))
+                .thenReturn(List.of("Image URL is invalid", "Audio URL is invalid"));
+        QuestionImportDtos.ImportRow row = importRow(
+                9,
+                "Q".repeat(10001),
+                null,
+                Arrays.asList(null, "A".repeat(4001)),
+                null,
+                invalidModuleId,
+                "E".repeat(10001),
+                (short) 6,
+                "not-a-bloom-level",
+                List.of("bad-image"),
+                List.of("bad-audio"));
+
+        assertThatThrownBy(() -> service.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(List.of(row), "excel")))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining("Question text must not exceed 10000 characters")
+                .hasMessageContaining("Question type is required")
+                .hasMessageContaining("Answer A is required")
+                .hasMessageContaining("Answer B must not exceed 4000 characters")
+                .hasMessageContaining("Correct answer is required")
+                .hasMessageContaining("Difficulty must be between 1 and 5")
+                .hasMessageContaining("Bloom level is invalid")
+                .hasMessageContaining("Question module must belong")
+                .hasMessageContaining("Explanation must not exceed 10000 characters")
+                .hasMessageContaining("Image URL is invalid");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void importBatchForCourse_collectsTrueFalseValidationErrors() {
+        QuestionImportDtos.ImportRow row = importRow(
+                10,
+                "Java has exactly one keyword.",
+                "true_false",
+                List.of("Yes", "No", "Maybe"),
+                "A",
+                moduleId);
+
+        assertThatThrownBy(() -> service.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(List.of(row), "excel")))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining("True/false questions must have exactly two answers")
+                .hasMessageContaining("True/false answers must be True and False")
+                .hasMessageContaining("Correct answer for true/false must be True or False");
+
+        verify(questionRepository, never()).save(any());
     }
 
     private QuestionModel.CreateRequest createRequest() {
@@ -538,7 +1130,7 @@ class QuestionServiceTest {
         return new QuestionModel.AnswerRequest(null, null, text, correct, null, order, null);
     }
 
-    private QuestionAnswer answer(UUID id, String text, boolean correct, int orderIndex) {
+    private QuestionAnswer answer(UUID id, String text, boolean correct, Integer orderIndex) {
         QuestionAnswer answer = new QuestionAnswer();
         answer.setId(id);
         answer.setQuestionId(questionId);
@@ -572,18 +1164,45 @@ class QuestionServiceTest {
             String correctAnswer,
             UUID rowModuleId
     ) {
+        return importRow(
+                rowNumber,
+                text,
+                type,
+                options,
+                correctAnswer,
+                rowModuleId,
+                "Explanation",
+                (short) 2,
+                "remember",
+                List.of("https://example.com/question.png"),
+                List.of("https://example.com/question.mp3"));
+    }
+
+    private QuestionImportDtos.ImportRow importRow(
+            int rowNumber,
+            String text,
+            String type,
+            List<String> options,
+            String correctAnswer,
+            UUID rowModuleId,
+            String explanation,
+            Short difficulty,
+            String bloomLevel,
+            List<String> imageFiles,
+            List<String> audioFiles
+    ) {
         return new QuestionImportDtos.ImportRow(
                 rowNumber,
                 text,
                 type,
                 options,
                 correctAnswer,
-                "Explanation",
-                (short) 2,
-                "remember",
+                explanation,
+                difficulty,
+                bloomLevel,
                 rowModuleId,
-                List.of("https://example.com/question.png"),
-                List.of("https://example.com/question.mp3"));
+                imageFiles,
+                audioFiles);
     }
 
     private Question question(UUID id, UUID owningCourseId, QuestionStatus status) {
@@ -599,5 +1218,26 @@ class QuestionServiceTest {
         question.setStatus(status);
         question.setCreatedBy(actorId);
         return question;
+    }
+
+    private QuestionAnswerMediaAttachment answerMediaAttachment(
+            UUID answerId,
+            QuestionMediaType type,
+            Long fileSize,
+            Integer displayOrder
+    ) {
+        QuestionAnswerMediaAttachment attachment = new QuestionAnswerMediaAttachment();
+        attachment.setId(UUID.randomUUID());
+        attachment.setAnswerId(answerId);
+        attachment.setMediaType(type);
+        attachment.setMediaUrl("https://cdn.example.com/answer-media");
+        attachment.setObjectKey("answers/media");
+        attachment.setBucket("question-answer-media");
+        attachment.setContentType(type == QuestionMediaType.AUDIO ? "audio/mpeg" : "image/png");
+        attachment.setFileSize(fileSize);
+        attachment.setOriginalFileName("answer-media");
+        attachment.setDisplayOrder(displayOrder);
+        attachment.setImportSource("manual");
+        return attachment;
     }
 }
