@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:16-alpine:///smartlearnly_it?TC_DAEMON=true
+    username: test
+    password: test
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:integration/db/migration,classpath:db/migration
+    baseline-on-migrate: false
+
+app:
+  classroom:
+    lifecycle:
+      enabled: false
+  notification:
+    retention:
+      enabled: false
+  seed:
+    auth-users-enabled: false
+    categories-enabled: false
+    admin-enabled: false
+  security:
+    authentication-mode: jwt
+    jwt-secret: smart-learnly-integration-secret-at-least-32-characters
+  hls:
+    token-secret: smart-learnly-integration-hls-secret-at-least-32-characters
+  integrations:
+    ai-provider: none
+    payment-provider: none
+    google-meet:
+      enabled: false
