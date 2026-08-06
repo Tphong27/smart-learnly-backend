@@ -230,9 +230,9 @@ class GeminiFlashcardDocumentGenerationServiceTest {
 
     @Test
     void generationPromptCapturesLanguageBehavior() {
-        String autoPrompt = service.buildGenerationPrompt("auto", "medium", 10, "PDF", "lesson.pdf");
-        String viPrompt = service.buildGenerationPrompt("vi", "hard", 8, "DOCX", "lesson.docx");
-        String enPrompt = service.buildGenerationPrompt("en", "easy", 6, "DOCX", "lesson.docx");
+        String autoPrompt = service.buildGenerationPrompt("auto", 10, "PDF", "lesson.pdf");
+        String viPrompt = service.buildGenerationPrompt("vi", 8, "DOCX", "lesson.docx");
+        String enPrompt = service.buildGenerationPrompt("en", 6, "DOCX", "lesson.docx");
 
         assertThat(autoPrompt).contains("Target language: Auto-detect");
         assertThat(autoPrompt).contains("For Auto-detect, follow the main document language");
@@ -279,7 +279,6 @@ class GeminiFlashcardDocumentGenerationServiceTest {
                 List.of(),
                 7,
                 "vi",
-                "hard",
                 "DOCX",
                 "lesson.docx"
         );
@@ -290,7 +289,6 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         assertThat(delegate.request.sourceText()).isEqualTo(request.documentText());
         assertThat(delegate.request.desiredCount()).isEqualTo(7);
         assertThat(delegate.request.language()).isEqualTo("vi");
-        assertThat(delegate.request.difficulty()).isEqualTo("hard");
         assertThat(delegate.request.sourceType()).isEqualTo("DOCX");
         assertThat(delegate.request.sourceName()).isEqualTo("lesson.docx");
         assertThat(delegate.request.sourceContentLabel()).isEqualTo("Document content");
@@ -303,7 +301,6 @@ class GeminiFlashcardDocumentGenerationServiceTest {
                 List.of(),
                 10,
                 "auto",
-                "medium",
                 "PDF",
                 "scan.pdf"
         );
@@ -314,7 +311,6 @@ class GeminiFlashcardDocumentGenerationServiceTest {
                 request.renderedPageImages(),
                 request.desiredCount(),
                 request.language(),
-                request.difficulty(),
                 request.sourceType(),
                 request.sourceName()
         )))

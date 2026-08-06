@@ -16,7 +16,8 @@ public record LearningLessonResponse(
         int sortOrder,
         boolean completed,
         List<LearningResourceResponse> resources,
-        UUID lessonIdentityId
+        UUID lessonIdentityId,
+        UUID testId
 ) {
     public LearningLessonResponse(
             UUID lessonId,
@@ -44,6 +45,7 @@ public record LearningLessonResponse(
                 sortOrder,
                 completed,
                 resources,
+                null,
                 null
         );
     }

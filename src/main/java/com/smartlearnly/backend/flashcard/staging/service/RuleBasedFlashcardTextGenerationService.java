@@ -19,8 +19,6 @@ public class RuleBasedFlashcardTextGenerationService implements FlashcardTextGen
     private static final int MIN_CHUNK_LENGTH = 60;
     private static final int MAX_CHUNK_LENGTH = 700;
     private static final int EXCERPT_MAX_LENGTH = 140;
-    private static final String DIFFICULTY_EASY = "easy";
-    private static final String DIFFICULTY_HARD = "hard";
     private static final Set<String> VIETNAMESE_LANGUAGE_OPTIONS = Set.of(
             "vi",
             "vn",
@@ -66,7 +64,7 @@ public class RuleBasedFlashcardTextGenerationService implements FlashcardTextGen
         List<String> chunks = chunks(sourceText, desiredCount);
         List<GeneratedFlashcardCandidate> candidates = chunks.stream()
                 .limit(desiredCount)
-                .map(chunk -> toCandidate(chunk, request.language(), request.difficulty()))
+                .map(chunk -> toCandidate(chunk, request.language()))
                 .toList();
         return new GenerationResult(SOURCE_TYPE_TEXT, candidates);
     }
@@ -286,37 +284,24 @@ public class RuleBasedFlashcardTextGenerationService implements FlashcardTextGen
         }
     }
 
-    private GeneratedFlashcardCandidate toCandidate(String chunk, String language, String difficulty) {
+    private GeneratedFlashcardCandidate toCandidate(String chunk, String language) {
         String excerpt = excerpt(chunk);
         String questionExcerpt = stripTrailingPunctuation(excerpt);
         return new GeneratedFlashcardCandidate(
-                fallbackQuestion(questionExcerpt, language, difficulty),
+                fallbackQuestion(questionExcerpt, language),
                 chunk,
                 GENERATED_EXPLANATION,
                 excerpt
         );
     }
 
-    private String fallbackQuestion(String questionExcerpt, String language, String difficulty) {
+    private String fallbackQuestion(String questionExcerpt, String language) {
         boolean vietnamese = isVietnameseLanguage(language);
-        String normalizedDifficulty = normalizeOption(difficulty);
 
         if (vietnamese) {
-            if (DIFFICULTY_EASY.equals(normalizedDifficulty)) {
-                return "Ý chính của nội dung này là gì?";
-            }
-            if (DIFFICULTY_HARD.equals(normalizedDifficulty)) {
-                return "Có thể giải thích hoặc áp dụng ý này như thế nào: " + questionExcerpt + "?";
-            }
             return "Ý chính của đoạn này là gì: " + questionExcerpt + "?";
         }
 
-        if (DIFFICULTY_EASY.equals(normalizedDifficulty)) {
-            return "What is the main idea of this content?";
-        }
-        if (DIFFICULTY_HARD.equals(normalizedDifficulty)) {
-            return "How would you explain or apply this idea: " + questionExcerpt + "?";
-        }
         return "What is the key idea of: " + questionExcerpt + "?";
     }
 

@@ -24,6 +24,7 @@ import com.smartlearnly.backend.learning.content.dto.LearningResourceResponse;
 import com.smartlearnly.backend.learning.content.dto.LearningSectionResponse;
 import com.smartlearnly.backend.learning.content.dto.LearningStats;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
+import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -269,6 +270,7 @@ public class CurriculumDtoMapper {
             boolean previewOnly) {
         List<LearningLessonResponse> lessons = orderedLessons(section).stream()
                 .filter(lesson -> lesson.getStatus() == LessonStatus.PUBLISHED)
+                .filter(lesson -> lesson.getType() != LessonType.FLASHCARD)
                 .filter(lesson -> !previewOnly || Boolean.TRUE.equals(lesson.getPreview()))
                 .map(lesson -> toLearningLessonResponse(
                         lesson,
@@ -305,7 +307,8 @@ public class CurriculumDtoMapper {
                 lesson.getSortOrder(),
                 completed,
                 resources,
-                lesson.getLessonIdentityId()
+                lesson.getLessonIdentityId(),
+                lesson.getTestId()
         );
     }
 
