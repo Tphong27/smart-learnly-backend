@@ -23,6 +23,7 @@ import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
+import java.io.IOException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +35,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.util.unit.DataSize;
+import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class QuestionMediaServiceTest {
@@ -124,6 +126,73 @@ class QuestionMediaServiceTest {
     }
 
     @Test
+    void upload_savesAudioAttachment_whenFileIsValid() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(storageProperties.getQuestionAudioMaxSize()).thenReturn(DataSize.ofMegabytes(20));
+        when(storageProperties.getQuestionMediaBucket()).thenReturn("question-media");
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.AUDIO))
+                .thenReturn(1L);
+        when(fileStorageService.store(eq("question-media"), any(), eq("audio/mpeg"), any()))
+                .thenReturn(new FileStorageService.StoredFile(
+                        "https://cdn.example.com/question.mp3",
+                        "questions/question.mp3",
+                        "fallback.mp3",
+                        "audio/mpeg",
+                        mp3Bytes().length));
+        when(mediaAttachmentRepository.save(any(QuestionMediaAttachment.class))).thenAnswer(invocation -> {
+            QuestionMediaAttachment saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        QuestionMediaDtos.UploadResponse response = questionMediaService.upload(
+                questionId,
+                "audio",
+                List.of(new MockMultipartFile("files", " question.mp3 ", "audio/mpeg", mp3Bytes())));
+
+        assertThat(response.mediaAttachments()).singleElement()
+                .satisfies(media -> {
+                    assertThat(media.mediaType()).isEqualTo("audio");
+                    assertThat(media.displayOrder()).isEqualTo(2);
+                    assertThat(media.fileName()).isEqualTo("question.mp3");
+                });
+        verify(fileStorageService).store(eq("question-media"), org.mockito.ArgumentMatchers.contains("/audios/"), eq("audio/mpeg"), any());
+    }
+
+    @Test
+    void upload_savesVideoAttachment_whenFileIsValidAndUsesFallbackFileName() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(storageProperties.getQuestionVideoMaxSize()).thenReturn(DataSize.ofMegabytes(100));
+        when(storageProperties.getQuestionMediaBucket()).thenReturn("question-media");
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.VIDEO))
+                .thenReturn(0L);
+        when(fileStorageService.store(eq("question-media"), any(), eq("video/quicktime"), any()))
+                .thenReturn(new FileStorageService.StoredFile(
+                        "https://cdn.example.com/question.mp4",
+                        "questions/question.mp4",
+                        "fallback.mp4",
+                        "video/quicktime",
+                        mp4Bytes().length));
+        when(mediaAttachmentRepository.save(any(QuestionMediaAttachment.class))).thenAnswer(invocation -> {
+            QuestionMediaAttachment saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        QuestionMediaDtos.UploadResponse response = questionMediaService.upload(
+                questionId,
+                "video",
+                List.of(new MockMultipartFile("files", " ", "video/mp4", mp4Bytes())));
+
+        assertThat(response.mediaAttachments()).singleElement()
+                .satisfies(media -> {
+                    assertThat(media.mediaType()).isEqualTo("video");
+                    assertThat(media.fileName()).isEqualTo("fallback.mp4");
+                });
+        verify(fileStorageService).store(eq("question-media"), org.mockito.ArgumentMatchers.contains("/videos/"), eq("video/quicktime"), any());
+    }
+
+    @Test
     void upload_throwsBusinessRuleViolation_whenImageLimitWouldBeExceeded() {
         when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
         when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.IMAGE))
@@ -141,6 +210,99 @@ class QuestionMediaServiceTest {
     }
 
     @Test
+    void upload_throwsBusinessRuleViolation_whenAudioLimitWouldBeExceeded() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.AUDIO))
+                .thenReturn(3L);
+
+        assertThatThrownBy(() -> questionMediaService.upload(
+                questionId,
+                "audio",
+                List.of(new MockMultipartFile("files", "question.mp3", "audio/mpeg", mp3Bytes()))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("at most 3 audio files")
+                .extracting("errorCode").isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
+    }
+
+    @Test
+    void upload_throwsBusinessRuleViolation_whenVideoLimitWouldBeExceeded() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.VIDEO))
+                .thenReturn(1L);
+
+        assertThatThrownBy(() -> questionMediaService.upload(
+                questionId,
+                "video",
+                List.of(new MockMultipartFile("files", "question.mp4", "video/mp4", mp4Bytes()))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("at most 1 video")
+                .extracting("errorCode").isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
+    }
+
+    @Test
+    void upload_throwsInvalidRequest_whenFilesAreMissing() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> questionMediaService.upload(questionId, "image", List.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("At least one media file is required")
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        verify(mediaAttachmentRepository, never()).countByQuestionIdAndMediaType(any(), any());
+    }
+
+    @Test
+    void upload_throwsPayloadTooLarge_whenFileExceedsMaxSize() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.IMAGE))
+                .thenReturn(0L);
+        when(storageProperties.getQuestionImageMaxSize()).thenReturn(DataSize.ofBytes(1));
+
+        assertThatThrownBy(() -> questionMediaService.upload(
+                questionId,
+                "image",
+                List.of(new MockMultipartFile("files", "question.png", "image/png", pngBytes()))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE);
+
+        verify(fileStorageService, never()).store(any(), any(), any(), any());
+    }
+
+    @Test
+    void upload_throwsInvalidRequest_whenFileCannotBeRead() throws IOException {
+        MultipartFile file = org.mockito.Mockito.mock(MultipartFile.class);
+        when(file.isEmpty()).thenReturn(false);
+        when(file.getSize()).thenReturn(1L);
+        when(file.getBytes()).thenThrow(new IOException("read failed"));
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.IMAGE))
+                .thenReturn(0L);
+        when(storageProperties.getQuestionImageMaxSize()).thenReturn(DataSize.ofMegabytes(5));
+
+        assertThatThrownBy(() -> questionMediaService.upload(questionId, "image", List.of(file)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("could not be read")
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    void upload_throwsInvalidRequest_whenFileContentIsEmptyAfterRead() throws IOException {
+        MultipartFile file = org.mockito.Mockito.mock(MultipartFile.class);
+        when(file.isEmpty()).thenReturn(false);
+        when(file.getSize()).thenReturn(1L);
+        when(file.getBytes()).thenReturn(new byte[0]);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.AUDIO))
+                .thenReturn(0L);
+        when(storageProperties.getQuestionAudioMaxSize()).thenReturn(DataSize.ofMegabytes(20));
+
+        assertThatThrownBy(() -> questionMediaService.upload(questionId, "audio", List.of(file)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Question audio file is required")
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
     void upload_throwsUnsupportedMediaType_whenImageContentIsNotAnImage() {
         when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
         when(storageProperties.getQuestionImageMaxSize()).thenReturn(DataSize.ofMegabytes(5));
@@ -152,6 +314,42 @@ class QuestionMediaServiceTest {
                 "image",
                 List.of(new MockMultipartFile("files", "question.txt", "text/plain", "not image".getBytes()))))
                 .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
+
+        verify(fileStorageService, never()).store(any(), any(), any(), any());
+    }
+
+    @Test
+    void upload_throwsUnsupportedMediaType_whenAudioContentIsNotAudio() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(storageProperties.getQuestionAudioMaxSize()).thenReturn(DataSize.ofMegabytes(20));
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.AUDIO))
+                .thenReturn(0L);
+
+        assertThatThrownBy(() -> questionMediaService.upload(
+                questionId,
+                "audio",
+                List.of(new MockMultipartFile("files", "question.txt", "text/plain", "not audio".getBytes()))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("MP3, M4A, or WAV")
+                .extracting("errorCode").isEqualTo(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
+
+        verify(fileStorageService, never()).store(any(), any(), any(), any());
+    }
+
+    @Test
+    void upload_throwsUnsupportedMediaType_whenVideoContentIsNotVideo() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(storageProperties.getQuestionVideoMaxSize()).thenReturn(DataSize.ofMegabytes(100));
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.VIDEO))
+                .thenReturn(0L);
+
+        assertThatThrownBy(() -> questionMediaService.upload(
+                questionId,
+                "video",
+                List.of(new MockMultipartFile("files", "question.txt", "text/plain", "not video".getBytes()))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("MP4, WebM")
                 .extracting("errorCode").isEqualTo(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
 
         verify(fileStorageService, never()).store(any(), any(), any(), any());
@@ -195,6 +393,56 @@ class QuestionMediaServiceTest {
     }
 
     @Test
+    void reorder_throwsInvalidRequest_whenIdsAreMissing() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> questionMediaService.reorder(
+                questionId,
+                new QuestionMediaDtos.ReorderRequest("image", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Attachment IDs are required")
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    void reorder_throwsInvalidRequest_whenRequestDoesNotIncludeAllAttachments() {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(questionId, QuestionMediaType.IMAGE))
+                .thenReturn(List.of(
+                        attachment(firstId, QuestionMediaType.IMAGE, 1),
+                        attachment(secondId, QuestionMediaType.IMAGE, 2)));
+
+        assertThatThrownBy(() -> questionMediaService.reorder(
+                questionId,
+                new QuestionMediaDtos.ReorderRequest("image", List.of(firstId))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("include all attachments")
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        verify(mediaAttachmentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorder_throwsInvalidRequest_whenAttachmentDoesNotBelongToMediaType() {
+        UUID firstId = UUID.randomUUID();
+        UUID foreignId = UUID.randomUUID();
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(mediaAttachmentRepository.findByQuestionIdAndMediaTypeOrderByDisplayOrderAsc(questionId, QuestionMediaType.IMAGE))
+                .thenReturn(List.of(attachment(firstId, QuestionMediaType.IMAGE, 1)));
+
+        assertThatThrownBy(() -> questionMediaService.reorder(
+                questionId,
+                new QuestionMediaDtos.ReorderRequest("image", List.of(foreignId))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("does not belong")
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        verify(mediaAttachmentRepository, never()).saveAll(any());
+    }
+
+    @Test
     void delete_removesAttachmentAndNormalizesOrder_whenAttachmentExists() {
         UUID attachmentId = UUID.randomUUID();
         QuestionMediaAttachment deleted = attachment(attachmentId, QuestionMediaType.IMAGE, 1);
@@ -211,6 +459,32 @@ class QuestionMediaServiceTest {
         verify(mediaAttachmentRepository).delete(deleted);
         verify(mediaAttachmentRepository, times(2)).saveAll(any());
         verify(mediaAttachmentRepository, times(3)).flush();
+    }
+
+    @Test
+    void delete_throwsNotFound_whenAttachmentDoesNotExist() {
+        UUID attachmentId = UUID.randomUUID();
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(mediaAttachmentRepository.findByQuestionIdAndId(questionId, attachmentId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> questionMediaService.delete(questionId, attachmentId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("attachment not found")
+                .extracting("errorCode").isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+
+        verify(mediaAttachmentRepository, never()).delete(any());
+    }
+
+    @Test
+    void list_throwsNotFound_whenQuestionDoesNotExist() {
+        when(questionRepository.findById(questionId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> questionMediaService.list(questionId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+
+        verify(courseAccessService, never()).requireReadableCourse(any());
     }
 
     @Test
@@ -284,6 +558,109 @@ class QuestionMediaServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
+    @Test
+    void parseMediaType_acceptsHyphenatedAndBlankValues() {
+        assertThat(questionMediaService.parseMediaType(" video ")).isEqualTo(QuestionMediaType.VIDEO);
+
+        assertThatThrownBy(() -> questionMediaService.parseMediaType(" "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Media type is required")
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    void toResponse_returnsNullAndDefaultsNullableNumericFields() {
+        assertThat(questionMediaService.toResponse(null)).isNull();
+        QuestionMediaAttachment attachment = attachment(QuestionMediaType.IMAGE, 1);
+        attachment.setFileSize(null);
+        attachment.setDisplayOrder(null);
+
+        var response = questionMediaService.toResponse(attachment);
+
+        assertThat(response.size()).isZero();
+        assertThat(response.displayOrder()).isZero();
+    }
+
+    @Test
+    void attachImportedFiles_returnsEmptyList_whenFilesAreMissing() {
+        List<?> result = questionMediaService.attachImportedFiles(question, QuestionMediaType.IMAGE, null, "excel_import");
+
+        assertThat(result).isEmpty();
+        verify(courseAccessService).requireUpdatableCourse(courseId);
+        verify(mediaAttachmentRepository, never()).countByQuestionIdAndMediaType(any(), any());
+    }
+
+    @Test
+    void attachImportedFiles_savesAttachmentWithImportSource_whenFileIsValid() {
+        when(storageProperties.getQuestionImageMaxSize()).thenReturn(DataSize.ofMegabytes(5));
+        when(storageProperties.getQuestionMediaBucket()).thenReturn("question-media");
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.IMAGE))
+                .thenReturn(1L);
+        when(fileStorageService.store(eq("question-media"), any(), eq("image/png"), any()))
+                .thenReturn(new FileStorageService.StoredFile(
+                        "https://cdn.example.com/imported.png",
+                        "questions/imported.png",
+                        "imported.png",
+                        "image/png",
+                        pngBytes().length));
+        when(mediaAttachmentRepository.save(any(QuestionMediaAttachment.class))).thenAnswer(invocation -> {
+            QuestionMediaAttachment saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        var response = questionMediaService.attachImportedFiles(
+                question,
+                QuestionMediaType.IMAGE,
+                List.of(new MockMultipartFile("files", "images/imported.png", "image/png", pngBytes())),
+                "image_import");
+
+        assertThat(response).singleElement()
+                .satisfies(media -> {
+                    assertThat(media.importSource()).isEqualTo("image_import");
+                    assertThat(media.displayOrder()).isEqualTo(2);
+                });
+    }
+
+    @Test
+    void attachImportedFiles_throwsInvalidRequest_whenQuestionIsMissing() {
+        assertThatThrownBy(() -> questionMediaService.attachImportedFiles(null, QuestionMediaType.IMAGE, List.of(), "image_import"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Question is required")
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        verify(courseAccessService, never()).requireUpdatableCourse(any());
+    }
+
+    @Test
+    void attachImportedFiles_throwsBusinessRuleViolation_whenQuestionIsArchived() {
+        question.setStatus(QuestionStatus.ARCHIVED);
+
+        assertThatThrownBy(() -> questionMediaService.attachImportedFiles(question, QuestionMediaType.IMAGE, List.of(), "image_import"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("archived question")
+                .extracting("errorCode").isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
+
+        verify(courseAccessService, never()).requireUpdatableCourse(any());
+    }
+
+    @Test
+    void attachImportedFiles_throwsBusinessRuleViolation_whenLimitWouldBeExceeded() {
+        when(mediaAttachmentRepository.countByQuestionIdAndMediaType(questionId, QuestionMediaType.VIDEO))
+                .thenReturn(1L);
+
+        assertThatThrownBy(() -> questionMediaService.attachImportedFiles(
+                question,
+                QuestionMediaType.VIDEO,
+                List.of(new MockMultipartFile("files", "question.mp4", "video/mp4", mp4Bytes())),
+                "image_import"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("at most 1 video")
+                .extracting("errorCode").isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
+
+        verify(fileStorageService, never()).store(any(), any(), any(), any());
+    }
+
     private void denyCourseUpdate() {
         doThrow(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"))
                 .when(courseAccessService)
@@ -313,5 +690,20 @@ class QuestionMediaServiceTest {
     private byte[] pngBytes() {
         return Base64.getDecoder().decode(
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=");
+    }
+
+    private byte[] mp3Bytes() {
+        return new byte[]{
+                'I', 'D', '3', 3, 0, 0, 0, 0, 0, 10,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        };
+    }
+
+    private byte[] mp4Bytes() {
+        return new byte[]{
+                0, 0, 0, 24, 'f', 't', 'y', 'p',
+                'i', 's', 'o', 'm', 0, 0, 2, 0,
+                'i', 's', 'o', 'm', 'i', 's', 'o', '2'
+        };
     }
 }
