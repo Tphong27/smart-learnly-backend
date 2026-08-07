@@ -20,11 +20,11 @@ public class AuthSessionHttpSupport {
 
     private final AuthProperties authProperties;
 
-    // Trả session thành công và đặt refresh token trong cookie HttpOnly theo cấu hình hiện tại.
+    // Trả session thành công và đặt refresh token trong cookie HttpOnly theo cấu
+    // hình hiện tại.
     public ResponseEntity<ApiResponse<AuthSessionResponse>> sessionResponse(
             String message,
-            AuthSessionService.IssuedSession session
-    ) {
+            AuthSessionService.IssuedSession session) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(session.refreshToken()).toString())
                 .body(ApiResponse.success(message, session.response()));
@@ -45,8 +45,7 @@ public class AuthSessionHttpSupport {
         }
         throw new BusinessException(
                 ErrorCode.INVALID_OR_EXPIRED_TOKEN,
-                "Refresh token cookie is missing"
-        );
+                "Refresh token cookie is missing");
     }
 
     // Đọc refresh token tùy chọn để logout vẫn idempotent khi cookie đã mất.
@@ -73,7 +72,8 @@ public class AuthSessionHttpSupport {
         return request.getRemoteAddr();
     }
 
-    // Tạo refresh cookie có thời hạn, scope và thuộc tính bảo mật thống nhất cho mọi cách đăng nhập.
+    // Tạo refresh cookie có thời hạn, scope và thuộc tính bảo mật thống nhất cho
+    // mọi cách đăng nhập.
     private ResponseCookie refreshCookie(String value) {
         return ResponseCookie.from(REFRESH_COOKIE_NAME, value)
                 .httpOnly(true)

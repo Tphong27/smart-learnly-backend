@@ -15,6 +15,7 @@ import com.smartlearnly.backend.curriculum.dto.ReorderRequest;
 import com.smartlearnly.backend.curriculum.dto.SectionRequest;
 import com.smartlearnly.backend.curriculum.dto.SectionResponse;
 import com.smartlearnly.backend.curriculum.entity.ClassCurriculumBinding;
+import com.smartlearnly.backend.curriculum.entity.ClassCurriculumEntry;
 import com.smartlearnly.backend.curriculum.entity.CurriculumCustomizationState;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLessonResource;
@@ -23,6 +24,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.ClassCurriculumBindingRepository;
+import com.smartlearnly.backend.curriculum.repository.ClassCurriculumEntryRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
@@ -57,9 +59,10 @@ public class TrainerClassCurriculumService {
     private final CurriculumVersionRepository curriculumVersionRepository;
     private final CurriculumSectionRepository sectionRepository;
     private final CurriculumLessonRepository lessonRepository;
+    private final ClassCurriculumEntryRepository entryRepository;
     private final CurriculumResolutionService resolutionService;
     private final ClassCurriculumBindingProvisioningService bindingProvisioningService;
-    private final CurriculumCloningService cloningService;
+    private final ClassCurriculumCompositionService compositionService;
     private final CurriculumDtoMapper mapper;
     private final CurrentUserService currentUserService;
     private final AuthenticatedUserResolver authenticatedUserResolver;
@@ -92,17 +95,65 @@ public class TrainerClassCurriculumService {
                 classId,
                 trainer.getId()
         );
-        CurriculumVersion draft = cloningService.cloneToClassDraft(source, classId, trainer.getId());
-        binding.setDraftVersionId(draft.getId());
+
+        CurriculumVersion savedDraft = createDraftVersion(classOffering, trainer, source);
+
+        binding.setDraftVersionId(savedDraft.getId());
         binding.setCustomizationState(CurriculumCustomizationState.DRAFT);
         ClassCurriculumBinding savedBinding = bindingRepository.save(binding);
 
-        return toEditorResponse(classId, classOffering.getCourseId(), savedBinding, draft, CurriculumResolutionService.SOURCE_CLASS_DRAFT);
+        return toEditorResponse(classId, classOffering.getCourseId(), savedBinding, savedDraft, CurriculumResolutionService.SOURCE_CLASS_DRAFT);
+    }
+
+    /**
+     * Creates and persists an empty CLASS-scoped draft version and snapshots the source
+     * structure into thin sections + entries (no lesson rows cloned).
+     */
+    @Transactional
+    private CurriculumVersion createDraftVersion(ClassOffering classOffering, UserAccount trainer, CurriculumVersion source) {
+        CurriculumVersion draft = new CurriculumVersion();
+        draft.setCourseId(classOffering.getCourseId());
+        draft.setClassId(classOffering.getId());
+        draft.setScope(CurriculumScope.CLASS);
+        draft.setStatus(CurriculumStatus.DRAFT);
+        draft.setVersionNumber(curriculumVersionRepository.findMaxClassVersionNumber(classOffering.getId(), CurriculumScope.CLASS) + 1);
+        draft.setTitle(source.getTitle());
+        draft.setSourceVersionId(source.getId());
+        draft.setCreatedBy(trainer.getId());
+        CurriculumVersion savedDraft = curriculumVersionRepository.save(draft);
+        compositionService.snapshotStructure(savedDraft, source);
+        return savedDraft;
+    }
+
+    /**
+     * Returns the editable draft for the class, AUTO-INITIALIZING one from the current
+     * effective source (class published, else published master) when the trainer has not
+     * started a draft yet. Used by every write operation so the trainer can edit in place
+     * without an explicit "start draft" step.
+     */
+    @Transactional
+    private CurriculumVersion requireEditableDraftForWrite(UUID classId) {
+        UserAccount trainer = currentUserService.requireAuthenticatedUser();
+        ClassOffering classOffering = requireOwnedClass(classId, trainer.getId());
+        ClassCurriculumBinding binding = requireBindingForUpdate(classId, classOffering.getCourseId());
+        if (binding.getDraftVersionId() != null) {
+            CurriculumVersion draft = curriculumVersionRepository.findById(binding.getDraftVersionId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class curriculum draft not found"));
+            assertDraftVersionForClass(draft, classOffering.getCourseId(), classId);
+            return draft;
+        }
+        CurriculumVersion source = resolutionService.resolveDraftInitializationSource(
+                classOffering.getCourseId(), classId, trainer.getId());
+        CurriculumVersion savedDraft = createDraftVersion(classOffering, trainer, source);
+        binding.setDraftVersionId(savedDraft.getId());
+        binding.setCustomizationState(CurriculumCustomizationState.DRAFT);
+        bindingRepository.save(binding);
+        return savedDraft;
     }
 
     @Transactional
     public SectionResponse createSection(UUID classId, SectionRequest request) {
-        CurriculumVersion draft = requireDraft(classId);
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
         CurriculumSection section = new CurriculumSection();
         section.setCurriculumVersion(draft);
         section.setTitle(CurriculumRequestNormalizer.normalizeRequired(request.title(), "Section title is required"));
@@ -114,7 +165,7 @@ public class TrainerClassCurriculumService {
 
     @Transactional
     public SectionResponse updateSection(UUID classId, UUID sectionId, SectionRequest request) {
-        CurriculumVersion draft = requireDraft(classId);
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
         CurriculumSection section = requireDraftSection(sectionId, draft.getId());
         section.setTitle(CurriculumRequestNormalizer.normalizeRequired(request.title(), "Section title is required"));
         if (request.sortOrder() != null) {
@@ -125,14 +176,14 @@ public class TrainerClassCurriculumService {
 
     @Transactional
     public void deleteSection(UUID classId, UUID sectionId) {
-        CurriculumVersion draft = requireDraft(classId);
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
         CurriculumSection section = requireDraftSection(sectionId, draft.getId());
         sectionRepository.delete(section);
     }
 
     @Transactional
     public List<SectionResponse> reorderSections(UUID classId, ReorderRequest request) {
-        CurriculumVersion draft = requireDraft(classId);
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
         List<CurriculumSection> sections = sectionRepository.findByCurriculumVersionIdOrderBySortOrderAscCreatedAtAsc(draft.getId());
         Map<UUID, CurriculumSection> sectionsById = sections.stream()
                 .collect(LinkedHashMap::new, (map, section) -> map.put(section.getId(), section), LinkedHashMap::putAll);
@@ -151,60 +202,90 @@ public class TrainerClassCurriculumService {
 
     @Transactional
     public LessonResponse createLesson(UUID classId, UUID sectionId, LessonRequest request) {
-        CurriculumVersion draft = requireDraft(classId);
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
         CurriculumSection section = requireDraftSection(sectionId, draft.getId());
+
+        // A class-only lesson has no master to inherit: create the entry and materialize a real row.
+        ClassCurriculumEntry entry = new ClassCurriculumEntry();
+        entry.setSection(section);
+        entry.setLessonIdentityId(UUID.randomUUID());
+        entry.setSortOrder(request.sortOrder() == null
+                ? entryRepository.findMaxSortOrderByClassVersionIdAndSectionId(draft.getId(), sectionId) + 1
+                : request.sortOrder());
+        ClassCurriculumEntry savedEntry = entryRepository.save(entry);
+
         CurriculumLesson lesson = new CurriculumLesson();
         lesson.setSection(section);
-        lesson.setLessonIdentityId(UUID.randomUUID());
+        lesson.setLessonIdentityId(savedEntry.getLessonIdentityId());
+        lesson.setSortOrder(savedEntry.getSortOrder());
         applyLessonRequest(lesson, request, true);
-        lesson.setSortOrder(request.sortOrder() == null
-                ? lessonRepository.findMaxSortOrderBySectionId(sectionId) + 1
-                : request.sortOrder());
-        return mapper.toLessonResponse(lessonRepository.save(lesson));
+        CurriculumLesson savedLesson = lessonRepository.save(lesson);
+
+        savedEntry.setMaterializedLessonId(savedLesson.getId());
+        entryRepository.save(savedEntry);
+
+        return mapper.toLessonResponse(savedLesson);
     }
 
     @Transactional
     public LessonResponse updateLesson(UUID classId, UUID lessonId, LessonRequest request) {
-        CurriculumVersion draft = requireDraft(classId);
-        CurriculumLesson lesson = requireDraftLesson(lessonId, draft.getId());
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
+        CurriculumLesson lesson = compositionService.ensureMaterializedForWrite(draft, lessonId);
         applyLessonRequest(lesson, request, false);
         if (request.sortOrder() != null) {
             lesson.setSortOrder(request.sortOrder());
         }
-        return mapper.toLessonResponse(lessonRepository.save(lesson));
+        CurriculumLesson saved = lessonRepository.save(lesson);
+        syncEntrySortOrder(saved);
+        return mapper.toLessonResponse(saved);
     }
 
     @Transactional
     public void deleteLesson(UUID classId, UUID lessonId) {
-        CurriculumVersion draft = requireDraft(classId);
-        CurriculumLesson lesson = requireDraftLesson(lessonId, draft.getId());
-        lessonRepository.delete(lesson);
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
+        ClassCurriculumEntry entry = requireDraftEntryForLessonReference(draft.getId(), lessonId);
+        entry.setDeletedAt(Instant.now());
+        entryRepository.save(entry);
+        if (entry.getMaterializedLessonId() != null) {
+            lessonRepository.deleteById(entry.getMaterializedLessonId());
+        }
     }
 
     @Transactional
     public List<LessonResponse> reorderLessons(UUID classId, UUID sectionId, ReorderRequest request) {
-        CurriculumVersion draft = requireDraft(classId);
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
         requireDraftSection(sectionId, draft.getId());
-        List<CurriculumLesson> lessons = lessonRepository.findBySectionIdOrderBySortOrderAscCreatedAtAsc(sectionId);
-        Map<UUID, CurriculumLesson> lessonsById = lessons.stream()
-                .collect(LinkedHashMap::new, (map, lesson) -> map.put(lesson.getId(), lesson), LinkedHashMap::putAll);
-        CurriculumReorderValidator.assertMatchesAllItems(request.ids(), lessonsById.keySet(), "Lesson");
+        List<ClassCurriculumEntry> entries =
+                entryRepository.findByClassVersionIdAndSectionIdOrderBySortOrderAsc(draft.getId(), sectionId);
+        Map<UUID, ClassCurriculumEntry> entriesByRefId = new LinkedHashMap<>();
+        for (ClassCurriculumEntry entry : entries) {
+            entriesByRefId.put(exposedLessonRefId(entry), entry);
+        }
+        CurriculumReorderValidator.assertMatchesAllItems(request.ids(), entriesByRefId.keySet(), "Lesson");
 
         int sortOrder = 0;
         for (UUID requestedId : request.ids()) {
-            lessonsById.get(requestedId).setSortOrder(sortOrder++);
+            ClassCurriculumEntry entry = entriesByRefId.get(requestedId);
+            entry.setSortOrder(sortOrder++);
+            if (entry.getMaterializedLessonId() != null) {
+                lessonRepository.findById(entry.getMaterializedLessonId()).ifPresent(lesson -> {
+                    lesson.setSortOrder(entry.getSortOrder());
+                    lessonRepository.save(lesson);
+                });
+            }
         }
+        entryRepository.saveAll(entries);
 
-        return lessonRepository.saveAll(lessons).stream()
-                .sorted(Comparator.comparing(CurriculumLesson::getSortOrder))
+        CurriculumSection section = requireDraftSection(sectionId, draft.getId());
+        return compositionService.effectiveLessons(section).stream()
                 .map(mapper::toLessonResponse)
                 .toList();
     }
 
     @Transactional
     public LessonResourceResponse addResource(UUID classId, UUID lessonId, LessonResourceRequest request) {
-        CurriculumVersion draft = requireDraft(classId);
-        CurriculumLesson lesson = requireDraftLesson(lessonId, draft.getId());
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
+        CurriculumLesson lesson = compositionService.ensureMaterializedForWrite(draft, lessonId);
         if (lesson.getResources().size() >= MAX_RESOURCES_PER_LESSON) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Lesson resources must not exceed 10 files");
         }
@@ -220,8 +301,8 @@ public class TrainerClassCurriculumService {
 
     @Transactional
     public List<LessonResourceResponse> replaceResources(UUID classId, UUID lessonId, List<LessonResourceRequest> requests) {
-        CurriculumVersion draft = requireDraft(classId);
-        CurriculumLesson lesson = requireDraftLesson(lessonId, draft.getId());
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
+        CurriculumLesson lesson = compositionService.ensureMaterializedForWrite(draft, lessonId);
         List<LessonResourceRequest> safeRequests = requests == null ? List.of() : requests;
         if (safeRequests.size() > MAX_RESOURCES_PER_LESSON) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Lesson resources must not exceed 10 files");
@@ -239,9 +320,11 @@ public class TrainerClassCurriculumService {
 
     @Transactional
     public void removeResource(UUID classId, UUID lessonId, UUID resourceId) {
-        CurriculumVersion draft = requireDraft(classId);
-        CurriculumLesson lesson = requireDraftLesson(lessonId, draft.getId());
-        boolean removed = lesson.getResources().removeIf(resource -> resourceId.equals(resource.getId()));
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
+        CurriculumLesson lesson = compositionService.ensureMaterializedForWrite(draft, lessonId);
+        boolean removed = lesson.getResources().removeIf(resource ->
+                resourceId.equals(resource.getId())
+                        || resourceId.equals(resource.getSourceCurriculumResourceId()));
         if (!removed) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Resource was not found");
         }
@@ -250,10 +333,12 @@ public class TrainerClassCurriculumService {
 
     @Transactional
     public List<LessonResourceResponse> reorderResources(UUID classId, UUID lessonId, ReorderRequest request) {
-        CurriculumVersion draft = requireDraft(classId);
-        CurriculumLesson lesson = requireDraftLesson(lessonId, draft.getId());
-        Map<UUID, CurriculumLessonResource> resourcesById = lesson.getResources().stream()
-                .collect(LinkedHashMap::new, (map, resource) -> map.put(resource.getId(), resource), LinkedHashMap::putAll);
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
+        CurriculumLesson lesson = compositionService.ensureMaterializedForWrite(draft, lessonId);
+        Map<UUID, CurriculumLessonResource> resourcesById = new LinkedHashMap<>();
+        for (CurriculumLessonResource resource : lesson.getResources()) {
+            resourcesById.put(exposedResourceRefId(resource), resource);
+        }
         CurriculumReorderValidator.assertMatchesAllItems(request.ids(), resourcesById.keySet(), "Resource");
 
         int sortOrder = 0;
@@ -274,10 +359,10 @@ public class TrainerClassCurriculumService {
         return mapper.toLessonResponse(lesson);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CurriculumLesson requireOwnedClassLessonForWrite(UUID classId, UUID lessonId) {
-        CurriculumVersion draft = requireDraft(classId);
-        return requireDraftLesson(lessonId, draft.getId());
+        CurriculumVersion draft = requireEditableDraftForWrite(classId);
+        return compositionService.ensureMaterializedForWrite(draft, lessonId);
     }
 
     @Transactional(readOnly = true)
@@ -289,13 +374,8 @@ public class TrainerClassCurriculumService {
                 classId,
                 trainer.getId()
         );
-        CurriculumVersion active = resolution.version();
-        CurriculumLesson lesson = lessonRepository.findById(lessonId)
+        return compositionService.resolveEffectiveLesson(resolution.version(), lessonId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson was not found"));
-        if (!active.getId().equals(lesson.getCurriculumVersionId())) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson was not found");
-        }
-        return lesson;
     }
 
     @Transactional
@@ -337,18 +417,6 @@ public class TrainerClassCurriculumService {
 
     // ========== Private Helper Methods ==========
 
-    private CurriculumVersion requireDraft(UUID classId) {
-        UserAccount trainer = currentUserService.requireAuthenticatedUser();
-        ClassOffering classOffering = requireOwnedClass(classId, trainer.getId());
-        CurriculumResolution resolution = resolutionService.resolveTrainerDraft(
-                classOffering.getCourseId(),
-                classId,
-                trainer.getId()
-        );
-        assertDraftVersionForClass(resolution.version(), classOffering.getCourseId(), classId);
-        return resolution.version();
-    }
-
     private ClassOffering requireOwnedClass(UUID classId, UUID trainerId) {
         ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Class not found"));
@@ -387,13 +455,38 @@ public class TrainerClassCurriculumService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
     }
 
-    private CurriculumLesson requireDraftLesson(UUID lessonId, UUID draftVersionId) {
-        CurriculumLesson lesson = lessonRepository.findById(lessonId)
+    private ClassCurriculumEntry requireDraftEntryForLessonReference(UUID draftVersionId, UUID lessonReferenceId) {
+        return entryRepository.findByClassVersionIdAndSourceCurriculumLessonId(draftVersionId, lessonReferenceId)
+                .or(() -> entryRepository.findByClassVersionIdAndLessonIdentityId(draftVersionId, lessonReferenceId))
+                .or(() -> entryRepository.findByMaterializedLessonId(lessonReferenceId)
+                        .filter(entry -> draftVersionId.equals(entry.getClassVersionId())))
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson was not found"));
-        if (!draftVersionId.equals(lesson.getCurriculumVersionId())) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Lesson was not found");
+    }
+
+    /** The lesson id a client sees for an entry: materialized row id, master id (inherited), or identity. */
+    private UUID exposedLessonRefId(ClassCurriculumEntry entry) {
+        if (entry.getMaterializedLessonId() != null) {
+            return entry.getMaterializedLessonId();
         }
-        return lesson;
+        if (entry.getSourceCurriculumLessonId() != null) {
+            return entry.getSourceCurriculumLessonId();
+        }
+        return entry.getLessonIdentityId();
+    }
+
+    /** The resource id a client sees: the master resource id for copied resources, else the real row id. */
+    private UUID exposedResourceRefId(CurriculumLessonResource resource) {
+        return resource.getSourceCurriculumResourceId() != null
+                ? resource.getSourceCurriculumResourceId()
+                : resource.getId();
+    }
+
+    private void syncEntrySortOrder(CurriculumLesson lesson) {
+        entryRepository.findByMaterializedLessonId(lesson.getId())
+                .ifPresent(entry -> {
+                    entry.setSortOrder(lesson.getSortOrder());
+                    entryRepository.save(entry);
+                });
     }
 
     private void assertDraftVersionForClass(CurriculumVersion version, UUID courseId, UUID classId) {

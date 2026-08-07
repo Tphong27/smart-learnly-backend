@@ -211,24 +211,22 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
     private List<Map<String, Object>> buildGenerationInput(GeminiGenerationRequest request, String mergedContent) {
         int desiredCount = Math.max(1, request == null ? 10 : request.desiredCount());
         String language = request == null ? "auto" : request.language();
-        String difficulty = request == null ? "medium" : request.difficulty();
         String sourceType = request == null ? null : request.sourceType();
         String sourceName = request == null ? null : request.sourceName();
         String sourceContentLabel = request == null ? "Document content" : request.sourceContentLabel();
         return List.of(
-                Map.of("type", "text", "text", buildGenerationPrompt(language, difficulty, desiredCount, sourceType, sourceName)),
+                Map.of("type", "text", "text", buildGenerationPrompt(language, desiredCount, sourceType, sourceName)),
                 Map.of("type", "text", "text", sourceContentLabel + ":\n" + mergedContent)
         );
     }
 
-    String buildGenerationPrompt(String language, String difficulty, int desiredCount, String sourceType, String sourceName) {
+    String buildGenerationPrompt(String language, int desiredCount, String sourceType, String sourceName) {
         String normalizedLanguage = normalizeLanguage(language);
         String languageInstruction = switch (normalizedLanguage) {
             case "vi" -> "Target language: Vietnamese. Generate every flashcard in natural Vietnamese. Translate or summarize English or mixed source content into Vietnamese. sourceExcerpt must also be Vietnamese, translated or paraphrased from the document if needed.";
             case "en" -> "Target language: English. Generate every flashcard in natural English. Translate or summarize Vietnamese or mixed source content into English. sourceExcerpt must also be English, translated or paraphrased from the document if needed.";
             default -> "Target language: Auto-detect. Detect the document's main language and generate every flashcard in that detected language. sourceExcerpt may follow the main document language.";
         };
-        String normalizedDifficulty = normalizeDifficulty(difficulty);
         String sourceLabel = normalizeNullable(sourceType) == null ? "document" : sourceType.trim();
         String nameLabel = normalizeNullable(sourceName) == null ? "uploaded file" : sourceName.trim();
 
@@ -237,7 +235,6 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
                 Source type: %s.
                 Source name: %s.
                 Maximum target cards: %d.
-                Difficulty: %s.
                 %s
 
                 Return strict JSON only, no markdown, no code fences, with exactly this shape:
@@ -273,7 +270,7 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
                 - Use sourceExcerpt for a short supporting source line whenever possible.
                 - If a candidate card has no clear source support, omit it.
                 - Avoid duplicate cards and avoid repeating the same fact with different wording.
-                """.formatted(sourceLabel, nameLabel, desiredCount, normalizedDifficulty, languageInstruction);
+                """.formatted(sourceLabel, nameLabel, desiredCount, languageInstruction);
     }
 
     String buildImageInsightPrompt() {
@@ -791,11 +788,6 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         }
         normalized = normalized.trim().toLowerCase(Locale.ROOT);
         return SUPPORTED_LANGUAGE_OPTIONS.contains(normalized) ? normalized : "auto";
-    }
-
-    private String normalizeDifficulty(String value) {
-        String normalized = normalizeNullable(value);
-        return normalized == null ? "medium" : normalized.trim().toLowerCase(Locale.ROOT);
     }
 
     private String normalizeOptionalMax(String value, int maxLength) {

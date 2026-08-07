@@ -85,7 +85,6 @@ public class FlashcardStagingGenerationService {
     private static final int MAX_GENERATED_SOURCE_EXCERPT_LENGTH = 1000;
     private static final int MIN_DESIRED_COUNT = 1;
     private static final int MAX_DESIRED_COUNT = 30;
-    private static final Set<String> ALLOWED_DIFFICULTIES = Set.of("easy", "medium", "hard");
     private static final Set<String> ALLOWED_GENERATION_MODES = Set.of("AI", "RULE_BASED");
     private static final Set<String> PDF_CONTENT_TYPES = Set.of(
             "application/pdf",
@@ -124,7 +123,6 @@ public class FlashcardStagingGenerationService {
                 input.sourceText(),
                 input.desiredCount(),
                 input.language(),
-                input.difficulty(),
                 input.generationMode()
         ));
         return createGeneratedStagingBatch(
@@ -145,12 +143,11 @@ public class FlashcardStagingGenerationService {
             MultipartFile file,
             Integer desiredCount,
             String language,
-            String difficulty,
             String generationMode
     ) {
         SetContext context = resolveSetContext(setId);
         DocumentFileInput fileInput = validateGenerateFromFileRequest(file);
-        GenerationOptions options = validateGenerationOptions(desiredCount, language, difficulty, SOURCE_TYPE_AI);
+        GenerationOptions options = validateGenerationOptions(desiredCount, language, generationMode);
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         DocumentTextExtractionResult extraction = documentTextExtractionService.extract(file);
         String sourceType = resolveDocumentSourceType(extraction, fileInput.extension());
@@ -174,12 +171,11 @@ public class FlashcardStagingGenerationService {
             MultipartFile file,
             Integer desiredCount,
             String language,
-            String difficulty,
             String generationMode
     ) {
         SetContext context = resolveSetContext(setId);
         DocumentFileInput fileInput = validateGenerateFromFileRequest(file);
-        GenerationOptions options = validateGenerationOptions(desiredCount, language, difficulty, SOURCE_TYPE_AI);
+        GenerationOptions options = validateGenerationOptions(desiredCount, language, generationMode);
         DocumentTextExtractionResult extraction = documentTextExtractionService.extract(file);
         String sourceType = resolveDocumentSourceType(extraction, fileInput.extension());
         String sourceName = resolveDocumentSourceName(extraction, sourceType);
@@ -218,7 +214,6 @@ public class FlashcardStagingGenerationService {
         GenerationOptions options = validateGenerationOptions(
                 request.desiredCount(),
                 request.language(),
-                request.difficulty(),
                 request.generationMode()
         );
         UserAccount actor = currentUserService.requireAuthenticatedUser();
@@ -249,12 +244,11 @@ public class FlashcardStagingGenerationService {
             MultipartFile file,
             Integer desiredCount,
             String language,
-            String difficulty,
             String generationMode
     ) {
         SetContext context = resolveSetContext(setId);
         validateGenerateFromTranscriptFileRequest(file);
-        GenerationOptions options = validateGenerationOptions(desiredCount, language, difficulty, generationMode);
+        GenerationOptions options = validateGenerationOptions(desiredCount, language, generationMode);
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         TranscriptTextExtractionResult extraction = transcriptTextExtractionService.extractFile(file);
         String transcriptText = validateCleanedGenerationText(
@@ -286,7 +280,6 @@ public class FlashcardStagingGenerationService {
                 extraction == null ? List.of() : extraction.renderedPageImages(),
                 options.desiredCount(),
                 options.language(),
-                options.difficulty(),
                 sourceType,
                 sourceName
         ));
@@ -298,7 +291,6 @@ public class FlashcardStagingGenerationService {
                 transcriptText,
                 options.desiredCount(),
                 options.language(),
-                options.difficulty(),
                 options.generationMode()
         ));
     }
@@ -321,14 +313,12 @@ public class FlashcardStagingGenerationService {
         GenerationOptions options = validateGenerationOptions(
                 request.desiredCount(),
                 request.language(),
-                request.difficulty(),
                 request.generationMode()
         );
         return new TextGenerationInput(
                 sourceText,
                 options.desiredCount(),
                 options.language(),
-                options.difficulty(),
                 options.generationMode()
         );
     }
@@ -375,11 +365,10 @@ public class FlashcardStagingGenerationService {
         }
     }
 
-    /** Chuẩn hóa số lượng, ngôn ngữ, độ khó và chế độ generation theo contract hiện hành. */
+    /** Chuẩn hóa số lượng, ngôn ngữ và chế độ generation theo contract hiện hành. */
     private GenerationOptions validateGenerationOptions(
             Integer desiredCountValue,
             String languageValue,
-            String difficultyValue,
             String generationModeValue
     ) {
         int desiredCount = desiredCountValue == null ? DEFAULT_DESIRED_COUNT : desiredCountValue;
@@ -393,14 +382,6 @@ public class FlashcardStagingGenerationService {
         if (language == null) {
             language = "auto";
         }
-        String difficulty = normalizeNullable(difficultyValue);
-        if (difficulty == null) {
-            difficulty = "medium";
-        }
-        difficulty = difficulty.toLowerCase(Locale.ROOT);
-        if (!ALLOWED_DIFFICULTIES.contains(difficulty)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "difficulty must be easy, medium, or hard");
-        }
         String generationMode = normalizeNullable(generationModeValue);
         if (generationMode == null) {
             generationMode = SOURCE_TYPE_AI;
@@ -409,7 +390,7 @@ public class FlashcardStagingGenerationService {
         if (!ALLOWED_GENERATION_MODES.contains(generationMode)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "generationMode must be AI or RULE_BASED");
         }
-        return new GenerationOptions(desiredCount, language, difficulty, generationMode);
+        return new GenerationOptions(desiredCount, language, generationMode);
     }
 
     /** Làm sạch nguồn text và giới hạn độ dài trước khi gửi sang provider. */
@@ -959,7 +940,6 @@ public class FlashcardStagingGenerationService {
             String sourceText,
             int desiredCount,
             String language,
-            String difficulty,
             String generationMode
     ) {
     }
@@ -967,7 +947,6 @@ public class FlashcardStagingGenerationService {
     private record GenerationOptions(
             int desiredCount,
             String language,
-            String difficulty,
             String generationMode
     ) {
     }

@@ -13,9 +13,14 @@ public interface CurriculumLessonRepository extends JpaRepository<CurriculumLess
 
     List<CurriculumLesson> findBySectionIdOrderBySortOrderAscCreatedAtAsc(UUID sectionId);
 
+    List<CurriculumLesson> findByCurriculumVersionIdAndSectionId(UUID curriculumVersionId, UUID sectionId);
+
     Optional<CurriculumLesson> findByIdAndSectionId(UUID id, UUID sectionId);
 
     Optional<CurriculumLesson> findByCurriculumVersionIdAndLessonIdentityId(UUID curriculumVersionId, UUID lessonIdentityId);
+
+    List<CurriculumLesson> findByCurriculumVersionIdAndLessonIdentityIdIn(
+            UUID curriculumVersionId, java.util.Collection<UUID> lessonIdentityIds);
 
     List<CurriculumLesson> findAllByLessonIdentityId(UUID lessonIdentityId);
 

@@ -267,7 +267,7 @@ class AdminFlashcardStagingServiceTest {
 
         StagingBatchResponse response = generationService.generateFromText(
                 flashcardSet.getId(),
-                new GenerateFromTextRequest(longSourceText(), 2, null, "medium", "AI")
+                new GenerateFromTextRequest(longSourceText(), 2, null, "AI")
         );
 
         assertThat(response.sourceType()).isEqualTo("TEXT");
@@ -300,7 +300,7 @@ class AdminFlashcardStagingServiceTest {
 
         assertThatThrownBy(() -> generationService.generateFromText(
                 flashcardSet.getId(),
-                new GenerateFromTextRequest("   ", null, null, null, null)
+                new GenerateFromTextRequest("   ", null, null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -317,7 +317,7 @@ class AdminFlashcardStagingServiceTest {
 
         assertThatThrownBy(() -> generationService.generateFromText(
                 flashcardSet.getId(),
-                new GenerateFromTextRequest("This source text is intentionally too short.", null, null, null, null)
+                new GenerateFromTextRequest("This source text is intentionally too short.", null, null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -334,7 +334,7 @@ class AdminFlashcardStagingServiceTest {
 
         assertThatThrownBy(() -> generationService.generateFromText(
                 flashcardSet.getId(),
-                new GenerateFromTextRequest(longSourceText(), 31, null, null, null)
+                new GenerateFromTextRequest(longSourceText(), 31, null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -353,7 +353,7 @@ class AdminFlashcardStagingServiceTest {
 
         assertThatThrownBy(() -> generationService.generateFromText(
                 flashcardSet.getId(),
-                new GenerateFromTextRequest(longSourceText(), 10, null, null, null)
+                new GenerateFromTextRequest(longSourceText(), 10, null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -384,7 +384,7 @@ class AdminFlashcardStagingServiceTest {
 
         StagingBatchResponse response = generationService.generateFromText(
                 flashcardSet.getId(),
-                new GenerateFromTextRequest(longSourceText(), 10, null, null, null)
+                new GenerateFromTextRequest(longSourceText(), 10, null, null)
         );
 
         assertThat(response.cards()).hasSize(2);
@@ -441,7 +441,6 @@ class AdminFlashcardStagingServiceTest {
                 file,
                 5,
                 null,
-                "hard",
                 "RULE_BASED"
         );
 
@@ -460,7 +459,6 @@ class AdminFlashcardStagingServiceTest {
         assertThat(requestCaptor.getValue().documentText()).isEqualTo(longSourceText());
         assertThat(requestCaptor.getValue().desiredCount()).isEqualTo(5);
         assertThat(requestCaptor.getValue().language()).isEqualTo("auto");
-        assertThat(requestCaptor.getValue().difficulty()).isEqualTo("hard");
         assertThat(requestCaptor.getValue().sourceType()).isEqualTo("PDF");
         assertThat(requestCaptor.getValue().sourceName()).isEqualTo("lesson.pdf");
         assertThat(requestCaptor.getValue().renderedPageImages()).hasSize(1);
@@ -499,7 +497,6 @@ class AdminFlashcardStagingServiceTest {
                 file,
                 null,
                 null,
-                null,
                 null
         );
 
@@ -521,7 +518,6 @@ class AdminFlashcardStagingServiceTest {
                 new MockMultipartFile("file", "lesson.txt", "text/plain", "content".getBytes()),
                 null,
                 null,
-                null,
                 null
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -530,7 +526,6 @@ class AdminFlashcardStagingServiceTest {
         assertThatThrownBy(() -> generationService.generateFromFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.pdf", "text/plain", "content".getBytes()),
-                null,
                 null,
                 null,
                 null
@@ -550,7 +545,6 @@ class AdminFlashcardStagingServiceTest {
         assertThatThrownBy(() -> generationService.generateFromFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.pdf", "application/pdf", new byte[0]),
-                null,
                 null,
                 null,
                 null
@@ -583,7 +577,6 @@ class AdminFlashcardStagingServiceTest {
                 file,
                 null,
                 null,
-                null,
                 null
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -603,7 +596,6 @@ class AdminFlashcardStagingServiceTest {
                 flashcardSet.getId(),
                 pdfFile(),
                 31,
-                null,
                 null,
                 null
         ))
@@ -646,7 +638,6 @@ class AdminFlashcardStagingServiceTest {
                         "Lesson video transcript",
                         1,
                         null,
-                        "medium",
                         "AI"
                 )
         );
@@ -670,7 +661,7 @@ class AdminFlashcardStagingServiceTest {
 
         assertThatThrownBy(() -> generationService.generateFromTranscript(
                 flashcardSet.getId(),
-                new GenerateFromTranscriptRequest("   ", null, null, null, null, null)
+                new GenerateFromTranscriptRequest("   ", null, null, null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -692,7 +683,7 @@ class AdminFlashcardStagingServiceTest {
 
         assertThatThrownBy(() -> generationService.generateFromTranscript(
                 flashcardSet.getId(),
-                new GenerateFromTranscriptRequest(transcriptSourceText(), null, null, null, null, null)
+                new GenerateFromTranscriptRequest(transcriptSourceText(), null, null, null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -708,7 +699,7 @@ class AdminFlashcardStagingServiceTest {
 
         assertThatThrownBy(() -> generationService.generateFromTranscript(
                 flashcardSet.getId(),
-                new GenerateFromTranscriptRequest(transcriptSourceText(), null, 31, null, null, null)
+                new GenerateFromTranscriptRequest(transcriptSourceText(), null, 31, null, null)
         ))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
@@ -741,7 +732,6 @@ class AdminFlashcardStagingServiceTest {
         StagingBatchResponse response = generationService.generateFromTranscriptFile(
                 flashcardSet.getId(),
                 file,
-                null,
                 null,
                 null,
                 null
@@ -778,7 +768,6 @@ class AdminFlashcardStagingServiceTest {
                 file,
                 null,
                 null,
-                null,
                 null
         );
 
@@ -795,7 +784,6 @@ class AdminFlashcardStagingServiceTest {
         assertThatThrownBy(() -> generationService.generateFromTranscriptFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.txt", "text/plain", transcriptSourceText().getBytes()),
-                null,
                 null,
                 null,
                 null
@@ -815,7 +803,6 @@ class AdminFlashcardStagingServiceTest {
         assertThatThrownBy(() -> generationService.generateFromTranscriptFile(
                 flashcardSet.getId(),
                 new MockMultipartFile("file", "lesson.srt", "text/plain", new byte[0]),
-                null,
                 null,
                 null,
                 null

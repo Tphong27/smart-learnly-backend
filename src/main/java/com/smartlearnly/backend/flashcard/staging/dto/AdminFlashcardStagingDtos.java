@@ -36,9 +36,6 @@ public final class AdminFlashcardStagingDtos {
 
             String language,
 
-            @Pattern(regexp = "(?i)^(easy|medium|hard)$", message = "difficulty must be easy, medium, or hard")
-            String difficulty,
-
             @Pattern(regexp = "(?i)^(AI|RULE_BASED)$", message = "generationMode must be AI or RULE_BASED")
             String generationMode
     ) {
@@ -46,8 +43,6 @@ public final class AdminFlashcardStagingDtos {
             sourceText = normalizeNullable(sourceText);
             desiredCount = desiredCount == null ? 10 : desiredCount;
             language = normalizeDefault(language, "en");
-            difficulty = normalizeNullable(difficulty);
-            difficulty = difficulty == null ? null : difficulty.toLowerCase(Locale.ROOT);
             generationMode = normalizeDefault(generationMode, "AI")
                     .replace('-', '_')
                     .toUpperCase(Locale.ROOT);
@@ -79,9 +74,6 @@ public final class AdminFlashcardStagingDtos {
 
             String language,
 
-            @Pattern(regexp = "(?i)^(easy|medium|hard)$", message = "difficulty must be easy, medium, or hard")
-            String difficulty,
-
             @Pattern(regexp = "(?i)^(AI|RULE_BASED)$", message = "generationMode must be AI or RULE_BASED")
             String generationMode
     ) {
@@ -90,8 +82,6 @@ public final class AdminFlashcardStagingDtos {
             sourceName = normalizeNullable(sourceName);
             desiredCount = desiredCount == null ? 10 : desiredCount;
             language = normalizeDefault(language, "en");
-            difficulty = normalizeNullable(difficulty);
-            difficulty = difficulty == null ? null : difficulty.toLowerCase(Locale.ROOT);
             generationMode = normalizeDefault(generationMode, "AI")
                     .replace('-', '_')
                     .toUpperCase(Locale.ROOT);

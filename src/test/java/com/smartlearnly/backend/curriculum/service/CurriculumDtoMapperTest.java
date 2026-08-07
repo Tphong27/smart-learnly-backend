@@ -20,7 +20,8 @@ import org.junit.jupiter.api.Test;
 
 class CurriculumDtoMapperTest {
 
-    private final CurriculumDtoMapper mapper = new CurriculumDtoMapper();
+    private final CurriculumDtoMapper mapper = new CurriculumDtoMapper(
+            org.mockito.Mockito.mock(ClassCurriculumCompositionService.class));
 
     @Test
     void toLearningLessonResponseIncludesYoutubeVideoUrl() {
