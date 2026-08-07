@@ -57,7 +57,7 @@ class CourseQuestionControllerTest {
 
     @Test
     void export_returnsCsvWithHeaderEscapingAndAttachmentHeaders() {
-        QuestionModel.Response first = response("What is \"Java\"?", "draft");
+        QuestionModel.Response first = response("<p>Annotation&nbsp;nào \"Java\"?</p>", "draft");
         QuestionModel.Response second = new QuestionModel.Response(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -90,9 +90,11 @@ class CourseQuestionControllerTest {
         assertThat(response.getHeaders().getContentDisposition().getFilename())
                 .isEqualTo("course-questions.csv");
         assertThat(response.getHeaders().getContentType().toString()).isEqualTo("text/csv;charset=UTF-8");
+        assertThat(response.getBody()).startsWith(new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
         String csv = new String(response.getBody(), StandardCharsets.UTF_8);
-        assertThat(csv).startsWith("id,module_id,type,status,question_text\n");
-        assertThat(csv).contains("\"What is \"\"Java\"\"?\"");
+        assertThat(csv).startsWith("\uFEFFid,module_id,type,status,question_text\n");
+        assertThat(csv).contains("\"Annotation nào \"\"Java\"\"?\"");
+        assertThat(csv).doesNotContain("<p>").doesNotContain("&nbsp;");
         assertThat(csv).contains(",\"true_false\",\"approved\",");
         verify(questionService).listByCourse(courseId, null, "java", null, null, true, null, 0, 10_000);
     }
