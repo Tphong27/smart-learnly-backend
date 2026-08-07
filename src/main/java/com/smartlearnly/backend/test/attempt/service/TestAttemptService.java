@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.test.attempt.service;
 
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
@@ -43,6 +44,7 @@ public class TestAttemptService {
     private final TestQuestionRepository testQuestionRepository;
     private final QuestionAnswerRepository questionAnswerRepository;
     private final StudentTestAnswerRepository studentTestAnswerRepository;
+    private final CurriculumLessonRepository curriculumLessonRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final TestService testService;
     private final UserRepository userRepository;
@@ -59,13 +61,14 @@ public class TestAttemptService {
     public TestAttemptModel.Response startAttempt(TestAttemptModel.StartRequest request) {
         Test test = testRepository.findById(required(request.getTestId(), "testId"))
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
-        UUID studentId = testService.requireCurrentTraineeAccess(test.getId());
+        UUID studentId = testService.requireCurrentTraineeAccess(test.getId(), request.getClassId());
         if (!testService.isWithinSchedule(test, Instant.now())) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_RULE_VIOLATION,
                     "This test is not open for attempts right now");
         }
-        if (!testService.accessCodeMatches(test, request.getAccessCode())) {
+        if (!isEmbeddedCourseQuiz(test)
+                && !testService.accessCodeMatches(test, request.getAccessCode())) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_RULE_VIOLATION,
                     "Invalid or expired test access code");
@@ -101,11 +104,20 @@ public class TestAttemptService {
     }
 
     /** Nộp attempt, chấm các câu trắc nghiệm và phát sự kiện theo dõi cho giảng viên. */
+    private boolean isEmbeddedCourseQuiz(Test test) {
+        return test != null
+                && test.getId() != null
+                && curriculumLessonRepository.existsByTestId(test.getId());
+    }
+
     @Transactional
     public TestAttemptModel.Response submitAttempt(UUID id, TestAttemptModel.SubmitRequest request) {
         TestAttempt attempt = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
-        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
+        testService.requireAttemptAccess(
+                attempt.getTestId(),
+                attempt.getStudentId(),
+                request == null ? null : request.getClassId());
 
         if (attempt.getStatus() == AttemptStatus.SUBMITTED
                 || attempt.getStatus() == AttemptStatus.GRADED
@@ -130,7 +142,12 @@ public class TestAttemptService {
     /** Trả lịch sử attempt của một học viên sau khi xác thực quyền xem. */
     @Transactional
     public List<TestAttemptModel.Response> getAttempts(UUID testId, UUID studentId) {
-        testService.requireAttemptAccess(testId, studentId);
+        return getAttempts(testId, studentId, null);
+    }
+
+    @Transactional
+    public List<TestAttemptModel.Response> getAttempts(UUID testId, UUID studentId, UUID classId) {
+        testService.requireAttemptAccess(testId, studentId, classId);
         return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId)
                 .stream()
                 .map(this::expireIfOverdue)
@@ -154,9 +171,14 @@ public class TestAttemptService {
     /** Trả chi tiết một attempt sau khi cập nhật trạng thái hết hạn và điểm cuối cùng. */
     @Transactional
     public TestAttemptModel.Response getAttemptById(UUID attemptId) {
+        return getAttemptById(attemptId, null);
+    }
+
+    @Transactional
+    public TestAttemptModel.Response getAttemptById(UUID attemptId, UUID classId) {
         TestAttempt attempt = repository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
-        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
+        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId(), classId);
         return mapToResponse(refreshFinalGrade(expireIfOverdue(attempt)));
     }
 

@@ -89,6 +89,56 @@ public interface TestRepository
     @Query("""
             select case when count(test) > 0 then true else false end
             from Test test
+            left join CourseEnrollment courseEnrollment
+                on courseEnrollment.courseId = test.courseId
+               and courseEnrollment.studentId = :studentId
+               and courseEnrollment.status in (
+                  com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE,
+                  com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.COMPLETED
+               )
+            left join ClassOffering classOffering
+                on classOffering.courseId = test.courseId
+            left join ClassEnrollment classEnrollment
+                on classEnrollment.classId = classOffering.id
+               and classEnrollment.studentId = :studentId
+               and classEnrollment.status in (
+                  com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE,
+                  com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.COMPLETED
+               )
+            where test.id = :testId
+              and test.classId is null
+              and (courseEnrollment.id is not null or classEnrollment.id is not null)
+              and test.isPublished = true
+              and test.isArchived = false
+            """)
+    boolean existsAvailableCourseTestForStudent(
+            @Param("testId") UUID testId,
+            @Param("studentId") UUID studentId);
+
+    @Query("""
+            select case when count(test) > 0 then true else false end
+            from Test test
+            join ClassOffering classOffering
+                on classOffering.id = :classId
+               and classOffering.courseId = test.courseId
+            join ClassEnrollment classEnrollment
+                on classEnrollment.classId = classOffering.id
+            where test.id = :testId
+              and classEnrollment.studentId = :studentId
+              and classEnrollment.status in (
+                  com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE,
+                  com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.COMPLETED
+              )
+              and test.isArchived = false
+            """)
+    boolean existsAvailableCourseTestForStudentClass(
+            @Param("testId") UUID testId,
+            @Param("studentId") UUID studentId,
+            @Param("classId") UUID classId);
+
+    @Query("""
+            select case when count(test) > 0 then true else false end
+            from Test test
             left join ClassOffering classOffering
                 on classOffering.id = test.classId
             where test.id = :testId

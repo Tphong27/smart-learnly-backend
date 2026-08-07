@@ -55,12 +55,14 @@ public class TestAttemptController {
     public ResponseEntity<List<TestAttemptModel.Response>>
     getAttempts(
             @PathVariable UUID testId,
-            @PathVariable UUID studentId) {
+            @PathVariable UUID studentId,
+            @RequestParam(required = false) UUID classId) {
 
         return ResponseEntity.ok(
                 service.getAttempts(
                         testId,
-                        studentId));
+                        studentId,
+                        classId));
     }
 
     /** Lấy danh sách attempt của đề cho nhân sự quản lý. */
@@ -75,8 +77,9 @@ public class TestAttemptController {
     @GetMapping("/{attemptId}")
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<TestAttemptModel.Response> getAttemptById(
-            @PathVariable UUID attemptId) {
-        return ResponseEntity.ok(service.getAttemptById(attemptId));
+            @PathVariable UUID attemptId,
+            @RequestParam(required = false) UUID classId) {
+        return ResponseEntity.ok(service.getAttemptById(attemptId, classId));
     }
 
     /** Mở quyền làm lại cho attempt gần nhất của học viên. */

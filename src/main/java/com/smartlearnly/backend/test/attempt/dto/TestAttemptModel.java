@@ -21,6 +21,7 @@ public class TestAttemptModel {
         private String studentName;
         private UUID assignmentId;
         private String accessCode;
+        private UUID classId;
     }
 
     // Sinh viên nộp bài / Hoặc hết giờ tự thu bài (Update)
@@ -29,6 +30,7 @@ public class TestAttemptModel {
     @NoArgsConstructor
     public static class SubmitRequest {
         private Boolean forceSubmit;
+        private UUID classId;
     }
 
     @Getter

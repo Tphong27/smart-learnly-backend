@@ -68,6 +68,7 @@ public class TrainerClassCurriculumService {
     private final AuthenticatedUserResolver authenticatedUserResolver;
     private final QuizContentValidator quizContentValidator;
     private final VideoSummaryService videoSummaryService;
+    private final CurriculumLessonTestLinkService lessonTestLinkService;
 
     @Transactional(readOnly = true)
     public ClassCurriculumEditorResponse getEditorCurriculum(UUID classId) {
@@ -210,7 +211,7 @@ public class TrainerClassCurriculumService {
         entry.setSection(section);
         entry.setLessonIdentityId(UUID.randomUUID());
         entry.setSortOrder(request.sortOrder() == null
-                ? entryRepository.findMaxSortOrderByClassVersionIdAndSectionId(draft.getId(), sectionId) + 1
+                ? entryRepository.findMaxSortOrderByClassVersionIdAndSectionId(draft.getId(), section.getId()) + 1
                 : request.sortOrder());
         ClassCurriculumEntry savedEntry = entryRepository.save(entry);
 
@@ -220,6 +221,7 @@ public class TrainerClassCurriculumService {
         lesson.setSortOrder(savedEntry.getSortOrder());
         applyLessonRequest(lesson, request, true);
         CurriculumLesson savedLesson = lessonRepository.save(lesson);
+        lessonTestLinkService.ensureQuizTest(savedLesson);
 
         savedEntry.setMaterializedLessonId(savedLesson.getId());
         entryRepository.save(savedEntry);
@@ -236,6 +238,7 @@ public class TrainerClassCurriculumService {
             lesson.setSortOrder(request.sortOrder());
         }
         CurriculumLesson saved = lessonRepository.save(lesson);
+        lessonTestLinkService.ensureQuizTest(saved);
         syncEntrySortOrder(saved);
         return mapper.toLessonResponse(saved);
     }
@@ -452,6 +455,8 @@ public class TrainerClassCurriculumService {
 
     private CurriculumSection requireDraftSection(UUID sectionId, UUID draftVersionId) {
         return sectionRepository.findByIdAndCurriculumVersionId(sectionId, draftVersionId)
+                .or(() -> sectionRepository.findBySourceCurriculumSectionIdAndCurriculumVersionId(sectionId, draftVersionId))
+                .or(() -> sectionRepository.findBySourceModuleIdAndCurriculumVersionId(sectionId, draftVersionId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
     }
 

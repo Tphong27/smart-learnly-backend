@@ -61,8 +61,17 @@ public class MasterCurriculumAccessService {
 
     // Tìm section thuộc master curriculum và kiểm tra quyền đọc khóa học sở hữu nó.
     CurriculumSection findReadableSection(UUID sectionId) {
-        CurriculumSection section = findMasterSection(sectionId);
+        CurriculumSection section = sectionRepository.findById(sectionId)
+                .map(this::requireMasterSection)
+                .orElseGet(() -> findReadableModuleSnapshot(sectionId));
         UUID courseId = getCourseId(section);
+        UUID resolvedCourseId = courseId;
+        if (courseModuleRepository.findById(sectionId)
+                .filter(module -> !resolvedCourseId.equals(module.getCourseId()))
+                .isPresent()) {
+            section = findReadableModuleSnapshot(sectionId);
+            courseId = getCourseId(section);
+        }
         courseAccessService.requireReadableCourse(courseId);
         findExistingCourse(courseId);
         return section;
@@ -70,8 +79,17 @@ public class MasterCurriculumAccessService {
 
     // Tìm section thuộc master curriculum và kiểm tra quyền cập nhật khóa học sở hữu nó.
     CurriculumSection findUpdatableSection(UUID sectionId) {
-        CurriculumSection section = findMasterSection(sectionId);
+        CurriculumSection section = sectionRepository.findById(sectionId)
+                .map(this::requireMasterSection)
+                .orElseGet(() -> findUpdatableModuleSnapshot(sectionId));
         UUID courseId = getCourseId(section);
+        UUID resolvedCourseId = courseId;
+        if (courseModuleRepository.findById(sectionId)
+                .filter(module -> !resolvedCourseId.equals(module.getCourseId()))
+                .isPresent()) {
+            section = findUpdatableModuleSnapshot(sectionId);
+            courseId = getCourseId(section);
+        }
         courseAccessService.requireUpdatableCourse(courseId);
         findExistingCourse(courseId);
         return section;
@@ -93,9 +111,9 @@ public class MasterCurriculumAccessService {
                 .filter(candidate -> !Boolean.TRUE.equals(candidate.getSystem()))
                 .filter(candidate -> CourseModule.STATUS_ACTIVE.equals(candidate.getStatus()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Module was not found"));
-        CurriculumVersion version = findUpdatableVersion(module.getCourseId());
+        CurriculumVersion version = findOrCreateUpdatableVersion(module.getCourseId());
         return sectionRepository.findBySourceModuleIdAndCurriculumVersionId(moduleId, version.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Module was not found"));
+                .orElseGet(() -> createMissingModuleSnapshot(module, version));
     }
 
     // Tìm lesson thuộc master curriculum và kiểm tra quyền đọc khóa học sở hữu nó.
@@ -147,6 +165,15 @@ public class MasterCurriculumAccessService {
     }
 
     // Tìm khóa học chưa bị xóa để ngăn thao tác trên dữ liệu đã lưu trữ mềm.
+    private CurriculumSection createMissingModuleSnapshot(CourseModule module, CurriculumVersion version) {
+        CurriculumSection section = new CurriculumSection();
+        section.setCurriculumVersion(version);
+        section.setSourceModuleId(module.getId());
+        section.setTitle(module.getTitle());
+        section.setSortOrder(module.getOrderIndex());
+        return sectionRepository.save(section);
+    }
+
     private Course findExistingCourse(UUID courseId) {
         return courseRepository.findByIdAndDeletedAtIsNull(courseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
@@ -156,6 +183,10 @@ public class MasterCurriculumAccessService {
     private CurriculumSection findMasterSection(UUID sectionId) {
         CurriculumSection section = sectionRepository.findById(sectionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
+        return requireMasterSection(section);
+    }
+
+    private CurriculumSection requireMasterSection(CurriculumSection section) {
         CurriculumVersion version = section.getCurriculumVersion();
         if (version == null || version.getScope() != CurriculumScope.MASTER) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found");

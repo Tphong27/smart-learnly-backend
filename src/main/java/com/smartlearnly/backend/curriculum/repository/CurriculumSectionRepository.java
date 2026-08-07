@@ -18,6 +18,11 @@ public interface CurriculumSectionRepository extends JpaRepository<CurriculumSec
             UUID curriculumVersionId
     );
 
+    Optional<CurriculumSection> findBySourceCurriculumSectionIdAndCurriculumVersionId(
+            UUID sourceCurriculumSectionId,
+            UUID curriculumVersionId
+    );
+
     @Query("select (count(section) > 0) from CurriculumSection section "
             + "where section.id = :sectionId and section.curriculumVersion.courseId = :courseId")
     boolean existsByIdAndCourseId(
