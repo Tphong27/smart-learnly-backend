@@ -117,7 +117,9 @@ public class ClassAdminService {
         classOffering.setTrainerId(trainer.getId());
         classOffering.setMeetingUrl(normalizeMeetingUrl(request.meetingUrl()));
         classOffering.setScheduleDescription(normalizeNullable(request.scheduleDescription()));
-        classOffering.setPrice(request.price());
+        // Price bỏ trống được hiểu là class miễn phí; chuẩn hóa về 0 để luồng đăng ký
+        // miễn phí và lịch mở lớp (yêu cầu price NOT NULL) hoạt động nhất quán.
+        classOffering.setPrice(request.price() == null ? BigDecimal.ZERO : request.price());
         classOffering.setStartDate(request.startDate());
         classOffering.setEndDate(request.endDate());
         classOffering.setMaxStudents(request.maxStudents());

@@ -22,5 +22,7 @@ public record CreateClassRequest(
         @NotNull(message = "Start date is required") @FutureOrPresent(message = "Start date must not be in the past") LocalDate startDate,
         @NotNull(message = "End date is required") LocalDate endDate,
         @NotNull(message = "Capacity is required") @Positive(message = "Capacity must be greater than 0") @Max(value = 500, message = "Capacity must not exceed 500") Integer maxStudents,
-        @NotNull(message = "Class price is required") @DecimalMin(value = "0.0", inclusive = true, message = "Class price must be greater than or equal to 0") @DecimalMax(value = "9999999999.99", message = "Class price is too large") @Digits(integer = 10, fraction = 2, message = "Class price must contain at most 2 decimal places") BigDecimal price) {
+        // Giá tùy chọn: bỏ trống (null) = tạo class miễn phí, backend chuẩn hóa về 0.
+        // Khi có giá, vẫn kiểm tra khoảng hợp lệ 0..9999999999.99 với tối đa 2 số thập phân.
+        @DecimalMin(value = "0.0", inclusive = true, message = "Class price must be greater than or equal to 0") @DecimalMax(value = "9999999999.99", message = "Class price is too large") @Digits(integer = 10, fraction = 2, message = "Class price must contain at most 2 decimal places") BigDecimal price) {
 }
