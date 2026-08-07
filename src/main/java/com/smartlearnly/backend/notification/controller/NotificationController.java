@@ -2,7 +2,6 @@ package com.smartlearnly.backend.notification.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
-import com.smartlearnly.backend.notification.dto.ArchivedCountResponse;
 import com.smartlearnly.backend.notification.dto.NotificationResponse;
 import com.smartlearnly.backend.notification.dto.UnreadCountResponse;
 import com.smartlearnly.backend.notification.service.NotificationService;
@@ -43,12 +42,10 @@ public class NotificationController {
     @Operation(summary = "List current user's notifications")
     public ApiResponse<PageResponse<NotificationResponse>> list(
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
-            @RequestParam(defaultValue = "all") String status,
-            @RequestParam(required = false) String type) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ApiResponse.success(
                 "Notifications loaded successfully",
-                notificationService.list(status, type, page, size));
+                notificationService.list(page, size));
     }
 
     /**
@@ -60,17 +57,6 @@ public class NotificationController {
         return ApiResponse.success(
                 "Unread notification count loaded successfully",
                 notificationService.unreadCount());
-    }
-
-    /**
-     * Lấy chi tiết một notification cụ thể.
-     */
-    @GetMapping("/{notificationId}")
-    @Operation(summary = "Get current user's notification detail")
-    public ApiResponse<NotificationResponse> get(@PathVariable UUID notificationId) {
-        return ApiResponse.success(
-                "Notification loaded successfully",
-                notificationService.get(notificationId));
     }
 
     /**
@@ -117,14 +103,4 @@ public class NotificationController {
                 notificationService.markAllRead());
     }
 
-    /**
-     * Lưu trữ tất cả notification.
-     */
-    @PatchMapping("/archive-all")
-    @Operation(summary = "Archive all current user's notifications")
-    public ApiResponse<ArchivedCountResponse> archiveAll() {
-        return ApiResponse.success(
-                "Notifications archived",
-                notificationService.archiveAll());
-    }
 }

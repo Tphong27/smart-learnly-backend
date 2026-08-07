@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.api.PageResponse;
-import com.smartlearnly.backend.notification.dto.ArchivedCountResponse;
 import com.smartlearnly.backend.notification.dto.NotificationResponse;
 import com.smartlearnly.backend.notification.dto.UnreadCountResponse;
 import com.smartlearnly.backend.notification.entity.NotificationType;
@@ -48,7 +47,7 @@ class NotificationControllerTest {
     @Test
     void listShouldDeclarePaginationValidation() throws Exception {
         Method method = NotificationController.class.getMethod(
-                "list", int.class, int.class, String.class, String.class);
+                "list", int.class, int.class);
 
         Min pageMin = method.getParameters()[0].getAnnotation(Min.class);
         Min sizeMin = method.getParameters()[1].getAnnotation(Min.class);
@@ -62,9 +61,9 @@ class NotificationControllerTest {
     @Test
     void listShouldReturnApiResponse() {
         PageResponse<NotificationResponse> page = new PageResponse<>(List.of(response()), 0, 20, 1, 1);
-        when(notificationService.list("unread", "payment", 0, 20)).thenReturn(page);
+        when(notificationService.list(0, 20)).thenReturn(page);
 
-        var response = controller.list(0, 20, "unread", "payment");
+        var response = controller.list(0, 20);
 
         assertThat(response.success()).isTrue();
         assertThat(response.message()).isEqualTo("Notifications loaded successfully");
@@ -80,17 +79,6 @@ class NotificationControllerTest {
 
         assertThat(response.success()).isTrue();
         assertThat(response.data()).isSameAs(count);
-    }
-
-    @Test
-    void getShouldReturnApiResponse() {
-        NotificationResponse notification = response();
-        when(notificationService.get(notificationId)).thenReturn(notification);
-
-        var response = controller.get(notificationId);
-
-        assertThat(response.success()).isTrue();
-        assertThat(response.data()).isSameAs(notification);
     }
 
     @Test
@@ -136,18 +124,6 @@ class NotificationControllerTest {
         var response = controller.markAllRead();
 
         assertThat(response.success()).isTrue();
-        assertThat(response.data()).isSameAs(count);
-    }
-
-    @Test
-    void archiveAllShouldReturnApiResponse() {
-        ArchivedCountResponse count = new ArchivedCountResponse(3);
-        when(notificationService.archiveAll()).thenReturn(count);
-
-        var response = controller.archiveAll();
-
-        assertThat(response.success()).isTrue();
-        assertThat(response.message()).isEqualTo("Notifications archived");
         assertThat(response.data()).isSameAs(count);
     }
 

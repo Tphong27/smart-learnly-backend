@@ -10,13 +10,10 @@ import org.springframework.data.jpa.repository.Query;
 
 class NotificationRepositoryQueryTest {
     @Test
-    void findForUserShouldCastTypeParameterInDataAndCountQueries() throws Exception {
+    void findActiveForUserShouldReturnOnlyActiveNotificationsNewestFirst() throws Exception {
         Method method = NotificationRepository.class.getMethod(
-                "findForUser",
+                "findActiveForUser",
                 UUID.class,
-                boolean.class,
-                boolean.class,
-                String.class,
                 Pageable.class);
 
         Query query = method.getAnnotation(Query.class);
@@ -24,15 +21,17 @@ class NotificationRepositoryQueryTest {
         assertThat(query).isNotNull();
         assertThat(query.nativeQuery()).isTrue();
         assertThat(query.value())
-                .contains("notification.type = CAST(:type AS public.notification_type)")
+                .contains("notification.user_id = :userId")
+                .contains("notification.archived_at IS NULL")
                 .contains("ORDER BY notification.created_at DESC")
-                .doesNotContain("notification.type::text")
-                .doesNotContain("CAST(notification.type");
+                .doesNotContain("notification.type")
+                .doesNotContain("notification.read_at");
         assertThat(query.countQuery())
                 .contains("SELECT COUNT(*)")
-                .contains("notification.type = CAST(:type AS public.notification_type)")
+                .contains("notification.user_id = :userId")
+                .contains("notification.archived_at IS NULL")
                 .doesNotContain("ORDER BY")
-                .doesNotContain("notification.type::text")
-                .doesNotContain("CAST(notification.type");
+                .doesNotContain("notification.type")
+                .doesNotContain("notification.read_at");
     }
 }

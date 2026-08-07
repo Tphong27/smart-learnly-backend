@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
-import com.smartlearnly.backend.notification.dto.ArchivedCountResponse;
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.dto.NotificationResponse;
 import com.smartlearnly.backend.notification.dto.UnreadCountResponse;
@@ -138,16 +137,6 @@ class NotificationWriteServiceTest {
 
         assertThat(response).isNotNull();
         assertThat(notification.getArchivedAt()).isNotNull();
-    }
-
-    @Test
-    void archiveAll_returnsArchivedCount() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        when(notificationRepository.archiveAllForUser(eq(userId), any(Instant.class))).thenReturn(5);
-
-        ArchivedCountResponse response = service.archiveAll();
-
-        assertThat(response.archivedCount()).isEqualTo(5);
     }
 
     @Test
