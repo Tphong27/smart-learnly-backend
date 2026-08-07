@@ -104,4 +104,23 @@ public interface ClassEnrollmentRepository extends JpaRepository<ClassEnrollment
                                  class_enrollment.id ASC
                         """, nativeQuery = true)
         List<MyCourseProjection> findActiveMyClasses(@Param("studentId") UUID studentId);
+
+        @Query(value = """
+                        SELECT enrollment.class_id
+                        FROM public.class_enrollments enrollment
+                        JOIN public.classes class_offering
+                            ON class_offering.id = enrollment.class_id
+                           AND class_offering.deleted_at IS NULL
+                        WHERE enrollment.student_id = :studentId
+                          AND class_offering.course_id = :courseId
+                          AND enrollment.status IN (
+                              'active'::public.enroll_status,
+                              'completed'::public.enroll_status
+                          )
+                        ORDER BY enrollment.enrollment_date DESC,
+                                 enrollment.id ASC
+                        """, nativeQuery = true)
+        List<UUID> findActiveClassIdsByCourseIdAndStudentId(
+                        @Param("courseId") UUID courseId,
+                        @Param("studentId") UUID studentId);
 }

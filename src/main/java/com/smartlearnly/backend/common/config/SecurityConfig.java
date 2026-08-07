@@ -121,9 +121,18 @@ public class SecurityConfig {
                         // Admin course content management: allow ADMIN/TMO/SME/TRAINER to access course content authoring APIs
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/courses", "/api/v1/admin/courses/**")
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
+                        // Course scoped question management: let the method-level @PreAuthorize enforce create/update/archive/import
+                        // (ADMIN/SME) and AI drafts (ADMIN/SME); the filter only needs to admit the allowed roles.
+                        .requestMatchers(
+                                "/api/v1/admin/courses/*/questions",
+                                "/api/v1/admin/courses/*/questions/**"
+                        )
+                        .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
 .requestMatchers("/api/v1/admin/sections/**")
 .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
 .requestMatchers("/api/v1/admin/lessons/**")
+.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+.requestMatchers("/api/v1/admin/modules/**")
 .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
 .requestMatchers(
         "/api/v1/admin/flashcard-sets/**",

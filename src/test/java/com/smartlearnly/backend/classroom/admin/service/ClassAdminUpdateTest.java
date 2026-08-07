@@ -350,20 +350,21 @@ class ClassAdminUpdateTest {
         }
 
         @Test
-        void UTCID09_update_rejectsPriceChangeWhileClassIsOngoing() {
+        void UTCID09_update_allowsPriceChangeWhileClassIsOngoing() {
                 ClassOffering existing = ongoingClass();
+                UserAccount actor = actor();
                 UpdateClassRequest request = new UpdateClassRequest();
                 request.setPrice(new BigDecimal("750000"));
                 stubLockedClass(existing);
+                stubSuccessfulTail(existing, actor, "Java Backend", "Original Trainer", 4L);
 
-                assertBusinessException(
-                                request,
-                                ErrorCode.CONFLICT,
-                                "Class price cannot be changed while the class is ongoing");
+                ClassResponse response = service.update(CLASS_ID, request);
 
-                verify(classOfferingRepository, never())
-                                .hasCommercialHistory(any());
-                assertNoPersistenceOrPostSaveSideEffects();
+                assertThat(existing.getPrice()).isEqualByComparingTo("750000");
+                assertThat(response.status()).isEqualTo("ongoing");
+                assertThat(response.price()).isEqualByComparingTo("750000");
+                verify(classOfferingRepository)
+                                .hasCommercialHistory(CLASS_ID);
         }
 
         @Test
