@@ -433,7 +433,7 @@ class AiQuestionDraftServiceTest {
                 .thenReturn(false);
         assertInvalidCreate(requestWithTypes("null-types", null), "At least one question type is required");
         assertInvalidCreate(requestWithTypes("bad-key", List.of()), "At least one question type is required");
-        assertInvalidCreate(requestWithTypes("bad-type-key", List.of("essay")), "Question type must be multiple_choice or true_false");
+        assertInvalidCreate(requestWithTypes("bad-type-key", List.of("essay")), "Question type must be single_choice, multiple_choice, or true_false");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), null, null, "vi", null, "null-count"),
                 "Requested count must be between 1 and 20");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 0, null, "vi", null, "bad-count"),
@@ -644,13 +644,13 @@ class AiQuestionDraftServiceTest {
                         exception -> assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
         assertInvalidAfterNoopUpdate(batch, noCorrect, answers("A", "B").stream()
                 .map(answer -> new AiQuestionDraftDtos.AnswerPayload(answer.answerText(), false, answer.orderIndex()))
-                .toList(), "Exactly one correct answer is required");
+                .toList(), "Multiple choice requires at least two correct answers");
         assertInvalidAfterNoopUpdate(batch, badTrueFalse, List.of(
                 new AiQuestionDraftDtos.AnswerPayload("True", true, 1),
                 new AiQuestionDraftDtos.AnswerPayload("Maybe", false, 2)), "True/false questions must have exactly True and False answers");
         assertInvalidAfterNoopUpdate(batch, tooFewMultipleChoice,
                 List.of(new AiQuestionDraftDtos.AnswerPayload("Only", true, 1)), "Multiple choice questions support 2 to 6 answers");
-        assertInvalidAfterNoopUpdate(batch, unsupportedType, answers("A", "B"), "Question type must be multiple_choice or true_false");
+        assertInvalidAfterNoopUpdate(batch, unsupportedType, answers("A", "B"), "Question type must be single_choice, multiple_choice, or true_false");
     }
 
     @Test
@@ -1030,12 +1030,12 @@ class AiQuestionDraftServiceTest {
     private List<AiQuestionDraftDtos.AnswerPayload> answers(String correct, String incorrect) {
         return List.of(
                 new AiQuestionDraftDtos.AnswerPayload(correct, true, null),
-                new AiQuestionDraftDtos.AnswerPayload(incorrect, false, null));
+                new AiQuestionDraftDtos.AnswerPayload(incorrect, true, null));
     }
 
     private String validAnswersJson() {
         return """
-                [{"answerText":"A","correct":true,"orderIndex":1},{"answerText":"B","correct":false,"orderIndex":2}]
+                [{"answerText":"A","correct":true,"orderIndex":1},{"answerText":"B","correct":true,"orderIndex":2}]
                 """;
     }
 
