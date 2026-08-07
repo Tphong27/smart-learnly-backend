@@ -201,7 +201,7 @@ class AiQuestionSourceServiceTest {
     }
 
     @Test
-    void persistAndBuildSourceInputs_allowsNullCollectionsButStillRequiresOneSource() {
+    void persistAndBuildSourceInputs_allowsNullCollectionsAndReturnsNoSourceInputs() {
         AiQuestionGenerationBatch batch = batch(courseId);
         AiQuestionDraftDtos.CreateBatchRequest request = new AiQuestionDraftDtos.CreateBatchRequest(
                 null,
@@ -213,9 +213,12 @@ class AiQuestionSourceServiceTest {
                 null,
                 "idem");
 
-        assertThatThrownBy(() -> service.persistAndBuildSourceInputs(courseId, batch, request, null))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.AI_INVALID_GENERATION_CONFIG));
+        List<QuestionGenerationProvider.SourceInput> inputs =
+                service.persistAndBuildSourceInputs(courseId, batch, request, null);
+
+        assertThat(inputs).isEmpty();
+        assertThat(savedSources).isEmpty();
+        assertThat(savedChunks).isEmpty();
     }
 
     @Test
@@ -426,11 +429,8 @@ class AiQuestionSourceServiceTest {
     }
 
     @Test
-    void persistAndBuildSourceInputs_rejectsMissingTooManyOrOversizedSources() {
+    void persistAndBuildSourceInputs_rejectsTooManyOrOversizedSources() {
         AiQuestionGenerationBatch batch = batch(courseId);
-        assertThatThrownBy(() -> service.persistAndBuildSourceInputs(courseId, batch, request(List.of(), List.of()), List.of()))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.AI_INVALID_GENERATION_CONFIG));
 
         List<AiQuestionDraftDtos.PastedTextSourceRequest> tooMany = new ArrayList<>();
         for (int index = 0; index < 9; index += 1) {

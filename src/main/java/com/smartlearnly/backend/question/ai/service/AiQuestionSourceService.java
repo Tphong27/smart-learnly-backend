@@ -214,7 +214,7 @@ public class AiQuestionSourceService {
         }
     }
 
-    /** Gom ba loại nguồn được request thành một danh sách chuẩn hóa. */
+    /** Gom cac loai nguon duoc request thanh danh sach chuan hoa; source co the de trong. */
     private List<SourceSpec> resolveSourceSpecs(
             UUID courseId,
             AiQuestionDraftDtos.CreateBatchRequest request,
@@ -224,11 +224,6 @@ public class AiQuestionSourceService {
         specs.addAll(resolvePastedTextSpecs(request.pastedTextSources()));
         specs.addAll(resolveDocumentSpecs(files));
         specs.addAll(resolveTranscriptSpecs(courseId, request.transcriptContentIds()));
-        if (specs.isEmpty()) {
-            throw new BusinessException(
-                    ErrorCode.AI_INVALID_GENERATION_CONFIG,
-                    "At least one generation source is required");
-        }
         return specs;
     }
 
