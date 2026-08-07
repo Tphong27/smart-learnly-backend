@@ -88,7 +88,7 @@ public class MasterCurriculumAccessService {
     }
 
     // Ánh xạ module đang hoạt động sang snapshot section của master curriculum để cập nhật.
-    CurriculumSection findUpdatableModuleSnapshot(UUID moduleId) {
+    public CurriculumSection findUpdatableModuleSnapshot(UUID moduleId) {
         CourseModule module = courseModuleRepository.findById(moduleId)
                 .filter(candidate -> !Boolean.TRUE.equals(candidate.getSystem()))
                 .filter(candidate -> CourseModule.STATUS_ACTIVE.equals(candidate.getStatus()))

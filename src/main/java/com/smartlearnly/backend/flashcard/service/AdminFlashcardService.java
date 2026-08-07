@@ -18,10 +18,10 @@ import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
+import com.smartlearnly.backend.curriculum.admin.service.MasterCurriculumAccessService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
-import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
@@ -50,8 +50,8 @@ public class AdminFlashcardService {
     private final FlashcardCardRepository flashcardCardRepository;
     private final CurrentUserService currentUserService;
     private final CurriculumLessonRepository curriculumLessonRepository;
-    private final CurriculumSectionRepository curriculumSectionRepository;
     private final CourseAccessService courseAccessService;
+    private final MasterCurriculumAccessService masterCurriculumAccessService;
 
     @Transactional
     public FlashcardLessonCreatedResponse createFlashcardLesson(
@@ -60,7 +60,12 @@ public class AdminFlashcardService {
             CreateFlashcardLessonRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
         Course course = findCourse(courseId);
-        CurriculumSection section = findCurriculumSection(courseId, sectionId);
+        // Frontend gửi section.id = sourceModuleId (module id) như mọi endpoint authoring
+        // khác, nên resolve qua module snapshot thay vì tìm theo section PK.
+        CurriculumSection section = masterCurriculumAccessService.findUpdatableModuleSnapshot(sectionId);
+        if (!courseId.equals(section.getCurriculumVersion().getCourseId())) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found");
+        }
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 
         CurriculumLesson lesson = new CurriculumLesson();
@@ -288,17 +293,6 @@ public class AdminFlashcardService {
     private Course findCourse(UUID courseId) {
         return courseRepository.findByIdAndDeletedAtIsNull(courseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
-    }
-
-    private CurriculumSection findCurriculumSection(UUID courseId, UUID sectionId) {
-        CurriculumSection section = curriculumSectionRepository.findById(sectionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
-
-        if (!courseId.equals(section.getCurriculumVersion().getCourseId())) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found");
-        }
-
-        return section;
     }
 
     private FlashcardSet findSet(UUID setId) {

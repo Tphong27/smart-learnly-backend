@@ -13,6 +13,11 @@ public interface CurriculumSectionRepository extends JpaRepository<CurriculumSec
 
     Optional<CurriculumSection> findByIdAndCurriculumVersionId(UUID id, UUID curriculumVersionId);
 
+    Optional<CurriculumSection> findBySourceCurriculumSectionIdAndCurriculumVersionId(
+            UUID sourceCurriculumSectionId,
+            UUID curriculumVersionId
+    );
+
     Optional<CurriculumSection> findBySourceModuleIdAndCurriculumVersionId(
             UUID sourceModuleId,
             UUID curriculumVersionId

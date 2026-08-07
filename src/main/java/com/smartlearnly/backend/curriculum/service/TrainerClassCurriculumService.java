@@ -451,7 +451,13 @@ public class TrainerClassCurriculumService {
     }
 
     private CurriculumSection requireDraftSection(UUID sectionId, UUID draftVersionId) {
+        // Khi class chưa có draft (inherited), frontend hiển thị section của master với id
+        // là section PK gốc. Auto-draft snapshot tạo section mới liên kết source, nên fallback
+        // theo sourceCurriculumSectionId để client có thể tiếp tục thao tác với id cũ.
         return sectionRepository.findByIdAndCurriculumVersionId(sectionId, draftVersionId)
+                .or(() -> sectionRepository.findBySourceCurriculumSectionIdAndCurriculumVersionId(
+                        sectionId,
+                        draftVersionId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
     }
 

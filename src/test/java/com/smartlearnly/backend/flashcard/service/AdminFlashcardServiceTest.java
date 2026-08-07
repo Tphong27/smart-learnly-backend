@@ -14,13 +14,13 @@ import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
+import com.smartlearnly.backend.curriculum.admin.service.MasterCurriculumAccessService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
-import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardLessonRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardCardResponse;
@@ -65,11 +65,11 @@ class AdminFlashcardServiceTest {
     private AdminFlashcardService adminFlashcardService;
     @Mock
     private CurriculumLessonRepository curriculumLessonRepository;
-    @Mock
-    private CurriculumSectionRepository curriculumSectionRepository;
 
     @Mock
     private CourseAccessService courseAccessService;
+    @Mock
+    private MasterCurriculumAccessService masterCurriculumAccessService;
 
     @BeforeEach
     void setUp() {
@@ -80,8 +80,8 @@ class AdminFlashcardServiceTest {
                 flashcardCardRepository,
                 currentUserService,
                 curriculumLessonRepository,
-                curriculumSectionRepository,
-                courseAccessService);
+                courseAccessService,
+                masterCurriculumAccessService);
     }
 
     @Test
@@ -93,7 +93,7 @@ class AdminFlashcardServiceTest {
         UUID lessonId = UUID.randomUUID();
         UUID setId = UUID.randomUUID();
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(curriculumSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(masterCurriculumAccessService.findUpdatableModuleSnapshot(section.getId())).thenReturn(section);
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(4);
         when(curriculumLessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {

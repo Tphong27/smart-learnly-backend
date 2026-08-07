@@ -602,23 +602,11 @@ public class ClassAdminService {
                     "Start date cannot be changed while the class is ongoing");
         }
 
-        if (request.isPriceProvided()
-                && !samePrice(
-                        current.getPrice(),
-                        request.getPrice())) {
-            throw new BusinessException(
-                    ErrorCode.CONFLICT,
-                    "Class price cannot be changed while the class is ongoing");
-        }
-    }
-
-    // So sánh giá trị tiền tệ, coi null và 0 là cùng một mức giá.
-    private boolean samePrice(BigDecimal first, BigDecimal second) {
-        if (first == null || second == null) {
-            return first == second;
-        }
-
-        return first.compareTo(second) == 0;
+        /*
+         * Giá có thể thay đổi ngay cả khi lớp đang ONGOING. Việc bảo vệ lịch sử
+         * thương mại được xử lý riêng ở updateClass qua hasCommercialHistory:
+         * chỉ chặn đổi giá khi đã có ghi danh hoặc thanh toán.
+         */
     }
 
     // Chuẩn hóa bộ lọc trạng thái và từ chối trạng thái không thuộc hợp đồng.
