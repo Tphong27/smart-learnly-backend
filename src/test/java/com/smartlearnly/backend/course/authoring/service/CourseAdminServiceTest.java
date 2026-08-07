@@ -381,6 +381,22 @@ class CourseAdminServiceTest {
         }
 
         @Test
+        void updateShouldRejectSmeBeforeChangingCourseDetails() {
+                UUID courseId = UUID.randomUUID();
+                UpdateCourseRequest request = new UpdateCourseRequest();
+                request.setTitle("SME edit attempt");
+                when(courseAccessService.isCurrentUserSme()).thenReturn(true);
+
+                assertThatThrownBy(() -> courseAdminService.update(courseId, request))
+                                .isInstanceOf(BusinessException.class)
+                                .extracting("errorCode")
+                                .isEqualTo(ErrorCode.FORBIDDEN);
+
+                verify(courseAccessService, never()).requireUpdatableCourse(courseId);
+                verify(courseRepository, never()).save(any());
+        }
+
+        @Test
         void updatePublishedCourseShouldNotifyEnrolledLearnersWhenPublicDetailsChange() {
                 Course course = existingCourse(CourseStatus.PUBLISHED);
                 UserAccount actor = admin();

@@ -8,6 +8,7 @@ import com.smartlearnly.backend.curriculum.admin.controller.AdminCourseLessonCon
 import com.smartlearnly.backend.curriculum.admin.controller.AdminCourseSectionController;
 import com.smartlearnly.backend.file.controller.AdminUploadController;
 import com.smartlearnly.backend.course.category.controller.AdminCategoryController;
+import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +19,18 @@ class CourseAdminAuthorizationAnnotationTest {
     void courseManagementShouldAllowAllCourseAuthoringRoles() {
         assertThat(preAuthorizeValue(AdminCourseController.class))
                 .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
+    }
+
+    @Test
+    void courseDetailUpdateShouldNotAllowSmeRole() throws Exception {
+        Method updateMethod = AdminCourseController.class.getMethod(
+                "update",
+                java.util.UUID.class,
+                com.smartlearnly.backend.course.authoring.dto.UpdateCourseRequest.class);
+
+        assertThat(preAuthorizeValue(updateMethod))
+                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'TRAINER')")
+                .doesNotContain("SME");
     }
 
     @Test
@@ -49,6 +62,15 @@ class CourseAdminAuthorizationAnnotationTest {
     private String preAuthorizeValue(Class<?> controllerClass) {
         PreAuthorize annotation = AnnotatedElementUtils.findMergedAnnotation(
                 controllerClass,
+                PreAuthorize.class
+        );
+        assertThat(annotation).isNotNull();
+        return annotation.value();
+    }
+
+    private String preAuthorizeValue(Method method) {
+        PreAuthorize annotation = AnnotatedElementUtils.findMergedAnnotation(
+                method,
                 PreAuthorize.class
         );
         assertThat(annotation).isNotNull();
