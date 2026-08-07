@@ -219,8 +219,10 @@ class SessionSyncHandlerTest {
 
     @Test
     void indexFutureSessions_filtersPastSessions() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDate today = now.toLocalDate();
+        // Cố định giờ giữa ngày để test không phụ thuộc thời điểm chạy thực tế
+        // (chạy trước 07:30 sáng sẽ biến session "today 07:30" thành tương lai).
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.of(today, LocalTime.of(15, 0));
 
         List<ClassSession> sessions = List.of(
                 createSession(UUID.randomUUID(), today.minusDays(1), LocalTime.of(7, 30)), // Past

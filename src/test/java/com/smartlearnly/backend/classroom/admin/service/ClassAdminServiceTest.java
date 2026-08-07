@@ -273,6 +273,52 @@ class ClassAdminServiceTest {
         }
 
         @Test
+        void softDeleteShouldRejectClassWithCommercialHistory() {
+                ClassOffering classOffering = classOffering();
+
+                when(classOfferingRepository.findByIdForUpdate(classOffering.getId()))
+                                .thenReturn(Optional.of(classOffering));
+                when(classOfferingRepository.hasCommercialHistory(classOffering.getId()))
+                                .thenReturn(true);
+
+                assertThatThrownBy(() -> service.softDelete(classOffering.getId()))
+                                .isInstanceOfSatisfying(BusinessException.class,
+                                                exception -> {
+                                                        assertThat(exception.errorCode())
+                                                                        .isEqualTo(ErrorCode.CONFLICT);
+                                                        assertThat(exception.getMessage())
+                                                                        .contains("cancel");
+                                                });
+
+                verify(classOfferingRepository, never()).save(any());
+                verify(auditLogService, never()).record(any(), any(), any(), any());
+        }
+
+        @Test
+        void softDeleteShouldDeleteClassWithoutHistory() {
+                ClassOffering classOffering = classOffering();
+                UserAccount actor = user("admin@smartlearnly.dev");
+
+                when(classOfferingRepository.findByIdForUpdate(classOffering.getId()))
+                                .thenReturn(Optional.of(classOffering));
+                when(classOfferingRepository.hasCommercialHistory(classOffering.getId()))
+                                .thenReturn(false);
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+                service.softDelete(classOffering.getId());
+
+                assertThat(classOffering.getStatus()).isEqualTo(ClassStatus.CANCELLED);
+                assertThat(classOffering.getDeletedAt()).isNotNull();
+
+                verify(classOfferingRepository).save(classOffering);
+                verify(auditLogService).record(
+                                actor.getEmail(),
+                                "CLASS_DELETED",
+                                "CLASS",
+                                classOffering.getId().toString());
+        }
+
+        @Test
         void restoreShouldRestoreCancelledClassAndRebuildSessions() {
                 ClassOffering classOffering = classOffering();
                 classOffering.setStatus(ClassStatus.CANCELLED);

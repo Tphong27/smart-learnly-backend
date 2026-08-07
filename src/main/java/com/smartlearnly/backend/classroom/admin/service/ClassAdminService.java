@@ -438,9 +438,23 @@ public class ClassAdminService {
     }
 
     @Transactional
-    // Xóa mềm lớp và dọn các phiên chưa diễn ra để giữ lịch sử.
+    // Xóa mềm lớp chưa có lịch sử ghi danh/thanh toán. Lớp đã có học viên
+    // chỉ nên hủy qua cancel (thông báo + dọn phiên tương lai) để giữ lịch sử.
     public void softDelete(UUID classId) {
         ClassOffering classOffering = findClassForUpdate(classId);
+
+        /*
+         * Không cho phép xóa lớp đã có lịch sử ghi danh hoặc thanh toán.
+         * Xóa sẽ khiến trainee đã đăng ký hoặc đang học mất quyền truy cập
+         * mà không được thông báo hay hoàn tiền. Lớp này chỉ nên được hủy
+         * bằng cancel để giữ lịch sử và thông báo cho người liên quan.
+         */
+        if (classOfferingRepository.hasCommercialHistory(classId)) {
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "Class with enrollment or payment history cannot be deleted. Use cancel instead.");
+        }
+
         classOffering.setStatus(ClassStatus.CANCELLED);
         classOffering.setDeletedAt(Instant.now());
         classOfferingRepository.save(classOffering);
