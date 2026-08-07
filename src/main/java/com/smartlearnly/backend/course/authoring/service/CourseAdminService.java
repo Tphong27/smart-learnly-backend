@@ -203,6 +203,11 @@ public class CourseAdminService {
     // Áp dụng các trường PATCH được cung cấp và đồng bộ trạng thái xuất bản khi cần.
     @Transactional
     public CourseResponse update(UUID courseId, UpdateCourseRequest request) {
+        if (courseAccessService.isCurrentUserSme()) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "SME can view course details but cannot update them");
+        }
         courseAccessService.requireUpdatableCourse(courseId);
 
         if (!request.hasAnyField()) {
