@@ -132,6 +132,8 @@ public class SecurityConfig {
 .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
 .requestMatchers("/api/v1/admin/lessons/**")
 .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+.requestMatchers("/api/v1/admin/modules/**")
+.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
 .requestMatchers(
         "/api/v1/admin/flashcard-sets/**",
         "/api/v1/admin/flashcard-cards/**",

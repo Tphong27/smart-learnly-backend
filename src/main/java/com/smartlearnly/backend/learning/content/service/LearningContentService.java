@@ -11,11 +11,13 @@ import com.smartlearnly.backend.curriculum.dto.CurriculumMetadataResponse;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolutionService;
+import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.learning.content.dto.LearningContentResponse;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -33,32 +35,47 @@ public class LearningContentService {
         private final CurriculumResolutionService curriculumResolutionService;
         private final CurriculumDtoMapper curriculumDtoMapper;
         private final CourseAccessService courseAccessService;
+        private final ClassEnrollmentRepository classEnrollmentRepository;
 
         /** Tạo nội dung học thật cho học viên sau khi kiểm tra quyền enrollment và scope lớp học. */
         @Transactional(readOnly = true)
         public LearningContentResponse getLearningContent(UUID courseId, UUID classId) {
                 UserAccount student = currentUserService.requireAuthenticatedUser();
 
+                /*
+                 * Khi client không gửi classId, tự động tìm class mà học viên đang theo học
+                 * để học viên của lớp nhận đúng curriculum riêng của trainer, thay vì
+                 * fallback về master curriculum như học online.
+                 */
+                UUID effectiveClassId = classId;
+                if (effectiveClassId == null) {
+                        List<UUID> activeClassIds = classEnrollmentRepository
+                                        .findActiveClassIdsByCourseIdAndStudentId(courseId, student.getId());
+                        if (!activeClassIds.isEmpty()) {
+                                effectiveClassId = activeClassIds.get(0);
+                        }
+                }
+
                 CurriculumResolution resolution;
 
                 /*
                  * Học online:
-                 * - Không có classId.
+                 * - Không thuộc class nào.
                  * - Kiểm tra CourseEnrollment.
                  * - Sử dụng master curriculum của course.
                  */
-                if (classId == null) {
+                if (effectiveClassId == null) {
                         resolution = curriculumResolutionService.resolveOnlineLearning(courseId, student.getId());
                 }
 
                 /*
                  * Học theo lớp offline:
-                 * - Có classId.
+                 * - Có classId (từ client hoặc tự resolve ở trên).
                  * - Kiểm tra ClassEnrollment.
                  * - Sử dụng curriculum hiệu lực của class.
                  */
                 else {
-                        resolution = curriculumResolutionService.resolveClassLearning(courseId, classId,
+                        resolution = curriculumResolutionService.resolveClassLearning(courseId, effectiveClassId,
                                         student.getId());
                 }
 
@@ -70,10 +87,10 @@ public class LearningContentService {
                 Set<UUID> completedLessonIdentityIds;
 
                 /*
-                 * classId null nghĩa là học online.
+                 * effectiveClassId null nghĩa là học online.
                  * Tạm thời không gọi query progress theo class với giá trị null.
                  */
-                if (classId == null) {
+                if (effectiveClassId == null) {
                         completedLessonIdentityIds = lessonProgressRepository
                                         .findByStudentIdAndCourseIdAndClassIdIsNull(student.getId(), courseId)
                                         .stream()
@@ -83,7 +100,7 @@ public class LearningContentService {
                                         .collect(Collectors.toSet());
                 } else {
                         completedLessonIdentityIds = lessonProgressRepository
-                                        .findByStudentIdAndClassIdAndCourseId(student.getId(), classId, courseId)
+                                        .findByStudentIdAndClassIdAndCourseId(student.getId(), effectiveClassId, courseId)
                                         .stream()
                                         .filter(LessonProgress::isCompleted)
                                         .map(LessonProgress::getLessonIdentityId)
