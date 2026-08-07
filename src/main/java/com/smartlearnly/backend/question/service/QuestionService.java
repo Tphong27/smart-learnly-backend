@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class QuestionService {
     private static final int MIN_ANSWERS = 2;
     private static final int MAX_MCQ_ANSWERS = 6;
+    private static final String SUPPORTED_QUESTION_TYPE_MESSAGE = "Question type must be single_choice, multiple_choice, or true_false";
+    private static final Set<QuestionType> SUPPORTED_QUESTION_TYPES = Set.of(
+            QuestionType.SINGLE_CHOICE,
+            QuestionType.MULTIPLE_CHOICE,
+            QuestionType.TRUE_FALSE
+    );
 
     private final QuestionRepository questionRepository;
     private final QuestionAnswerRepository answerRepository;
@@ -244,15 +251,16 @@ public class QuestionService {
         List<String> options = row.options().stream()
                 .map(option -> normalizeRequired(option, "Answer text is required"))
                 .toList();
-        int correctIndex = resolveCorrectAnswerIndex(questionType, options, row.correctAnswer());
+        Set<Integer> correctIndexes = resolveCorrectAnswerIndexes(questionType, options, row.correctAnswer());
         List<QuestionModel.AnswerRequest> answers = new ArrayList<>();
         for (int index = 0; index < options.size(); index += 1) {
+            boolean correct = correctIndexes.contains(index);
             answers.add(new QuestionModel.AnswerRequest(
                     null,
                     null,
                     options.get(index),
-                    index == correctIndex,
-                    index == correctIndex,
+                    correct,
+                    correct,
                     index + 1,
                     index + 1
             ));
@@ -260,7 +268,7 @@ public class QuestionService {
         return answers;
     }
 
-    private int resolveCorrectAnswerIndex(QuestionType questionType, List<String> options, String correctAnswer) {
+    private Set<Integer> resolveCorrectAnswerIndexes(QuestionType questionType, List<String> options, String correctAnswer) {
         String normalized = correctAnswer == null ? "" : correctAnswer.trim();
         if (questionType == QuestionType.TRUE_FALSE) {
             boolean isTrue = "true".equalsIgnoreCase(normalized);
@@ -270,23 +278,39 @@ public class QuestionService {
             }
             for (int index = 0; index < options.size(); index += 1) {
                 String text = options.get(index).trim().toLowerCase(Locale.ROOT);
-                if (isTrue && "true".equals(text)) return index;
-                if (isFalse && "false".equals(text)) return index;
+                if (isTrue && "true".equals(text)) return Set.of(index);
+                if (isFalse && "false".equals(text)) return Set.of(index);
             }
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "True/false options must contain True and False answers");
         }
-        if (normalized.length() != 1) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer must be a single letter A-F");
+        List<String> letters = List.of(normalized.toUpperCase(Locale.ROOT).split("[,;\\s]+")).stream()
+                .map(String::trim)
+                .filter(letter -> !letter.isBlank())
+                .toList();
+        if (questionType == QuestionType.SINGLE_CHOICE && letters.size() != 1) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Single choice correct answer must be one letter A-F");
         }
-        char letter = Character.toUpperCase(normalized.charAt(0));
-        if (letter < 'A' || letter > 'F') {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer must be A, B, C, D, E, or F");
+        if (questionType == QuestionType.MULTIPLE_CHOICE && letters.size() < 2) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Multiple choice correct answer must include at least two letters");
         }
-        int index = letter - 'A';
-        if (index >= options.size()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer refers to an option that was not provided");
+        Set<Integer> indexes = new java.util.LinkedHashSet<>();
+        for (String item : letters) {
+            if (item.length() != 1) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer must use letters A, B, C, D, E, or F");
+            }
+            char letter = item.charAt(0);
+            if (letter < 'A' || letter > 'F') {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer must use letters A, B, C, D, E, or F");
+            }
+            int index = letter - 'A';
+            if (index >= options.size()) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer refers to an option that was not provided");
+            }
+            if (!indexes.add(index)) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Correct answer contains duplicate letters");
+            }
         }
-        return index;
+        return indexes;
     }
 
     private List<String> validateImportRowForCourse(UUID courseId, QuestionImportDtos.ImportRow row) {
@@ -327,10 +351,10 @@ public class QuestionService {
             try {
                 type = QuestionType.valueOf(normalizedType);
             } catch (IllegalArgumentException exception) {
-                rowErrors.add("Question type must be multiple_choice or true_false");
+                rowErrors.add(SUPPORTED_QUESTION_TYPE_MESSAGE);
             }
-            if (type != null && type != QuestionType.MULTIPLE_CHOICE && type != QuestionType.TRUE_FALSE) {
-                rowErrors.add("Question type must be multiple_choice or true_false");
+            if (type != null && !SUPPORTED_QUESTION_TYPES.contains(type)) {
+                rowErrors.add(SUPPORTED_QUESTION_TYPE_MESSAGE);
                 type = null;
             }
         }
@@ -339,7 +363,7 @@ public class QuestionService {
         if (options == null || options.size() < 2) {
             rowErrors.add("At least two answers are required");
         } else if (options.size() > 6) {
-            rowErrors.add("Multiple choice questions support 2 to 6 answers");
+            rowErrors.add("Choice questions support 2 to 6 answers");
         } else {
             for (int index = 0; index < options.size(); index += 1) {
                 String option = options.get(index);
@@ -377,16 +401,30 @@ public class QuestionService {
             if (!"true".equalsIgnoreCase(normalized) && !"false".equalsIgnoreCase(normalized)) {
                 rowErrors.add("Correct answer for true/false must be True or False");
             }
-        } else if (type == QuestionType.MULTIPLE_CHOICE) {
-            String normalized = correctAnswer.trim();
-            if (normalized.length() != 1) {
-                rowErrors.add("Correct answer must be a single letter A-F");
+        } else if (type == QuestionType.SINGLE_CHOICE || type == QuestionType.MULTIPLE_CHOICE) {
+            List<String> letters = List.of(correctAnswer.trim().toUpperCase(Locale.ROOT).split("[,;\\s]+")).stream()
+                    .map(String::trim)
+                    .filter(letter -> !letter.isBlank())
+                    .toList();
+            if (type == QuestionType.SINGLE_CHOICE && letters.size() != 1) {
+                rowErrors.add("Single choice correct answer must be one letter A-F");
+            } else if (type == QuestionType.MULTIPLE_CHOICE && letters.size() < 2) {
+                rowErrors.add("Multiple choice correct answer must include at least two letters, such as A,C");
             } else {
-                char letter = Character.toUpperCase(normalized.charAt(0));
-                if (letter < 'A' || letter > 'F') {
-                    rowErrors.add("Correct answer must be A, B, C, D, E, or F");
-                } else if (options != null && (letter - 'A') >= options.size()) {
-                    rowErrors.add("Correct answer refers to an option that was not provided");
+                Set<String> uniqueLetters = new java.util.LinkedHashSet<>();
+                for (String letterValue : letters) {
+                    if (letterValue.length() != 1) {
+                        rowErrors.add("Correct answer must use letters A, B, C, D, E, or F");
+                        continue;
+                    }
+                    char letter = letterValue.charAt(0);
+                    if (letter < 'A' || letter > 'F') {
+                        rowErrors.add("Correct answer must use letters A, B, C, D, E, or F");
+                    } else if (options != null && (letter - 'A') >= options.size()) {
+                        rowErrors.add("Correct answer refers to an option that was not provided");
+                    } else if (!uniqueLetters.add(letterValue)) {
+                        rowErrors.add("Correct answer contains duplicate letters");
+                    }
                 }
             }
         }
@@ -460,9 +498,16 @@ public class QuestionService {
     private void validateAnswers(QuestionType questionType, List<QuestionModel.AnswerRequest> answers) {
         if (answers == null || answers.size() < MIN_ANSWERS) throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least two answers are required");
         long correctCount = answers.stream().filter(QuestionModel.AnswerRequest::correctValue).count();
-        if (correctCount != 1) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Exactly one correct answer is required");
         for (QuestionModel.AnswerRequest answer : answers) normalizeRequired(answer.answerText(), "Answer text is required");
-        if (questionType == QuestionType.MULTIPLE_CHOICE && answers.size() > MAX_MCQ_ANSWERS) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Multiple choice questions support 2 to 6 answers");
+        if ((questionType == QuestionType.SINGLE_CHOICE || questionType == QuestionType.MULTIPLE_CHOICE) && answers.size() > MAX_MCQ_ANSWERS) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Choice questions support 2 to 6 answers");
+        }
+        if ((questionType == QuestionType.SINGLE_CHOICE || questionType == QuestionType.TRUE_FALSE) && correctCount != 1) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Exactly one correct answer is required");
+        }
+        if (questionType == QuestionType.MULTIPLE_CHOICE && correctCount < 2) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Multiple choice requires at least two correct answers");
+        }
         if (questionType == QuestionType.TRUE_FALSE) validateTrueFalseAnswers(answers);
     }
 
@@ -548,8 +593,8 @@ public class QuestionService {
         );
     }
     private QuestionType parseSupportedQuestionType(String value) {
-        QuestionType type = parseEnum(value, QuestionType.class, "Question type must be multiple_choice or true_false");
-        if (type != QuestionType.MULTIPLE_CHOICE && type != QuestionType.TRUE_FALSE) throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question type must be multiple_choice or true_false");
+        QuestionType type = parseEnum(value, QuestionType.class, SUPPORTED_QUESTION_TYPE_MESSAGE);
+        if (!SUPPORTED_QUESTION_TYPES.contains(type)) throw new BusinessException(ErrorCode.INVALID_REQUEST, SUPPORTED_QUESTION_TYPE_MESSAGE);
         return type;
     }
 

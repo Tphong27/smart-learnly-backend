@@ -155,7 +155,7 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
                   "questions": [
                     {
                       "questionText": "...",
-                      "questionType": "multiple_choice" or "true_false",
+                      "questionType": "single_choice", "multiple_choice", or "true_false",
                       "answers": [{"answerText":"...","correct":true|false}],
                       "difficulty": 1-5 or null,
                       "explanation": "..." or null,
@@ -173,7 +173,9 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
                 - If the answer key is missing or ambiguous, include the question with no correct answer and add an error.
                 - If explanation/rationale is clearly present in the image, copy it into explanation.
                 - If explanation/rationale is not present, set explanation to null. Do not write a new explanation.
-                - Use multiple_choice for A/B/C/D style questions and true_false only for True/False questions.
+                - Use single_choice for A/B/C/D style questions with exactly one correct answer.
+                - Use multiple_choice only when at least two answers are correct.
+                - Use true_false only for True/False questions.
                 """.formatted(targetLanguage);
     }
 

@@ -287,7 +287,7 @@ class QuestionServiceTest {
 
         ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
         verify(questionRepository).save(questionCaptor.capture());
-        assertThat(questionCaptor.getValue().getQuestionType()).isEqualTo(QuestionType.MULTIPLE_CHOICE);
+        assertThat(questionCaptor.getValue().getQuestionType()).isEqualTo(QuestionType.SINGLE_CHOICE);
         assertThat(questionCaptor.getValue().getIsAiGenerated()).isFalse();
 
         verify(answerRepository).deleteByQuestionId(questionId);
@@ -349,7 +349,7 @@ class QuestionServiceTest {
                 null,
                 null,
                 "What is Java?",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 "Basic Java question",
@@ -381,7 +381,7 @@ class QuestionServiceTest {
                 null,
                 invalidModuleId,
                 "What is Java?",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 "Basic Java question",
@@ -403,7 +403,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 " ",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 null,
@@ -428,7 +428,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 "What is Java?",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 null,
@@ -452,7 +452,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 "What is Java?",
-                "multiple_choice",
+                "single_choice",
                 "unknown",
                 (short) 2,
                 null,
@@ -474,7 +474,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 "What is Java?",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 null,
@@ -496,7 +496,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 "What is Java?",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 null,
@@ -583,19 +583,19 @@ class QuestionServiceTest {
         assertThatThrownBy(() -> service.createForCourse(courseId, request))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
-                .hasMessageContaining("Question type must be multiple_choice or true_false");
+                .hasMessageContaining("Question type must be single_choice, multiple_choice, or true_false");
 
         verify(questionRepository, never()).existsActiveDuplicateInCourse(any(), any(), any());
         verify(questionRepository, never()).save(any());
     }
 
     @Test
-    void createForCourse_throwsInvalidRequest_whenMultipleChoiceHasTooManyAnswers() {
+    void createForCourse_throwsInvalidRequest_whenChoiceQuestionHasTooManyAnswers() {
         QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
                 null,
                 moduleId,
                 "Choose one.",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 null,
@@ -619,12 +619,12 @@ class QuestionServiceTest {
     }
 
     @Test
-    void createForCourse_throwsInvalidRequest_whenCorrectAnswerCountIsNotOne() {
+    void createForCourse_throwsInvalidRequest_whenSingleChoiceCorrectAnswerCountIsNotOne() {
         QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
                 null,
                 moduleId,
                 "Choose one.",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 null,
@@ -654,7 +654,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 "Updated question?",
-                "multiple_choice",
+                "single_choice",
                 "understand",
                 (short) 3,
                 "Updated explanation",
@@ -725,7 +725,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 "Updated question?",
-                "multiple_choice",
+                "single_choice",
                 "understand",
                 (short) 3,
                 "Updated explanation",
@@ -789,7 +789,7 @@ class QuestionServiceTest {
         QuestionImportDtos.ImportRow row = importRow(
                 2,
                 "Imported question?",
-                "multiple_choice",
+                "single_choice",
                 List.of("A", "B"),
                 "B",
                 moduleId);
@@ -822,7 +822,7 @@ class QuestionServiceTest {
         QuestionImportDtos.ImportRow row = importRow(
                 2,
                 "Imported question?",
-                "multiple_choice",
+                "single_choice",
                 List.of("A", "B"),
                 "A",
                 moduleId);
@@ -850,7 +850,7 @@ class QuestionServiceTest {
         QuestionImportDtos.ImportRow row = importRow(
                 2,
                 "Imported question?",
-                "multiple_choice",
+                "single_choice",
                 List.of("A", "B"),
                 "A",
                 moduleId);
@@ -878,7 +878,7 @@ class QuestionServiceTest {
         QuestionImportDtos.ImportRow row = importRow(
                 6,
                 "AI imported?",
-                "multiple_choice",
+                "single_choice",
                 List.of("A", "B", "C"),
                 "C",
                 moduleId);
@@ -964,7 +964,7 @@ class QuestionServiceTest {
         QuestionImportDtos.ImportRow row = importRow(
                 4,
                 "Imported question?",
-                "multiple_choice",
+                "single_choice",
                 List.of("A", "B"),
                 "C",
                 moduleId);
@@ -985,7 +985,7 @@ class QuestionServiceTest {
         QuestionImportDtos.ImportRow row = importRow(
                 4,
                 "Imported question?",
-                "multiple_choice",
+                "single_choice",
                 List.of("A", "B"),
                 "A",
                 moduleId);
@@ -1096,7 +1096,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 "What is Java?",
-                "multiple_choice",
+                "single_choice",
                 "remember",
                 (short) 2,
                 "Basic Java question",
@@ -1110,7 +1110,7 @@ class QuestionServiceTest {
                 null,
                 moduleId,
                 "Updated question?",
-                "multiple_choice",
+                "single_choice",
                 "understand",
                 (short) 3,
                 "Updated explanation",

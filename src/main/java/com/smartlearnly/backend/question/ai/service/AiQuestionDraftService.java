@@ -60,6 +60,8 @@ public class AiQuestionDraftService {
     private static final int MAX_INSTRUCTION_LENGTH = 2000;
     private static final int MAX_NEAR_DUPLICATE_CANDIDATES = 3;
     private static final double NEAR_DUPLICATE_THRESHOLD = 0.86D;
+    private static final String SUPPORTED_QUESTION_TYPE_MESSAGE = "Question type must be single_choice, multiple_choice, or true_false";
+    private static final Set<String> SUPPORTED_QUESTION_TYPES = Set.of("single_choice", "multiple_choice", "true_false");
 
     private final CourseAccessService courseAccessService;
     private final CurrentUserService currentUserService;
@@ -496,15 +498,24 @@ public class AiQuestionDraftService {
         }
         List<AiQuestionDraftDtos.AnswerPayload> answers = parseAnswers(draft.getAnswersJson());
         long correctCount = answers.stream().filter(AiQuestionDraftDtos.AnswerPayload::correctValue).count();
-        if (correctCount != 1) {
-            warnings.add("Exactly one correct answer is required");
-            return false;
-        }
         if ("true_false".equals(draft.getQuestionType())) {
             boolean hasTrue = answers.stream().anyMatch(answer -> "true".equalsIgnoreCase(answer.answerText()));
             boolean hasFalse = answers.stream().anyMatch(answer -> "false".equalsIgnoreCase(answer.answerText()));
+            if (correctCount != 1) {
+                warnings.add("Exactly one correct answer is required");
+                return false;
+            }
             if (answers.size() != 2 || !hasTrue || !hasFalse) {
                 warnings.add("True/false questions must have exactly True and False answers");
+                return false;
+            }
+        } else if ("single_choice".equals(draft.getQuestionType())) {
+            if (answers.size() < 2 || answers.size() > 6) {
+                warnings.add("Single choice questions support 2 to 6 answers");
+                return false;
+            }
+            if (correctCount != 1) {
+                warnings.add("Exactly one correct answer is required");
                 return false;
             }
         } else if ("multiple_choice".equals(draft.getQuestionType())) {
@@ -512,8 +523,12 @@ public class AiQuestionDraftService {
                 warnings.add("Multiple choice questions support 2 to 6 answers");
                 return false;
             }
+            if (correctCount < 2) {
+                warnings.add("Multiple choice requires at least two correct answers");
+                return false;
+            }
         } else {
-            warnings.add("Question type must be multiple_choice or true_false");
+            warnings.add(SUPPORTED_QUESTION_TYPE_MESSAGE);
             return false;
         }
         return answers.stream().allMatch(answer -> answer.answerText() != null && !answer.answerText().isBlank());
@@ -597,8 +612,8 @@ public class AiQuestionDraftService {
 
     private String normalizeQuestionType(String value) {
         String normalized = normalizeRequired(value, "Question type is required").replace('-', '_').toLowerCase(Locale.ROOT);
-        if (!"multiple_choice".equals(normalized) && !"true_false".equals(normalized)) {
-            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, "Question type must be multiple_choice or true_false");
+        if (!SUPPORTED_QUESTION_TYPES.contains(normalized)) {
+            throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG, SUPPORTED_QUESTION_TYPE_MESSAGE);
         }
         return normalized;
     }

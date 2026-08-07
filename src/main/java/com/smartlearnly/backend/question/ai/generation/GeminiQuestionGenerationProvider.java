@@ -256,7 +256,7 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                   "questions": [
                     {
                       "questionText": "...",
-                      "questionType": "multiple_choice" or "true_false",
+                      "questionType": "single_choice", "multiple_choice", or "true_false",
                       "answers": [{"answerText":"...","correct":true|false,"orderIndex":1}],
                       "explanation": "..." or null,
                       "evidence": [
@@ -273,8 +273,8 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                 }
 
                 Rules:
-                - Every question must have exactly one correct answer.
-                - multiple_choice must have exactly 4 answers.
+                - single_choice must have 2 to 6 answers and exactly one correct answer.
+                - multiple_choice must have 2 to 6 answers and at least two correct answers.
                 - true_false must have exactly two answers: True and False.
                 %s
 
