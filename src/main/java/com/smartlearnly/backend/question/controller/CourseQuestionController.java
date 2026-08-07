@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.HtmlUtils;
 
 @Validated
 @RestController
@@ -135,7 +136,7 @@ public class CourseQuestionController {
                 0,
                 10_000
         );
-        byte[] csv = toCsv(page.items()).getBytes(StandardCharsets.UTF_8);
+        byte[] csv = ("\uFEFF" + toCsv(page.items())).getBytes(StandardCharsets.UTF_8);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
@@ -157,10 +158,24 @@ public class CourseQuestionController {
                     .append(',')
                     .append(csv(question.status()))
                     .append(',')
-                    .append(csv(question.questionText()))
+                    .append(csv(toPlainText(question.questionText())))
                     .append('\n');
         }
         return builder.toString();
+    }
+
+    private String toPlainText(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String withoutBlockBreaks = value
+                .replaceAll("(?i)<\\s*br\\s*/?\\s*>", "\n")
+                .replaceAll("(?i)</\\s*(p|div|li|h[1-6]|tr)\\s*>", "\n");
+        String withoutTags = withoutBlockBreaks.replaceAll("<[^>]+>", " ");
+        String decoded = HtmlUtils.htmlUnescape(withoutTags).replace('\u00A0', ' ');
+        return decoded.replaceAll("[ \\t\\u000B\\f\\r]+", " ")
+                .replaceAll(" *\\n+ *", "\n")
+                .trim();
     }
 
     private String csv(Object value) {
