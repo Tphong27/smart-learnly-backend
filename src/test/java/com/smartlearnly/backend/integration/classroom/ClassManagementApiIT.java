@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.smartlearnly.backend.integration.AbstractPostgresIntegrationTest;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,33 @@ class ClassManagementApiIT extends AbstractPostgresIntegrationTest {
         assertThat(count("classes", "class_name = 'Java Evening K01'")).isEqualTo(1);
         assertThat(count("class_sessions", "class_id = (select id from public.classes where class_name = 'Java Evening K01')"))
                 .isGreaterThan(0);
+    }
+
+    @Test
+    @Sql("/integration/classroom/cm-04-course-and-trainer.sql")
+    void cm05_createFreeClassWithoutPricePersistsWithZeroPrice() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/classes")
+                        .with(asUser(ADMIN_ID, "admin@it.local", "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(freeCreatePayload()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.className").value("Free Evening K01"))
+                .andExpect(jsonPath("$.data.price").value(0));
+
+        assertThat(count("classes", "class_name = 'Free Evening K01'")).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select price from public.classes where class_name = 'Free Evening K01'", BigDecimal.class))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    private String freeCreatePayload() {
+        return """
+                {"courseId":"%s","className":"Free Evening K01","trainerId":"%s",
+                 "meetingUrl":"https://meet.google.com/abc-defg-hij",
+                 "scheduleDescription":"[{\\"dayOfWeek\\":\\"MONDAY\\",\\"slots\\":[{\\"startTime\\":\\"19:30\\",\\"endTime\\":\\"21:30\\"}]}]",
+                 "startDate":"%s","endDate":"%s","maxStudents":20}
+                """.formatted(COURSE_ID, TRAINER_ID, LocalDate.now().plusDays(1), LocalDate.now().plusWeeks(4));
     }
 
     private String validCreatePayload() {

@@ -109,6 +109,38 @@ class ClassAdminCreateTest {
         }
 
         @Test
+        void create_withoutPrice_createsFreeClassWithZeroPrice() {
+                UserAccount actor = actor();
+                UserAccount trainer = trainer();
+                Course course = publishedCourse();
+                LocalDate startDate = validStartDate();
+                LocalDate endDate = startDate.plusMonths(1);
+
+                CreateClassRequest request = request(
+                                course.getId(),
+                                "Free Demo Cohort",
+                                trainer.getId(),
+                                VALID_MEETING_URL,
+                                VALID_SCHEDULE,
+                                startDate,
+                                endDate,
+                                30,
+                                null);
+
+                stubAuthenticatedCreateDependencies(actor, course, trainer);
+                stubSuccessfulSave();
+
+                ClassResponse response = service.create(request);
+
+                ArgumentCaptor<ClassOffering> savedCaptor = ArgumentCaptor.forClass(ClassOffering.class);
+                verify(classOfferingRepository).saveAndFlush(savedCaptor.capture());
+
+                assertThat(savedCaptor.getValue().getPrice()).isEqualByComparingTo(BigDecimal.ZERO);
+                assertThat(response.price()).isEqualByComparingTo(BigDecimal.ZERO);
+                assertThat(response.status()).isEqualTo("upcoming");
+        }
+
+        @Test
         void UTCID01_create_persistsNormalizedClassAndRunsSideEffectsInOrder() {
                 UserAccount actor = actor();
                 UserAccount trainer = trainer();
