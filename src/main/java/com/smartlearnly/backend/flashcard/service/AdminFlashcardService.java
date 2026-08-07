@@ -19,13 +19,19 @@ import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
+import com.smartlearnly.backend.learning.module.entity.CourseModule;
+import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.Comparator;
@@ -51,6 +57,8 @@ public class AdminFlashcardService {
     private final CurrentUserService currentUserService;
     private final CurriculumLessonRepository curriculumLessonRepository;
     private final CurriculumSectionRepository curriculumSectionRepository;
+    private final CurriculumVersionRepository curriculumVersionRepository;
+    private final CourseModuleRepository courseModuleRepository;
     private final CourseAccessService courseAccessService;
 
     @Transactional
@@ -292,13 +300,48 @@ public class AdminFlashcardService {
 
     private CurriculumSection findCurriculumSection(UUID courseId, UUID sectionId) {
         CurriculumSection section = curriculumSectionRepository.findById(sectionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
+                .orElseGet(() -> findOrCreateModuleSnapshot(courseId, sectionId));
 
         if (!courseId.equals(section.getCurriculumVersion().getCourseId())) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found");
+            return findOrCreateModuleSnapshot(courseId, sectionId);
         }
 
         return section;
+    }
+
+    private CurriculumSection findOrCreateModuleSnapshot(UUID courseId, UUID moduleId) {
+        CourseModule module = courseModuleRepository.findById(moduleId)
+                .filter(candidate -> courseId.equals(candidate.getCourseId()))
+                .filter(candidate -> !Boolean.TRUE.equals(candidate.getSystem()))
+                .filter(candidate -> CourseModule.STATUS_ACTIVE.equals(candidate.getStatus()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found"));
+        CurriculumVersion version = curriculumVersionRepository
+                .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(courseId, CurriculumScope.MASTER)
+                .orElseGet(() -> createInitialMasterVersion(findCourse(courseId)));
+        return curriculumSectionRepository.findBySourceModuleIdAndCurriculumVersionId(moduleId, version.getId())
+                .orElseGet(() -> createMissingModuleSnapshot(module, version));
+    }
+
+    private CurriculumVersion createInitialMasterVersion(Course course) {
+        CurriculumVersion version = new CurriculumVersion();
+        version.setCourseId(course.getId());
+        version.setScope(CurriculumScope.MASTER);
+        version.setStatus(CurriculumStatus.DRAFT);
+        version.setVersionNumber(curriculumVersionRepository.findMaxMasterVersionNumber(
+                course.getId(),
+                CurriculumScope.MASTER) + 1);
+        version.setTitle(course.getTitle());
+        version.setCreatedBy(currentUserService.requireAuthenticatedUser().getId());
+        return curriculumVersionRepository.save(version);
+    }
+
+    private CurriculumSection createMissingModuleSnapshot(CourseModule module, CurriculumVersion version) {
+        CurriculumSection section = new CurriculumSection();
+        section.setCurriculumVersion(version);
+        section.setSourceModuleId(module.getId());
+        section.setTitle(module.getTitle());
+        section.setSortOrder(module.getOrderIndex());
+        return curriculumSectionRepository.save(section);
     }
 
     private FlashcardSet findSet(UUID setId) {

@@ -69,10 +69,11 @@ public class TestController {
     /** Trả chi tiết đề nếu caller có quyền đọc đề đó. */
     @GetMapping("/{id}")
     public ResponseEntity<TestModel.Response> getById(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID classId) {
 
         return ResponseEntity.ok(
-                testService.getTestById(id));
+                testService.getTestById(id, classId));
     }
 
     /** Xác thực mã truy cập trước khi học viên bắt đầu làm đề. */

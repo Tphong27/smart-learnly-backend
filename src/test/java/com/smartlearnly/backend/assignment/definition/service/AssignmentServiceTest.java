@@ -15,6 +15,7 @@ import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
 import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
@@ -147,6 +148,144 @@ class AssignmentServiceTest {
     }
 
     @Test
+    void createAssignmentShouldRejectMissingClassWhenClassIdIsProvided() {
+        UUID classId = UUID.randomUUID();
+        UUID lessonId = UUID.randomUUID();
+        AssignmentModel.CreateRequest request = new AssignmentModel.CreateRequest();
+        request.setClassId(classId);
+        request.setLessonId(lessonId);
+        request.setTitle("Class assignment");
+
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.createAssignment(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Class was not found");
+
+        verify(assignmentRepository, never()).save(any(Assignment.class));
+    }
+
+    @Test
+    void createAssignmentShouldRejectLessonOutsideClassCurriculum() {
+        UUID classId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID lessonId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(classId);
+        classOffering.setCourseId(courseId);
+        CurriculumVersion publishedVersion = new CurriculumVersion();
+        publishedVersion.setId(versionId);
+        publishedVersion.setCourseId(courseId);
+        AssignmentModel.CreateRequest request = new AssignmentModel.CreateRequest();
+        request.setClassId(classId);
+        request.setLessonId(lessonId);
+        request.setTitle("Wrong lesson");
+
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId)).thenReturn(Optional.of(classOffering));
+        when(curriculumLessonRepository.findById(lessonId)).thenReturn(Optional.empty());
+        when(curriculumResolutionService.resolveClassEffectivePublished(courseId, classId))
+                .thenReturn(new CurriculumResolution(
+                        publishedVersion,
+                        null,
+                        classId,
+                        false,
+                        CurriculumResolutionService.SOURCE_MASTER_INHERITED));
+        when(curriculumLessonRepository.findEffectiveLessonReference(versionId, lessonId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.createAssignment(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Assignment lesson must belong to this class curriculum");
+
+        verify(assignmentRepository, never()).save(any(Assignment.class));
+    }
+
+    @Test
+    void findAssignmentByLessonIdShouldPreferClassSpecificEquivalentLessonAssignment() {
+        UUID requestedLessonId = UUID.randomUUID();
+        UUID sourceLessonId = UUID.randomUUID();
+        UUID lessonIdentityId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        CurriculumLesson lesson = new CurriculumLesson();
+        lesson.setId(requestedLessonId);
+        lesson.setSourceCurriculumLessonId(sourceLessonId);
+        lesson.setLessonIdentityId(lessonIdentityId);
+        Assignment sharedAssignment = assignment(sourceLessonId, null, "Shared assignment");
+        Assignment classAssignment = assignment(lessonIdentityId, classId, "Class assignment");
+
+        when(curriculumLessonRepository.findById(requestedLessonId)).thenReturn(Optional.of(lesson));
+        when(curriculumLessonRepository.findAllByLessonIdentityId(lessonIdentityId)).thenReturn(List.of(lesson));
+        when(assignmentRepository.findByLessonIdInAndClassId(any(), eq(classId)))
+                .thenReturn(List.of(classAssignment));
+
+        Optional<AssignmentModel.Response> response =
+                service.findAssignmentByLessonId(requestedLessonId, classId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().getTitle()).isEqualTo("Class assignment");
+        verify(assignmentRepository, never()).findByLessonIdInAndClassIdIsNull(any());
+        verify(assignmentRepository, never()).findByLessonIdIn(any());
+    }
+
+    @Test
+    void findAssignmentByLessonIdShouldFallBackToSharedAssignmentForClassLookup() {
+        UUID lessonId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        Assignment sharedAssignment = assignment(lessonId, null, "Shared assignment");
+
+        when(curriculumLessonRepository.findById(lessonId)).thenReturn(Optional.empty());
+        when(assignmentRepository.findByLessonIdInAndClassId(any(), eq(classId))).thenReturn(List.of());
+        when(assignmentRepository.findByLessonIdInAndClassIdIsNull(any())).thenReturn(List.of(sharedAssignment));
+
+        Optional<AssignmentModel.Response> response =
+                service.findAssignmentByLessonId(lessonId, classId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().getTitle()).isEqualTo("Shared assignment");
+        verify(assignmentRepository, never()).findByLessonIdIn(any());
+    }
+
+    @Test
+    void findAssignmentByLessonIdShouldSearchAnyAssignmentWhenClassIdIsAbsent() {
+        UUID lessonId = UUID.randomUUID();
+        Assignment assignment = assignment(lessonId, UUID.randomUUID(), "Legacy assignment");
+
+        when(curriculumLessonRepository.findById(lessonId)).thenReturn(Optional.empty());
+        when(assignmentRepository.findByLessonIdInAndClassIdIsNull(any())).thenReturn(List.of());
+        when(assignmentRepository.findByLessonIdIn(any())).thenReturn(List.of(assignment));
+
+        Optional<AssignmentModel.Response> response =
+                service.findAssignmentByLessonId(lessonId, null);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().getTitle()).isEqualTo("Legacy assignment");
+    }
+
+    @Test
+    void findAssignmentByLessonIdShouldReturnEmptyWhenNoAssignmentMatchesAnyReference() {
+        UUID lessonId = UUID.randomUUID();
+
+        when(curriculumLessonRepository.findById(lessonId)).thenReturn(Optional.empty());
+        when(assignmentRepository.findByLessonIdInAndClassIdIsNull(any())).thenReturn(List.of());
+        when(assignmentRepository.findByLessonIdIn(any())).thenReturn(List.of());
+
+        Optional<AssignmentModel.Response> response =
+                service.findAssignmentByLessonId(lessonId, null);
+
+        assertThat(response).isEmpty();
+    }
+
+    @Test
+    void findAssignmentByLessonIdShouldReturnEmptyWhenLessonIdIsNull() {
+        assertThat(service.findAssignmentByLessonId(null, UUID.randomUUID())).isEmpty();
+
+        verify(assignmentRepository, never()).findByLessonIdIn(any());
+        verify(assignmentRepository, never()).findByLessonIdInAndClassId(any(), any());
+        verify(assignmentRepository, never()).findByLessonIdInAndClassIdIsNull(any());
+    }
+
+    @Test
     void updateAssignmentShouldAttachLegacyAssignmentToTrainerClass() {
         UUID assignmentId = UUID.randomUUID();
         UUID classId = UUID.randomUUID();
@@ -273,5 +412,15 @@ class AssignmentServiceTest {
 
         verify(assignmentSubmissionRepository, never()).deleteByAssignmentId(assignmentId);
         verify(assignmentRepository, never()).deleteById(assignmentId);
+    }
+
+    private Assignment assignment(UUID lessonId, UUID classId, String title) {
+        Assignment assignment = new Assignment();
+        assignment.setId(UUID.randomUUID());
+        assignment.setLessonId(lessonId);
+        assignment.setClassId(classId);
+        assignment.setTitle(title);
+        assignment.setUpdatedAt(Instant.now());
+        return assignment;
     }
 }

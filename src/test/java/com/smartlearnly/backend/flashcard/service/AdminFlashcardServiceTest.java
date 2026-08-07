@@ -21,6 +21,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
+import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardLessonRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardCardResponse;
@@ -37,6 +38,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.repository.LessonRepository;
 import com.smartlearnly.backend.learning.module.entity.CourseModule;
+import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.util.List;
@@ -67,6 +69,10 @@ class AdminFlashcardServiceTest {
     private CurriculumLessonRepository curriculumLessonRepository;
     @Mock
     private CurriculumSectionRepository curriculumSectionRepository;
+    @Mock
+    private CurriculumVersionRepository curriculumVersionRepository;
+    @Mock
+    private CourseModuleRepository courseModuleRepository;
 
     @Mock
     private CourseAccessService courseAccessService;
@@ -81,6 +87,8 @@ class AdminFlashcardServiceTest {
                 currentUserService,
                 curriculumLessonRepository,
                 curriculumSectionRepository,
+                curriculumVersionRepository,
+                courseModuleRepository,
                 courseAccessService);
     }
 

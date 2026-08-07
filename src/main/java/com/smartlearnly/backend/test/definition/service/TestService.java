@@ -176,6 +176,10 @@ public class TestService {
 
     /** Xác thực học viên hiện tại có quyền bắt đầu attempt của đề. */
     public UUID requireCurrentTraineeAccess(UUID testId) {
+        return requireCurrentTraineeAccess(testId, null);
+    }
+
+    public UUID requireCurrentTraineeAccess(UUID testId, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         if (!isTrainee(actor)) {
             throw new BusinessException(
@@ -185,12 +189,16 @@ public class TestService {
 
         Test test = testRepository.findById(testId)
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
-        requireTestAccess(test, actor);
+        requireTestAccess(test, actor, classId);
         return actor.getId();
     }
 
     /** Xác thực caller được xem hoặc thao tác attempt của học viên tương ứng. */
     public void requireAttemptAccess(UUID testId, UUID studentId) {
+        requireAttemptAccess(testId, studentId, null);
+    }
+
+    public void requireAttemptAccess(UUID testId, UUID studentId, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         Test test = testRepository.findById(testId)
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
@@ -201,7 +209,7 @@ public class TestService {
                         ErrorCode.FORBIDDEN,
                         "You cannot access another trainee's attempt");
             }
-            requireTestAccess(test, actor);
+            requireTestAccess(test, actor, classId);
             return;
         }
 
@@ -217,6 +225,10 @@ public class TestService {
 
     /** Trả chi tiết đề nếu caller có quyền; chỉ quản lý mới nhận mã truy cập. */
     public TestModel.Response getTestById(UUID id) {
+        return getTestById(id, null);
+    }
+
+    public TestModel.Response getTestById(UUID id, UUID classId) {
 
         Test test = testRepository.findById(id)
                 .orElseThrow(() ->
@@ -224,7 +236,7 @@ public class TestService {
                                 "Test not found"));
 
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        requireTestAccess(test, actor);
+        requireTestAccess(test, actor, classId);
         boolean includeAccessCode = canManageTests(actor);
         return mapToResponse(
                 includeAccessCode ? ensureAccessCode(test) : test,
@@ -494,8 +506,18 @@ public class TestService {
 
     /** Bảo vệ quyền xem đề theo enrollment học viên hoặc phân công nhân sự. */
     private void requireTestAccess(Test test, UserAccount actor) {
+        requireTestAccess(test, actor, null);
+    }
+
+    private void requireTestAccess(Test test, UserAccount actor, UUID contextClassId) {
         if (isTrainee(actor)) {
-            if (testRepository.existsAvailableForStudent(test.getId(), actor.getId())) {
+            if (testRepository.existsAvailableForStudent(test.getId(), actor.getId())
+                    || testRepository.existsAvailableCourseTestForStudent(test.getId(), actor.getId())
+                    || (contextClassId != null
+                    && testRepository.existsAvailableCourseTestForStudentClass(
+                    test.getId(),
+                    actor.getId(),
+                    contextClassId))) {
                 return;
             }
         } else if (isPrivilegedStaff(actor)

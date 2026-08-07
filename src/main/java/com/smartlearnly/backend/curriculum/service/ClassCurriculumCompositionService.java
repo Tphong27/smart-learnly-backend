@@ -215,6 +215,33 @@ public class ClassCurriculumCompositionService {
         if (byIdentity.isPresent()) {
             return byIdentity;
         }
+        Optional<ClassCurriculumEntry> byLegacySourceLesson = lessonRepository.findFirstBySourceLessonId(lessonReferenceId)
+                .flatMap(lesson -> entryRepository
+                        .findByClassVersionIdAndSourceCurriculumLessonId(classVersionId, lesson.getId())
+                        .or(() -> entryRepository.findByClassVersionIdAndLessonIdentityId(
+                                classVersionId,
+                                lesson.getLessonIdentityId())));
+        if (byLegacySourceLesson.isPresent()) {
+            return byLegacySourceLesson;
+        }
+        Optional<ClassCurriculumEntry> byLegacyLessonRow = lessonRepository.findById(lessonReferenceId)
+                .flatMap(lesson -> entryRepository
+                        .findByClassVersionIdAndLessonIdentityId(classVersionId, lesson.getLessonIdentityId())
+                        .or(() -> lesson.getSourceCurriculumLessonId() == null
+                                ? Optional.empty()
+                                : entryRepository.findByClassVersionIdAndSourceCurriculumLessonId(
+                                        classVersionId,
+                                        lesson.getSourceCurriculumLessonId()))
+                        .or(() -> lesson.getSourceLessonId() == null
+                                ? Optional.empty()
+                                : lessonRepository.findFirstBySourceLessonId(lesson.getSourceLessonId())
+                                        .flatMap(sourceLesson -> entryRepository
+                                                .findByClassVersionIdAndSourceCurriculumLessonId(
+                                                        classVersionId,
+                                                        sourceLesson.getId()))));
+        if (byLegacyLessonRow.isPresent()) {
+            return byLegacyLessonRow;
+        }
         return entryRepository.findByMaterializedLessonId(lessonReferenceId)
                 .filter(entry -> classVersionId.equals(entry.getClassVersionId()));
     }

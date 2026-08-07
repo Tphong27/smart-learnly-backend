@@ -35,6 +35,12 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         ErrorCode errorCode = exception.errorCode();
+        log.warn(
+                "BusinessException {} {} -> {}: {}",
+                request.getMethod(),
+                request.getRequestURI(),
+                errorCode.name(),
+                exception.getMessage());
         return buildResponse(errorCode, exception.getMessage(), List.of(), request);
     }
 

@@ -13,6 +13,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumLessonResource;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
+import com.smartlearnly.backend.curriculum.service.CurriculumLessonTestLinkService;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
@@ -46,6 +47,7 @@ public class CurriculumLessonAdminService {
     private final VideoSummaryService videoSummaryService;
     private final FlashcardSetRepository flashcardSetRepository;
     private final MasterCurriculumAccessService curriculumAccessService;
+    private final CurriculumLessonTestLinkService lessonTestLinkService;
 
     // Liệt kê toàn bộ lesson chưa xóa của section để màn quản trị thấy cả trạng thái inactive.
     @Transactional(readOnly = true)
@@ -81,6 +83,7 @@ public class CurriculumLessonAdminService {
                 : request.sortOrder();
         lesson.setSortOrder(sortOrder);
         CurriculumLesson saved = lessonRepository.save(lesson);
+        lessonTestLinkService.ensureQuizTest(saved);
         audit("LESSON_CREATED", "CURRICULUM_LESSON", saved.getId());
         return curriculumDtoMapper.toLessonResponse(saved);
     }
@@ -100,6 +103,7 @@ public class CurriculumLessonAdminService {
             lesson.setSortOrder(request.sortOrder());
         }
         CurriculumLesson saved = lessonRepository.save(lesson);
+        lessonTestLinkService.ensureQuizTest(saved);
         synchronizeFlashcardSetTitle(saved);
         audit("LESSON_UPDATED", "CURRICULUM_LESSON", saved.getId());
         return curriculumDtoMapper.toLessonResponse(saved);
