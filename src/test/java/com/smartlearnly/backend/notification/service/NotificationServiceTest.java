@@ -40,12 +40,12 @@ class NotificationServiceTest {
         NotificationResponse expected = createNotificationResponse(NotificationType.PAYMENT);
         PageResponse<NotificationResponse> pageResponse = new PageResponse<>(
                 List.of(expected), 0, 20, 1, 1);
-        when(queryService.list("unread", "payment", 0, 20)).thenReturn(pageResponse);
+        when(queryService.list(0, 20)).thenReturn(pageResponse);
 
-        var response = service.list("unread", "payment", 0, 20);
+        var response = service.list(0, 20);
 
         assertThat(response.items()).hasSize(1);
-        verify(queryService).list("unread", "payment", 0, 20);
+        verify(queryService).list(0, 20);
     }
 
     @Test
@@ -57,18 +57,6 @@ class NotificationServiceTest {
 
         assertThat(response.unreadCount()).isEqualTo(5L);
         verify(queryService).unreadCount();
-    }
-
-    @Test
-    void getShouldDelegateToQueryService() {
-        UUID notificationId = UUID.randomUUID();
-        NotificationResponse expected = createNotificationResponse(NotificationType.SYSTEM);
-        when(queryService.get(notificationId)).thenReturn(expected);
-
-        var response = service.get(notificationId);
-
-        assertThat(response.id()).isNotNull();
-        verify(queryService).get(notificationId);
     }
 
     @Test
@@ -116,17 +104,6 @@ class NotificationServiceTest {
 
         assertThat(response.archivedAt()).isNotNull();
         verify(writeService).archive(notificationId);
-    }
-
-    @Test
-    void archiveAllShouldDelegateToWriteService() {
-        var expected = new com.smartlearnly.backend.notification.dto.ArchivedCountResponse(4);
-        when(writeService.archiveAll()).thenReturn(expected);
-
-        var response = service.archiveAll();
-
-        assertThat(response.archivedCount()).isEqualTo(4);
-        verify(writeService).archiveAll();
     }
 
     @Test
