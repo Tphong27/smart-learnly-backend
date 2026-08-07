@@ -1,7 +1,6 @@
 package com.smartlearnly.backend.notification.service;
 
 import com.smartlearnly.backend.common.api.PageResponse;
-import com.smartlearnly.backend.notification.dto.ArchivedCountResponse;
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.dto.NotificationResponse;
 import com.smartlearnly.backend.notification.dto.UnreadCountResponse;
@@ -28,8 +27,8 @@ public class NotificationService {
     /**
      * Lấy danh sách notification của người dùng.
      */
-    public PageResponse<NotificationResponse> list(String statusValue, String typeValue, int page, int size) {
-        return queryService.list(statusValue, typeValue, page, size);
+    public PageResponse<NotificationResponse> list(int page, int size) {
+        return queryService.list(page, size);
     }
 
     /**
@@ -37,13 +36,6 @@ public class NotificationService {
      */
     public UnreadCountResponse unreadCount() {
         return queryService.unreadCount();
-    }
-
-    /**
-     * Lấy chi tiết một notification.
-     */
-    public NotificationResponse get(UUID notificationId) {
-        return queryService.get(notificationId);
     }
 
     /**
@@ -72,13 +64,6 @@ public class NotificationService {
      */
     public NotificationResponse archive(UUID notificationId) {
         return writeService.archive(notificationId);
-    }
-
-    /**
-     * Lưu trữ tất cả notification.
-     */
-    public ArchivedCountResponse archiveAll() {
-        return writeService.archiveAll();
     }
 
     /**

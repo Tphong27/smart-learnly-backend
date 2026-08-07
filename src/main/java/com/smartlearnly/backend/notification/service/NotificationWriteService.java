@@ -3,7 +3,6 @@ package com.smartlearnly.backend.notification.service;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
-import com.smartlearnly.backend.notification.dto.ArchivedCountResponse;
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.dto.NotificationResponse;
 import com.smartlearnly.backend.notification.dto.UnreadCountResponse;
@@ -117,17 +116,6 @@ public class NotificationWriteService {
         }
         notification.setArchivedAt(now);
         return NotificationMapper.toResponse(notificationRepository.save(notification));
-    }
-
-    /**
-     * Lưu trữ tất cả notification của người dùng.
-     *
-     * @return số notification đã lưu trữ
-     */
-    @Transactional
-    public ArchivedCountResponse archiveAll() {
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        return new ArchivedCountResponse(notificationRepository.archiveAllForUser(actor.getId(), Instant.now()));
     }
 
     /**
