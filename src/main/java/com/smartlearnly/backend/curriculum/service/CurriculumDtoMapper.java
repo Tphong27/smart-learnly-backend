@@ -273,7 +273,6 @@ public class CurriculumDtoMapper {
             boolean previewOnly) {
         List<LearningLessonResponse> lessons = orderedLessons(section).stream()
                 .filter(lesson -> lesson.getStatus() == LessonStatus.PUBLISHED)
-                .filter(lesson -> lesson.getType() != LessonType.FLASHCARD)
                 .filter(lesson -> !previewOnly || Boolean.TRUE.equals(lesson.getPreview()))
                 .map(lesson -> toLearningLessonResponse(
                         lesson,

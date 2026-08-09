@@ -140,6 +140,18 @@ class NotificationWriteServiceTest {
     }
 
     @Test
+    void archiveAll_callsRepositoryAndReturnsUnreadCount() {
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
+        UnreadCountResponse expectedCount = new UnreadCountResponse(0);
+        when(queryService.unreadCount()).thenReturn(expectedCount);
+
+        UnreadCountResponse response = service.archiveAll();
+
+        assertThat(response).isEqualTo(expectedCount);
+        verify(notificationRepository).archiveAllForUser(eq(userId), any(Instant.class));
+    }
+
+    @Test
     void emit_createsNewNotification() {
         NotificationCreateCommand command = new NotificationCreateCommand(
                 userId, NotificationType.SYSTEM, "Test Title", "Test Body",

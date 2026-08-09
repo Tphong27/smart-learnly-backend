@@ -54,6 +54,18 @@ class PersonalFlashcardControllerSecurityTest {
     }
 
     @Test
+    @WithMockUser(roles = "TRAINER")
+    void listShouldAllowTrainer() throws Exception {
+        when(personalFlashcardService.listSets(isNull(), org.mockito.ArgumentMatchers.eq("updated_desc"), anyInt(), anyInt()))
+                .thenReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
+
+        mockMvc.perform(get("/api/v1/my-flashcards/sets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.items").isEmpty());
+    }
+
+    @Test
     @WithMockUser(roles = "TRAINEE")
     void listShouldAllowEligiblePersonalRole() throws Exception {
         when(personalFlashcardService.listSets(isNull(), org.mockito.ArgumentMatchers.eq("updated_desc"), anyInt(), anyInt()))

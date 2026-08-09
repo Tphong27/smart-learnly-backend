@@ -31,6 +31,14 @@ public class NotificationService {
         return queryService.list(page, size);
     }
 
+    public PageResponse<NotificationResponse> list(int page, int size, String status) {
+        return queryService.list(page, size, status);
+    }
+
+    public PageResponse<NotificationResponse> list(int page, int size, String status, String type) {
+        return queryService.list(page, size, status, type);
+    }
+
     /**
      * Đếm số notification chưa đọc.
      */
@@ -64,6 +72,10 @@ public class NotificationService {
      */
     public NotificationResponse archive(UUID notificationId) {
         return writeService.archive(notificationId);
+    }
+
+    public UnreadCountResponse archiveAll() {
+        return writeService.archiveAll();
     }
 
     /**

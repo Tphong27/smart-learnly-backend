@@ -49,6 +49,33 @@ class NotificationServiceTest {
     }
 
     @Test
+    void listWithStatusShouldDelegateToQueryService() {
+        NotificationResponse expected = createNotificationResponse(NotificationType.PAYMENT);
+        PageResponse<NotificationResponse> pageResponse = new PageResponse<>(
+                List.of(expected), 0, 20, 1, 1);
+        when(queryService.list(0, 20, "unread")).thenReturn(pageResponse);
+
+        var response = service.list(0, 20, "unread");
+
+        assertThat(response.items()).hasSize(1);
+        verify(queryService).list(0, 20, "unread");
+    }
+
+    @Test
+    void listWithStatusAndTypeShouldDelegateToQueryService() {
+        NotificationResponse expected = createNotificationResponse(NotificationType.PAYMENT);
+        PageResponse<NotificationResponse> pageResponse = new PageResponse<>(
+                List.of(expected), 0, 20, 1, 1);
+        when(queryService.list(0, 20, "read", "PAYMENT")).thenReturn(pageResponse);
+
+        var response = service.list(0, 20, "read", "PAYMENT");
+
+        assertThat(response.items()).hasSize(1);
+        verify(queryService).list(0, 20, "read", "PAYMENT");
+    }
+
+
+    @Test
     void unreadCountShouldDelegateToQueryService() {
         UnreadCountResponse expected = new UnreadCountResponse(5L);
         when(queryService.unreadCount()).thenReturn(expected);
@@ -104,6 +131,17 @@ class NotificationServiceTest {
 
         assertThat(response.archivedAt()).isNotNull();
         verify(writeService).archive(notificationId);
+    }
+
+    @Test
+    void archiveAllShouldDelegateToWriteService() {
+        UnreadCountResponse expected = new UnreadCountResponse(0L);
+        when(writeService.archiveAll()).thenReturn(expected);
+
+        var response = service.archiveAll();
+
+        assertThat(response.unreadCount()).isZero();
+        verify(writeService).archiveAll();
     }
 
     @Test

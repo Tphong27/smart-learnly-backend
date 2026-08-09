@@ -30,6 +30,48 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
             @Param("userId") UUID userId,
             Pageable pageable);
 
+    Page<Notification> findByUserIdAndArchivedAtIsNullAndReadAtIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);
+
+    Page<Notification> findByUserIdAndArchivedAtIsNullAndReadAtIsNotNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);
+
+    @Query(value = """
+            SELECT notification.*
+            FROM public.notifications notification
+            WHERE notification.user_id = :userId
+              AND notification.archived_at IS NULL
+              AND (
+                    CAST(:status AS text) = 'all'
+                    OR (CAST(:status AS text) = 'unread' AND notification.read_at IS NULL)
+                    OR (CAST(:status AS text) = 'read' AND notification.read_at IS NOT NULL)
+              )
+              AND (
+                    CAST(:type AS text) IS NULL
+                    OR notification.type::text = CAST(:type AS text)
+              )
+            ORDER BY notification.created_at DESC
+            """,
+            countQuery = """
+                    SELECT COUNT(*)
+                    FROM public.notifications notification
+                    WHERE notification.user_id = :userId
+                      AND notification.archived_at IS NULL
+                      AND (
+                            CAST(:status AS text) = 'all'
+                            OR (CAST(:status AS text) = 'unread' AND notification.read_at IS NULL)
+                            OR (CAST(:status AS text) = 'read' AND notification.read_at IS NOT NULL)
+                      )
+                      AND (
+                            CAST(:type AS text) IS NULL
+                            OR notification.type::text = CAST(:type AS text)
+                      )
+                    """,
+            nativeQuery = true)
+    Page<Notification> findActiveForUserByStatusAndType(
+            @Param("userId") UUID userId,
+            @Param("status") String status,
+            @Param("type") String type,
+            Pageable pageable);
+
     Optional<Notification> findByIdAndUserIdAndArchivedAtIsNull(UUID id, UUID userId);
 
     long countByUserIdAndReadAtIsNullAndArchivedAtIsNull(UUID userId);
@@ -47,6 +89,18 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
               AND notification.readAt IS NULL
             """)
     int markAllReadForUser(@Param("userId") UUID userId, @Param("now") Instant now);
+
+    @Modifying
+    @Query("""
+            UPDATE Notification notification
+            SET notification.readAt = COALESCE(notification.readAt, :now),
+                notification.seenAt = COALESCE(notification.seenAt, :now),
+                notification.archivedAt = :now,
+                notification.updatedAt = :now
+            WHERE notification.userId = :userId
+              AND notification.archivedAt IS NULL
+            """)
+    int archiveAllForUser(@Param("userId") UUID userId, @Param("now") Instant now);
 
     @Modifying
     @Query("""

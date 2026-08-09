@@ -47,7 +47,7 @@ class NotificationControllerTest {
     @Test
     void listShouldDeclarePaginationValidation() throws Exception {
         Method method = NotificationController.class.getMethod(
-                "list", int.class, int.class);
+                "list", int.class, int.class, String.class, String.class);
 
         Min pageMin = method.getParameters()[0].getAnnotation(Min.class);
         Min sizeMin = method.getParameters()[1].getAnnotation(Min.class);
@@ -61,9 +61,9 @@ class NotificationControllerTest {
     @Test
     void listShouldReturnApiResponse() {
         PageResponse<NotificationResponse> page = new PageResponse<>(List.of(response()), 0, 20, 1, 1);
-        when(notificationService.list(0, 20)).thenReturn(page);
+        when(notificationService.list(0, 20, "all", "PAYMENT")).thenReturn(page);
 
-        var response = controller.list(0, 20);
+        var response = controller.list(0, 20, "all", "PAYMENT");
 
         assertThat(response.success()).isTrue();
         assertThat(response.message()).isEqualTo("Notifications loaded successfully");
@@ -124,6 +124,18 @@ class NotificationControllerTest {
         var response = controller.markAllRead();
 
         assertThat(response.success()).isTrue();
+        assertThat(response.data()).isSameAs(count);
+    }
+
+    @Test
+    void archiveAllShouldReturnApiResponse() {
+        UnreadCountResponse count = new UnreadCountResponse(0);
+        when(notificationService.archiveAll()).thenReturn(count);
+
+        var response = controller.archiveAll();
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.message()).isEqualTo("Notifications archived");
         assertThat(response.data()).isSameAs(count);
     }
 

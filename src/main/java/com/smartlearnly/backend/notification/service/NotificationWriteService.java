@@ -118,6 +118,13 @@ public class NotificationWriteService {
         return NotificationMapper.toResponse(notificationRepository.save(notification));
     }
 
+    @Transactional
+    public UnreadCountResponse archiveAll() {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        notificationRepository.archiveAllForUser(actor.getId(), Instant.now());
+        return queryService.unreadCount();
+    }
+
     /**
      * Tạo một notification mới cho người dùng.
      * Bỏ qua nếu notification với cùng eventKey đã tồn tại.
