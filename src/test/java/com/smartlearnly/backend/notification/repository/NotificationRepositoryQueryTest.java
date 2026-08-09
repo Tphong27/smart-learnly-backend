@@ -34,4 +34,29 @@ class NotificationRepositoryQueryTest {
                 .doesNotContain("notification.type")
                 .doesNotContain("notification.read_at");
     }
+
+    @Test
+    void findActiveForUserByStatusAndTypeShouldUsePostgresSafeTypeCast() throws Exception {
+        Method method = NotificationRepository.class.getMethod(
+                "findActiveForUserByStatusAndType",
+                UUID.class,
+                String.class,
+                String.class,
+                Pageable.class);
+
+        Query query = method.getAnnotation(Query.class);
+
+        assertThat(query).isNotNull();
+        assertThat(query.nativeQuery()).isTrue();
+        assertThat(query.value())
+                .contains("notification.archived_at IS NULL")
+                .contains("CAST(:status AS text) = 'unread'")
+                .contains("notification.read_at IS NULL")
+                .contains("notification.read_at IS NOT NULL")
+                .contains("notification.type::text = CAST(:type AS text)");
+        assertThat(query.countQuery())
+                .contains("SELECT COUNT(*)")
+                .contains("notification.type::text = CAST(:type AS text)")
+                .doesNotContain("ORDER BY");
+    }
 }

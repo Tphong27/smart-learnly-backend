@@ -42,10 +42,12 @@ public class NotificationController {
     @Operation(summary = "List current user's notifications")
     public ApiResponse<PageResponse<NotificationResponse>> list(
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "all") String status,
+            @RequestParam(required = false) String type) {
         return ApiResponse.success(
                 "Notifications loaded successfully",
-                notificationService.list(page, size));
+                notificationService.list(page, size, status, type));
     }
 
     /**
@@ -90,6 +92,14 @@ public class NotificationController {
         return ApiResponse.success(
                 "Notification archived",
                 notificationService.archive(notificationId));
+    }
+
+    @PatchMapping("/archive-all")
+    @Operation(summary = "Archive all current user's active notifications")
+    public ApiResponse<UnreadCountResponse> archiveAll() {
+        return ApiResponse.success(
+                "Notifications archived",
+                notificationService.archiveAll());
     }
 
     /**
