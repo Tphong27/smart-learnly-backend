@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.test.definition.dto.TestModel;
 import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
@@ -35,6 +36,8 @@ class TestServiceClassScopeTest {
     private CurriculumSectionRepository curriculumSectionRepository;
     @Mock
     private ClassOfferingRepository classOfferingRepository;
+    @Mock
+    private CourseAccessService courseAccessService;
 
     @InjectMocks
     private TestService service;

@@ -3,20 +3,26 @@ package com.smartlearnly.backend.test.attempt.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.test.attempt.dto.StudentTestAnswerModel;
+import com.smartlearnly.backend.test.definition.service.TestService;
 import com.smartlearnly.backend.test.entity.StudentTestAnswer;
 import com.smartlearnly.backend.test.entity.TestAttempt;
+import com.smartlearnly.backend.test.entity.TestQuestion.TestQuestionId;
 import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
 import com.smartlearnly.backend.test.repository.TestAttemptRepository;
+import com.smartlearnly.backend.test.repository.TestQuestionRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,6 +39,8 @@ class StudentTestAnswerServiceTest {
     @Mock private StudentTestAnswerRepository repository;
     @Mock private TestAttemptRepository attemptRepository;
     @Mock private QuestionAnswerRepository questionAnswerRepository;
+    @Mock private TestQuestionRepository testQuestionRepository;
+    @Mock private TestService testService;
 
     @InjectMocks private StudentTestAnswerService service;
 
@@ -51,8 +59,16 @@ class StudentTestAnswerServiceTest {
     void saveStudentAnswer_createsNewAnswer() {
         TestAttempt attempt = new TestAttempt();
         attempt.setId(attemptId);
+        attempt.setTestId(UUID.randomUUID());
+        attempt.setStudentId(UUID.randomUUID());
         attempt.setEndTime(Instant.now().plusSeconds(60));
         when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
+        when(testQuestionRepository.existsById(new TestQuestionId(attempt.getTestId(), questionId)))
+                .thenReturn(true);
+        QuestionAnswer selectedAnswer = new QuestionAnswer();
+        selectedAnswer.setId(answerId);
+        selectedAnswer.setQuestionId(questionId);
+        when(questionAnswerRepository.findById(answerId)).thenReturn(Optional.of(selectedAnswer));
 
         StudentTestAnswer saved = new StudentTestAnswer();
         saved.setId(UUID.randomUUID());
@@ -83,10 +99,18 @@ class StudentTestAnswerServiceTest {
     void saveStudentAnswer_updatesExistingAnswer() {
         TestAttempt attempt = new TestAttempt();
         attempt.setId(attemptId);
+        attempt.setTestId(UUID.randomUUID());
+        attempt.setStudentId(UUID.randomUUID());
         attempt.setEndTime(Instant.now().plusSeconds(60));
         when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
 
         UUID newAnswerId = UUID.randomUUID();
+        when(testQuestionRepository.existsById(new TestQuestionId(attempt.getTestId(), questionId)))
+                .thenReturn(true);
+        QuestionAnswer selectedAnswer = new QuestionAnswer();
+        selectedAnswer.setId(newAnswerId);
+        selectedAnswer.setQuestionId(questionId);
+        when(questionAnswerRepository.findById(newAnswerId)).thenReturn(Optional.of(selectedAnswer));
         StudentTestAnswer existing = new StudentTestAnswer();
         existing.setId(UUID.randomUUID());
         existing.setAttemptId(attemptId);
@@ -123,6 +147,8 @@ class StudentTestAnswerServiceTest {
     void saveStudentAnswer_throwsWhenAttemptExpired() {
         TestAttempt attempt = new TestAttempt();
         attempt.setId(attemptId);
+        attempt.setTestId(UUID.randomUUID());
+        attempt.setStudentId(UUID.randomUUID());
         attempt.setEndTime(Instant.now().minusSeconds(1));
         when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
 
@@ -139,8 +165,12 @@ class StudentTestAnswerServiceTest {
     void saveStudentAnswer_savesEssayAnswer() {
         TestAttempt attempt = new TestAttempt();
         attempt.setId(attemptId);
+        attempt.setTestId(UUID.randomUUID());
+        attempt.setStudentId(UUID.randomUUID());
         attempt.setEndTime(Instant.now().plusSeconds(60));
         when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
+        when(testQuestionRepository.existsById(new TestQuestionId(attempt.getTestId(), questionId)))
+                .thenReturn(true);
 
         when(repository.findByAttemptIdAndQuestionId(attemptId, questionId)).thenReturn(Optional.empty());
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -163,7 +193,9 @@ class StudentTestAnswerServiceTest {
         entity.setId(answerId);
         entity.setAttemptId(attemptId);
         entity.setQuestionId(questionId);
+        TestAttempt attempt = attempt(attemptId);
         when(repository.findById(answerId)).thenReturn(Optional.of(entity));
+        when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         StudentTestAnswerModel.GradeRequest request = new StudentTestAnswerModel.GradeRequest();
@@ -191,6 +223,7 @@ class StudentTestAnswerServiceTest {
 
     @Test
     void getAnswersByAttempt_returnsAllAnswers() {
+        TestAttempt attempt = attempt(attemptId);
         StudentTestAnswer answer1 = new StudentTestAnswer();
         answer1.setId(UUID.randomUUID());
         answer1.setAttemptId(attemptId);
@@ -203,6 +236,7 @@ class StudentTestAnswerServiceTest {
         answer2.setQuestionId(UUID.randomUUID());
 
         when(repository.findByAttemptId(attemptId)).thenReturn(List.of(answer1, answer2));
+        when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
 
         List<StudentTestAnswerModel.Response> responses = service.getAnswersByAttempt(attemptId);
 
@@ -211,10 +245,55 @@ class StudentTestAnswerServiceTest {
 
     @Test
     void getAnswersByAttempt_returnsEmptyListWhenNoAnswers() {
+        TestAttempt attempt = attempt(attemptId);
+        when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
         when(repository.findByAttemptId(attemptId)).thenReturn(List.of());
 
         List<StudentTestAnswerModel.Response> responses = service.getAnswersByAttempt(attemptId);
 
         assertThat(responses).isEmpty();
+    }
+
+    @Test
+    void saveStudentAnswer_rejectsQuestionOutsideAttemptTest() {
+        TestAttempt attempt = attempt(attemptId);
+        when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
+
+        StudentTestAnswerModel.SaveRequest request = new StudentTestAnswerModel.SaveRequest();
+        request.setAttemptId(attemptId);
+        request.setQuestionId(questionId);
+
+        assertThatThrownBy(() -> service.saveStudentAnswer(request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void saveStudentAnswer_checksCurrentUserAccessBeforeSaving() {
+        TestAttempt attempt = attempt(attemptId);
+        when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
+        BusinessException forbidden = new BusinessException(ErrorCode.FORBIDDEN, "Forbidden");
+        doThrow(forbidden)
+                .when(testService)
+                .requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
+
+        StudentTestAnswerModel.SaveRequest request = new StudentTestAnswerModel.SaveRequest();
+        request.setAttemptId(attemptId);
+        request.setQuestionId(questionId);
+
+        assertThatThrownBy(() -> service.saveStudentAnswer(request))
+                .isSameAs(forbidden);
+        verify(repository, never()).save(any());
+    }
+
+    private TestAttempt attempt(UUID id) {
+        TestAttempt attempt = new TestAttempt();
+        attempt.setId(id);
+        attempt.setTestId(UUID.randomUUID());
+        attempt.setStudentId(UUID.randomUUID());
+        attempt.setEndTime(Instant.now().plusSeconds(60));
+        return attempt;
     }
 }

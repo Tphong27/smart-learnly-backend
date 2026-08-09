@@ -94,7 +94,7 @@ class AdminFlashcardServiceTest {
         UUID lessonId = UUID.randomUUID();
         UUID setId = UUID.randomUUID();
         when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
-        when(masterCurriculumAccessService.findUpdatableModuleSnapshot(section.getId())).thenReturn(section);
+        when(masterCurriculumAccessService.findUpdatableSection(section.getId())).thenReturn(section);
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         when(curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(4);
         when(curriculumLessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {

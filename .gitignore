@@ -43,6 +43,12 @@ docs/api-contracts/
 .env.unit-test.ps1
 reports/
 *.service-account.json
+
+# Runtime/generated artifacts
+uploads/
+*.log
+repomix-output.xml
+
 ### Node.js ###
 node_modules/
 
