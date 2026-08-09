@@ -6,6 +6,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
@@ -46,6 +47,7 @@ public class TestService {
     private final StudentTestAnswerRepository studentTestAnswerRepository;
     private final CurriculumSectionRepository curriculumSectionRepository;
     private final ClassOfferingRepository classOfferingRepository;
+    private final CourseAccessService courseAccessService;
     private NotificationService notificationService;
     private ClassEnrollmentRepository notificationClassEnrollmentRepository;
     private CourseEnrollmentRepository notificationCourseEnrollmentRepository;
@@ -544,20 +546,19 @@ public class TestService {
                 "You cannot manage tests outside your assigned classes");
     }
 
-    /** Kiểm tra course, lớp và quyền trainer trước khi tạo hoặc đổi phạm vi đề. */
+    /** Kiểm tra course và quyền quản lý; đề cấp lớp còn phải thuộc đúng lớp được phân công. */
     private void validateClassScope(
             UUID classId,
             UUID courseId,
             UserAccount actor) {
-        if (classId == null) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "A class is required for every test");
-        }
         if (courseId == null) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
                     "A course is required for every test");
+        }
+        if (classId == null) {
+            courseAccessService.requireUpdatableCourse(courseId);
+            return;
         }
 
         ClassOffering classOffering = classOfferingRepository

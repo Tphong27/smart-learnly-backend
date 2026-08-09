@@ -58,6 +58,7 @@ public class AdminFlashcardService {
     private final CourseAccessService courseAccessService;
     private final MasterCurriculumAccessService masterCurriculumAccessService;
 
+    /** Tạo lesson flashcard trong master curriculum và liên kết bộ thẻ rỗng để biên tập. */
     @Transactional
     public FlashcardLessonCreatedResponse createFlashcardLesson(
             UUID courseId,
@@ -65,9 +66,7 @@ public class AdminFlashcardService {
             CreateFlashcardLessonRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
         Course course = findCourse(courseId);
-        // Frontend gửi section.id = sourceModuleId (module id) như mọi endpoint authoring
-        // khác, nên resolve qua module snapshot thay vì tìm theo section PK.
-        CurriculumSection section = masterCurriculumAccessService.findUpdatableModuleSnapshot(sectionId);
+        CurriculumSection section = masterCurriculumAccessService.findUpdatableSection(sectionId);
         if (!courseId.equals(section.getCurriculumVersion().getCourseId())) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found");
         }
@@ -81,7 +80,7 @@ public class AdminFlashcardService {
         lesson.setStatus(parseLessonStatus(request.status(), LessonStatus.DRAFT));
         lesson.setPreview(Boolean.TRUE.equals(request.isPreview()));
         lesson.setSortOrder(request.sortOrder() == null
-                ? curriculumLessonRepository.findMaxSortOrderBySectionId(sectionId) + 1
+                ? curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId()) + 1
                 : request.sortOrder());
 
         CurriculumLesson savedLesson = curriculumLessonRepository.save(lesson);

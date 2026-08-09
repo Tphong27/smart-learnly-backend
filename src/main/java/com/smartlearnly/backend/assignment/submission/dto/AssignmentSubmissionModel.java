@@ -43,7 +43,7 @@ public class AssignmentSubmissionModel {
         private String fileName;
     }
 
-    // Giảng viên hoặc AI cập nhật điểm và feedback (Grade/Update)
+    /** Dữ liệu điểm và phản hồi do backend gắn người chấm từ phiên đăng nhập. */
     @Getter
     @Setter
     @NoArgsConstructor
@@ -52,7 +52,6 @@ public class AssignmentSubmissionModel {
         private String aiFeedback;
         private String trainerFeedback;
         private SubmissionStatus status;
-        private UUID gradedBy;
     }
 
     // Phản hồi dữ liệu nộp bài (List/Detail)

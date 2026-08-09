@@ -79,6 +79,8 @@ class AssignmentSubmissionServiceTest {
 
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainee);
         when(assignmentRepository.findById(assignmentId)).thenReturn(Optional.of(assignment));
+        when(assignmentRepository.existsAvailableForStudent(assignmentId, trainee.getId()))
+                .thenReturn(true);
         when(submissionRepository.findByAssignmentIdAndStudentId(assignmentId, trainee.getId()))
                 .thenReturn(Optional.empty());
         when(submissionRepository.save(any(AssignmentSubmission.class))).thenAnswer(invocation -> {
@@ -123,8 +125,10 @@ class AssignmentSubmissionServiceTest {
 
         when(submissionRepository.findById(submission.getId())).thenReturn(Optional.of(submission));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
-        when(submissionRepository.save(submission)).thenReturn(submission);
         when(assignmentRepository.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(assignmentRepository.existsManagedByStaff(assignment.getId(), trainer.getId()))
+                .thenReturn(true);
+        when(submissionRepository.save(submission)).thenReturn(submission);
 
         service.gradeSubmission(submission.getId(), request);
 
@@ -155,8 +159,10 @@ class AssignmentSubmissionServiceTest {
 
         when(submissionRepository.findById(submission.getId())).thenReturn(Optional.of(submission));
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
-        when(submissionRepository.save(submission)).thenReturn(submission);
         when(assignmentRepository.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(assignmentRepository.existsManagedByStaff(assignment.getId(), trainer.getId()))
+                .thenReturn(true);
+        when(submissionRepository.save(submission)).thenReturn(submission);
 
         AssignmentSubmissionModel.Response response = service.gradeSubmission(submission.getId(), request);
 
@@ -167,17 +173,81 @@ class AssignmentSubmissionServiceTest {
     @Test
     void startAssignmentShouldRejectTraineeImpersonation() {
         UserAccount trainee = trainee();
+        Assignment assignment = assignment(UUID.randomUUID());
         AssignmentSubmissionModel.StartRequest request = new AssignmentSubmissionModel.StartRequest();
-        request.setAssignmentId(UUID.randomUUID());
+        request.setAssignmentId(assignment.getId());
         request.setStudentId(UUID.randomUUID());
 
         when(currentUserService.requireAuthenticatedUser()).thenReturn(trainee);
+        when(assignmentRepository.findById(assignment.getId())).thenReturn(Optional.of(assignment));
 
         assertThatThrownBy(() -> service.startAssignment(request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.FORBIDDEN);
-        verify(assignmentRepository, never()).findById(any());
+        verify(submissionRepository, never()).save(any());
+    }
+
+    @Test
+    void gradeSubmissionShouldRejectTrainerOutsideAssignedClass() {
+        UserAccount trainer = new UserAccount();
+        trainer.setId(UUID.randomUUID());
+        trainer.setRole("TRAINER");
+        Assignment assignment = assignment(UUID.randomUUID());
+        AssignmentSubmission submission = new AssignmentSubmission();
+        submission.setId(UUID.randomUUID());
+        submission.setAssignmentId(assignment.getId());
+        submission.setStudentId(UUID.randomUUID());
+
+        when(submissionRepository.findById(submission.getId())).thenReturn(Optional.of(submission));
+        when(assignmentRepository.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
+
+        assertThatThrownBy(() -> service.gradeSubmission(
+                submission.getId(),
+                new AssignmentSubmissionModel.GradeRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FORBIDDEN);
+        verify(submissionRepository, never()).save(any());
+    }
+
+    @Test
+    void submitAssignmentShouldRejectTraineeOutsideEnrolledClass() {
+        UserAccount trainee = trainee();
+        Assignment assignment = assignment(UUID.randomUUID());
+        AssignmentSubmissionModel.CreateRequest request = new AssignmentSubmissionModel.CreateRequest();
+        request.setAssignmentId(assignment.getId());
+        request.setStudentId(trainee.getId());
+
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(trainee);
+        when(assignmentRepository.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+
+        assertThatThrownBy(() -> service.submitAssignment(request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FORBIDDEN);
+        verify(submissionRepository, never()).save(any());
+    }
+
+    @Test
+    void requireFileAccessShouldRejectAnotherTraineesSubmission() {
+        UserAccount trainee = trainee();
+        Assignment assignment = assignment(UUID.randomUUID());
+        AssignmentSubmission submission = new AssignmentSubmission();
+        submission.setAssignmentId(assignment.getId());
+        submission.setStudentId(UUID.randomUUID());
+        submission.setFileUrl("/api/v1/submissions/files/private.pdf");
+
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(trainee);
+        when(submissionRepository.findByFileUrl(submission.getFileUrl()))
+                .thenReturn(Optional.of(submission));
+        when(assignmentRepository.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+
+        assertThatThrownBy(() -> service.requireFileAccess(submission.getFileUrl()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FORBIDDEN);
     }
 
     private UserAccount trainee() {

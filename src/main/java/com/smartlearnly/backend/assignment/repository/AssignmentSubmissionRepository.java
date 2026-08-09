@@ -17,6 +17,9 @@ public interface AssignmentSubmissionRepository
             UUID assignmentId,
             UUID studentId);
 
+    /** Tìm submission đang tham chiếu file đã lưu để kiểm tra quyền download. */
+    Optional<AssignmentSubmission> findByFileUrl(String fileUrl);
+
     void deleteByAssignmentId(UUID assignmentId);
 
 }
