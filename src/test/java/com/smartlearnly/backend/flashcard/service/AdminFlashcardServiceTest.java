@@ -28,6 +28,7 @@ import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardLesson
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardSetResponse;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.ReorderFlashcardCardsRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.UpdateFlashcardCardRequest;
+import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.UpdateFlashcardSetRequest;
 import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
@@ -149,6 +150,183 @@ class AdminFlashcardServiceTest {
         assertThat(response.frontText()).isEqualTo("Front");
         assertThat(response.backText()).isEqualTo("Back");
         assertThat(response.orderIndex()).isZero();
+    }
+
+    @Test
+    void getSetShouldReturnActiveSetAndEnforceReadableAccess() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardCard card = card(flashcardSet, 0);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(card));
+
+        FlashcardSetResponse response = adminFlashcardService.getSet(flashcardSet.getId());
+
+        assertThat(response.id()).isEqualTo(flashcardSet.getId());
+        assertThat(response.lessonId()).isEqualTo(flashcardSet.getLesson().getId());
+        assertThat(response.courseId()).isEqualTo(flashcardSet.getCourse().getId());
+        assertThat(response.sectionId()).isEqualTo(flashcardSet.getLesson().getModule().getId());
+        assertThat(response.title()).isEqualTo("Flashcards");
+        assertThat(response.cards()).hasSize(1);
+        verify(courseAccessService).requireReadableCourse(flashcardSet.getCourse().getId());
+    }
+
+    @Test
+    void getSetShouldRejectMissingSetAndInvalidLinkedLesson() {
+        UUID missingSetId = UUID.randomUUID();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(missingSetId)).thenReturn(Optional.empty());
+
+        assertBusinessException(
+                () -> adminFlashcardService.getSet(missingSetId),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard set was not found"
+        );
+
+        FlashcardSet videoLessonSet = flashcardSet();
+        videoLessonSet.getLesson().setType(LessonType.VIDEO);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(videoLessonSet.getId()))
+                .thenReturn(Optional.of(videoLessonSet));
+
+        assertBusinessException(
+                () -> adminFlashcardService.getSet(videoLessonSet.getId()),
+                ErrorCode.INVALID_REQUEST,
+                "Flashcard set is not linked to a flashcard lesson"
+        );
+
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void getSetShouldRejectSetWithDeletedCourseBeforeAccessCheck() {
+        FlashcardSet flashcardSet = flashcardSet();
+        flashcardSet.getCourse().setDeletedAt(Instant.now());
+        flashcardSet.getLesson().getCourse().setDeletedAt(Instant.now());
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+
+        assertBusinessException(
+                () -> adminFlashcardService.getSet(flashcardSet.getId()),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard lesson was not found"
+        );
+
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void getSetByLessonShouldResolveLegacyLessonReference() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardCard card = card(flashcardSet, 0);
+        UUID lessonId = flashcardSet.getLesson().getId();
+        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lessonId))
+                .thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(card));
+
+        FlashcardSetResponse response = adminFlashcardService.getSetByLesson(lessonId);
+
+        assertThat(response.id()).isEqualTo(flashcardSet.getId());
+        assertThat(response.lessonId()).isEqualTo(lessonId);
+        assertThat(response.cards()).hasSize(1);
+        verify(courseAccessService).requireReadableCourse(flashcardSet.getCourse().getId());
+        verify(flashcardSetRepository, never()).findByCurriculumLessonIdAndDeletedAtIsNull(lessonId);
+    }
+
+    @Test
+    void getSetByLessonShouldResolveCurriculumLessonReference() {
+        Course course = course();
+        CurriculumVersion version = curriculumVersion(course.getId());
+        CurriculumSection section = curriculumSection(version);
+        CurriculumLesson lesson = curriculumLesson(section, LessonType.FLASHCARD);
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course, lesson);
+        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lesson.getId())).thenReturn(Optional.empty());
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of());
+
+        FlashcardSetResponse response = adminFlashcardService.getSetByLesson(lesson.getId());
+
+        assertThat(response.id()).isEqualTo(flashcardSet.getId());
+        assertThat(response.lessonId()).isEqualTo(lesson.getId());
+        assertThat(response.courseId()).isEqualTo(course.getId());
+        assertThat(response.sectionId()).isEqualTo(section.getId());
+        verify(courseAccessService).requireReadableCourse(course.getId());
+    }
+
+    @Test
+    void getSetByLessonShouldResolveViaSourceLessonAndSourceCurriculumLesson() {
+        FlashcardSet sourceLessonSet = flashcardSet();
+        UUID curriculumLessonId = UUID.randomUUID();
+        CurriculumLesson sourceLessonLink = curriculumLesson(curriculumSection(curriculumVersion(sourceLessonSet.getCourse().getId())),
+                LessonType.FLASHCARD);
+        sourceLessonLink.setId(curriculumLessonId);
+        sourceLessonLink.setSourceLessonId(sourceLessonSet.getLesson().getId());
+        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(curriculumLessonId)).thenReturn(Optional.empty());
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId)).thenReturn(Optional.empty());
+        when(curriculumLessonRepository.findById(curriculumLessonId)).thenReturn(Optional.of(sourceLessonLink));
+        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(sourceLessonSet.getLesson().getId()))
+                .thenReturn(Optional.of(sourceLessonSet));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(sourceLessonSet.getId()))
+                .thenReturn(List.of());
+
+        FlashcardSetResponse sourceLessonResponse = adminFlashcardService.getSetByLesson(curriculumLessonId);
+
+        assertThat(sourceLessonResponse.id()).isEqualTo(sourceLessonSet.getId());
+
+        Course course = course();
+        CurriculumVersion version = curriculumVersion(course.getId());
+        CurriculumSection section = curriculumSection(version);
+        CurriculumLesson sourceCurriculumLesson = curriculumLesson(section, LessonType.FLASHCARD);
+        FlashcardSet sourceCurriculumSet = curriculumFlashcardSet(course, sourceCurriculumLesson);
+        CurriculumLesson inheritedLesson = curriculumLesson(section, LessonType.FLASHCARD);
+        inheritedLesson.setSourceCurriculumLessonId(sourceCurriculumLesson.getId());
+        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(inheritedLesson.getId())).thenReturn(Optional.empty());
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(inheritedLesson.getId()))
+                .thenReturn(Optional.empty());
+        when(curriculumLessonRepository.findById(inheritedLesson.getId())).thenReturn(Optional.of(inheritedLesson));
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(sourceCurriculumLesson.getId()))
+                .thenReturn(Optional.of(sourceCurriculumSet));
+        when(curriculumLessonRepository.findById(sourceCurriculumLesson.getId())).thenReturn(Optional.of(sourceCurriculumLesson));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(sourceCurriculumSet.getId()))
+                .thenReturn(List.of());
+
+        FlashcardSetResponse sourceCurriculumResponse = adminFlashcardService.getSetByLesson(inheritedLesson.getId());
+
+        assertThat(sourceCurriculumResponse.id()).isEqualTo(sourceCurriculumSet.getId());
+        assertThat(sourceCurriculumResponse.lessonId()).isEqualTo(sourceCurriculumLesson.getId());
+    }
+
+    @Test
+    void getSetByLessonShouldRejectMissingLessonReference() {
+        UUID lessonId = UUID.randomUUID();
+        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lessonId)).thenReturn(Optional.empty());
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lessonId)).thenReturn(Optional.empty());
+        when(curriculumLessonRepository.findById(lessonId)).thenReturn(Optional.empty());
+
+        assertBusinessException(
+                () -> adminFlashcardService.getSetByLesson(lessonId),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard set was not found"
+        );
+    }
+
+    @Test
+    void getSetByLessonShouldRejectCurriculumReferenceWithoutLinkedSet() {
+        UUID lessonId = UUID.randomUUID();
+        CurriculumLesson lesson = curriculumLesson(curriculumSection(curriculumVersion(UUID.randomUUID())), LessonType.FLASHCARD);
+        lesson.setId(lessonId);
+        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lessonId)).thenReturn(Optional.empty());
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lessonId)).thenReturn(Optional.empty());
+        when(curriculumLessonRepository.findById(lessonId)).thenReturn(Optional.of(lesson));
+
+        assertBusinessException(
+                () -> adminFlashcardService.getSetByLesson(lessonId),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard set was not found"
+        );
     }
 
     @Test
@@ -298,6 +476,75 @@ class AdminFlashcardServiceTest {
     }
 
     @Test
+    void updateSetShouldUpdateLegacySetAndLinkedLessonTitle() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardCard card = card(flashcardSet, 0);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.save(flashcardSet)).thenReturn(flashcardSet);
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(card));
+
+        FlashcardSetResponse response = adminFlashcardService.updateSet(
+                flashcardSet.getId(),
+                new UpdateFlashcardSetRequest("  Updated title  ", "  Updated description  "));
+
+        assertThat(response.title()).isEqualTo("Updated title");
+        assertThat(response.description()).isEqualTo("Updated description");
+        assertThat(flashcardSet.getLesson().getTitle()).isEqualTo("Updated title");
+        verify(courseAccessService).requireUpdatableCourse(flashcardSet.getCourse().getId());
+        verify(lessonRepository).save(flashcardSet.getLesson());
+        verify(flashcardSetRepository).save(flashcardSet);
+    }
+
+    @Test
+    void updateSetShouldUpdateCurriculumLinkedLessonTitle() {
+        Course course = course();
+        CurriculumVersion version = curriculumVersion(course.getId());
+        CurriculumSection section = curriculumSection(version);
+        CurriculumLesson lesson = curriculumLesson(section, LessonType.FLASHCARD);
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course, lesson);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(flashcardSetRepository.save(flashcardSet)).thenReturn(flashcardSet);
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of());
+
+        FlashcardSetResponse response = adminFlashcardService.updateSet(
+                flashcardSet.getId(),
+                new UpdateFlashcardSetRequest("Curriculum title", " "));
+
+        assertThat(response.title()).isEqualTo("Curriculum title");
+        assertThat(response.description()).isNull();
+        assertThat(lesson.getTitle()).isEqualTo("Curriculum title");
+        verify(courseAccessService).requireUpdatableCourse(course.getId());
+        verify(curriculumLessonRepository).save(lesson);
+    }
+
+    @Test
+    void updateSetShouldRejectBlankTitleAndMissingSet() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UUID missingSetId = UUID.randomUUID();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(missingSetId)).thenReturn(Optional.empty());
+
+        assertBusinessException(
+                () -> adminFlashcardService.updateSet(flashcardSet.getId(), new UpdateFlashcardSetRequest(" ", null)),
+                ErrorCode.INVALID_REQUEST,
+                "Flashcard set title is required"
+        );
+        assertBusinessException(
+                () -> adminFlashcardService.updateSet(missingSetId, new UpdateFlashcardSetRequest("Title", null)),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard set was not found"
+        );
+
+        verify(flashcardSetRepository, never()).save(any(FlashcardSet.class));
+    }
+
+    @Test
     void updateCardShouldRejectClearingExistingCardToEmpty() {
         FlashcardCard card = card(flashcardSet(), 0);
         when(flashcardCardRepository.findByIdAndDeletedAtIsNull(card.getId())).thenReturn(Optional.of(card));
@@ -321,6 +568,57 @@ class AdminFlashcardServiceTest {
 
         assertThat(card.getDeletedAt()).isNotNull();
         verify(flashcardCardRepository).save(card);
+    }
+
+    @Test
+    void deleteSetShouldSoftDeleteSetCardsAndDeactivateLegacyLesson() {
+        FlashcardSet flashcardSet = flashcardSet();
+        FlashcardCard first = card(flashcardSet, 0);
+        FlashcardCard second = card(flashcardSet, 1);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of(first, second));
+
+        adminFlashcardService.deleteSet(flashcardSet.getId());
+
+        assertThat(flashcardSet.getDeletedAt()).isNotNull();
+        assertThat(first.getDeletedAt()).isEqualTo(flashcardSet.getDeletedAt());
+        assertThat(second.getDeletedAt()).isEqualTo(flashcardSet.getDeletedAt());
+        assertThat(flashcardSet.getLesson().getStatus()).isEqualTo(LessonStatus.INACTIVE);
+        verify(courseAccessService).requireUpdatableCourse(flashcardSet.getCourse().getId());
+        verify(flashcardCardRepository).saveAll(List.of(first, second));
+        verify(lessonRepository).save(flashcardSet.getLesson());
+        verify(flashcardSetRepository).save(flashcardSet);
+    }
+
+    @Test
+    void deleteSetShouldDeactivateCurriculumLessonAndRejectMissingSet() {
+        Course course = course();
+        CurriculumVersion version = curriculumVersion(course.getId());
+        CurriculumSection section = curriculumSection(version);
+        CurriculumLesson lesson = curriculumLesson(section, LessonType.FLASHCARD);
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course, lesson);
+        UUID missingSetId = UUID.randomUUID();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))
+                .thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
+                .thenReturn(List.of());
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(missingSetId)).thenReturn(Optional.empty());
+
+        adminFlashcardService.deleteSet(flashcardSet.getId());
+
+        assertThat(flashcardSet.getDeletedAt()).isNotNull();
+        assertThat(lesson.getStatus()).isEqualTo(LessonStatus.INACTIVE);
+        assertThat(lesson.getDeletedAt()).isNotNull();
+        verify(curriculumLessonRepository).save(lesson);
+
+        assertBusinessException(
+                () -> adminFlashcardService.deleteSet(missingSetId),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard set was not found"
+        );
     }
 
     @Test
@@ -416,6 +714,30 @@ class AdminFlashcardServiceTest {
         return flashcardSet;
     }
 
+    private FlashcardSet curriculumFlashcardSet(Course course, CurriculumLesson lesson) {
+        FlashcardSet flashcardSet = new FlashcardSet();
+        flashcardSet.setId(UUID.randomUUID());
+        flashcardSet.setCourse(course);
+        flashcardSet.setCurriculumLessonId(lesson.getId());
+        flashcardSet.setTitle("Curriculum flashcards");
+        flashcardSet.setCreatedAt(Instant.now());
+        flashcardSet.setUpdatedAt(Instant.now());
+        return flashcardSet;
+    }
+
+    private CurriculumLesson curriculumLesson(CurriculumSection section, LessonType type) {
+        CurriculumLesson lesson = new CurriculumLesson();
+        lesson.setId(UUID.randomUUID());
+        lesson.setSection(section);
+        lesson.setLessonIdentityId(UUID.randomUUID());
+        lesson.setTitle("Curriculum flashcards");
+        lesson.setType(type);
+        lesson.setStatus(LessonStatus.PUBLISHED);
+        lesson.setPreview(false);
+        lesson.setSortOrder(0);
+        return lesson;
+    }
+
     private FlashcardCard card(FlashcardSet flashcardSet, int orderIndex) {
         FlashcardCard card = new FlashcardCard();
         card.setId(UUID.randomUUID());
@@ -426,5 +748,12 @@ class AdminFlashcardServiceTest {
         card.setCreatedAt(Instant.now());
         card.setUpdatedAt(Instant.now());
         return card;
+    }
+
+    private void assertBusinessException(Runnable action, ErrorCode errorCode, String message) {
+        assertThatThrownBy(action::run)
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(errorCode))
+                .hasMessage(message);
     }
 }
