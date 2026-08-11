@@ -23,8 +23,8 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID> {
                         FROM public.users u
                         WHERE u.id = :id
                           AND u.deleted_at IS NULL
-                          AND LOWER(CAST(u.role AS text)) = LOWER(:role)
-                          AND LOWER(CAST(u.status AS text)) = LOWER(:status)
+                          AND u.role = CAST(:role AS public.user_role)
+                          AND u.status = CAST(:status AS public.user_status)
                         LIMIT 1
                         """, nativeQuery = true)
         Optional<UserAccount> findActiveUserByIdAndRole(
@@ -36,8 +36,8 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID> {
                         SELECT u.*
                         FROM public.users u
                         WHERE u.deleted_at IS NULL
-                          AND (:role IS NULL OR CAST(u.role AS text) = :role)
-                          AND (:status IS NULL OR CAST(u.status AS text) = :status)
+                          AND (:role IS NULL OR u.role = CAST(:role AS public.user_role))
+                          AND (:status IS NULL OR u.status = CAST(:status AS public.user_status))
                           AND (
                               :keyword IS NULL
                               OR u.email ILIKE :keyword ESCAPE '\\'
@@ -48,8 +48,8 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID> {
                         SELECT COUNT(*)
                         FROM public.users u
                         WHERE u.deleted_at IS NULL
-                          AND (:role IS NULL OR CAST(u.role AS text) = :role)
-                          AND (:status IS NULL OR CAST(u.status AS text) = :status)
+                          AND (:role IS NULL OR u.role = CAST(:role AS public.user_role))
+                          AND (:status IS NULL OR u.status = CAST(:status AS public.user_status))
                           AND (
                               :keyword IS NULL
                               OR u.email ILIKE :keyword ESCAPE '\\'

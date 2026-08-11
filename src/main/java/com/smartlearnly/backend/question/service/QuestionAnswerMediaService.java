@@ -151,7 +151,9 @@ public class QuestionAnswerMediaService {
         return new QuestionAnswerMediaResponse(
                 attachment.getId(),
                 attachment.getAnswerId(),
-                toApiValue(attachment.getMediaType()),
+                attachment.getMediaType() == null
+                        ? null
+                        : attachment.getMediaType().name().toLowerCase(Locale.ROOT),
                 attachment.getMediaUrl(),
                 attachment.getObjectKey(),
                 attachment.getBucket(),
@@ -268,7 +270,4 @@ public class QuestionAnswerMediaService {
         return slashIndex >= 0 ? trimmed.substring(slashIndex + 1) : trimmed;
     }
 
-    private String toApiValue(Enum<?> value) {
-        return value == null ? null : value.name().toLowerCase(Locale.ROOT);
-    }
 }

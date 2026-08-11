@@ -145,6 +145,36 @@ class ClassCurriculumCompositionServiceTest {
     }
 
     @Test
+    void orderedEffectiveLessonsShouldBatchEntriesAndMaterializedLessonsAcrossSections() {
+        CurriculumVersion classVersion = version(CurriculumScope.CLASS, CurriculumStatus.PUBLISHED);
+        CurriculumSection firstSection = section(classVersion, 0);
+        CurriculumSection secondSection = section(classVersion, 1);
+        classVersion.addSection(secondSection);
+        classVersion.addSection(firstSection);
+
+        CurriculumLesson firstLesson = materializedLesson("First lesson");
+        CurriculumLesson secondLesson = materializedLesson("Second lesson");
+        ClassCurriculumEntry firstEntry = entry(
+                firstSection, null, UUID.randomUUID(), firstLesson.getId());
+        ClassCurriculumEntry secondEntry = entry(
+                secondSection, null, UUID.randomUUID(), secondLesson.getId());
+
+        when(entryRepository.findByClassVersionIdOrderBySortOrderAscCreatedAtAsc(classVersion.getId()))
+                .thenReturn(List.of(firstEntry, secondEntry));
+        when(lessonRepository.findAllById(List.of(firstLesson.getId(), secondLesson.getId())))
+                .thenReturn(List.of(firstLesson, secondLesson));
+
+        List<CurriculumLesson> lessons = service.orderedEffectiveLessons(classVersion);
+
+        assertThat(lessons).extracting(CurriculumLesson::getTitle)
+                .containsExactly("First lesson", "Second lesson");
+        verify(entryRepository).findByClassVersionIdOrderBySortOrderAscCreatedAtAsc(classVersion.getId());
+        verify(lessonRepository).findAllById(List.of(firstLesson.getId(), secondLesson.getId()));
+        verify(entryRepository, never())
+                .findByClassVersionIdAndSectionIdOrderBySortOrderAsc(any(UUID.class), any(UUID.class));
+    }
+
+    @Test
     void resolveEffectiveLessonShouldResolveInheritedEntryByMasterSourceId() {
         UUID classVersionId = UUID.randomUUID();
         UUID masterVersionId = UUID.randomUUID();
@@ -275,5 +305,21 @@ class ClassCurriculumCompositionServiceTest {
         entry.setLessonIdentityId(lessonIdentityId);
         entry.setMaterializedLessonId(materializedLessonId);
         return entry;
+    }
+
+    private CurriculumSection section(CurriculumVersion version, int sortOrder) {
+        CurriculumSection section = new CurriculumSection();
+        section.setId(UUID.randomUUID());
+        section.setCurriculumVersion(version);
+        section.setSortOrder(sortOrder);
+        return section;
+    }
+
+    private CurriculumLesson materializedLesson(String title) {
+        CurriculumLesson lesson = new CurriculumLesson();
+        lesson.setId(UUID.randomUUID());
+        lesson.setTitle(title);
+        lesson.setStatus(LessonStatus.PUBLISHED);
+        return lesson;
     }
 }

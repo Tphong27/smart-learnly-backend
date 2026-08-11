@@ -4,9 +4,6 @@ import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
 import com.smartlearnly.backend.question.ai.service.AiQuestionDraftService;
 import com.smartlearnly.backend.question.ai.service.AiQuestionSourceService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -31,26 +28,21 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
 @RequestMapping("/api/v1/admin/courses/{courseId}/questions/ai-drafts")
-@Tag(name = "Admin Course AI Question Drafts", description = "Course and module scoped AI question draft staging APIs.")
-@SecurityRequirement(name = "bearerAuth")
 public class CourseAiQuestionDraftController {
     private final AiQuestionDraftService aiQuestionDraftService;
     private final AiQuestionSourceService aiQuestionSourceService;
 
     @GetMapping("/source-capabilities")
-    @Operation(summary = "Get supported AI question generation source limits")
     public ApiResponse<AiQuestionDraftDtos.SourceCapabilitiesResponse> sourceCapabilities(@PathVariable UUID courseId) {
         return ApiResponse.success("AI generation source capabilities loaded successfully", aiQuestionSourceService.sourceCapabilities(courseId));
     }
 
     @GetMapping("/sources")
-    @Operation(summary = "List transcript sources for AI question generation")
     public ApiResponse<List<AiQuestionDraftDtos.SourceOptionResponse>> sources(@PathVariable UUID courseId) {
         return ApiResponse.success("AI generation sources loaded successfully", aiQuestionSourceService.listSources(courseId));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "Create an AI question generation batch")
     public ResponseEntity<ApiResponse<AiQuestionDraftDtos.BatchResponse>> create(
             @PathVariable UUID courseId,
             @Valid @RequestBody AiQuestionDraftDtos.CreateBatchRequest request
@@ -61,7 +53,6 @@ public class CourseAiQuestionDraftController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Create an AI question generation batch from mixed source types")
     public ResponseEntity<ApiResponse<AiQuestionDraftDtos.BatchResponse>> createMultipart(
             @PathVariable UUID courseId,
             @Valid @RequestPart("request") AiQuestionDraftDtos.CreateBatchRequest request,
@@ -73,19 +64,16 @@ public class CourseAiQuestionDraftController {
     }
 
     @GetMapping
-    @Operation(summary = "List AI question generation batches")
     public ApiResponse<List<AiQuestionDraftDtos.BatchResponse>> list(@PathVariable UUID courseId) {
         return ApiResponse.success("AI question generation batches loaded successfully", aiQuestionDraftService.listBatches(courseId));
     }
 
     @GetMapping("/{batchId}")
-    @Operation(summary = "Get an AI question generation batch")
     public ApiResponse<AiQuestionDraftDtos.BatchResponse> get(@PathVariable UUID courseId, @PathVariable UUID batchId) {
         return ApiResponse.success("AI question generation batch loaded successfully", aiQuestionDraftService.getBatch(courseId, batchId));
     }
 
     @PostMapping("/{batchId}/sources/{sourceId}/download-url")
-    @Operation(summary = "Create a short-lived audit download URL for an AI generation source")
     public ApiResponse<AiQuestionDraftDtos.SourceDownloadUrlResponse> sourceDownloadUrl(
             @PathVariable UUID courseId,
             @PathVariable UUID batchId,
@@ -95,13 +83,11 @@ public class CourseAiQuestionDraftController {
     }
 
     @GetMapping("/{batchId}/items")
-    @Operation(summary = "List draft items in an AI question generation batch")
     public ApiResponse<List<AiQuestionDraftDtos.DraftResponse>> items(@PathVariable UUID courseId, @PathVariable UUID batchId) {
         return ApiResponse.success("AI question drafts loaded successfully", aiQuestionDraftService.listDrafts(courseId, batchId));
     }
 
     @PutMapping("/{batchId}/drafts/{draftId}")
-    @Operation(summary = "Edit an AI question draft")
     public ApiResponse<AiQuestionDraftDtos.DraftResponse> updateDraft(
             @PathVariable UUID courseId,
             @PathVariable UUID batchId,
@@ -112,7 +98,6 @@ public class CourseAiQuestionDraftController {
     }
 
     @PostMapping("/{batchId}/drafts/{draftId}/reject")
-    @Operation(summary = "Reject an AI question draft")
     public ApiResponse<AiQuestionDraftDtos.DraftResponse> rejectDraft(
             @PathVariable UUID courseId,
             @PathVariable UUID batchId,
@@ -123,7 +108,6 @@ public class CourseAiQuestionDraftController {
     }
 
     @PostMapping("/{batchId}/drafts/{draftId}/evidence-confirmation")
-    @Operation(summary = "Confirm whether existing evidence still supports an edited AI question draft")
     public ApiResponse<AiQuestionDraftDtos.DraftResponse> confirmEvidence(
             @PathVariable UUID courseId,
             @PathVariable UUID batchId,
@@ -134,7 +118,6 @@ public class CourseAiQuestionDraftController {
     }
 
     @PostMapping("/{batchId}/add-selected")
-    @Operation(summary = "Add selected AI drafts as draft course questions")
     public ApiResponse<AiQuestionDraftDtos.AddSelectedResponse> addSelected(
             @PathVariable UUID courseId,
             @PathVariable UUID batchId,
@@ -144,7 +127,6 @@ public class CourseAiQuestionDraftController {
     }
 
     @PostMapping("/{batchId}/retry")
-    @Operation(summary = "Retry a failed AI question generation batch")
     public ApiResponse<AiQuestionDraftDtos.BatchResponse> retry(@PathVariable UUID courseId, @PathVariable UUID batchId) {
         return ApiResponse.success("AI question generation batch retry completed", aiQuestionDraftService.retry(courseId, batchId));
     }

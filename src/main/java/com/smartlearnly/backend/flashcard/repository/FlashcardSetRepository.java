@@ -1,6 +1,8 @@
 package com.smartlearnly.backend.flashcard.repository;
 
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
@@ -179,6 +181,26 @@ public interface FlashcardSetRepository extends JpaRepository<FlashcardSet, UUID
               and flashcardSet.deletedAt is null
             """)
     Optional<FlashcardSet> findByCurriculumLessonIdAndDeletedAtIsNull(@Param("curriculumLessonId") UUID curriculumLessonId);
+
+    /** Tìm bộ thẻ nguồn trong master đã publish theo identity, không lấy nhầm bản tùy biến của lớp khác. */
+    @Query("""
+            select flashcardSet
+            from FlashcardSet flashcardSet
+            where flashcardSet.curriculumLessonId in (
+                select curriculumLesson.id
+                from CurriculumLesson curriculumLesson
+                where curriculumLesson.lessonIdentityId = :lessonIdentityId
+                  and curriculumLesson.section.curriculumVersion.scope = :scope
+                  and curriculumLesson.section.curriculumVersion.status = :status
+            )
+              and flashcardSet.deletedAt is null
+            order by flashcardSet.updatedAt desc, flashcardSet.id desc
+            """)
+    List<FlashcardSet> findActiveByLessonIdentityIdAndCurriculumStateOrderByUpdatedAtDesc(
+            @Param("lessonIdentityId") UUID lessonIdentityId,
+            @Param("scope") CurriculumScope scope,
+            @Param("status") CurriculumStatus status
+    );
 
     @Query("""
             select count(flashcardSet) > 0

@@ -34,7 +34,7 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
 
     @Override
     public ImageImportParseResult parse(ImageImportRequest request) {
-        QuestionImageImportSettings settings = resolveSettings();
+        QuestionImageImportSettings settings = settingsService.resolveQuestionImageImportSettings();
         ensureAvailable(settings);
         try {
             String response = restClient(settings)
@@ -87,10 +87,6 @@ public class GeminiVisionQuestionImportProvider implements ImageQuestionImportPr
                     "Gemini image import provider request failed"
             );
         }
-    }
-
-    private QuestionImageImportSettings resolveSettings() {
-        return settingsService.resolveQuestionImageImportSettings();
     }
 
     private void ensureAvailable(QuestionImageImportSettings settings) {

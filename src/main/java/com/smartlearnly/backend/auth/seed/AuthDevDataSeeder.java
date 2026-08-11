@@ -2,8 +2,8 @@ package com.smartlearnly.backend.auth.seed;
 
 import com.smartlearnly.backend.auth.password.service.AuthPasswordService;
 import com.smartlearnly.backend.auth.password.dto.ForgotPasswordRequest;
-import com.smartlearnly.backend.auth.registration.dto.ResendVerificationRequest;
-import com.smartlearnly.backend.auth.registration.service.AuthRegistrationService;
+import com.smartlearnly.backend.auth.register.dto.ResendVerificationRequest;
+import com.smartlearnly.backend.auth.register.service.AuthRegistrationService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.user.entity.UserAccount;

@@ -11,8 +11,6 @@ import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.Que
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/settings")
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin System Settings", description = "Admin-only AI provider configuration.")
 public class AiSettingsController {
     private final SystemSettingsService settingsService;
     private final AuditLogService auditLogService;
@@ -36,7 +33,6 @@ public class AiSettingsController {
 
     // Trả cấu hình AI nhập câu hỏi từ ảnh và trạng thái provider đã sẵn sàng.
     @GetMapping("/ai/question-image-import")
-    @Operation(summary = "Get current question image import settings (secret masked)")
     public ApiResponse<QuestionImageImportSettingsResponse> getQuestionImageImportSettings() {
         QuestionImageImportSettings settings = settingsService.resolveQuestionImageImportSettings();
         QuestionImageImportSettingsResponse response = new QuestionImageImportSettingsResponse(
@@ -53,7 +49,6 @@ public class AiSettingsController {
     // Lưu provider, model và giới hạn nhập câu hỏi từ ảnh rồi ghi audit.
     @PutMapping("/ai/question-image-import")
     @Transactional
-    @Operation(summary = "Update question image import settings")
     public ApiResponse<QuestionImageImportSettingsResponse> updateQuestionImageImportSettings(
             @Valid @RequestBody QuestionImageImportSettingsUpdateRequest request) {
         UUID actor = support.currentUserId();
@@ -90,7 +85,6 @@ public class AiSettingsController {
 
     // Trả cấu hình tạo bản nháp bài tập và trạng thái provider đã sẵn sàng.
     @GetMapping("/ai/assignment-draft")
-    @Operation(summary = "Get current assignment AI draft settings (secret masked)")
     public ApiResponse<AssignmentAiSettingsResponse> getAssignmentAiSettings() {
         AssignmentAiSettings settings = settingsService.resolveAssignmentAiSettings();
         AssignmentAiSettingsResponse response = new AssignmentAiSettingsResponse(
@@ -106,7 +100,6 @@ public class AiSettingsController {
     // Lưu provider và model tạo bản nháp bài tập rồi ghi audit thay đổi.
     @PutMapping("/ai/assignment-draft")
     @Transactional
-    @Operation(summary = "Update assignment AI draft settings")
     public ApiResponse<AssignmentAiSettingsResponse> updateAssignmentAiSettings(
             @Valid @RequestBody AssignmentAiSettingsUpdateRequest request) {
         UUID actor = support.currentUserId();

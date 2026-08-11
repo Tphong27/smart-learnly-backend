@@ -541,28 +541,17 @@ class VideoSummaryServiceTest {
                 when(metadataService.fetchYoutubeVideoMetadata(VIDEO_ID))
                                 .thenReturn(new YoutubeVideoMetadata(1_021));
 
-                // GIVEN: Transcript service trả ngôn ngữ và nội dung phụ đề.
-                when(transcriptService.fetchYoutubeTranscript(VIDEO_ID))
-                                .thenReturn(new YoutubeTranscriptService.TranscriptResult(
-                                                "vi",
-                                                "Nội dung bài học"));
-
-                // GIVEN: Gemini trả bản tóm tắt có cấu trúc.
-                when(summaryService.generateSummaryFromTranscript(
-                                "vi",
-                                "Nội dung bài học"))
+                // GIVEN: Gemini đọc trực tiếp URL và trả bản tóm tắt có cấu trúc.
+                when(summaryService.generateSummaryFromYoutubeVideo(WATCH_URL))
                                 .thenReturn(GENERATED_SUMMARY);
 
                 /*
                  * DEBUG FLOW:
                  * 1. Dòng 32 parse youtu.be URL => videoId="V9i3cGD-mts".
                  * 2. Dòng 34 gọi metadataService(videoId); mock trả durationSeconds=1021.
-                 * 3. Dòng 36 gọi transcriptService(videoId); mock trả language="vi",
-                 * text="Nội dung bài học".
-                 * 4. Dòng 38-40 gọi Gemini bằng đúng language/text; mock trả GENERATED_SUMMARY.
-                 * 5. Dòng 41 durationSeconds=1021.
-                 * 6. Dòng 46 tính phút: (1021+59)/60=1080/60=18.
-                 * 7. Dòng 42-47 return response; không dependency nào ném exception.
+                 * 3. Service chuẩn hóa URL và gọi Gemini trực tiếp bằng WATCH_URL.
+                 * 4. Gemini trả GENERATED_SUMMARY nên không chạy transcript fallback.
+                 * 5. Thời lượng 1021 giây được làm tròn lên 18 phút.
                  */
                 // WHEN: Người dùng tạo summary từ URL youtu.be hợp lệ.
                 GenerateSummaryResponse actualResponse = service.generateVideoSummary(
@@ -579,13 +568,10 @@ class VideoSummaryServiceTest {
                 // THEN: 17 phút 1 giây được làm tròn lên 18 phút.
                 assertThat(actualResponse.durationMinutes()).isEqualTo(18);
 
-                // THEN: Ba service phải được gọi đúng thứ tự dữ liệu của luồng.
+                // THEN: Luồng chính không được gọi transcript scraper.
                 verify(metadataService).fetchYoutubeVideoMetadata(VIDEO_ID);
-                verify(transcriptService).fetchYoutubeTranscript(VIDEO_ID);
-                verify(summaryService)
-                                .generateSummaryFromTranscript(
-                                                "vi",
-                                                "Nội dung bài học");
+                verify(summaryService).generateSummaryFromYoutubeVideo(WATCH_URL);
+                verify(transcriptService, never()).fetchYoutubeTranscript(VIDEO_ID);
         }
 
         @Test
@@ -621,41 +607,43 @@ class VideoSummaryServiceTest {
         }
 
         @Test
-        void generateVideoSummary_propagatesException_whenTranscriptRetrievalFails() {
+        void generateVideoSummary_fallsBackToTranscript_whenDirectGeminiFails() {
                 // GIVEN: Metadata hợp lệ.
                 when(metadataService.fetchYoutubeVideoMetadata(VIDEO_ID))
                                 .thenReturn(new YoutubeVideoMetadata(600));
 
-                // GIVEN: YouTube không có transcript khả dụng.
-                when(transcriptService.fetchYoutubeTranscript(VIDEO_ID))
+                // GIVEN: Gemini trực tiếp tạm lỗi nhưng transcript vẫn lấy được.
+                when(summaryService.generateSummaryFromYoutubeVideo(WATCH_URL))
                                 .thenThrow(new BusinessException(
-                                                ErrorCode.BUSINESS_RULE_VIOLATION,
-                                                "This YouTube video does not have an available transcript"));
+                                                ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                                                "Direct video input is temporarily unavailable"));
+                when(transcriptService.fetchYoutubeTranscript(VIDEO_ID))
+                                .thenReturn(new YoutubeTranscriptService.TranscriptResult(
+                                                "vi",
+                                                "Nội dung bài học"));
+                when(summaryService.generateSummaryFromTranscript(
+                                "vi",
+                                "Nội dung bài học"))
+                                .thenReturn(GENERATED_SUMMARY);
 
                 /*
                  * DEBUG FLOW:
                  * 1. Dòng 32 videoId=VIDEO_ID.
                  * 2. Dòng 34 metadata mock trả durationSeconds=600 nên tiếp tục.
-                 * 3. Dòng 36 transcript mock ném BUSINESS_RULE_VIOLATION.
-                 * 4. Service không catch exception; dòng 37-47 không chạy.
-                 * 5. summaryService không được gọi vì chưa có transcript.
-                 * 6. catchThrowable nhận exception từ transcript mock.
+                 * 3. Gemini trực tiếp ném EXTERNAL_SERVICE_UNAVAILABLE.
+                 * 4. Service lấy transcript và gọi lại Gemini bằng văn bản.
+                 * 5. Fallback thành công nên response vẫn được trả về.
                  */
                 // WHEN: Người dùng yêu cầu tạo summary.
-                Throwable actualException = catchThrowable(
-                                () -> service.generateVideoSummary(WATCH_URL));
+                GenerateSummaryResponse actualResponse =
+                                service.generateVideoSummary(WATCH_URL);
 
-                // THEN: generateVideoSummary giữ nguyên lỗi của transcript service.
-                assertThat(actualException)
-                                .isInstanceOf(BusinessException.class)
-                                .extracting(exception -> ((BusinessException) exception).errorCode())
-                                .isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION);
-
-                // THEN: Không được gọi Gemini khi chưa lấy được transcript.
-                verify(summaryService, never())
-                                .generateSummaryFromTranscript(
-                                                org.mockito.ArgumentMatchers.any(),
-                                                org.mockito.ArgumentMatchers.any());
+                // THEN: Người dùng vẫn nhận summary và transcript được gọi đúng một lần.
+                assertThat(actualResponse.summary()).isEqualTo(GENERATED_SUMMARY);
+                verify(transcriptService).fetchYoutubeTranscript(VIDEO_ID);
+                verify(summaryService).generateSummaryFromTranscript(
+                                "vi",
+                                "Nội dung bài học");
         }
 
         @Test
@@ -663,6 +651,10 @@ class VideoSummaryServiceTest {
                 // GIVEN: Metadata và transcript đều hợp lệ.
                 when(metadataService.fetchYoutubeVideoMetadata(VIDEO_ID))
                                 .thenReturn(new YoutubeVideoMetadata(600));
+                when(summaryService.generateSummaryFromYoutubeVideo(WATCH_URL))
+                                .thenThrow(new BusinessException(
+                                                ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                                                "Direct video input is temporarily unavailable"));
                 when(transcriptService.fetchYoutubeTranscript(VIDEO_ID))
                                 .thenReturn(new YoutubeTranscriptService.TranscriptResult(
                                                 "en",

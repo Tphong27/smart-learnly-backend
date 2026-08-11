@@ -5,9 +5,6 @@ import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.notification.dto.NotificationResponse;
 import com.smartlearnly.backend.notification.dto.UnreadCountResponse;
 import com.smartlearnly.backend.notification.service.NotificationService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.UUID;
@@ -30,8 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/notifications")
 @PreAuthorize("isAuthenticated()")
-@Tag(name = "Notifications", description = "In-app notification APIs")
-@SecurityRequirement(name = "bearerAuth")
 public class NotificationController {
     private final NotificationService notificationService;
 
@@ -39,7 +34,6 @@ public class NotificationController {
      * Lấy danh sách notification của người dùng đang đăng nhập.
      */
     @GetMapping
-    @Operation(summary = "List current user's notifications")
     public ApiResponse<PageResponse<NotificationResponse>> list(
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
@@ -54,7 +48,6 @@ public class NotificationController {
      * Lấy số notification chưa đọc của người dùng.
      */
     @GetMapping("/unread-count")
-    @Operation(summary = "Get current user's unread notification count")
     public ApiResponse<UnreadCountResponse> unreadCount() {
         return ApiResponse.success(
                 "Unread notification count loaded successfully",
@@ -65,7 +58,6 @@ public class NotificationController {
      * Đánh dấu một notification là đã đọc.
      */
     @PatchMapping("/{notificationId}/read")
-    @Operation(summary = "Mark one notification as read")
     public ApiResponse<NotificationResponse> markRead(@PathVariable UUID notificationId) {
         return ApiResponse.success(
                 "Notification marked as read",
@@ -76,7 +68,6 @@ public class NotificationController {
      * Ghi nhận thao tác click vào notification.
      */
     @PatchMapping("/{notificationId}/clicked")
-    @Operation(summary = "Record a click on one notification")
     public ApiResponse<NotificationResponse> recordClick(@PathVariable UUID notificationId) {
         return ApiResponse.success(
                 "Notification click recorded",
@@ -87,7 +78,6 @@ public class NotificationController {
      * Lưu trữ một notification.
      */
     @PatchMapping("/{notificationId}/archive")
-    @Operation(summary = "Archive one notification")
     public ApiResponse<NotificationResponse> archive(@PathVariable UUID notificationId) {
         return ApiResponse.success(
                 "Notification archived",
@@ -95,7 +85,6 @@ public class NotificationController {
     }
 
     @PatchMapping("/archive-all")
-    @Operation(summary = "Archive all current user's active notifications")
     public ApiResponse<UnreadCountResponse> archiveAll() {
         return ApiResponse.success(
                 "Notifications archived",
@@ -106,7 +95,6 @@ public class NotificationController {
      * Đánh dấu tất cả notification là đã đọc.
      */
     @PatchMapping("/read-all")
-    @Operation(summary = "Mark all current user's notifications as read")
     public ApiResponse<UnreadCountResponse> markAllRead() {
         return ApiResponse.success(
                 "Notifications marked as read",

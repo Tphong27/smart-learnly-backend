@@ -96,7 +96,7 @@ public class QuestionMediaImportService {
 
     private void store(Question question, QuestionMediaType mediaType, DownloadedMedia media, int displayOrder, String importSource) {
         String contentType = detectContentType(media.content(), mediaType);
-        String extension = allowedTypes(mediaType).get(contentType);
+        String extension = (mediaType == QuestionMediaType.IMAGE ? IMAGE_TYPES : AUDIO_TYPES).get(contentType);
         if (extension == null) {
             throw new BusinessException(ErrorCode.UNSUPPORTED_MEDIA_TYPE, unsupportedTypeMessage(mediaType));
         }
@@ -331,10 +331,6 @@ public class QuestionMediaImportService {
                     ? "Question image type could not be detected"
                     : "Question audio type could not be detected");
         }
-    }
-
-    private Map<String, String> allowedTypes(QuestionMediaType mediaType) {
-        return mediaType == QuestionMediaType.IMAGE ? IMAGE_TYPES : AUDIO_TYPES;
     }
 
     private DataSize maxSize(QuestionMediaType mediaType) {

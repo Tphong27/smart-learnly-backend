@@ -3,7 +3,6 @@ package com.smartlearnly.backend.notification.service;
 import com.smartlearnly.backend.notification.dto.NotificationResponse;
 import com.smartlearnly.backend.notification.entity.Notification;
 import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Mapper chuyển đổi Notification entity sang NotificationResponse DTO.
@@ -29,7 +28,9 @@ public final class NotificationMapper {
                 notification.getActionUrl(),
                 notification.getActorId(),
                 notification.getEventKey(),
-                copyPayload(notification.getPayload()),
+                notification.getPayload() == null
+                        ? new LinkedHashMap<>()
+                        : new LinkedHashMap<>(notification.getPayload()),
                 notification.getReadAt(),
                 notification.getDeliveredAt(),
                 notification.getSeenAt(),
@@ -38,7 +39,4 @@ public final class NotificationMapper {
                 notification.getCreatedAt());
     }
 
-    private static Map<String, Object> copyPayload(Map<String, Object> payload) {
-        return payload == null ? new LinkedHashMap<>() : new LinkedHashMap<>(payload);
-    }
 }

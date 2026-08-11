@@ -236,6 +236,30 @@ class AdminUserServiceTest {
                 .isEqualTo(ErrorCode.CONFLICT);
     }
 
+    @Test
+    void softDeleteShouldDeactivateUserAndKeepRecordForHistory() {
+        UserAccount trainer = user("trainer@example.com", "Trainer Name", "TRAINER", "active");
+        when(userRepository.findByIdAndDeletedAtIsNull(trainer.getId())).thenReturn(Optional.of(trainer));
+        when(userRepository.save(trainer)).thenReturn(trainer);
+
+        service.softDelete(trainer.getId());
+
+        assertThat(trainer.getStatus()).isEqualTo("inactive");
+        assertThat(trainer.getDeletedAt()).isNotNull();
+        org.mockito.Mockito.verify(userRepository).save(trainer);
+    }
+
+    @Test
+    void softDeleteShouldRejectMissingOrAlreadyDeletedUser() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.softDelete(userId))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).errorCode())
+                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
     private UserAccount user(String email, String fullName, String role, String status) {
         UserAccount user = new UserAccount();
         user.setId(UUID.randomUUID());

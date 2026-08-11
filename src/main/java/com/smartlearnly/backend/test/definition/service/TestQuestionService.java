@@ -195,10 +195,11 @@ public class TestQuestionService {
             answers.add(new PersistableQuizAnswer(answerText, correctIndexes.contains(index + 1)));
         }
 
+        String explanation = textValue(node, "explain_question");
         return new PersistableQuizQuestion(
                 title.trim(),
                 type,
-                blankToNull(textValue(node, "explain_question")),
+                explanation == null || explanation.isBlank() ? null : explanation.trim(),
                 answers);
     }
 
@@ -243,10 +244,6 @@ public class TestQuestionService {
     private String textValue(JsonNode node, String field) {
         JsonNode value = node == null ? null : node.get(field);
         return value == null || value.isNull() ? null : value.asText();
-    }
-
-    private String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private record PersistableQuizQuestion(

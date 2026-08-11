@@ -33,6 +33,39 @@ import org.springframework.web.client.RestClient;
 class GeminiVideoSummaryServiceTest {
 
     /**
+     * Mục đích: xác minh Gemini nhận URL YouTube như một video input thực sự.
+     */
+    @Test
+    void generateSummaryFromYoutubeVideo_sendsPublicVideoInput_whenResponseIsValid()
+            throws Exception {
+        // GIVEN: Gemini trả summary đúng schema cho một URL YouTube công khai.
+        TestContext context = context("gemini-test");
+        context.server()
+                .expect(requestTo(
+                        "https://gemini.example.test/v1beta/models/gemini-test:generateContent"))
+                .andExpect(jsonPath(
+                        "$.contents[0].parts[0].file_data.file_uri")
+                        .value("https://www.youtube.com/watch?v=V9i3cGD-mts"))
+                .andExpect(jsonPath(
+                        "$.contents[0].parts[0].file_data.mime_type")
+                        .value("video/*"))
+                .andExpect(jsonPath(
+                        "$.contents[0].parts[1].text",
+                        containsString("primary spoken language")))
+                .andRespond(withSuccess(
+                        providerResponse(context, validSummary()),
+                        MediaType.APPLICATION_JSON));
+
+        // WHEN: Service tạo summary trực tiếp từ video.
+        GeneratedSummary actual = context.service().generateSummaryFromYoutubeVideo(
+                "https://www.youtube.com/watch?v=V9i3cGD-mts");
+
+        // THEN: Summary được parse đúng và request đã đi qua mock server.
+        assertThat(actual).isEqualTo(validSummary());
+        context.server().verify();
+    }
+
+    /**
      * Mục đích: kiểm tra luồng thành công với đúng response chuẩn của Gemini.
      *
      * <p>Input: language = {@code vi}, transcript là nội dung bài học React.

@@ -11,8 +11,6 @@ import com.smartlearnly.backend.enrollment.dto.FreeCourseEnrollmentRequest;
 import com.smartlearnly.backend.enrollment.dto.MyCourseResponse;
 import com.smartlearnly.backend.enrollment.service.ClassEnrollmentService;
 import com.smartlearnly.backend.enrollment.service.CourseEnrollmentService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -31,14 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/enrollments")
 @RequiredArgsConstructor
-@Tag(name = "Enrollments", description = "Enrollment access and history endpoints")
 public class EnrollmentController {
     private final CourseEnrollmentService courseEnrollmentService;
     private final ClassEnrollmentService classEnrollmentService;
 
     @PostMapping("/free-course")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Enroll in a published free online course")
     public ApiResponse<EnrollmentResponse> enrollFreeCourse(
             @Valid @RequestBody FreeCourseEnrollmentRequest request) {
         return ApiResponse.success(
@@ -48,14 +44,12 @@ public class EnrollmentController {
 
     @GetMapping("/my-courses")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "List separate online-course and class-course learning entries")
     public ApiResponse<List<MyCourseResponse>> getMyCourses() {
         return ApiResponse.success(courseEnrollmentService.getMyCourses());
     }
 
     @GetMapping
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "List course enrollment history for the authenticated trainee")
     public ApiResponse<PageResponse<EnrollmentHistoryResponse>> getHistory(
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
@@ -64,7 +58,6 @@ public class EnrollmentController {
 
     @GetMapping("/{enrollmentId}/status-history")
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
-    @Operation(summary = "List audited status transitions for a course enrollment")
     public ApiResponse<List<EnrollmentStatusHistoryResponse>> getStatusHistory(
             @PathVariable UUID enrollmentId) {
         return ApiResponse.success(courseEnrollmentService.getStatusHistory(enrollmentId));
@@ -72,7 +65,6 @@ public class EnrollmentController {
 
     @PostMapping("/free-class")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Enroll in an upcoming free offline class")
     public ApiResponse<ClassEnrollmentResponse> enrollFreeClass(
             @Valid @RequestBody FreeClassEnrollmentRequest request) {
 

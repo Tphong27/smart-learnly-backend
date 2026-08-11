@@ -12,8 +12,6 @@ import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SeP
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.payment.sepay.service.SePayReconciliationService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +28,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/settings")
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin System Settings", description = "Admin-only SePay configuration and reconciliation.")
 public class SePaySettingsController {
     private final SystemSettingsService settingsService;
     private final AuditLogService auditLogService;
@@ -39,7 +36,6 @@ public class SePaySettingsController {
 
     // Trả thông tin ngân hàng đang hiển thị trên hướng dẫn thanh toán SePay.
     @GetMapping("/integrations/sepay/bank-display")
-    @Operation(summary = "Get current SePay bank display settings")
     public ApiResponse<SePayBankDisplaySettingsResponse> getSePayBankDisplaySettings() {
         return ApiResponse.success("SePay bank display settings loaded", toBankDisplayResponse());
     }
@@ -47,7 +43,6 @@ public class SePaySettingsController {
     // Lưu thông tin tài khoản nhận tiền SePay và ghi audit thay đổi.
     @PutMapping("/integrations/sepay/bank-display")
     @Transactional
-    @Operation(summary = "Update SePay bank display settings")
     public ApiResponse<SePayBankDisplaySettingsResponse> updateSePayBankDisplaySettings(
             @Valid @RequestBody SePayBankDisplaySettingsUpdateRequest request) {
         UUID actor = support.currentUserId();
@@ -64,7 +59,6 @@ public class SePaySettingsController {
 
     // Trả trạng thái API token và webhook secret mà không lộ giá trị thật.
     @GetMapping("/integrations/sepay/runtime")
-    @Operation(summary = "Get current SePay runtime secret settings (secret masked)")
     public ApiResponse<SePayRuntimeSettingsResponse> getSePayRuntimeSettings() {
         return ApiResponse.success("SePay runtime settings loaded", toRuntimeResponse());
     }
@@ -72,7 +66,6 @@ public class SePaySettingsController {
     // Cập nhật secret runtime SePay khi request gửi giá trị mới và ghi audit.
     @PutMapping("/integrations/sepay/runtime")
     @Transactional
-    @Operation(summary = "Update SePay runtime secret settings")
     public ApiResponse<SePayRuntimeSettingsResponse> updateSePayRuntimeSettings(
             @Valid @RequestBody SePayRuntimeSettingsUpdateRequest request) {
         UUID actor = support.currentUserId();
@@ -88,7 +81,6 @@ public class SePaySettingsController {
 
     // Chạy đối soát SePay thủ công và trả số lượng đơn/giao dịch đã xử lý.
     @PostMapping("/integrations/sepay/reconciliation/run")
-    @Operation(summary = "Run SePay reconciliation immediately")
     public ApiResponse<SePayReconciliationRunResponse> runSePayReconciliationNow() {
         var summary = sePayReconciliationService.reconcileNow();
         auditLogService.record(support.actorLabel(), "PAYMENT_RECONCILED", "sepay_reconciliation", "manual");

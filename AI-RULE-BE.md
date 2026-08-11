@@ -11,7 +11,7 @@
 ## Tech stack
 
 1. Dự án dùng Java 17, Spring Boot 4, Maven, PostgreSQL, Flyway.
-2. Dự án dùng Spring Data JPA, Spring Security, OAuth2 Resource Server, Jakarta Validation, Spring Mail, Springdoc OpenAPI, Lombok.
+2. Dự án dùng Spring Data JPA, Spring Security, OAuth2 Resource Server, Jakarta Validation, Spring Mail và Lombok.
 3. Package gốc là `com.smartlearnly.backend`.
 4. Lệnh kiểm tra chính:
 
@@ -151,9 +151,8 @@ return ApiResponse.success("Category loaded successfully", categoryService.get(c
 6. Dùng `@PathVariable` cho resource id.
 7. Dùng `@RequestParam` cho filter/search/pagination.
 8. Dùng `@PreAuthorize` để bảo vệ role/method nếu endpoint không public.
-9. Dùng `@Tag`, `@Operation`, `@SecurityRequirement` cho OpenAPI khi endpoint quan trọng hoặc cần auth.
-10. Create endpoint nên trả `ResponseEntity.created(...)` nếu tạo resource mới.
-11. Controller chỉ điều phối request/response, không chứa business logic.
+9. Create endpoint nên trả `ResponseEntity.created(...)` nếu tạo resource mới.
+10. Controller chỉ điều phối request/response, không chứa business logic.
 
 Ví dụ controller:
 
@@ -163,8 +162,6 @@ Ví dụ controller:
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/api/v1/admin/categories")
-@Tag(name = "Admin Categories", description = "Administrator course-category management APIs.")
-@SecurityRequirement(name = "bearerAuth")
 public class AdminCategoryController {
     private final CategoryService categoryService;
 
@@ -264,13 +261,6 @@ public class CategoryService {
 3. Validate UUID/resource ownership ở service.
 4. Validate trạng thái trước khi chuyển trạng thái, ví dụ order chỉ cancel khi pending.
 5. Không dựa vào frontend validation để bảo vệ backend.
-
-## OpenAPI
-
-1. Endpoint public/admin quan trọng nên có `@Operation(summary = "...")`.
-2. Controller nên có `@Tag` rõ domain.
-3. Endpoint cần bearer auth nên có `@SecurityRequirement(name = "bearerAuth")` ở class hoặc method.
-4. Nếu có response đặc biệt như 201, 409, 422, nên khai báo `@ApiResponses`.
 
 ## Pagination, search, filter
 

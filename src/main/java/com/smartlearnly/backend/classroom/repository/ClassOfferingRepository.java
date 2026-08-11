@@ -245,7 +245,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             WHERE class_offering.deleted_at IS NULL
               AND (:courseId IS NULL OR class_offering.course_id = :courseId)
               AND (:trainerId IS NULL OR class_offering.trainer_id = :trainerId)
-              AND (:status IS NULL OR class_offering.status::text = :status)
+              AND (:status IS NULL OR class_offering.status = CAST(:status AS public.class_status))
               AND (
                   :keyword IS NULL
                   OR class_offering.class_name ILIKE :keyword ESCAPE '\\'
@@ -258,7 +258,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             WHERE class_offering.deleted_at IS NULL
               AND (:courseId IS NULL OR class_offering.course_id = :courseId)
               AND (:trainerId IS NULL OR class_offering.trainer_id = :trainerId)
-              AND (:status IS NULL OR class_offering.status::text = :status)
+              AND (:status IS NULL OR class_offering.status = CAST(:status AS public.class_status))
               AND (
                   :keyword IS NULL
                   OR class_offering.class_name ILIKE :keyword ESCAPE '\\'
@@ -380,7 +380,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             WHERE class_offering.deleted_at IS NULL
               AND class_offering.trainer_id = :trainerId
               AND (CAST(:courseId AS uuid) IS NULL OR class_offering.course_id = CAST(:courseId AS uuid))
-              AND (:status IS NULL OR class_offering.status::text = :status)
+              AND (:status IS NULL OR class_offering.status = CAST(:status AS public.class_status))
               AND (
                   :keyword IS NULL
                   OR class_offering.class_name ILIKE :keyword ESCAPE '\\'
@@ -397,7 +397,7 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             WHERE class_offering.deleted_at IS NULL
               AND class_offering.trainer_id = :trainerId
               AND (CAST(:courseId AS uuid) IS NULL OR class_offering.course_id = CAST(:courseId AS uuid))
-              AND (:status IS NULL OR class_offering.status::text = :status)
+              AND (:status IS NULL OR class_offering.status = CAST(:status AS public.class_status))
               AND (
                   :keyword IS NULL
                   OR class_offering.class_name ILIKE :keyword ESCAPE '\\'

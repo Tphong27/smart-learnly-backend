@@ -131,6 +131,36 @@ class AdminFlashcardServiceTest {
     }
 
     @Test
+    void getSetByLessonShouldResolveFlashcardsFromEquivalentCurriculumLesson() {
+        UUID classLessonId = UUID.randomUUID();
+        UUID lessonIdentityId = UUID.randomUUID();
+        Course course = course();
+        CurriculumLesson classLesson = new CurriculumLesson();
+        classLesson.setId(classLessonId);
+        classLesson.setLessonIdentityId(lessonIdentityId);
+        FlashcardSet sourceSet = flashcardSet();
+        sourceSet.setCourse(course);
+
+        when(flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(classLessonId))
+                .thenReturn(Optional.empty());
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(classLessonId))
+                .thenReturn(Optional.empty());
+        when(curriculumLessonRepository.findById(classLessonId)).thenReturn(Optional.of(classLesson));
+        when(flashcardSetRepository.findActiveByLessonIdentityIdAndCurriculumStateOrderByUpdatedAtDesc(
+                lessonIdentityId,
+                CurriculumScope.MASTER,
+                CurriculumStatus.PUBLISHED))
+                .thenReturn(List.of(sourceSet));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(sourceSet.getId()))
+                .thenReturn(List.of());
+
+        FlashcardSetResponse response = adminFlashcardService.getSetByLesson(classLessonId);
+
+        assertThat(response.id()).isEqualTo(sourceSet.getId());
+        verify(courseAccessService).requireReadableCourse(course.getId());
+    }
+
+    @Test
     void addCardShouldAcceptFrontAndBackTextCard() {
         FlashcardSet flashcardSet = flashcardSet();
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId()))

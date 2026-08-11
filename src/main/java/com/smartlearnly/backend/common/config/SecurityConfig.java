@@ -48,10 +48,7 @@ public class SecurityConfig {
                                 "/api/v1/opening-schedules/**"
                         ).permitAll()
                         .requestMatchers(
-                                "/api/v1/auth/**",
-                                "/v3/api-docs/**",
-                                "/swagger-ui.html",
-                                "/swagger-ui/**"
+                                "/api/v1/auth/**"
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
@@ -98,10 +95,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
                                 "/api/v1/auth/verify-email",
-                                "/api/v1/auth/resend-verification",
-                                "/v3/api-docs/**",
-                                "/swagger-ui.html",
-                                "/swagger-ui/**"
+                                "/api/v1/auth/resend-verification"
                         ).permitAll()
                         
                         .requestMatchers(

@@ -4,9 +4,6 @@ import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.course.access.dto.CourseAccessResponse;
 import com.smartlearnly.backend.course.access.dto.UpdateCourseAccessRequest;
 import com.smartlearnly.backend.course.access.service.CourseAccessAdminService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -21,14 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
 @RequestMapping("/api/v1/admin/courses")
-@Tag(name = "Admin Course Access", description = "Explicit learner access blocking for courses")
-@SecurityRequirement(name = "bearerAuth")
 public class AdminCourseAccessController {
     private final CourseAccessAdminService courseAccessAdminService;
 
     // Khóa hoặc mở lại quyền học của toàn bộ học viên đối với một khóa học.
     @PatchMapping("/{courseId}/access")
-    @Operation(summary = "Block or unblock learner access to a course")
     public ApiResponse<CourseAccessResponse> updateAccess(
             @PathVariable UUID courseId,
             @Valid @RequestBody UpdateCourseAccessRequest request

@@ -10,9 +10,6 @@ import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardSetRes
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.ReorderFlashcardCardsRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.UpdateFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.UpdateFlashcardSetRequest;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -40,13 +37,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'TMO')")
 @RequestMapping("/api/v1/trainer/classes/{classId}/curriculum/lessons/{lessonId}/flashcards")
-@Tag(name = "Trainer Class Lesson Flashcards", description = "Trainer flashcard authoring APIs for class curriculum drafts")
-@SecurityRequirement(name = "bearerAuth")
 public class TrainerLessonFlashcardController {
     private final TrainerLessonFlashcardService trainerLessonFlashcardService;
 
     @PostMapping
-    @Operation(summary = "Create flashcard set for a class-draft lesson")
     public ResponseEntity<ApiResponse<FlashcardLessonCreatedResponse>> createFlashcardSet(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -61,7 +55,6 @@ public class TrainerLessonFlashcardController {
     }
 
     @GetMapping("/set")
-    @Operation(summary = "Get flashcard set attached to a class-draft lesson")
     public ApiResponse<FlashcardSetResponse> getSetByLesson(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId
@@ -73,7 +66,6 @@ public class TrainerLessonFlashcardController {
     }
 
     @PatchMapping("/set/{setId}")
-    @Operation(summary = "Update flashcard set metadata")
     public ApiResponse<FlashcardSetResponse> updateSet(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -87,7 +79,6 @@ public class TrainerLessonFlashcardController {
     }
 
     @DeleteMapping("/set/{setId}")
-    @Operation(summary = "Delete flashcard set")
     public ApiResponse<Void> deleteSet(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -98,7 +89,6 @@ public class TrainerLessonFlashcardController {
     }
 
     @PostMapping("/set/{setId}/cards")
-    @Operation(summary = "Add a flashcard card")
     public ResponseEntity<ApiResponse<FlashcardCardResponse>> addCard(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -115,7 +105,6 @@ public class TrainerLessonFlashcardController {
     }
 
     @PatchMapping("/set/{setId}/cards/{cardId}")
-    @Operation(summary = "Update a flashcard card")
     public ApiResponse<FlashcardCardResponse> updateCard(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -130,7 +119,6 @@ public class TrainerLessonFlashcardController {
     }
 
     @DeleteMapping("/set/{setId}/cards/{cardId}")
-    @Operation(summary = "Delete a flashcard card")
     public ApiResponse<Void> deleteCard(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -142,7 +130,6 @@ public class TrainerLessonFlashcardController {
     }
 
     @PatchMapping("/set/{setId}/cards/reorder")
-    @Operation(summary = "Reorder all flashcard cards")
     public ApiResponse<FlashcardSetResponse> reorderCards(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,

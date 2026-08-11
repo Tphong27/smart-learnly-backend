@@ -10,9 +10,6 @@ import com.smartlearnly.backend.curriculum.dto.SectionRequest;
 import com.smartlearnly.backend.curriculum.dto.SectionResponse;
 import com.smartlearnly.backend.curriculum.dto.ClassCurriculumEditorResponse;
 import com.smartlearnly.backend.curriculum.service.TrainerClassCurriculumService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -35,13 +32,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'TMO')")
 @RequestMapping("/api/v1/trainer/classes/{classId}/curriculum")
-@Tag(name = "Trainer Class Curriculum", description = "Trainer class curriculum draft and publish APIs")
-@SecurityRequirement(name = "bearerAuth")
 public class TrainerClassCurriculumController {
     private final TrainerClassCurriculumService trainerClassCurriculumService;
 
     @GetMapping
-    @Operation(summary = "Get trainer class curriculum editor view")
     public ApiResponse<ClassCurriculumEditorResponse> getCurriculum(@PathVariable UUID classId) {
         return ApiResponse.success(
                 "Class curriculum loaded successfully",
@@ -50,7 +44,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PostMapping("/draft")
-    @Operation(summary = "Initialize class curriculum draft")
     public ResponseEntity<ApiResponse<ClassCurriculumEditorResponse>> initializeDraft(@PathVariable UUID classId) {
         ClassCurriculumEditorResponse response = trainerClassCurriculumService.initializeDraft(classId);
         return ResponseEntity.created(URI.create("/api/v1/trainer/classes/" + classId + "/curriculum"))
@@ -58,7 +51,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PostMapping("/publish")
-    @Operation(summary = "Publish active class curriculum draft")
     public ApiResponse<ClassCurriculumEditorResponse> publishDraft(@PathVariable UUID classId) {
         return ApiResponse.success(
                 "Class curriculum published successfully",
@@ -67,7 +59,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PostMapping("/sections")
-    @Operation(summary = "Create draft curriculum section")
     public ResponseEntity<ApiResponse<SectionResponse>> createSection(
             @PathVariable UUID classId,
             @Valid @RequestBody SectionRequest request
@@ -78,7 +69,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PutMapping("/sections/order")
-    @Operation(summary = "Reorder all draft curriculum sections")
     public ApiResponse<List<SectionResponse>> reorderSections(
             @PathVariable UUID classId,
             @Valid @RequestBody ReorderRequest request
@@ -90,7 +80,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PutMapping("/sections/{sectionId}")
-    @Operation(summary = "Update draft curriculum section")
     public ApiResponse<SectionResponse> updateSection(
             @PathVariable UUID classId,
             @PathVariable UUID sectionId,
@@ -103,7 +92,6 @@ public class TrainerClassCurriculumController {
     }
 
     @DeleteMapping("/sections/{sectionId}")
-    @Operation(summary = "Delete draft curriculum section")
     public ApiResponse<Void> deleteSection(
             @PathVariable UUID classId,
             @PathVariable UUID sectionId
@@ -113,7 +101,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PostMapping("/sections/{sectionId}/lessons")
-    @Operation(summary = "Create draft curriculum lesson")
     public ResponseEntity<ApiResponse<LessonResponse>> createLesson(
             @PathVariable UUID classId,
             @PathVariable UUID sectionId,
@@ -125,7 +112,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PutMapping("/sections/{sectionId}/lessons/order")
-    @Operation(summary = "Reorder all lessons in a draft curriculum section")
     public ApiResponse<List<LessonResponse>> reorderLessons(
             @PathVariable UUID classId,
             @PathVariable UUID sectionId,
@@ -138,7 +124,6 @@ public class TrainerClassCurriculumController {
     }
 
     @GetMapping("/lessons/{lessonId}")
-    @Operation(summary = "Get draft/published curriculum lesson detail")
     public ApiResponse<LessonResponse> getLesson(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId
@@ -150,7 +135,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PutMapping("/lessons/{lessonId}")
-    @Operation(summary = "Update draft curriculum lesson")
     public ApiResponse<LessonResponse> updateLesson(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -163,7 +147,6 @@ public class TrainerClassCurriculumController {
     }
 
     @DeleteMapping("/lessons/{lessonId}")
-    @Operation(summary = "Delete draft curriculum lesson")
     public ApiResponse<Void> deleteLesson(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId
@@ -173,7 +156,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PostMapping("/lessons/{lessonId}/resources")
-    @Operation(summary = "Add draft lesson resource")
     public ResponseEntity<ApiResponse<LessonResourceResponse>> addResource(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -185,7 +167,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PutMapping("/lessons/{lessonId}/resources")
-    @Operation(summary = "Replace all draft lesson resources")
     public ApiResponse<List<LessonResourceResponse>> replaceResources(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -198,7 +179,6 @@ public class TrainerClassCurriculumController {
     }
 
     @PutMapping("/lessons/{lessonId}/resources/order")
-    @Operation(summary = "Reorder all draft lesson resources")
     public ApiResponse<List<LessonResourceResponse>> reorderResources(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -211,7 +191,6 @@ public class TrainerClassCurriculumController {
     }
 
     @DeleteMapping("/lessons/{lessonId}/resources/{resourceId}")
-    @Operation(summary = "Remove draft lesson resource")
     public ApiResponse<Void> removeResource(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,

@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +28,7 @@ import java.util.UUID;
 public class AdminUserController {
     private final AdminUserService adminUserService;
 
+    /** Tạo tài khoản do quản trị viên quản lý mà không gửi mật khẩu tạm ra ngoài. */
     @PostMapping
     public ApiResponse<AdminUserResponse> create(@Valid @RequestBody CreateAdminUserRequest request) {
         return ApiResponse.success(
@@ -35,6 +37,7 @@ public class AdminUserController {
         );
     }
 
+    /** Liệt kê tài khoản chưa bị xóa mềm theo bộ lọc và phân trang. */
     @GetMapping
     public ApiResponse<AdminUserPageResponse> list(
             @RequestParam(required = false) String role,
@@ -49,6 +52,7 @@ public class AdminUserController {
         );
     }
 
+    /** Trả chi tiết một tài khoản còn hiệu lực cho màn hình quản trị. */
     @GetMapping("/{userId}")
     public ApiResponse<AdminUserResponse> get(@PathVariable UUID userId) {
         return ApiResponse.success(
@@ -57,6 +61,7 @@ public class AdminUserController {
         );
     }
 
+    /** Cập nhật các trường hồ sơ và quyền được phép thay đổi bởi quản trị viên. */
     @PatchMapping("/{userId}")
     public ApiResponse<AdminUserResponse> update(
             @PathVariable UUID userId,
@@ -66,5 +71,12 @@ public class AdminUserController {
                 "User updated successfully",
                 adminUserService.update(userId, request)
         );
+    }
+
+    /** Xóa mềm tài khoản để giữ nguyên lịch sử học tập, giao dịch và audit. */
+    @DeleteMapping("/{userId}")
+    public ApiResponse<Void> delete(@PathVariable UUID userId) {
+        adminUserService.softDelete(userId);
+        return ApiResponse.success("User deleted successfully");
     }
 }

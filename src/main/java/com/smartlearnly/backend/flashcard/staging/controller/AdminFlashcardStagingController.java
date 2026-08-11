@@ -19,9 +19,6 @@ import com.smartlearnly.backend.flashcard.staging.service.AdminFlashcardStagingS
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardCourseQuestionImportService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardStagingGenerationService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardStagingCardEditService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -48,8 +45,6 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
-@Tag(name = "Admin Flashcard Staging", description = "Administrator flashcard staging APIs.")
-@SecurityRequirement(name = "bearerAuth")
 public class AdminFlashcardStagingController {
     private final AdminFlashcardStagingService adminFlashcardStagingService;
     private final FlashcardCourseQuestionImportService flashcardCourseQuestionImportService;
@@ -57,7 +52,6 @@ public class AdminFlashcardStagingController {
     private final FlashcardStagingCardEditService flashcardStagingCardEditService;
 
     @GetMapping("/flashcard-sets/{setId}/staging/source-questions")
-    @Operation(summary = "List same-course questions for flashcard staging")
     public ApiResponse<List<SourceQuestionResponse>> listSourceQuestions(
             @PathVariable UUID setId,
             @RequestParam(required = false) UUID moduleId,
@@ -78,11 +72,6 @@ public class AdminFlashcardStagingController {
     }
 
     @PostMapping("/flashcard-sets/{setId}/staging/import-course-questions")
-    @Operation(summary = "Import course questions into flashcard staging")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "201",
-            description = "Flashcard staging batch created"
-    )
     public ResponseEntity<ApiResponse<StagingBatchResponse>> importCourseQuestions(
             @PathVariable UUID setId,
             @Valid @RequestBody ImportCourseQuestionsRequest request
@@ -93,7 +82,6 @@ public class AdminFlashcardStagingController {
     }
 
     @PostMapping("/flashcard-sets/{setId}/temporary-review/import-course-questions")
-    @Operation(summary = "Create temporary flashcard candidates from course questions")
     public ApiResponse<TemporaryFlashcardCandidateBatchResponse> temporaryCourseQuestions(
             @PathVariable UUID setId,
             @Valid @RequestBody ImportCourseQuestionsRequest request
@@ -105,7 +93,6 @@ public class AdminFlashcardStagingController {
     }
 
     @PostMapping("/flashcard-sets/{setId}/staging/generate-from-text")
-    @Operation(summary = "Generate flashcard staging cards from pasted text")
     public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromText(
             @PathVariable UUID setId,
             @Valid @RequestBody GenerateFromTextRequest request
@@ -119,7 +106,6 @@ public class AdminFlashcardStagingController {
             value = "/flashcard-sets/{setId}/staging/generate-from-file",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    @Operation(summary = "Generate flashcard staging cards from an uploaded DOCX or PDF")
     public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromFile(
             @PathVariable UUID setId,
             @RequestPart(value = "file", required = false) MultipartFile file,
@@ -142,7 +128,6 @@ public class AdminFlashcardStagingController {
             value = "/flashcard-sets/{setId}/temporary-review/generate-from-file",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    @Operation(summary = "Create temporary flashcard candidates from an uploaded DOCX or PDF")
     public ApiResponse<TemporaryFlashcardCandidateBatchResponse> temporaryFromFile(
             @PathVariable UUID setId,
             @RequestPart(value = "file", required = false) MultipartFile file,
@@ -163,7 +148,6 @@ public class AdminFlashcardStagingController {
     }
 
     @PostMapping("/flashcard-sets/{setId}/staging/generate-from-transcript")
-    @Operation(summary = "Generate flashcard staging cards from pasted video transcript text")
     public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromTranscript(
             @PathVariable UUID setId,
             @Valid @RequestBody GenerateFromTranscriptRequest request
@@ -177,7 +161,6 @@ public class AdminFlashcardStagingController {
             value = "/flashcard-sets/{setId}/staging/generate-from-transcript-file",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    @Operation(summary = "Generate flashcard staging cards from an uploaded SRT or VTT transcript")
     public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromTranscriptFile(
             @PathVariable UUID setId,
             @RequestPart(value = "file", required = false) MultipartFile file,
@@ -197,7 +180,6 @@ public class AdminFlashcardStagingController {
     }
 
     @GetMapping("/flashcard-sets/{setId}/staging")
-    @Operation(summary = "List flashcard staging batches")
     public ApiResponse<List<StagingBatchResponse>> listStaging(@PathVariable UUID setId) {
         return ApiResponse.success(
                 "Flashcard staging batches loaded successfully",
@@ -206,7 +188,6 @@ public class AdminFlashcardStagingController {
     }
 
     @PatchMapping("/flashcard-staging-cards/{stagingCardId}")
-    @Operation(summary = "Update a flashcard staging card")
     public ApiResponse<StagingCardResponse> updateCard(
             @PathVariable UUID stagingCardId,
             @Valid @RequestBody UpdateStagingCardRequest request
@@ -218,14 +199,12 @@ public class AdminFlashcardStagingController {
     }
 
     @DeleteMapping("/flashcard-staging-cards/{stagingCardId}")
-    @Operation(summary = "Reject a flashcard staging card")
     public ApiResponse<Void> rejectCard(@PathVariable UUID stagingCardId) {
         adminFlashcardStagingService.rejectCard(stagingCardId);
         return ApiResponse.success("Flashcard staging card rejected successfully");
     }
 
     @PostMapping("/flashcard-sets/{setId}/staging/reject")
-    @Operation(summary = "Reject flashcard staging cards")
     public ApiResponse<RejectStagingCardsResponse> reject(
             @PathVariable UUID setId,
             @Valid @RequestBody RejectStagingCardsRequest request
@@ -237,7 +216,6 @@ public class AdminFlashcardStagingController {
     }
 
     @PostMapping("/flashcard-sets/{setId}/staging/approve")
-    @Operation(summary = "Approve flashcard staging cards into real flashcards")
     public ApiResponse<ApproveStagingCardsResponse> approve(
             @PathVariable UUID setId,
             @Valid @RequestBody ApproveStagingCardsRequest request
@@ -249,7 +227,6 @@ public class AdminFlashcardStagingController {
     }
 
     @PostMapping("/flashcard-sets/{setId}/temporary-review/approve")
-    @Operation(summary = "Approve temporary flashcard candidates into real flashcards")
     public ApiResponse<ApproveTemporaryFlashcardsResponse> approveTemporary(
             @PathVariable UUID setId,
             @Valid @RequestBody ApproveTemporaryFlashcardsRequest request

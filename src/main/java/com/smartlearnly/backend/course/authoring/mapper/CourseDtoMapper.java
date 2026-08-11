@@ -31,15 +31,12 @@ public final class CourseDtoMapper {
                 course.getPrice(),
                 course.getDiscountedPrice(),
                 Boolean.TRUE.equals(course.getFree()),
-                enumValue(course.getStatus()),
+                course.getStatus() == null
+                        ? null
+                        : course.getStatus().name().toLowerCase(Locale.ROOT),
                 course.getCreatedAt(),
                 course.getUpdatedAt(),
                 assignedSmeId);
-    }
-
-    // Chuyển enum thành chuỗi chữ thường theo hợp đồng JSON hiện tại.
-    private static String enumValue(Enum<?> value) {
-        return value == null ? null : value.name().toLowerCase(Locale.ROOT);
     }
 
 }

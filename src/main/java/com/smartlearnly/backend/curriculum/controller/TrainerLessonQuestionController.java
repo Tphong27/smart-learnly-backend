@@ -4,9 +4,6 @@ import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.curriculum.dto.ReorderRequest;
 import com.smartlearnly.backend.curriculum.service.TrainerLessonQuestionService;
 import com.smartlearnly.backend.test.definition.dto.TestQuestionModel;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -34,14 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'TMO')")
 @RequestMapping("/api/v1/trainer/classes/{classId}/curriculum/lessons/{lessonId}/questions")
-@Tag(name = "Trainer Class Lesson Questions", description = "Trainer quiz question authoring APIs for class curriculum drafts")
-@SecurityRequirement(name = "bearerAuth")
 public class TrainerLessonQuestionController {
 
     private final TrainerLessonQuestionService trainerLessonQuestionService;
 
     @GetMapping
-    @Operation(summary = "List questions attached to the lesson quiz")
     public ApiResponse<List<TestQuestionModel.Response>> listQuestions(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId
@@ -53,7 +47,6 @@ public class TrainerLessonQuestionController {
     }
 
     @PostMapping
-    @Operation(summary = "Attach an existing question to the lesson quiz")
     public ResponseEntity<ApiResponse<TestQuestionModel.Response>> attachQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -65,7 +58,6 @@ public class TrainerLessonQuestionController {
     }
 
     @PutMapping("/{questionId}")
-    @Operation(summary = "Update marks and order for an attached question")
     public ApiResponse<TestQuestionModel.Response> updateQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -79,7 +71,6 @@ public class TrainerLessonQuestionController {
     }
 
     @DeleteMapping("/{questionId}")
-    @Operation(summary = "Detach an attached question from the lesson quiz")
     public ApiResponse<Void> detachQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -90,7 +81,6 @@ public class TrainerLessonQuestionController {
     }
 
     @PostMapping("/reorder")
-    @Operation(summary = "Reorder all questions attached to the lesson quiz")
     public ApiResponse<List<TestQuestionModel.Response>> reorderQuestions(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,

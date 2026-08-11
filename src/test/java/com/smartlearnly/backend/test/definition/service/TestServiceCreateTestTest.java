@@ -209,6 +209,32 @@ class TestServiceCreateTestTest {
         verify(testRepository, never()).save(any(com.smartlearnly.backend.test.entity.Test.class));
     }
 
+    @Test
+    void verifyAccessCodeShouldUseRequestedClassContext() {
+        UUID testId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        com.smartlearnly.backend.test.entity.Test test =
+                new com.smartlearnly.backend.test.entity.Test();
+        test.setId(testId);
+        test.setAccessCode("123456");
+        test.setAccessCodeExpiresAt(Instant.now().plusSeconds(300));
+        TestModel.AccessCodeVerifyRequest request = new TestModel.AccessCodeVerifyRequest();
+        request.setAccessCode("123456");
+
+        when(testRepository.findById(testId)).thenReturn(java.util.Optional.of(test));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(studentId, "TRAINEE"));
+        when(testRepository.existsAvailableCourseTestForStudentClass(testId, studentId, classId))
+                .thenReturn(true);
+
+        TestModel.AccessCodeVerifyResponse response =
+                service.verifyAccessCode(testId, request, classId);
+
+        assertThat(response.getValid()).isTrue();
+        verify(testRepository)
+                .existsAvailableCourseTestForStudentClass(testId, studentId, classId);
+    }
+
     private TestModel.CreateRequest createRequest(UUID classId, UUID courseId) {
         TestModel.CreateRequest request = new TestModel.CreateRequest();
         request.setClassId(classId);

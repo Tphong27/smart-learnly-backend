@@ -127,35 +127,13 @@ public class ClassCurriculumCompositionService {
             return List.of();
         }
 
-        List<UUID> materializedIds = entries.stream()
-                .map(ClassCurriculumEntry::getMaterializedLessonId)
-                .filter(Objects::nonNull)
-                .toList();
-        Map<UUID, CurriculumLesson> materializedById = materializedIds.isEmpty()
-                ? Map.of()
-                : lessonRepository.findAllById(materializedIds).stream()
-                        .collect(Collectors.toMap(CurriculumLesson::getId, Function.identity()));
-
         List<ClassCurriculumEntry> inheritedEntries = entries.stream()
                 .filter(entry -> entry.getMaterializedLessonId() == null)
                 .toList();
-        Map<UUID, CurriculumLesson> masterByIdentity = resolveMasterLessonsByIdentity(version, inheritedEntries);
-
-        List<CurriculumLesson> result = new ArrayList<>(entries.size());
-        for (ClassCurriculumEntry entry : entries) {
-            if (entry.getMaterializedLessonId() != null) {
-                CurriculumLesson row = materializedById.get(entry.getMaterializedLessonId());
-                if (row != null) {
-                    result.add(row);
-                }
-            } else {
-                CurriculumLesson master = masterByIdentity.get(entry.getLessonIdentityId());
-                if (master != null) {
-                    result.add(buildTransientInheritedLesson(entry, master));
-                }
-            }
-        }
-        return result;
+        return composeEffectiveLessons(
+                entries,
+                loadMaterializedLessons(entries),
+                resolveMasterLessonsByIdentity(version, inheritedEntries));
     }
 
     /**
@@ -167,9 +145,59 @@ public class ClassCurriculumCompositionService {
         if (!isCompositionVersion(version)) {
             return version.getSections().stream().flatMap(section -> orderedLessons(section).stream()).toList();
         }
+        List<ClassCurriculumEntry> entries =
+                entryRepository.findByClassVersionIdOrderBySortOrderAscCreatedAtAsc(version.getId());
+        if (entries.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, List<ClassCurriculumEntry>> entriesBySection = entries.stream()
+                .collect(Collectors.groupingBy(entry -> entry.getSection().getId()));
+        Map<UUID, CurriculumLesson> materializedById = loadMaterializedLessons(entries);
+        Map<UUID, CurriculumLesson> masterByIdentity = resolveMasterLessonsByIdentity(
+                version,
+                entries.stream().filter(entry -> entry.getMaterializedLessonId() == null).toList());
+
         return orderedSections(version).stream()
-                .flatMap(section -> effectiveLessons(section).stream())
+                .flatMap(section -> composeEffectiveLessons(
+                        entriesBySection.getOrDefault(section.getId(), List.of()),
+                        materializedById,
+                        masterByIdentity).stream())
                 .toList();
+    }
+
+    /** Tải toàn bộ lesson đã materialize trong một lần truy vấn. */
+    private Map<UUID, CurriculumLesson> loadMaterializedLessons(List<ClassCurriculumEntry> entries) {
+        List<UUID> materializedIds = entries.stream()
+                .map(ClassCurriculumEntry::getMaterializedLessonId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (materializedIds.isEmpty()) {
+            return Map.of();
+        }
+        return lessonRepository.findAllById(materializedIds).stream()
+                .collect(Collectors.toMap(CurriculumLesson::getId, Function.identity()));
+    }
+
+    /** Ghép entry với lesson materialize hoặc nội dung master đã được batch-load. */
+    private List<CurriculumLesson> composeEffectiveLessons(
+            List<ClassCurriculumEntry> entries,
+            Map<UUID, CurriculumLesson> materializedById,
+            Map<UUID, CurriculumLesson> masterByIdentity) {
+        List<CurriculumLesson> result = new ArrayList<>(entries.size());
+        for (ClassCurriculumEntry entry : entries) {
+            CurriculumLesson lesson = entry.getMaterializedLessonId() == null
+                    ? masterByIdentity.get(entry.getLessonIdentityId())
+                    : materializedById.get(entry.getMaterializedLessonId());
+            if (lesson == null) {
+                continue;
+            }
+            result.add(entry.getMaterializedLessonId() == null
+                    ? buildTransientInheritedLesson(entry, lesson)
+                    : lesson);
+        }
+        return result;
     }
 
     /**

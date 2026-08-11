@@ -129,6 +129,7 @@ public class CurriculumDtoMapper {
         CurriculumVersion version = section.getCurriculumVersion();
         return new SectionResponse(
                 section.getId(),
+                section.getSourceModuleId(),
                 version == null ? null : version.getCourseId(),
                 section.getTitle(),
                 section.getSortOrder(),

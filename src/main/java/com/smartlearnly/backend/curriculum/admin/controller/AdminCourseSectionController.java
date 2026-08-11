@@ -7,9 +7,6 @@ import com.smartlearnly.backend.curriculum.dto.ReorderRequest;
 import com.smartlearnly.backend.curriculum.dto.SectionRequest;
 import com.smartlearnly.backend.curriculum.dto.SectionResponse;
 import com.smartlearnly.backend.curriculum.admin.service.CurriculumSectionAdminService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -32,28 +29,23 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
-@Tag(name = "Admin Course Content", description = "Administrator module and section authoring APIs.")
-@SecurityRequirement(name = "bearerAuth")
 public class AdminCourseSectionController {
     private final CurriculumSectionAdminService curriculumSectionAdminService;
 
     // Trả danh sách section của master curriculum theo thứ tự hiện tại.
     @GetMapping("/courses/{courseId}/sections")
-    @Operation(summary = "List course sections")
     public ApiResponse<List<SectionResponse>> listSections(@PathVariable UUID courseId) {
         return ApiResponse.success("Sections loaded successfully", curriculumSectionAdminService.listSections(courseId));
     }
 
     // Trả danh sách module của khóa học theo contract admin mới.
     @GetMapping("/courses/{courseId}/modules")
-    @Operation(summary = "List course modules")
     public ApiResponse<List<ModuleResponse>> listModules(@PathVariable UUID courseId) {
         return ApiResponse.success("Modules loaded successfully", curriculumSectionAdminService.listModules(courseId));
     }
 
     // Tạo section trong master curriculum và trả URL resource vừa tạo.
     @PostMapping("/courses/{courseId}/sections")
-    @Operation(summary = "Create a course section")
     public ResponseEntity<ApiResponse<SectionResponse>> createSection(
             @PathVariable UUID courseId,
             @Valid @RequestBody SectionRequest request) {
@@ -64,7 +56,6 @@ public class AdminCourseSectionController {
 
     // Tạo module trong khóa học và trả URL resource vừa tạo.
     @PostMapping("/courses/{courseId}/modules")
-    @Operation(summary = "Create a course module")
     public ResponseEntity<ApiResponse<ModuleResponse>> createModule(
             @PathVariable UUID courseId,
             @Valid @RequestBody ModuleRequest request) {
@@ -75,7 +66,6 @@ public class AdminCourseSectionController {
 
     // Lưu thứ tự đầy đủ của section trong khóa học.
     @PutMapping("/courses/{courseId}/sections/order")
-    @Operation(summary = "Reorder all course sections")
     public ApiResponse<List<SectionResponse>> reorderSections(
             @PathVariable UUID courseId,
             @Valid @RequestBody ReorderRequest request) {
@@ -86,7 +76,6 @@ public class AdminCourseSectionController {
 
     // Lưu thứ tự đầy đủ của module trong khóa học.
     @PutMapping("/courses/{courseId}/modules/order")
-    @Operation(summary = "Reorder all course modules")
     public ApiResponse<List<ModuleResponse>> reorderModules(
             @PathVariable UUID courseId,
             @Valid @RequestBody ReorderRequest request) {
@@ -97,21 +86,18 @@ public class AdminCourseSectionController {
 
     // Trả chi tiết một section mà người dùng có quyền đọc.
     @GetMapping("/sections/{sectionId}")
-    @Operation(summary = "Get section details")
     public ApiResponse<SectionResponse> getSection(@PathVariable UUID sectionId) {
         return ApiResponse.success("Section loaded successfully", curriculumSectionAdminService.getSection(sectionId));
     }
 
     // Trả chi tiết một module snapshot mà người dùng có quyền đọc.
     @GetMapping("/modules/{moduleId}")
-    @Operation(summary = "Get module details")
     public ApiResponse<ModuleResponse> getModule(@PathVariable UUID moduleId) {
         return ApiResponse.success("Module loaded successfully", curriculumSectionAdminService.getModule(moduleId));
     }
 
     // Cập nhật section trong master curriculum.
     @PutMapping("/sections/{sectionId}")
-    @Operation(summary = "Update a section")
     public ApiResponse<SectionResponse> updateSection(
             @PathVariable UUID sectionId,
             @Valid @RequestBody SectionRequest request) {
@@ -122,7 +108,6 @@ public class AdminCourseSectionController {
 
     // Cập nhật module và đồng bộ module canonical tương ứng.
     @PutMapping("/modules/{moduleId}")
-    @Operation(summary = "Update a module")
     public ApiResponse<ModuleResponse> updateModule(
             @PathVariable UUID moduleId,
             @Valid @RequestBody ModuleRequest request) {
@@ -133,7 +118,6 @@ public class AdminCourseSectionController {
 
     // Xóa section cùng lesson trực thuộc theo nghiệp vụ hiện tại.
     @DeleteMapping("/sections/{sectionId}")
-    @Operation(summary = "Delete a section and its lessons")
     public ApiResponse<Void> deleteSection(@PathVariable UUID sectionId) {
         curriculumSectionAdminService.deleteSection(sectionId);
         return ApiResponse.success("Section deleted successfully");
@@ -141,7 +125,6 @@ public class AdminCourseSectionController {
 
     // Xóa module và vô hiệu module canonical tương ứng.
     @DeleteMapping("/modules/{moduleId}")
-    @Operation(summary = "Delete a module and its lessons")
     public ApiResponse<Void> deleteModule(@PathVariable UUID moduleId) {
         curriculumSectionAdminService.deleteModule(moduleId);
         return ApiResponse.success("Module deleted successfully");

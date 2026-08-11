@@ -9,7 +9,9 @@ import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.curriculum.dto.CurriculumMetadataResponse;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
@@ -305,6 +307,7 @@ public class LearningContentService {
                                 || Objects.equals(lesson.getSourceLessonId(), lessonId);
         }
 
+        /** Tìm bộ thẻ của lesson hiện tại hoặc của lesson nguồn có cùng identity. */
         private Optional<FlashcardSet> resolveFlashcardSet(CurriculumLesson lesson) {
                 Optional<FlashcardSet> direct = flashcardSetRepository
                                 .findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId());
@@ -319,7 +322,20 @@ public class LearningContentService {
                         }
                 }
                 if (lesson.getSourceLessonId() != null) {
-                        return flashcardSetRepository.findByLessonIdAndDeletedAtIsNull(lesson.getSourceLessonId());
+                        Optional<FlashcardSet> bySourceLesson = flashcardSetRepository
+                                        .findByLessonIdAndDeletedAtIsNull(lesson.getSourceLessonId());
+                        if (bySourceLesson.isPresent()) {
+                                return bySourceLesson;
+                        }
+                }
+                if (lesson.getLessonIdentityId() != null) {
+                        return flashcardSetRepository
+                                        .findActiveByLessonIdentityIdAndCurriculumStateOrderByUpdatedAtDesc(
+                                                        lesson.getLessonIdentityId(),
+                                                        CurriculumScope.MASTER,
+                                                        CurriculumStatus.PUBLISHED)
+                                        .stream()
+                                        .findFirst();
                 }
                 return Optional.empty();
         }

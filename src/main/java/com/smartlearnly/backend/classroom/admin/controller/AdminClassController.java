@@ -10,8 +10,6 @@ import com.smartlearnly.backend.classroom.schedule.service.GoogleMeetService;
 import com.smartlearnly.backend.classroom.admin.service.ClassAdminService;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -36,7 +34,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1")
-@SecurityRequirement(name = "bearerAuth")
 public class AdminClassController {
     private final ClassAdminService classAdminService;
     private final GoogleMeetService googleMeetService;
@@ -44,7 +41,6 @@ public class AdminClassController {
     // Trả các trạng thái lớp mà quản trị viên được phép chọn trong màn quản lý.
     @GetMapping("/admin/classes/statuses")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "List class status options", tags = { "Admin Classes" })
     public ApiResponse<List<ClassStatusOptionResponse>> listStatusOptions() {
         return ApiResponse.success("Class statuses loaded successfully", classAdminService.listStatusOptions());
     }
@@ -52,7 +48,6 @@ public class AdminClassController {
     // Tạo link Google Meet mới để quản trị viên gắn vào lớp học.
     @PostMapping("/admin/classes/meeting-links")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Generate a Google Meet link", tags = { "Admin Classes" })
     public ApiResponse<MeetingUrlResponse> generateMeetingUrl() {
         return ApiResponse.success("Google Meet link generated successfully", googleMeetService.createMeetingUrl());
     }
@@ -60,7 +55,6 @@ public class AdminClassController {
     // Liệt kê lớp học theo các bộ lọc quản trị và phân trang hiện tại.
     @GetMapping("/admin/classes")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "List classes with filters", tags = { "Admin Classes" })
     public ApiResponse<PageResponse<ClassResponse>> listAdminClasses(
             @RequestParam(required = false) UUID courseId,
             @RequestParam(required = false) UUID trainerId,
@@ -76,7 +70,6 @@ public class AdminClassController {
     // Trả chi tiết một lớp cho quản trị viên hoặc TMO.
     @GetMapping("/admin/classes/{classId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Get class detail", tags = { "Admin Classes" })
     public ApiResponse<ClassResponse> getAdminClass(@PathVariable UUID classId) {
         return ApiResponse.success("Class loaded successfully", classAdminService.get(classId));
     }
@@ -84,7 +77,6 @@ public class AdminClassController {
     // Tạo lớp mới và trả URL của tài nguyên lớp vừa được tạo.
     @PostMapping("/admin/classes")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Create a class", tags = { "Admin Classes" })
     public ResponseEntity<ApiResponse<ClassResponse>> createClass(@Valid @RequestBody CreateClassRequest request) {
         ClassResponse created = classAdminService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/classes/" + created.id()))
@@ -94,7 +86,6 @@ public class AdminClassController {
     // Cập nhật các trường lớp học được gửi trong yêu cầu PATCH.
     @PatchMapping("/admin/classes/{classId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Update selected class fields", tags = { "Admin Classes" })
     public ApiResponse<ClassResponse> updateClass(
             @PathVariable UUID classId,
             @Valid @RequestBody UpdateClassRequest request) {
@@ -104,7 +95,6 @@ public class AdminClassController {
     // Hủy lớp nhưng vẫn giữ lịch sử dữ liệu để có thể khôi phục.
     @PostMapping("/admin/classes/{classId}/cancel")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Cancel a class without deleting history", tags = { "Admin Classes" })
     public ApiResponse<ClassResponse> cancelClass(@PathVariable UUID classId) {
         return ApiResponse.success("Class cancelled successfully", classAdminService.cancel(classId));
     }
@@ -112,7 +102,6 @@ public class AdminClassController {
     // Khôi phục lớp đã hủy với thông tin cập nhật được xác nhận.
     @PostMapping("/admin/classes/{classId}/restore")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Restore a cancelled class and recalculate its status", tags = { "Admin Classes" })
     public ApiResponse<ClassResponse> restoreClass(
             @PathVariable UUID classId,
             @Valid @RequestBody RestoreClassRequest request) {
@@ -122,7 +111,6 @@ public class AdminClassController {
     // Xóa mềm lớp để giữ các dữ liệu lịch sử liên quan.
     @DeleteMapping("/admin/classes/{classId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Soft delete a class", tags = { "Admin Classes" })
     public ApiResponse<Void> deleteClass(@PathVariable UUID classId) {
         classAdminService.softDelete(classId);
         return ApiResponse.success("Class deleted successfully");
