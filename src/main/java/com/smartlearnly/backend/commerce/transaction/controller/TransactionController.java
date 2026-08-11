@@ -62,7 +62,7 @@ public class TransactionController {
     }
 
     @GetMapping("/filter-options")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'TRAINEE')")
     // Trả các giá trị lọc đang có trong dữ liệu để màn hình admin tạo bộ lọc.
     public ApiResponse<TransactionFilterOptionsResponse> getFilterOptions() {
         return ApiResponse.success(

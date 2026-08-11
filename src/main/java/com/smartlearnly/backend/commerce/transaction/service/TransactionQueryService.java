@@ -127,14 +127,14 @@ public class TransactionQueryService {
     }
 
     @Transactional(readOnly = true)
-    // Lấy danh sách trạng thái, cổng thanh toán và tiền tệ đang có cho bộ lọc admin.
+    // Lấy các giá trị bộ lọc giao dịch cho Trainee, Admin và TMO đã đăng nhập.
     public TransactionFilterOptionsResponse getFilterOptions() {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 
-        if (!isAdminOrTmo(actor)) {
+        if (!isTransactionViewer(actor)) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN,
-                    "Only Admin or TMO can view transaction filter options");
+                    "Only Trainee, Admin or TMO can view transaction filter options");
         }
 
         return new TransactionFilterOptionsResponse(
@@ -194,5 +194,11 @@ public class TransactionQueryService {
     // Kiểm tra vai trò được phép truy vấn giao dịch của mọi người dùng.
     private boolean isAdminOrTmo(UserAccount user) {
         return "ADMIN".equalsIgnoreCase(user.getRole()) || "TMO".equalsIgnoreCase(user.getRole());
+    }
+
+    // Kiểm tra vai trò được phép sử dụng các giá trị lọc giao dịch.
+    private boolean isTransactionViewer(UserAccount user) {
+        return "TRAINEE".equalsIgnoreCase(user.getRole())
+                || isAdminOrTmo(user);
     }
 }
