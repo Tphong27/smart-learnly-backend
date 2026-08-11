@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.auth.registration.entity;
+package com.smartlearnly.backend.auth.register.entity;
 
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.Column;

@@ -10,9 +10,6 @@ import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.commerce.transaction.dto.TransactionFilterOptionsResponse;
 import com.smartlearnly.backend.commerce.entity.PaymentGateway;
 import com.smartlearnly.backend.user.entity.UserAccount;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -30,15 +27,12 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/transactions")
-@Tag(name = "Transactions", description = "Transaction query APIs")
-@SecurityRequirement(name = "bearerAuth")
 public class TransactionController {
     private final TransactionQueryService transactionQueryService;
     private final CurrentUserService currentUserService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
-    @Operation(summary = "List transactions. Admin/TMO see all; Trainee sees own transactions")
     // Trả giao dịch của học viên hiện tại hoặc toàn bộ giao dịch khi người gọi là Admin/TMO.
     public ApiResponse<PageResponse<TransactionResponse>> listTransactions(
             @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -69,7 +63,6 @@ public class TransactionController {
 
     @GetMapping("/filter-options")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Get transaction filter options for admin monitoring")
     // Trả các giá trị lọc đang có trong dữ liệu để màn hình admin tạo bộ lọc.
     public ApiResponse<TransactionFilterOptionsResponse> getFilterOptions() {
         return ApiResponse.success(
@@ -79,7 +72,6 @@ public class TransactionController {
 
     @GetMapping("/{transactionId}")
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
-    @Operation(summary = "Get transaction detail")
     // Trả chi tiết giao dịch sau khi service kiểm tra quyền sở hữu hoặc quyền quản trị.
     public ApiResponse<TransactionResponse> getTransaction(@PathVariable UUID transactionId) {
         return ApiResponse.success(
@@ -89,7 +81,6 @@ public class TransactionController {
 
     @GetMapping("/{transactionId}/invoice")
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
-    @Operation(summary = "Get transaction invoice")
     // Trả dữ liệu hóa đơn của giao dịch đã thanh toán thành công.
     public ApiResponse<InvoiceResponse> getInvoice(@PathVariable UUID transactionId) {
         return ApiResponse.success(

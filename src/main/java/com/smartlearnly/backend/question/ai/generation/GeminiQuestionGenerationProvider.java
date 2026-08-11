@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
-import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -56,26 +55,25 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                     properties.getModel(),
                     sanitizeEndpoint(properties.getApiBaseUrl()),
                     truncateForLog(exception.getResponseBodyAsString(), 1600),
-                    exception
-            );
-            throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI provider returned HTTP " + exception.getStatusCode().value());
+                    exception);
+            throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE,
+                    "AI provider returned HTTP " + exception.getStatusCode().value());
         } catch (IOException | IllegalArgumentException exception) {
             log.warn(
                     "Gemini question generation response parse error: model={} endpoint={} reason={}",
                     properties.getModel(),
                     sanitizeEndpoint(properties.getApiBaseUrl()),
                     exception.getMessage(),
-                    exception
-            );
-            throw new BusinessException(ErrorCode.AI_PROVIDER_OUTPUT_INVALID, "AI provider returned an invalid response");
+                    exception);
+            throw new BusinessException(ErrorCode.AI_PROVIDER_OUTPUT_INVALID,
+                    "AI provider returned an invalid response");
         } catch (RestClientException exception) {
             log.warn(
                     "Gemini question generation request error: model={} endpoint={} reason={}",
                     properties.getModel(),
                     sanitizeEndpoint(properties.getApiBaseUrl()),
                     exception.getMessage(),
-                    exception
-            );
+                    exception);
             throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI provider request failed");
         }
     }
@@ -99,7 +97,8 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
             throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI question generation is disabled");
         }
         if (!PROVIDER_NAME.equalsIgnoreCase(properties.getProvider())) {
-            throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI question generation provider is not configured");
+            throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE,
+                    "AI question generation provider is not configured");
         }
         if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
             throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "Gemini API key is not configured");
@@ -234,13 +233,13 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                 : "No source material was selected. Generate from the user generation instruction and general course/module context only; keep questions as drafts for human review.";
         String evidenceRule = hasSources
                 ? """
-                - At least one evidence item must support the correct answer.
-                - If the provided chunks are insufficient, return fewer questions rather than hallucinating.
-                """
+                        - At least one evidence item must support the correct answer.
+                        - If the provided chunks are insufficient, return fewer questions rather than hallucinating.
+                        """
                 : """
-                - Evidence may be an empty array because no source material was selected.
-                - Do not invent source IDs, chunk IDs, chunk references, or excerpts.
-                """;
+                        - Evidence may be an empty array because no source material was selected.
+                        - Do not invent source IDs, chunk IDs, chunk references, or excerpts.
+                        """;
         String sourcesText = hasSources ? sourceBuilder.toString() : "No source material selected.";
 
         return """
@@ -287,8 +286,7 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                 String.join(", ", request.questionTypes()),
                 instruction,
                 evidenceRule,
-                sourcesText
-        );
+                sourcesText);
     }
 
     private GenerationResult parseResponse(String response) throws IOException {
@@ -303,42 +301,49 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                 payload.questions() == null ? List.of() : payload.questions(),
                 null,
                 null,
-                null
-        );
+                null);
     }
 
     private String extractOutputText(JsonNode root) {
         String direct = text(root, "output_text");
-        if (direct != null) return direct;
+        if (direct != null)
+            return direct;
         direct = text(root, "outputText");
-        if (direct != null) return direct;
+        if (direct != null)
+            return direct;
         return findTextValue(root);
     }
 
     private String findTextValue(JsonNode node) {
-        if (node == null || node.isNull()) return null;
+        if (node == null || node.isNull())
+            return null;
         if (node.isObject()) {
             String text = text(node, "text");
-            if (text != null) return text;
+            if (text != null)
+                return text;
             var fields = node.fields();
             while (fields.hasNext()) {
                 String found = findTextValue(fields.next().getValue());
-                if (found != null) return found;
+                if (found != null)
+                    return found;
             }
         }
         if (node.isArray()) {
             for (JsonNode child : node) {
                 String found = findTextValue(child);
-                if (found != null) return found;
+                if (found != null)
+                    return found;
             }
         }
         return null;
     }
 
     private String text(JsonNode node, String fieldName) {
-        if (node == null) return null;
+        if (node == null)
+            return null;
         JsonNode value = node.get(fieldName);
-        if (value == null || value.isNull()) return null;
+        if (value == null || value.isNull())
+            return null;
         return value.asText(null);
     }
 

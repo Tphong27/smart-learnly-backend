@@ -4,8 +4,6 @@ import com.smartlearnly.backend.course.catalog.dto.CourseCatalogSort;
 import com.smartlearnly.backend.course.catalog.dto.CourseDetailResponse;
 import com.smartlearnly.backend.course.catalog.dto.CourseListItemResponse;
 import com.smartlearnly.backend.course.catalog.service.CourseQueryService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import java.math.BigDecimal;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -21,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Validated
 @RequestMapping("/api/v1/courses")
-@Tag(name = "Courses", description = "Public course browsing endpoints")
 public class CourseController {
 
 	private final CourseQueryService courseQueryService;
@@ -33,7 +30,6 @@ public class CourseController {
 
 	// Tải catalog khóa học published theo bộ lọc và cách sắp xếp.
 	@GetMapping
-	@Operation(summary = "List published courses")
 	public Page<CourseListItemResponse> getCourses(
 			@RequestParam(required = false) String keyword,
 			@RequestParam(required = false) String categorySlug,
@@ -58,7 +54,6 @@ public class CourseController {
 
 	// Tìm khóa học published theo từ khóa bắt buộc.
 	@GetMapping("/search")
-	@Operation(summary = "Search published courses")
 	public Page<CourseListItemResponse> searchCourses(
 			@RequestParam @NotBlank String keyword,
 			@RequestParam(defaultValue = "0") @Min(0) int page,
@@ -68,7 +63,6 @@ public class CourseController {
 
 	// Tải khóa học published thuộc một category slug.
 	@GetMapping("/category/{categorySlug}")
-	@Operation(summary = "List published courses by category")
 	public Page<CourseListItemResponse> getCoursesByCategory(
 			@PathVariable String categorySlug,
 			@RequestParam(defaultValue = "0") @Min(0) int page,
@@ -78,7 +72,6 @@ public class CourseController {
 
 	// Trả chi tiết khóa học published theo slug hoặc ID.
 	@GetMapping("/{slug}")
-	@Operation(summary = "Get published course detail")
 	public CourseDetailResponse getCourseDetail(@PathVariable String slug) {
 		return courseQueryService.getCourseDetail(slug);
 	}

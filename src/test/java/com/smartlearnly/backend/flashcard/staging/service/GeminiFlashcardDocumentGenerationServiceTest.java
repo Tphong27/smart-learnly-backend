@@ -53,6 +53,55 @@ class GeminiFlashcardDocumentGenerationServiceTest {
     }
 
     @Test
+    void generateUsesStructuredSchemaAndJoinsModelOutputTextBlocks() {
+        FlashcardDocumentGenerationProperties properties = properties();
+        properties.setApiBaseUrl("https://gemini.example.test/v1beta");
+        properties.setModel("gemini-test");
+        properties.setFallbackModel("");
+        RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GeminiFlashcardGenerationService structuredService =
+                new GeminiFlashcardGenerationService(properties, builder.build());
+
+        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
+                .andExpect(jsonPath("$.response_format.type").value("text"))
+                .andExpect(jsonPath("$.response_format.mime_type").value("application/json"))
+                .andExpect(jsonPath("$.response_format.schema.properties.cards.type").value("array"))
+                .andExpect(jsonPath("$.response_format.schema.required[0]").value("cards"))
+                .andRespond(withSuccess("""
+                        {
+                          "steps": [
+                            {
+                              "type": "thought",
+                              "content": [{"type":"text","text":"This is not the result."}]
+                            },
+                            {
+                              "type": "model_output",
+                              "content": [
+                                {"type":"text","text":"{\\"cards\\":["},
+                                {"type":"text","text":"{\\"frontText\\":\\"What is staging?\\",\\"backText\\":\\"A review area.\\",\\"hint\\":null,\\"explanation\\":null,\\"sourceExcerpt\\":\\"Staging is a review area.\\"}]}"}
+                              ]
+                            }
+                          ]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        GenerationResult result = structuredService.generate(new GeminiGenerationRequest(
+                "Staging keeps generated flashcards in a review area before approval. ".repeat(3),
+                List.of(),
+                List.of(),
+                5,
+                "en",
+                "DOCX",
+                "lesson.docx",
+                "Document content"));
+
+        assertThat(result.candidates()).hasSize(1);
+        assertThat(result.candidates().get(0).frontText()).isEqualTo("What is staging?");
+        server.verify();
+    }
+
+    @Test
     void parseGenerationOutputAcceptsStrictJsonAndOptionalFields() {
         String json = """
                 {

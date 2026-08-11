@@ -4,6 +4,8 @@ import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.curriculum.dto.LessonRequest;
 import com.smartlearnly.backend.curriculum.dto.LessonResourceRequest;
 import com.smartlearnly.backend.curriculum.dto.LessonResponse;
@@ -15,6 +17,7 @@ import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.curriculum.service.CurriculumLessonTestLinkService;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
+import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
@@ -46,10 +49,11 @@ public class CurriculumLessonAdminService {
     private final QuizContentValidator quizContentValidator;
     private final VideoSummaryService videoSummaryService;
     private final FlashcardSetRepository flashcardSetRepository;
+    private final CourseRepository courseRepository;
     private final MasterCurriculumAccessService curriculumAccessService;
     private final CurriculumLessonTestLinkService lessonTestLinkService;
 
-    // Liệt kê toàn bộ lesson chưa xóa của section để màn quản trị thấy cả trạng thái inactive.
+    /** Liệt kê toàn bộ lesson chưa xóa của section để màn quản trị thấy cả trạng thái inactive. */
     @Transactional(readOnly = true)
     public List<LessonResponse> listLessons(UUID sectionId) {
         CurriculumSection section = curriculumAccessService.findReadableSection(sectionId);
@@ -58,19 +62,19 @@ public class CurriculumLessonAdminService {
                 .toList();
     }
 
-    // Liệt kê lesson của module tương thích cũ thông qua snapshot section hiện tại.
+    /** Liệt kê lesson của module tương thích cũ thông qua snapshot section hiện tại. */
     @Transactional(readOnly = true)
     public List<LessonResponse> listModuleLessons(UUID moduleId) {
         return listLessons(curriculumAccessService.findReadableModuleSnapshot(moduleId).getId());
     }
 
-    // Trả chi tiết lesson sau khi xác nhận nó thuộc master curriculum có thể đọc.
+    /** Trả chi tiết lesson sau khi xác nhận nó thuộc master curriculum có thể đọc. */
     @Transactional(readOnly = true)
     public LessonResponse getLesson(UUID lessonId) {
         return curriculumDtoMapper.toLessonResponse(curriculumAccessService.findReadableLesson(lessonId));
     }
 
-    // Tạo lesson mới trong section với trạng thái và thứ tự mặc định của authoring.
+    /** Tạo lesson mới và bảo đảm lesson flashcard luôn có bộ thẻ đi kèm. */
     @Transactional
     public LessonResponse createLesson(UUID sectionId, LessonRequest request) {
         CurriculumSection section = curriculumAccessService.findUpdatableSection(sectionId);
@@ -84,17 +88,18 @@ public class CurriculumLessonAdminService {
         lesson.setSortOrder(sortOrder);
         CurriculumLesson saved = lessonRepository.save(lesson);
         lessonTestLinkService.ensureQuizTest(saved);
+        synchronizeFlashcardSet(saved);
         audit("LESSON_CREATED", "CURRICULUM_LESSON", saved.getId());
         return curriculumDtoMapper.toLessonResponse(saved);
     }
 
-    // Tạo lesson qua mã module tương thích cũ sau khi tìm snapshot section.
+    /** Tạo lesson qua mã module tương thích cũ sau khi tìm snapshot section. */
     @Transactional
     public LessonResponse createModuleLesson(UUID moduleId, LessonRequest request) {
         return createLesson(curriculumAccessService.findUpdatableModuleSnapshot(moduleId).getId(), request);
     }
 
-    // Cập nhật nội dung, loại, trạng thái, resource và thứ tự được gửi cho lesson.
+    /** Cập nhật lesson và tạo hoặc đồng bộ bộ flashcard khi loại lesson là flashcard. */
     @Transactional
     public LessonResponse updateLesson(UUID lessonId, LessonRequest request) {
         CurriculumLesson lesson = curriculumAccessService.findUpdatableLesson(lessonId);
@@ -104,12 +109,12 @@ public class CurriculumLessonAdminService {
         }
         CurriculumLesson saved = lessonRepository.save(lesson);
         lessonTestLinkService.ensureQuizTest(saved);
-        synchronizeFlashcardSetTitle(saved);
+        synchronizeFlashcardSet(saved);
         audit("LESSON_UPDATED", "CURRICULUM_LESSON", saved.getId());
         return curriculumDtoMapper.toLessonResponse(saved);
     }
 
-    // Xóa mềm lesson bằng trạng thái inactive và thời điểm xóa để giữ lịch sử.
+    /** Xóa mềm lesson bằng trạng thái inactive và thời điểm xóa để giữ lịch sử. */
     @Transactional
     public void deleteLesson(UUID lessonId) {
         CurriculumLesson lesson = curriculumAccessService.findUpdatableLesson(lessonId);
@@ -119,7 +124,7 @@ public class CurriculumLessonAdminService {
         audit("LESSON_DELETED", "CURRICULUM_LESSON", lesson.getId());
     }
 
-    // Sắp xếp lại toàn bộ lesson và yêu cầu payload chứa mỗi lesson đúng một lần.
+    /** Sắp xếp lại toàn bộ lesson và yêu cầu payload chứa mỗi lesson đúng một lần. */
     @Transactional
     public List<LessonResponse> reorderLessons(UUID sectionId, ReorderRequest request) {
         CurriculumSection section = curriculumAccessService.findUpdatableSection(sectionId);
@@ -144,13 +149,13 @@ public class CurriculumLessonAdminService {
                 .toList();
     }
 
-    // Giữ nguyên cách route module hiện tại chuyển yêu cầu sắp xếp vào nghiệp vụ section.
+    /** Giữ route module tương thích cũ bằng cách chuyển yêu cầu sang nghiệp vụ section. */
     @Transactional
     public List<LessonResponse> reorderModuleLessons(UUID moduleId, ReorderRequest request) {
         return reorderLessons(moduleId, request);
     }
 
-    // Áp dụng và kiểm tra các trường lesson dùng chung cho cả thao tác tạo và cập nhật.
+    /** Áp dụng và kiểm tra các trường lesson dùng chung cho cả thao tác tạo và cập nhật. */
     private void applyLessonRequest(CurriculumLesson lesson, LessonRequest request, boolean create) {
         lesson.setTitle(normalizeRequired(request.title(), "Lesson title is required"));
         LessonType defaultType = create ? LessonType.RICH_TEXT : lesson.getType();
@@ -195,19 +200,36 @@ public class CurriculumLessonAdminService {
         }
     }
 
-    // Đồng bộ tên bộ flashcard gắn với lesson khi tiêu đề lesson thay đổi.
-    private void synchronizeFlashcardSetTitle(CurriculumLesson lesson) {
+    /** Tạo bộ thẻ còn thiếu hoặc đồng bộ tên bộ thẻ đang gắn với lesson flashcard. */
+    private void synchronizeFlashcardSet(CurriculumLesson lesson) {
         if (lesson.getType() != LessonType.FLASHCARD) {
             return;
         }
-        flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId())
-                .ifPresent(flashcardSet -> {
-                    flashcardSet.setTitle(lesson.getTitle());
-                    flashcardSetRepository.save(flashcardSet);
-                });
+        var existingSet = flashcardSetRepository
+                .findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId());
+        if (existingSet.isPresent()) {
+            FlashcardSet flashcardSet = existingSet.get();
+            flashcardSet.setTitle(lesson.getTitle());
+            flashcardSetRepository.save(flashcardSet);
+            return;
+        }
+
+        UUID courseId = lesson.getSection().getCurriculumVersion().getCourseId();
+        Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+
+        FlashcardSet flashcardSet = new FlashcardSet();
+        flashcardSet.setCurriculumLessonId(lesson.getId());
+        flashcardSet.setCourse(course);
+        flashcardSet.setCreatedBy(actor);
+        flashcardSet.setTitle(lesson.getTitle());
+        flashcardSet.setIsPublic(false);
+        flashcardSet.setIsOfficial(false);
+        flashcardSetRepository.save(flashcardSet);
     }
 
-    // Xác thực danh sách sắp xếp không thiếu, thừa hoặc lặp lesson.
+    /** Xác thực danh sách sắp xếp không thiếu, thừa hoặc lặp lesson. */
     private void assertReorderMatchesAllItems(
             List<UUID> requestedIds,
             Set<UUID> existingIds,
@@ -228,7 +250,7 @@ public class CurriculumLessonAdminService {
         }
     }
 
-    // Chuyển loại lesson từ chuỗi sang enum và hỗ trợ alias document của client cũ.
+    /** Chuyển loại lesson từ chuỗi sang enum và hỗ trợ alias document của client cũ. */
     private LessonType parseLessonType(String value, LessonType defaultType) {
         if (value == null || value.isBlank()) {
             return defaultType;
@@ -246,13 +268,13 @@ public class CurriculumLessonAdminService {
         }
     }
 
-    // Ưu tiên trường lessonType mới nhưng vẫn nhận trường type tương thích cũ.
+    /** Ưu tiên trường lessonType mới nhưng vẫn nhận trường type tương thích cũ. */
     private String resolveLessonType(LessonRequest request) {
         String lessonType = normalizeNullable(request.lessonType());
         return lessonType == null ? normalizeNullable(request.type()) : lessonType;
     }
 
-    // Chuyển trạng thái lesson từ chuỗi sang enum và giữ mặc định khi không được gửi.
+    /** Chuyển trạng thái lesson từ chuỗi sang enum và giữ mặc định khi không được gửi. */
     private LessonStatus parseLessonStatus(String value, LessonStatus defaultStatus) {
         if (value == null || value.isBlank()) {
             return defaultStatus;
@@ -266,13 +288,13 @@ public class CurriculumLessonAdminService {
         }
     }
 
-    // Ghi audit thao tác lesson bằng người dùng đang đăng nhập.
+    /** Ghi audit thao tác lesson bằng người dùng đang đăng nhập. */
     private void audit(String action, String targetType, UUID targetId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         auditLogService.record(actor.getEmail(), action, targetType, targetId.toString());
     }
 
-    // Chuẩn hóa chuỗi bắt buộc và báo lỗi nếu chỉ có khoảng trắng.
+    /** Chuẩn hóa chuỗi bắt buộc và báo lỗi nếu chỉ có khoảng trắng. */
     private String normalizeRequired(String value, String message) {
         String normalized = normalizeNullable(value);
         if (normalized == null) {
@@ -281,7 +303,7 @@ public class CurriculumLessonAdminService {
         return normalized;
     }
 
-    // Chuẩn hóa chuỗi tùy chọn, biến giá trị rỗng thành null.
+    /** Chuẩn hóa chuỗi tùy chọn, biến giá trị rỗng thành null. */
     private String normalizeNullable(String value) {
         if (value == null) {
             return null;
@@ -290,7 +312,7 @@ public class CurriculumLessonAdminService {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    // Chuyển resource trong request thành entity con với tên và thứ tự an toàn.
+    /** Chuyển resource trong request thành entity con với tên và thứ tự an toàn. */
     private CurriculumLessonResource toLessonResource(LessonResourceRequest request, int index) {
         CurriculumLessonResource resource = new CurriculumLessonResource();
         String url = normalizeRequired(request.url(), "Resource URL is required");
@@ -303,7 +325,7 @@ public class CurriculumLessonAdminService {
         return resource;
     }
 
-    // Chọn tên resource từ name, fileName, URL hoặc tên dự phòng theo thứ tự ưu tiên.
+    /** Chọn tên resource từ name, fileName, URL hoặc tên dự phòng theo thứ tự ưu tiên. */
     private String resolveResourceName(LessonResourceRequest request, String url, int index) {
         String name = normalizeNullable(request.name());
         if (name == null) {
@@ -323,7 +345,7 @@ public class CurriculumLessonAdminService {
         return name;
     }
 
-    // Tách tên file cuối URL sau khi loại bỏ fragment và query string.
+    /** Tách tên file cuối URL sau khi loại bỏ fragment và query string. */
     private String fileNameFromUrl(String url) {
         int fragmentIndex = url.indexOf('#');
         String withoutFragment = fragmentIndex < 0 ? url : url.substring(0, fragmentIndex);

@@ -1,8 +1,6 @@
 package com.smartlearnly.backend.lessonprogress.trainee.service;
 
 import com.smartlearnly.backend.assignment.entity.Assignment;
-import com.smartlearnly.backend.assignment.entity.AssignmentSubmission;
-import com.smartlearnly.backend.assignment.entity.SubmissionStatus;
 import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
 import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
@@ -339,21 +337,12 @@ public class TraineeProgressService {
                 List<Assignment> assignments = assignmentRepository.findAvailableForStudent(studentId, courseId,
                                 classId, false);
                 int total = assignments.size();
-                int completed = (int) assignments.stream().filter(assignment -> assignmentSubmissionRepository
-                                .findByAssignmentIdAndStudentId(assignment.getId(), studentId)
-                                .map(AssignmentSubmission::getStatus)
-                                .filter(this::isCompletedAssignmentStatus)
-                                .isPresent())
-                                .count();
+                int completed = assignments.isEmpty()
+                                ? 0
+                                : Math.toIntExact(assignmentSubmissionRepository.countCompletedByStudentIdAndAssignmentIds(
+                                                studentId,
+                                                assignments.stream().map(Assignment::getId).toList()));
                 return metric("Assignment", completed, total);
-        }
-
-        /** Xác định trạng thái nộp bài nào được tính là đã hoàn thành. */
-        private boolean isCompletedAssignmentStatus(SubmissionStatus status) {
-                return status == SubmissionStatus.SUBMITTED
-                                || status == SubmissionStatus.GRADED
-                                || status == SubmissionStatus.LATE
-                                || status == SubmissionStatus.EXPIRED;
         }
 
         /** Lấy lớp còn hiệu lực hoặc trả lỗi không tìm thấy. */

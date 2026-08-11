@@ -16,7 +16,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -208,12 +207,10 @@ public class NotificationWriteService {
         notification.setActionUrl(normalize(command.actionUrl(), MAX_ACTION_URL_LENGTH));
         notification.setActorId(command.actorId());
         notification.setEventKey(eventKey);
-        notification.setPayload(copyPayload(command.payload()));
+        notification.setPayload(command.payload() == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(command.payload()));
         return Optional.of(notification);
-    }
-
-    private static Map<String, Object> copyPayload(Map<String, Object> payload) {
-        return payload == null ? new LinkedHashMap<>() : new LinkedHashMap<>(payload);
     }
 
     private static String requireText(String value, String message, int maxLength) {

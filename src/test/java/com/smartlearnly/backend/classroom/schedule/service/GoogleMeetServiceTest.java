@@ -235,17 +235,17 @@ class GoogleMeetServiceTest {
         }
 
         @Test
-        void UTCID11_createMeetingUrl_convertsOAuth401ToExternalServiceUnavailable() {
+        void UTCID11_createMeetingUrl_reportsExpiredRefreshToken_whenGoogleReturnsInvalidGrant() {
                 stubEnabledConfiguration(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN);
                 tokenServer.expect(requestTo(TOKEN_BASE_URL + "/token"))
                                 .andExpect(method(HttpMethod.POST))
-                                .andRespond(withStatus(HttpStatus.UNAUTHORIZED)
+                                .andRespond(withStatus(HttpStatus.BAD_REQUEST)
                                                 .contentType(MediaType.APPLICATION_JSON)
                                                 .body("{\"error\":\"invalid_grant\"}"));
 
                 assertUnavailable(
                                 service::createMeetingUrl,
-                                "Google Meet rejected the request. Check the OAuth credentials and refresh token.");
+                                "Google Meet refresh token is expired or revoked. Reconnect Google Meet.");
 
                 tokenServer.verify();
         }
@@ -260,7 +260,7 @@ class GoogleMeetServiceTest {
 
                 assertUnavailable(
                                 service::createMeetingUrl,
-                                "Google Meet rejected the request. Check the OAuth credentials and refresh token.");
+                                "Google Meet is temporarily unavailable");
 
                 tokenServer.verify();
                 meetServer.verify();
@@ -276,9 +276,74 @@ class GoogleMeetServiceTest {
 
                 assertUnavailable(
                                 service::createMeetingUrl,
-                                "Google Meet is temporarily unavailable");
+                                "Google OAuth is temporarily unavailable");
 
                 tokenServer.verify();
+        }
+
+        @Test
+        void UTCID14_createMeetingUrl_reportsInvalidOAuthClient_whenGoogleReturnsInvalidClient() {
+                // GIVEN: Google từ chối cặp client ID và client secret.
+                stubEnabledConfiguration(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN);
+                tokenServer.expect(requestTo(TOKEN_BASE_URL + "/token"))
+                                .andRespond(withStatus(HttpStatus.UNAUTHORIZED)
+                                                .contentType(MediaType.APPLICATION_JSON)
+                                                .body("{\"error\":\"invalid_client\"}"));
+
+                // WHEN + THEN: API trả thông báo credential chính xác, không đổ lỗi token.
+                assertUnavailable(
+                                service::createMeetingUrl,
+                                "Google Meet OAuth client ID or client secret is invalid.");
+                tokenServer.verify();
+        }
+
+        @Test
+        void UTCID15_createMeetingUrl_reportsMissingScope_whenMeetReturnsForbidden() {
+                // GIVEN: OAuth đổi token thành công nhưng Meet API từ chối quyền tạo space.
+                stubEnabledConfiguration(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN);
+                expectSuccessfulTokenResponse();
+                meetServer.expect(requestTo(MEET_BASE_URL + "/v2/spaces"))
+                                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                                                .contentType(MediaType.APPLICATION_JSON)
+                                                .body("{\"error\":{\"status\":\"PERMISSION_DENIED\"}}"));
+
+                // WHEN + THEN: Người vận hành nhận hướng dẫn scope/API thay vì lỗi chung chung.
+                assertUnavailable(
+                                service::createMeetingUrl,
+                                "Google Meet permission is missing. Re-authorize the meetings.space.created scope and enable Google Meet REST API.");
+                tokenServer.verify();
+                meetServer.verify();
+        }
+
+        @Test
+        void UTCID16_createMeetingUrl_prefersDedicatedMeetOAuthClient() {
+                // GIVEN: Meet có client riêng, khác credential Google Login dùng chung.
+                properties.setClientId("dedicated-meet-client-id");
+                properties.setClientSecret("dedicated-meet-client-secret");
+                stubEnabledConfiguration(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN);
+
+                MultiValueMap<String, String> dedicatedForm = new LinkedMultiValueMap<>();
+                dedicatedForm.add("client_id", "dedicated-meet-client-id");
+                dedicatedForm.add("client_secret", "dedicated-meet-client-secret");
+                dedicatedForm.add("refresh_token", REFRESH_TOKEN);
+                dedicatedForm.add("grant_type", "refresh_token");
+                tokenServer.expect(requestTo(TOKEN_BASE_URL + "/token"))
+                                .andExpect(content().formData(dedicatedForm))
+                                .andRespond(withSuccess(
+                                                "{\"access_token\":\"test-access-token\"}",
+                                                MediaType.APPLICATION_JSON));
+                meetServer.expect(requestTo(MEET_BASE_URL + "/v2/spaces"))
+                                .andRespond(withSuccess(
+                                                "{\"meetingUri\":\"https://meet.google.com/abc-defg-hij\"}",
+                                                MediaType.APPLICATION_JSON));
+
+                // WHEN: Tạo link bằng cấu hình Meet chuyên biệt.
+                MeetingUrlResponse result = service.createMeetingUrl();
+
+                // THEN: Request OAuth dùng đúng client Meet và trả link thành công.
+                assertThat(result.meetingUrl()).isEqualTo(MEETING_URL);
+                tokenServer.verify();
+                meetServer.verify();
         }
 
         private void stubEnabledConfiguration(

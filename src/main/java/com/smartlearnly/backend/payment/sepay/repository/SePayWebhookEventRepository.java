@@ -133,7 +133,7 @@ public class SePayWebhookEventRepository {
             args.add(normalizedStatus);
         }
 
-        sql.append(" ORDER BY received_at DESC LIMIT ? OFFSET ? ");
+        sql.append(" ORDER BY received_at DESC, id DESC LIMIT ? OFFSET ? ");
         args.add(limit);
         args.add(offset);
 

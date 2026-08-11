@@ -205,6 +205,10 @@ public class AdminFlashcardService {
                 .toList());
     }
 
+    /**
+     * Tìm bộ thẻ từ mọi dạng tham chiếu lesson dùng trong master và class curriculum.
+     * Khi lesson lớp là một bản sao, {@code lessonIdentityId} nối nó về bộ thẻ của lesson nguồn.
+     */
     private FlashcardSet resolveFlashcardSetByLessonReference(UUID lessonReferenceId) {
         // Trường hợp 1:
         // ID frontend gửi là legacy lesson ID.
@@ -260,6 +264,18 @@ public class AdminFlashcardService {
 
             if (bySourceCurriculumLesson.isPresent()) {
                 return bySourceCurriculumLesson.get();
+            }
+        }
+
+        UUID lessonIdentityId = curriculumLesson.getLessonIdentityId();
+        if (lessonIdentityId != null) {
+            List<FlashcardSet> equivalentSets = flashcardSetRepository
+                    .findActiveByLessonIdentityIdAndCurriculumStateOrderByUpdatedAtDesc(
+                            lessonIdentityId,
+                            CurriculumScope.MASTER,
+                            CurriculumStatus.PUBLISHED);
+            if (!equivalentSets.isEmpty()) {
+                return equivalentSets.get(0);
             }
         }
 

@@ -9,7 +9,7 @@ import com.smartlearnly.backend.admin.settings.controller.SePaySettingsControlle
 import com.smartlearnly.backend.auth.google.controller.GoogleAuthController;
 import com.smartlearnly.backend.auth.password.controller.AuthPasswordController;
 import com.smartlearnly.backend.auth.profile.controller.AuthProfileController;
-import com.smartlearnly.backend.auth.registration.controller.AuthRegistrationController;
+import com.smartlearnly.backend.auth.register.controller.AuthRegistrationController;
 import com.smartlearnly.backend.auth.session.controller.AuthSessionController;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -22,6 +22,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 class AuthAndSettingsRouteContractTest {
 
+    /**
+     * Kịch bản: kiểm tra hồi quy toàn bộ public route của nhóm auth sau khi tổ chức lại package/controller.
+     * Given: các controller registration, session, password, profile và Google hiện tại.
+     * When: test đọc annotation mapping bằng reflection.
+     * Then: base path và từng HTTP method/path phải giữ nguyên contract mà frontend đang sử dụng.
+     * Ý nghĩa tương thích: refactor Java/package không được âm thầm làm hỏng API đăng ký, đăng nhập hay tài khoản.
+     */
     @Test
     void authRoutesShouldKeepTheirPublicContract() {
         assertBasePath("/api/v1/auth",
@@ -47,6 +54,13 @@ class AuthAndSettingsRouteContractTest {
         assertPost(AuthProfileController.class, "uploadAvatar", "/profile/avatar");
     }
 
+    /**
+     * Kịch bản: kiểm tra hồi quy các route quản trị cấu hình có liên quan đến auth/email/Google.
+     * Given: các settings controller hiện tại.
+     * When: test đọc mapping annotation bằng reflection.
+     * Then: base path, HTTP verb và endpoint con phải đúng contract đã công bố.
+     * Ý nghĩa tương thích: thay đổi cấu trúc code không được làm mất màn hình cấu hình dịch vụ đăng nhập/gửi email.
+     */
     @Test
     void settingsRoutesShouldKeepTheirPublicContract() {
         assertBasePath("/api/v1/admin/settings",

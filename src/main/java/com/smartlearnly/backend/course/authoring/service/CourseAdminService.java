@@ -126,8 +126,8 @@ public class CourseAdminService {
         }
         if (status != null) {
             filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder.equal(
-                    root.get("status").cast(String.class),
-                    status.name().toLowerCase(Locale.ROOT)));
+                    root.get("status"),
+                    status));
         }
         if (categoryId != null) {
             filters = filters.and((root, query, criteriaBuilder) -> criteriaBuilder

@@ -20,9 +20,6 @@ import com.smartlearnly.backend.flashcard.personal.dto.PersonalFlashcardDtos.Rep
 import com.smartlearnly.backend.flashcard.personal.service.PersonalFlashcardImageUploadService;
 import com.smartlearnly.backend.flashcard.personal.service.PersonalFlashcardImportService;
 import com.smartlearnly.backend.flashcard.personal.service.PersonalFlashcardService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -50,15 +47,12 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('TRAINEE', 'TRAINER', 'SME')")
 @RequestMapping("/api/v1/my-flashcards/sets")
-@Tag(name = "Personal Flashcards", description = "Standalone, owner-scoped personal flashcard APIs.")
-@SecurityRequirement(name = "bearerAuth")
 public class PersonalFlashcardController {
     private final PersonalFlashcardService personalFlashcardService;
     private final PersonalFlashcardImageUploadService personalFlashcardImageUploadService;
     private final PersonalFlashcardImportService personalFlashcardImportService;
 
     @GetMapping
-    @Operation(summary = "List Personal flashcard sets")
     public ApiResponse<PageResponse<PersonalFlashcardSetSummaryResponse>> listSets(
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "updated_desc") String sort,
@@ -72,7 +66,6 @@ public class PersonalFlashcardController {
     }
 
     @PostMapping
-    @Operation(summary = "Create a Personal flashcard set")
     public ResponseEntity<ApiResponse<PersonalFlashcardSetDetailResponse>> createSet(
             @Valid @RequestBody CreatePersonalFlashcardSetRequest request
     ) {
@@ -82,7 +75,6 @@ public class PersonalFlashcardController {
     }
 
     @GetMapping("/{setId}")
-    @Operation(summary = "Get an owned Personal flashcard set")
     public ApiResponse<PersonalFlashcardSetDetailResponse> getSet(@PathVariable UUID setId) {
         return ApiResponse.success(
                 "Personal flashcard set loaded successfully",
@@ -91,7 +83,6 @@ public class PersonalFlashcardController {
     }
 
     @PutMapping("/{setId}")
-    @Operation(summary = "Replace Personal flashcard set metadata")
     public ApiResponse<PersonalFlashcardSetDetailResponse> replaceSet(
             @PathVariable UUID setId,
             @Valid @RequestBody ReplacePersonalFlashcardSetRequest request
@@ -103,14 +94,12 @@ public class PersonalFlashcardController {
     }
 
     @DeleteMapping("/{setId}")
-    @Operation(summary = "Delete an owned Personal flashcard set")
     public ApiResponse<Void> deleteSet(@PathVariable UUID setId) {
         personalFlashcardService.deleteSet(setId);
         return ApiResponse.success("Personal flashcard set deleted successfully");
     }
 
     @PostMapping("/{setId}/cards")
-    @Operation(summary = "Create a direct-use Personal flashcard")
     public ResponseEntity<ApiResponse<PersonalFlashcardCardResponse>> addCard(
             @PathVariable UUID setId,
             @Valid @RequestBody CreatePersonalFlashcardCardRequest request
@@ -122,7 +111,6 @@ public class PersonalFlashcardController {
     }
 
     @PutMapping("/{setId}/cards/{cardId}")
-    @Operation(summary = "Replace a Personal flashcard")
     public ApiResponse<PersonalFlashcardCardResponse> replaceCard(
             @PathVariable UUID setId,
             @PathVariable UUID cardId,
@@ -135,14 +123,12 @@ public class PersonalFlashcardController {
     }
 
     @DeleteMapping("/{setId}/cards/{cardId}")
-    @Operation(summary = "Delete a Personal flashcard")
     public ApiResponse<Void> deleteCard(@PathVariable UUID setId, @PathVariable UUID cardId) {
         personalFlashcardService.deleteCard(setId, cardId);
         return ApiResponse.success("Personal flashcard card deleted successfully");
     }
 
     @PostMapping("/{setId}/cards/bulk-delete")
-    @Operation(summary = "Delete Personal flashcards atomically")
     public ApiResponse<PersonalBulkDeleteResponse> bulkDeleteCards(
             @PathVariable UUID setId,
             @Valid @RequestBody BulkDeletePersonalFlashcardCardsRequest request
@@ -154,7 +140,6 @@ public class PersonalFlashcardController {
     }
 
     @PostMapping("/{setId}/cards/bulk-create")
-    @Operation(summary = "Create generated Personal flashcards atomically")
     public ApiResponse<PersonalFlashcardSetDetailResponse> bulkCreateCards(
             @PathVariable UUID setId,
             @Valid @RequestBody BulkCreatePersonalFlashcardCardsRequest request
@@ -166,7 +151,6 @@ public class PersonalFlashcardController {
     }
 
     @PostMapping("/{setId}/imports/generate-from-text")
-    @Operation(summary = "Generate unsaved Personal flashcard candidates from pasted text")
     public ApiResponse<PersonalGeneratedFlashcardsResponse> generateFromText(
             @PathVariable UUID setId,
             @Valid @RequestBody GeneratePersonalFlashcardsFromTextRequest request
@@ -178,7 +162,6 @@ public class PersonalFlashcardController {
     }
 
     @PostMapping(value = "/{setId}/imports/generate-from-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Generate unsaved Personal flashcard candidates from a document")
     public ApiResponse<PersonalGeneratedFlashcardsResponse> generateFromFile(
             @PathVariable UUID setId,
             @RequestPart(value = "file", required = false) MultipartFile file,
@@ -192,7 +175,6 @@ public class PersonalFlashcardController {
     }
 
     @PutMapping("/{setId}/cards/reorder")
-    @Operation(summary = "Reorder every active Personal flashcard")
     public ApiResponse<PersonalFlashcardSetDetailResponse> reorderCards(
             @PathVariable UUID setId,
             @Valid @RequestBody ReorderPersonalFlashcardCardsRequest request
@@ -204,7 +186,6 @@ public class PersonalFlashcardController {
     }
 
     @PostMapping(value = "/{setId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload an image for an owned Personal flashcard set")
     public ApiResponse<FlashcardImageUploadResponse> uploadImage(
             @PathVariable UUID setId,
             @RequestPart(value = "file", required = false) MultipartFile file
@@ -216,7 +197,6 @@ public class PersonalFlashcardController {
     }
 
     @GetMapping("/{setId}/study")
-    @Operation(summary = "Get Personal flashcards for standalone study")
     public ApiResponse<PersonalFlashcardStudyResponse> getStudy(@PathVariable UUID setId) {
         return ApiResponse.success(
                 "Personal flashcard study set loaded successfully",

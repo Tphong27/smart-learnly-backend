@@ -33,6 +33,7 @@ import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepositor
 import com.smartlearnly.backend.curriculum.service.ClassCurriculumCompositionService;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.curriculum.service.CurriculumLessonTestLinkService;
+import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
@@ -122,6 +123,7 @@ class CurriculumAdminServicesTest {
                 quizContentValidator,
                 videoSummaryService,
                 flashcardSetRepository,
+                courseRepository,
                 curriculumAccessService,
                 lessonTestLinkService
         );
@@ -332,6 +334,89 @@ class CurriculumAdminServicesTest {
         verify(videoSummaryService, never())
                 .normalizeLessonVideoUrl(null, null, true);
         verify(quizContentValidator).validate(quizContent.trim());
+    }
+
+    @Test
+    void createFlashcardLessonShouldCreateLinkedSet() {
+        Course course = course();
+        CurriculumVersion version = version(course);
+        CurriculumSection section = section(version, 0);
+        UserAccount actor = new UserAccount();
+        actor.setId(UUID.randomUUID());
+        actor.setEmail("admin@smartlearnly.dev");
+
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(curriculumSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId())).thenReturn(0);
+        when(curriculumLessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {
+            CurriculumLesson saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            saved.setCreatedAt(Instant.now());
+            saved.setUpdatedAt(Instant.now());
+            return saved;
+        });
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+        LessonResponse response = curriculumLessonAdminService.createLesson(
+                section.getId(),
+                new LessonRequest(
+                        "Vocabulary",
+                        "FLASHCARD",
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        false,
+                        "DRAFT",
+                        List.of(),
+                        null));
+
+        ArgumentCaptor<FlashcardSet> setCaptor = ArgumentCaptor.forClass(FlashcardSet.class);
+        verify(flashcardSetRepository).save(setCaptor.capture());
+        FlashcardSet savedSet = setCaptor.getValue();
+        assertThat(savedSet.getCurriculumLessonId()).isEqualTo(response.id());
+        assertThat(savedSet.getCourse()).isSameAs(course);
+        assertThat(savedSet.getCreatedBy()).isSameAs(actor);
+        assertThat(savedSet.getTitle()).isEqualTo("Vocabulary");
+        assertThat(savedSet.getIsPublic()).isFalse();
+        assertThat(savedSet.getIsOfficial()).isFalse();
+    }
+
+    @Test
+    void updateLessonToFlashcardShouldCreateMissingLinkedSet() {
+        Course course = course();
+        CurriculumVersion version = version(course);
+        CurriculumSection section = section(version, 0);
+        CurriculumLesson lesson = lesson(section);
+        UserAccount actor = new UserAccount();
+        actor.setId(UUID.randomUUID());
+        actor.setEmail("admin@smartlearnly.dev");
+
+        when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+        when(curriculumLessonRepository.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(curriculumLessonRepository.save(lesson)).thenReturn(lesson);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
+
+        curriculumLessonAdminService.updateLesson(
+                lesson.getId(),
+                new LessonRequest(
+                        "Converted flashcards",
+                        "FLASHCARD",
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        false,
+                        "DRAFT",
+                        List.of(),
+                        null));
+
+        ArgumentCaptor<FlashcardSet> setCaptor = ArgumentCaptor.forClass(FlashcardSet.class);
+        verify(flashcardSetRepository).save(setCaptor.capture());
+        assertThat(setCaptor.getValue().getCurriculumLessonId()).isEqualTo(lesson.getId());
+        assertThat(setCaptor.getValue().getTitle()).isEqualTo("Converted flashcards");
     }
 
     @Test

@@ -146,7 +146,8 @@ public class FlashcardCourseQuestionImportService {
         Map<UUID, List<QuestionAnswer>> answersByQuestionId = answersByQuestionId(questions);
         FlashcardStagingBatch batch = new FlashcardStagingBatch();
         batch.setFlashcardSet(context.flashcardSet());
-        applyBatchTarget(batch, context);
+        batch.setLesson(context.lesson());
+        batch.setCurriculumLessonId(context.curriculumLessonId());
         batch.setCourse(context.course());
         batch.setCreatedBy(actor);
         batch.setSourceType(SOURCE_TYPE_COURSE_QUESTIONS);
@@ -422,12 +423,6 @@ public class FlashcardCourseQuestionImportService {
             courseAccessService.requireReadableCourse(course.getId());
         }
         return new SetContext(flashcardSet, null, curriculumLessonId, course);
-    }
-
-    /** Gắn đúng lesson hoặc curriculum lesson vào batch staging. */
-    private void applyBatchTarget(FlashcardStagingBatch batch, SetContext context) {
-        batch.setLesson(context.lesson());
-        batch.setCurriculumLessonId(context.curriculumLessonId());
     }
 
     /** Kiểm tra staging card có đủ nội dung ở cả hai mặt. */

@@ -181,6 +181,7 @@ public class TestService {
         return requireCurrentTraineeAccess(testId, null);
     }
 
+    /** Xác thực quyền bắt đầu attempt trong context lớp cụ thể của học viên. */
     public UUID requireCurrentTraineeAccess(UUID testId, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         if (!isTrainee(actor)) {
@@ -200,6 +201,7 @@ public class TestService {
         requireAttemptAccess(testId, studentId, null);
     }
 
+    /** Xác thực quyền xem attempt trong context lớp cụ thể của học viên. */
     public void requireAttemptAccess(UUID testId, UUID studentId, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         Test test = testRepository.findById(testId)
@@ -230,6 +232,7 @@ public class TestService {
         return getTestById(id, null);
     }
 
+    /** Trả chi tiết đề theo context lớp để hỗ trợ quiz được kế thừa từ course. */
     public TestModel.Response getTestById(UUID id, UUID classId) {
 
         Test test = testRepository.findById(id)
@@ -249,12 +252,20 @@ public class TestService {
     public TestModel.AccessCodeVerifyResponse verifyAccessCode(
             UUID id,
             TestModel.AccessCodeVerifyRequest request) {
+        return verifyAccessCode(id, request, null);
+    }
+
+    /** Kiểm tra mã truy cập sau khi xác thực enrollment trong context lớp. */
+    public TestModel.AccessCodeVerifyResponse verifyAccessCode(
+            UUID id,
+            TestModel.AccessCodeVerifyRequest request,
+            UUID classId) {
 
         Test test = testRepository.findById(id)
                 .orElseThrow(() ->
                         new EntityNotFoundException(
                                 "Test not found"));
-        requireTestAccess(test, currentUserService.requireAuthenticatedUser());
+        requireTestAccess(test, currentUserService.requireAuthenticatedUser(), classId);
         test = ensureAccessCode(test);
 
         TestModel.AccessCodeVerifyResponse response =
@@ -511,6 +522,7 @@ public class TestService {
         requireTestAccess(test, actor, null);
     }
 
+    /** Cho phép course quiz dùng enrollment của đúng lớp đang học làm context truy cập. */
     private void requireTestAccess(Test test, UserAccount actor, UUID contextClassId) {
         if (isTrainee(actor)) {
             if (testRepository.existsAvailableForStudent(test.getId(), actor.getId())

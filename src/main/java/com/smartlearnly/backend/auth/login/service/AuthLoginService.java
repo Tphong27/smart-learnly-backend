@@ -33,7 +33,9 @@ public class AuthLoginService {
     // Xác thực email/mật khẩu, kiểm soát khóa tài khoản và phát session mới.
     @Transactional(noRollbackFor = BusinessException.class)
     public AuthSessionService.IssuedSession login(LoginRequest request, String deviceInfo, String ipAddress) {
-        String email = normalizeEmail(request.email());
+        String email = request.email() == null
+                ? null
+                : request.email().trim().toLowerCase(Locale.ROOT);
         UserAccount user = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email)
                 .orElseThrow(() -> {
                     recordLogin(null, email, ipAddress, deviceInfo, "email", "failed");
@@ -113,8 +115,4 @@ public class AuthLoginService {
         loginHistoryRepository.save(history);
     }
 
-    // Chuẩn hóa email trước khi truy vấn hoặc ghi lịch sử đăng nhập.
-    private String normalizeEmail(String email) {
-        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
-    }
 }

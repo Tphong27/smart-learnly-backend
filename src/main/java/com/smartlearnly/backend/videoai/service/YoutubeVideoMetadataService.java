@@ -17,8 +17,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
- * Lấy metadata của video từ YouTube và kiểm tra các điều kiện cần thiết trước
- * khi tạo bản tóm tắt.
+ * Lấy metadata của video từ YouTube và kiểm tra video có thể được xử lý.
  */
 @Slf4j
 @Service
@@ -28,11 +27,17 @@ public class YoutubeVideoMetadataService {
         private final RestClient youtubeClient;
         private final ObjectMapper youtubeJson = new ObjectMapper();
 
+        /**
+         * Khởi tạo service bằng cấu hình YouTube của ứng dụng.
+         */
         @Autowired
         public YoutubeVideoMetadataService(VideoAiProperties properties) {
                 this(properties, createYoutubeClient(properties));
         }
 
+        /**
+         * Khởi tạo service với HTTP client thay thế để kiểm thử độc lập.
+         */
         YoutubeVideoMetadataService(
                         VideoAiProperties properties,
                         RestClient youtubeClient) {
@@ -42,7 +47,7 @@ public class YoutubeVideoMetadataService {
 
         /**
          * Gọi YouTube Data API và trả metadata đã vượt qua các kiểm tra:
-         * video tồn tại, cho phép nhúng, có caption và không vượt quá thời lượng.
+         * video tồn tại, cho phép nhúng và không vượt quá thời lượng.
          */
         public YoutubeVideoMetadata fetchYoutubeVideoMetadata(String videoId) {
                 validateYoutubeMetadataConfiguration();
@@ -74,14 +79,6 @@ public class YoutubeVideoMetadataService {
                                 throw new BusinessException(
                                                 ErrorCode.BUSINESS_RULE_VIOLATION,
                                                 "This YouTube video cannot be embedded");
-                        }
-
-                        boolean captionsAvailable = "true".equalsIgnoreCase(
-                                        video.path("contentDetails").path("caption").asText());
-                        if (!captionsAvailable) {
-                                throw new BusinessException(
-                                                ErrorCode.BUSINESS_RULE_VIOLATION,
-                                                "This YouTube video does not have captions");
                         }
 
                         long durationSeconds = Duration.parse(
@@ -117,6 +114,9 @@ public class YoutubeVideoMetadataService {
                 }
         }
 
+        /**
+         * Kiểm tra tính năng metadata đã được bật và có YouTube API key.
+         */
         private void validateYoutubeMetadataConfiguration() {
                 if (!properties.isEnabled()
                                 || properties.getYoutubeApiKey() == null
@@ -127,6 +127,9 @@ public class YoutubeVideoMetadataService {
                 }
         }
 
+        /**
+         * Tạo YouTube Data API client với timeout đã chuẩn hóa.
+         */
         private static RestClient createYoutubeClient(VideoAiProperties properties) {
                 SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
                 Duration timeout = properties.getYoutubeApiTimeout();

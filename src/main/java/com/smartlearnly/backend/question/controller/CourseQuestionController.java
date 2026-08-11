@@ -5,9 +5,6 @@ import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.service.QuestionService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -37,13 +34,10 @@ import org.springframework.web.util.HtmlUtils;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')")
 @RequestMapping("/api/v1/admin/courses/{courseId}/questions")
-@Tag(name = "Admin Course Questions", description = "Course and module scoped question management APIs.")
-@SecurityRequirement(name = "bearerAuth")
 public class CourseQuestionController {
     private final QuestionService questionService;
 
     @GetMapping
-    @Operation(summary = "List course questions")
     public ApiResponse<PageResponse<QuestionModel.Response>> list(
             @PathVariable UUID courseId,
             @RequestParam(required = false) UUID moduleId,
@@ -62,7 +56,6 @@ public class CourseQuestionController {
     }
 
     @GetMapping("/{questionId}")
-    @Operation(summary = "Get course question details")
     public ApiResponse<QuestionModel.Response> get(
             @PathVariable UUID courseId,
             @PathVariable UUID questionId
@@ -72,7 +65,6 @@ public class CourseQuestionController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
-    @Operation(summary = "Create a course question")
     public ResponseEntity<ApiResponse<QuestionModel.Response>> create(
             @PathVariable UUID courseId,
             @Valid @RequestBody QuestionModel.CreateRequest request
@@ -85,7 +77,6 @@ public class CourseQuestionController {
 
     @PutMapping("/{questionId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
-    @Operation(summary = "Update a course question")
     public ApiResponse<QuestionModel.Response> update(
             @PathVariable UUID courseId,
             @PathVariable UUID questionId,
@@ -96,7 +87,6 @@ public class CourseQuestionController {
 
     @DeleteMapping("/{questionId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
-    @Operation(summary = "Archive a course question")
     public ApiResponse<Void> archive(
             @PathVariable UUID courseId,
             @PathVariable UUID questionId
@@ -107,7 +97,6 @@ public class CourseQuestionController {
 
     @PostMapping("/import")
     @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
-    @Operation(summary = "Import course questions")
     public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(
             @PathVariable UUID courseId,
             @Valid @RequestBody QuestionImportDtos.ImportBatchRequest request
@@ -116,7 +105,6 @@ public class CourseQuestionController {
     }
 
     @GetMapping(value = "/export", produces = "text/csv")
-    @Operation(summary = "Export course questions as CSV")
     public ResponseEntity<byte[]> export(
             @PathVariable UUID courseId,
             @RequestParam(required = false) UUID moduleId,

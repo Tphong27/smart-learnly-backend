@@ -121,7 +121,9 @@ public class PersonalFlashcardImportService {
         }
         flashcardCardRepository.saveAllAndFlush(entities);
         touchSet(flashcardSet);
-        return toDetail(flashcardSet, findActiveCards(setId));
+        return toDetail(
+                flashcardSet,
+                flashcardCardRepository.findPersonalActiveBySetIdOrderByOrderIndex(setId));
     }
 
     private PersonalGeneratedFlashcardsResponse toGeneratedResponse(
@@ -166,10 +168,6 @@ public class PersonalFlashcardImportService {
     private FlashcardSet requirePersonalSetForWrite(UserAccount actor, UUID setId) {
         return flashcardSetRepository.findPersonalForUpdateByIdAndOwnerId(setId, actor.getId())
                 .orElseThrow(this::setNotFound);
-    }
-
-    private List<FlashcardCard> findActiveCards(UUID setId) {
-        return flashcardCardRepository.findPersonalActiveBySetIdOrderByOrderIndex(setId);
     }
 
     private void applyCardValues(

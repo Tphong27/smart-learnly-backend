@@ -6,9 +6,6 @@ import com.smartlearnly.backend.commerce.entity.OrderStatus;
 import com.smartlearnly.backend.commerce.order.service.OrderService;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -27,14 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/orders")
-@Tag(name = "Orders", description = "Checkout and order APIs")
-@SecurityRequirement(name = "bearerAuth")
 public class OrderController {
     private final OrderService orderService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "List orders for admin monitoring")
     // Trả danh sách đơn có phân trang và bộ lọc cho màn hình giám sát của Admin/TMO.
     public ApiResponse<PageResponse<OrderSummaryResponse>> listOrders(
             @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -50,7 +44,6 @@ public class OrderController {
 
     @GetMapping("/{orderId}")
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
-    @Operation(summary = "Get order detail")
     // Trả chi tiết đơn nếu người gọi là chủ đơn hoặc có quyền quản trị.
     public ApiResponse<OrderResponse> getOrder(@PathVariable UUID orderId) {
         return ApiResponse.success("Order loaded successfully", orderService.getOrder(orderId));
@@ -58,7 +51,6 @@ public class OrderController {
 
     @PostMapping("/{orderId}/cancel")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Cancel a pending owned order")
     // Yêu cầu hủy một đơn đang chờ thanh toán thuộc về học viên hiện tại.
     public ApiResponse<OrderResponse> cancel(@PathVariable UUID orderId) {
         return ApiResponse.success("Order cancelled successfully", orderService.cancel(orderId));

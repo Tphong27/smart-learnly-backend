@@ -5,9 +5,6 @@ import com.smartlearnly.backend.payment.sepay.repository.SePayWebhookEventReposi
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -24,8 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/sepay-events")
-@Tag(name = "SePay Events", description = "Admin SePay webhook event monitoring")
-@SecurityRequirement(name = "bearerAuth")
 public class SePayAdminController {
     private static final int MAX_PAGE_SIZE = 100;
 
@@ -33,7 +28,6 @@ public class SePayAdminController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "List SePay webhook events")
     // Trả danh sách sự kiện webhook có phân trang để admin theo dõi trạng thái xử lý.
     public ApiResponse<PageResponse<SePayWebhookEventResponse>> listEvents(
             @RequestParam(defaultValue = "0") @Min(0) int page,

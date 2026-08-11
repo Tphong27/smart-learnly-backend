@@ -12,7 +12,11 @@ public class SubmissionStatusConverter
         if (attribute == null) {
             return null;
         }
-        return attribute.name().toLowerCase();
+        return switch (attribute) {
+            case PENDING -> "doing";
+            case LATE -> "expired";
+            default -> attribute.name().toLowerCase();
+        };
     }
 
     @Override

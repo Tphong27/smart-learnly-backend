@@ -22,7 +22,6 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,7 +47,11 @@ public class AuthPasswordService {
     @Transactional
     // Tạo reset token cho tài khoản tồn tại nhưng luôn giữ response chống dò email.
     public void forgotPassword(ForgotPasswordRequest request) {
-        findUserByEmail(request.email()).ifPresent(user -> {
+        String email = request.email() == null
+                ? null
+                : request.email().trim().toLowerCase(Locale.ROOT);
+
+        userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email).ifPresent(user -> {
             Instant now = Instant.now();
             passwordResetTokenRepository.markAllUnusedAsUsed(user.getId(), now);
 
@@ -128,11 +131,6 @@ public class AuthPasswordService {
         auditLogService.record(user.getEmail(), "PASSWORD_CHANGED", "USER", user.getId().toString());
     }
 
-    // Tìm tài khoản theo email đã chuẩn hóa mà không phân biệt hoa/thường.
-    private Optional<UserAccount> findUserByEmail(String email) {
-        return userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(normalizeEmail(email));
-    }
-
     // Sinh reset token ngẫu nhiên đủ mạnh để chỉ gửi cho người dùng.
     private String generateRawToken() {
         byte[] tokenBytes = new byte[32];
@@ -163,8 +161,4 @@ public class AuthPasswordService {
         }
     }
 
-    // Chuẩn hóa email để truy vấn auth ổn định.
-    private String normalizeEmail(String email) {
-        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
-    }
 }
