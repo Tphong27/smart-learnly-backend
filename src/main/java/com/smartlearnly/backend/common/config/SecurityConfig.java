@@ -119,7 +119,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/question-imports/**", "/api/v1/admin/question-answers/**")
                         .hasAnyRole("ADMIN", "SME")
                         // Admin course content management: allow ADMIN/TMO/SME/TRAINER to access course content authoring APIs
-                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/courses", "/api/v1/admin/courses/**")
+                        .requestMatchers("/api/v1/admin/courses", "/api/v1/admin/courses/**")
                         .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
                         // Course scoped question management: let the method-level @PreAuthorize enforce create/update/archive/import
                         // (ADMIN/SME) and AI drafts (ADMIN/SME); the filter only needs to admit the allowed roles.

@@ -79,7 +79,7 @@ public class AdminCourseController {
 
     // Cập nhật riêng các trường metadata được gửi trong yêu cầu PATCH.
     @PatchMapping("/{courseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
     @Operation(summary = "Update selected course fields")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,
