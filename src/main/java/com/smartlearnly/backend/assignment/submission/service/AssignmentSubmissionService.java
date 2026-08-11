@@ -57,8 +57,8 @@ public class AssignmentSubmissionService {
     public AssignmentSubmissionModel.Response startAssignment(
             AssignmentSubmissionModel.StartRequest request) {
         UUID studentId = required(request.getStudentId(), "studentId");
-        requireSelfIfTrainee(studentId);
         Assignment assignment = loadAssignment(required(request.getAssignmentId(), "assignmentId"));
+        requireTraineeAccess(assignment, studentId);
 
         AssignmentSubmission submission = repository
                 .findByAssignmentIdAndStudentId(
@@ -88,8 +88,8 @@ public class AssignmentSubmissionService {
     public AssignmentSubmissionModel.Response submitAssignment(
             AssignmentSubmissionModel.CreateRequest request) {
         UUID studentId = required(request.getStudentId(), "studentId");
-        requireSelfIfTrainee(studentId);
         Assignment assignment = loadAssignment(required(request.getAssignmentId(), "assignmentId"));
+        requireTraineeAccess(assignment, studentId);
         AssignmentSubmission submission = repository
                 .findByAssignmentIdAndStudentId(request.getAssignmentId(), request.getStudentId())
                 .orElseGet(AssignmentSubmission::new);
@@ -146,8 +146,8 @@ public class AssignmentSubmissionService {
             AssignmentSubmissionModel.UpdateRequest request) {
         AssignmentSubmission submission = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Submission not found"));
-        requireSelfIfTrainee(submission.getStudentId());
         Assignment assignment = loadAssignment(submission.getAssignmentId());
+        requireTraineeAccess(assignment, submission.getStudentId());
         assertAssignmentOpen(assignment);
 
         submission.setSubmissionText(request.getSubmissionText());
@@ -165,6 +165,8 @@ public class AssignmentSubmissionService {
             AssignmentSubmissionModel.GradeRequest request) {
         AssignmentSubmission submission = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Submission not found"));
+        Assignment assignment = loadAssignment(submission.getAssignmentId());
+        requireManageAccess(assignment, currentUserService.requireAuthenticatedUser());
 
         if (request.getScore() != null
                 && (request.getScore().compareTo(BigDecimal.ZERO) < 0
@@ -192,7 +194,6 @@ public class AssignmentSubmissionService {
         submission.setGradedAt(Instant.now());
 
         AssignmentSubmission updated = repository.save(submission);
-        Assignment assignment = assignmentRepository.findById(updated.getAssignmentId()).orElse(null);
         emitSubmissionGradedNotification(assignment, updated);
         return mapToResponse(updated);
     }
@@ -255,6 +256,7 @@ public class AssignmentSubmissionService {
         AssignmentSubmission submission = repository.findById(submissionId)
                 .orElseThrow(() -> new EntityNotFoundException("Submission not found"));
         Assignment assignment = loadAssignment(submission.getAssignmentId());
+        requireManageAccess(assignment, currentUserService.requireAuthenticatedUser());
         String feedback = assignmentAiDraftService.generateFeedback(
                 assignment.getDescription(),
                 assignment.getRubric(),
@@ -292,6 +294,8 @@ public class AssignmentSubmissionService {
     }
 
     public List<AssignmentSubmissionModel.Response> getSubmissionsByAssignment(UUID assignmentId) {
+        Assignment assignment = loadAssignment(assignmentId);
+        requireManageAccess(assignment, currentUserService.requireAuthenticatedUser());
         return repository.findByAssignmentId(assignmentId)
                 .stream()
                 .map(this::mapToResponse)
@@ -301,10 +305,39 @@ public class AssignmentSubmissionService {
     public AssignmentSubmissionModel.Response getSubmissionByAssignmentAndStudent(
             UUID assignmentId,
             UUID studentId) {
-        requireSelfIfTrainee(studentId);
+        Assignment assignment = loadAssignment(assignmentId);
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        if ("TRAINEE".equalsIgnoreCase(actor.getRole())) {
+            requireTraineeAccess(assignment, studentId);
+        } else {
+            requireManageAccess(assignment, actor);
+        }
         return repository.findByAssignmentIdAndStudentId(assignmentId, studentId)
                 .map(this::mapToResponse)
                 .orElse(null);
+    }
+
+    /** Kiểm tra người dùng hiện tại được đọc file submission hoặc file hướng dẫn đã tham chiếu. */
+    public void requireFileAccess(String fileUrl) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        AssignmentSubmission submission = repository.findByFileUrl(fileUrl).orElse(null);
+        if (submission != null) {
+            Assignment assignment = loadAssignment(submission.getAssignmentId());
+            if ("TRAINEE".equalsIgnoreCase(actor.getRole())) {
+                requireTraineeAccess(assignment, submission.getStudentId());
+            } else {
+                requireManageAccess(assignment, actor);
+            }
+            return;
+        }
+
+        Assignment assignment = assignmentRepository.findByInstructionFileUrl(fileUrl)
+                .orElseThrow(() -> new EntityNotFoundException("Submission file not found"));
+        if ("TRAINEE".equalsIgnoreCase(actor.getRole())) {
+            requireTraineeAccess(assignment, actor.getId());
+        } else {
+            requireManageAccess(assignment, actor);
+        }
     }
 
     private Assignment loadAssignment(UUID assignmentId) {
@@ -423,13 +456,35 @@ public class AssignmentSubmissionService {
         return value;
     }
 
-    private void requireSelfIfTrainee(UUID studentId) {
+    /** Chỉ cho học viên thao tác bài của chính mình trong lớp đã ghi danh. */
+    private void requireTraineeAccess(Assignment assignment, UUID studentId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        if ("TRAINEE".equalsIgnoreCase(actor.getRole())
-                && !actor.getId().equals(studentId)) {
+        boolean isAllowed = "TRAINEE".equalsIgnoreCase(actor.getRole())
+                && actor.getId().equals(studentId)
+                && assignmentRepository.existsAvailableForStudent(
+                        assignment.getId(),
+                        actor.getId());
+        if (!isAllowed) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN,
-                    "You can only access your own assignment submission");
+                    "You can only access assignments from your enrolled classes");
         }
+    }
+
+    /** Chỉ cho staff toàn cục hoặc trainer được phân công quản lý assignment. */
+    private void requireManageAccess(Assignment assignment, UserAccount actor) {
+        String role = actor.getRole();
+        if ("ADMIN".equalsIgnoreCase(role)
+                || "TMO".equalsIgnoreCase(role)
+                || "SME".equalsIgnoreCase(role)
+                || ("TRAINER".equalsIgnoreCase(role)
+                && assignmentRepository.existsManagedByStaff(
+                        assignment.getId(),
+                        actor.getId()))) {
+            return;
+        }
+        throw new BusinessException(
+                ErrorCode.FORBIDDEN,
+                "You cannot manage submissions outside your assigned classes");
     }
 }

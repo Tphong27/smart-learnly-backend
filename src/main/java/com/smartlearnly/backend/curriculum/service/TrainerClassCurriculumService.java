@@ -6,6 +6,8 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.curriculum.dto.ClassCurriculumEditorResponse;
 import com.smartlearnly.backend.curriculum.dto.LessonRequest;
 import com.smartlearnly.backend.curriculum.dto.LessonResourceRequest;
@@ -35,6 +37,8 @@ import com.smartlearnly.backend.curriculum.util.LessonResourceBuilder;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.lesson.service.QuizContentValidator;
+import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
+import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import com.smartlearnly.backend.videoai.service.VideoSummaryService;
 import java.time.Instant;
@@ -69,6 +73,8 @@ public class TrainerClassCurriculumService {
     private final QuizContentValidator quizContentValidator;
     private final VideoSummaryService videoSummaryService;
     private final CurriculumLessonTestLinkService lessonTestLinkService;
+    private final CourseRepository courseRepository;
+    private final FlashcardSetRepository flashcardSetRepository;
 
     @Transactional(readOnly = true)
     public ClassCurriculumEditorResponse getEditorCurriculum(UUID classId) {
@@ -201,6 +207,7 @@ public class TrainerClassCurriculumService {
                 .toList();
     }
 
+    /** Tạo lesson class-only và mọi dữ liệu nền bắt buộc trong cùng một transaction. */
     @Transactional
     public LessonResponse createLesson(UUID classId, UUID sectionId, LessonRequest request) {
         CurriculumVersion draft = requireEditableDraftForWrite(classId);
@@ -222,6 +229,7 @@ public class TrainerClassCurriculumService {
         applyLessonRequest(lesson, request, true);
         CurriculumLesson savedLesson = lessonRepository.save(lesson);
         lessonTestLinkService.ensureQuizTest(savedLesson);
+        ensureFlashcardSet(savedLesson, draft.getCourseId());
 
         savedEntry.setMaterializedLessonId(savedLesson.getId());
         entryRepository.save(savedEntry);
@@ -229,6 +237,7 @@ public class TrainerClassCurriculumService {
         return mapper.toLessonResponse(savedLesson);
     }
 
+    /** Cập nhật lesson và khởi tạo dữ liệu nền nếu lesson được đổi sang flashcard. */
     @Transactional
     public LessonResponse updateLesson(UUID classId, UUID lessonId, LessonRequest request) {
         CurriculumVersion draft = requireEditableDraftForWrite(classId);
@@ -239,6 +248,7 @@ public class TrainerClassCurriculumService {
         }
         CurriculumLesson saved = lessonRepository.save(lesson);
         lessonTestLinkService.ensureQuizTest(saved);
+        ensureFlashcardSet(saved, draft.getCourseId());
         syncEntrySortOrder(saved);
         return mapper.toLessonResponse(saved);
     }
@@ -560,5 +570,24 @@ public class TrainerClassCurriculumService {
                     .mapToObj(index -> LessonResourceBuilder.create(request.resources().get(index), index))
                     .forEach(lesson::addResource);
         }
+    }
+
+    /** Bảo đảm lesson flashcard có set ngay trong transaction tạo hoặc cập nhật lesson. */
+    private void ensureFlashcardSet(CurriculumLesson lesson, UUID courseId) {
+        if (lesson.getType() != LessonType.FLASHCARD
+                || flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId()).isPresent()) {
+            return;
+        }
+
+        Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
+        FlashcardSet flashcardSet = new FlashcardSet();
+        flashcardSet.setCurriculumLessonId(lesson.getId());
+        flashcardSet.setCourse(course);
+        flashcardSet.setCreatedBy(currentUserService.requireAuthenticatedUser());
+        flashcardSet.setTitle(lesson.getTitle());
+        flashcardSet.setIsPublic(false);
+        flashcardSet.setIsOfficial(false);
+        flashcardSetRepository.save(flashcardSet);
     }
 }

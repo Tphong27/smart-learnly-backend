@@ -5,8 +5,6 @@ import com.smartlearnly.backend.lessonprogress.trainee.dto.LessonProgressRespons
 import com.smartlearnly.backend.lessonprogress.trainee.dto.TraineeProgressResponse;
 import com.smartlearnly.backend.lessonprogress.trainee.dto.UpdateLessonProgressRequest;
 import com.smartlearnly.backend.lessonprogress.trainee.service.TraineeProgressService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -22,14 +20,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 @RestController
 @RequestMapping("/api/v1/learning/progress")
 @RequiredArgsConstructor
-@Tag(name = "Trainee Progress", description = "Progress APIs for trainee learning")
 public class TraineeProgressController {
     private final TraineeProgressService traineeProgressService;
 
     /** Trả về tổng quan tiến độ của chính học viên đang đăng nhập. */
     @GetMapping("/my")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Get authenticated trainee learning progress")
     public ApiResponse<TraineeProgressResponse> getMyProgress() {
         return ApiResponse.success(
                 "Trainee progress loaded successfully",
@@ -39,7 +35,6 @@ public class TraineeProgressController {
     /** Cập nhật trạng thái hoàn thành của một bài học trong khóa online hoặc lớp học. */
     @PatchMapping("/lessons/{lessonId}")
     @PreAuthorize("hasRole('TRAINEE')")
-    @Operation(summary = "Mark lesson, quiz, or flashcard as completed/incomplete")
     public ApiResponse<LessonProgressResponse> updateLessonProgress(
             @PathVariable UUID lessonId,
             @RequestParam(required = false) UUID courseId,

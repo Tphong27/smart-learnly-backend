@@ -4,8 +4,6 @@ import com.smartlearnly.backend.classroom.dto.ClassResponse;
 import com.smartlearnly.backend.classroom.trainer.service.ClassTrainerService;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.UUID;
@@ -22,14 +20,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1")
-@SecurityRequirement(name = "bearerAuth")
 public class TrainerClassController {
     private final ClassTrainerService classTrainerService;
 
     // Liệt kê các lớp đã phân công cho giảng viên đang đăng nhập.
     @GetMapping("/trainer/classes")
     @PreAuthorize("hasRole('TRAINER')")
-    @Operation(summary = "List classes assigned to current trainer", tags = { "Trainer Classes" })
     public ApiResponse<PageResponse<ClassResponse>> listMyAssignedClasses(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword,
@@ -44,7 +40,6 @@ public class TrainerClassController {
     // Trả chi tiết lớp chỉ khi lớp đó được phân công cho giảng viên hiện tại.
     @GetMapping("/trainer/classes/{classId}")
     @PreAuthorize("hasRole('TRAINER')")
-    @Operation(summary = "Get assigned class detail", tags = { "Trainer Classes" })
     public ApiResponse<ClassResponse> getMyAssignedClassDetail(@PathVariable UUID classId) {
         return ApiResponse.success(
                 "Assigned class loaded successfully",

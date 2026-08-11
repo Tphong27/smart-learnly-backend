@@ -421,7 +421,8 @@ public class FlashcardStagingGenerationService {
         }
         FlashcardStagingBatch batch = new FlashcardStagingBatch();
         batch.setFlashcardSet(context.flashcardSet());
-        applyBatchTarget(batch, context);
+        batch.setLesson(context.lesson());
+        batch.setCurriculumLessonId(context.curriculumLessonId());
         batch.setCourse(context.course());
         batch.setCreatedBy(actor);
         batch.setSourceType(sourceType);
@@ -650,12 +651,6 @@ public class FlashcardStagingGenerationService {
             courseAccessService.requireReadableCourse(course.getId());
         }
         return new SetContext(flashcardSet, null, curriculumLessonId, course);
-    }
-
-    /** Gắn đúng lesson hoặc curriculum lesson vào batch staging mới. */
-    private void applyBatchTarget(FlashcardStagingBatch batch, SetContext context) {
-        batch.setLesson(context.lesson());
-        batch.setCurriculumLessonId(context.curriculumLessonId());
     }
 
     /** Kiểm tra mỗi card sinh ra có tối thiểu một nội dung ở cả hai mặt. */

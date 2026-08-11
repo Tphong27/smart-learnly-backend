@@ -53,22 +53,18 @@ public interface PaymentTransactionRepository
               )
               and (
                   cast(:status as text) is null
-                  or cast(
-                      transaction_record.status as text
-                  ) = cast(:status as text)
+                  or transaction_record.status = cast(:status as public.tx_status)
               )
               and (
                   cast(:paymentGateway as text) is null
-                  or cast(
-                      transaction_record.payment_gateway as text
-                  ) = cast(:paymentGateway as text)
+                  or transaction_record.payment_gateway = cast(:paymentGateway as public.payment_gw)
               )
               and (
                   cast(:currency as text) is null
                   or upper(transaction_record.currency)
                       = upper(cast(:currency as text))
               )
-            order by transaction_record.created_at desc
+            order by transaction_record.created_at desc, transaction_record.id desc
             """, countQuery = """
             select count(*)
             from public.transactions transaction_record
@@ -100,15 +96,11 @@ public interface PaymentTransactionRepository
               )
               and (
                   cast(:status as text) is null
-                  or cast(
-                      transaction_record.status as text
-                  ) = cast(:status as text)
+                  or transaction_record.status = cast(:status as public.tx_status)
               )
               and (
                   cast(:paymentGateway as text) is null
-                  or cast(
-                      transaction_record.payment_gateway as text
-                  ) = cast(:paymentGateway as text)
+                  or transaction_record.payment_gateway = cast(:paymentGateway as public.payment_gw)
               )
               and (
                   cast(:currency as text) is null
@@ -154,22 +146,18 @@ public interface PaymentTransactionRepository
               )
               and (
                   cast(:status as text) is null
-                  or cast(
-                      transaction_record.status as text
-                  ) = cast(:status as text)
+                  or transaction_record.status = cast(:status as public.tx_status)
               )
               and (
                   cast(:paymentGateway as text) is null
-                  or cast(
-                      transaction_record.payment_gateway as text
-                  ) = cast(:paymentGateway as text)
+                  or transaction_record.payment_gateway = cast(:paymentGateway as public.payment_gw)
               )
               and (
                   cast(:currency as text) is null
                   or upper(transaction_record.currency)
                       = upper(cast(:currency as text))
               )
-            order by transaction_record.created_at desc
+            order by transaction_record.created_at desc, transaction_record.id desc
             """, countQuery = """
             select count(*)
             from public.transactions transaction_record
@@ -200,15 +188,11 @@ public interface PaymentTransactionRepository
               )
               and (
                   cast(:status as text) is null
-                  or cast(
-                      transaction_record.status as text
-                  ) = cast(:status as text)
+                  or transaction_record.status = cast(:status as public.tx_status)
               )
               and (
                   cast(:paymentGateway as text) is null
-                  or cast(
-                      transaction_record.payment_gateway as text
-                  ) = cast(:paymentGateway as text)
+                  or transaction_record.payment_gateway = cast(:paymentGateway as public.payment_gw)
               )
               and (
                   cast(:currency as text) is null
@@ -261,7 +245,7 @@ public interface PaymentTransactionRepository
             select transaction_record.*
             from public.transactions transaction_record
             where transaction_record.order_id = :orderId
-              and cast(transaction_record.status as text) = cast(:status as text)
+              and transaction_record.status = cast(:status as public.tx_status)
             """, nativeQuery = true)
     List<PaymentTransaction> findByOrderIdAndStatus(
             @Param("orderId") UUID orderId,

@@ -1,12 +1,18 @@
 
 package com.smartlearnly.backend.test.attempt.service;
 
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.test.attempt.dto.StudentTestAnswerModel;
+import com.smartlearnly.backend.test.definition.service.TestService;
+import com.smartlearnly.backend.test.entity.AttemptStatus;
 import com.smartlearnly.backend.test.entity.StudentTestAnswer;
 import com.smartlearnly.backend.test.entity.TestAttempt;
+import com.smartlearnly.backend.test.entity.TestQuestion.TestQuestionId;
 import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
 import com.smartlearnly.backend.test.repository.TestAttemptRepository;
+import com.smartlearnly.backend.test.repository.TestQuestionRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -22,6 +28,8 @@ public class StudentTestAnswerService {
     private final StudentTestAnswerRepository repository;
     private final TestAttemptRepository attemptRepository;
     private final QuestionAnswerRepository questionAnswerRepository;
+    private final TestQuestionRepository testQuestionRepository;
+    private final TestService testService;
 
     /** Lưu hoặc cập nhật câu trả lời đang làm của học viên khi attempt còn hiệu lực. */
     public StudentTestAnswerModel.Response saveStudentAnswer(
@@ -31,8 +39,30 @@ public class StudentTestAnswerService {
                 .orElseThrow(() ->
                         new EntityNotFoundException("Attempt not found"));
 
+        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
+
         if (attempt.getEndTime() != null && Instant.now().isAfter(attempt.getEndTime())) {
             throw new IllegalStateException("Attempt has expired");
+        }
+        if (attempt.getStatus() != null
+                && attempt.getStatus() != AttemptStatus.DOING
+                && attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Attempt is no longer accepting answers");
+        }
+        if (!testQuestionRepository.existsById(
+                new TestQuestionId(attempt.getTestId(), request.getQuestionId()))) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Question does not belong to this test");
+        }
+        if (request.getSelectedAnswerId() != null) {
+            questionAnswerRepository.findById(request.getSelectedAnswerId())
+                    .filter(answer -> request.getQuestionId().equals(answer.getQuestionId()))
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.INVALID_REQUEST,
+                            "Selected answer does not belong to this question"));
         }
 
         StudentTestAnswer entity = repository
@@ -62,6 +92,9 @@ public class StudentTestAnswerService {
                         .orElseThrow(() ->
                                 new EntityNotFoundException(
                                         "Student answer not found"));
+        TestAttempt attempt = attemptRepository.findById(entity.getAttemptId())
+                .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
+        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
 
         entity.setIsCorrect(
                 request.getIsCorrect());
@@ -81,6 +114,10 @@ public class StudentTestAnswerService {
     /** Trả các câu trả lời đã lưu trong một attempt để người học hoặc giảng viên xem lại. */
     public List<StudentTestAnswerModel.Response>
     getAnswersByAttempt(UUID attemptId) {
+
+        TestAttempt attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
+        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
 
         List<StudentTestAnswer> entities =
                 repository.findByAttemptId(attemptId);

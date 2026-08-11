@@ -69,7 +69,10 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
                 : List.of();
         List<DocumentImage> renderedPageInputs = selectableText.length() < MIN_CONTENT_LENGTH
                 && SOURCE_TYPE_PDF.equalsIgnoreCase(normalizeNullable(sourceType))
-                ? validPageImages(request == null ? List.of() : request.renderedPageImages())
+                ? validImages(
+                        request == null ? List.of() : request.renderedPageImages(),
+                        properties.getMaxRenderedPdfPages(),
+                        properties.getMaxRenderedPageImageSize().toBytes())
                 : List.of();
         try {
             if (selectableText.length() < MIN_CONTENT_LENGTH && imageInputs.isEmpty() && renderedPageInputs.isEmpty()) {
@@ -101,7 +104,10 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
             }
             mergedContent = validateMergedContent(mergedContent, sourceType);
             geminiCalls += 1;
-            String outputText = sendGeminiInput(buildGenerationInput(request, mergedContent), "flashcard document generation");
+            String outputText = sendGeminiInput(
+                    buildGenerationInput(request, mergedContent),
+                    "flashcard document generation",
+                    flashcardResponseSchema());
             return parseGenerationOutput(outputText, request == null ? 0 : request.desiredCount(), language);
         }
         finally {
@@ -112,7 +118,7 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
                     imageInputs.size(),
                     renderedPageInputs.size(),
                     geminiCalls,
-                    elapsedMillis(startedAtNanos)
+                    (System.nanoTime() - startedAtNanos) / 1_000_000L
             );
         }
     }
@@ -150,16 +156,15 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         if (imageInputs.isEmpty()) {
             return List.of();
         }
-        String outputText = sendGeminiInput(buildImageInsightInput(imageInputs, prompt, itemLabel), operation);
+        String outputText = sendGeminiInput(
+                buildImageInsightInput(imageInputs, prompt, itemLabel),
+                operation,
+                imageInsightResponseSchema());
         return parseImageInsightOutput(outputText);
     }
 
     private List<DocumentImage> validImages(List<DocumentImage> images) {
         return validImages(images, properties.getMaxEmbeddedImages(), properties.getMaxEmbeddedImageSize().toBytes());
-    }
-
-    private List<DocumentImage> validPageImages(List<DocumentImage> images) {
-        return validImages(images, properties.getMaxRenderedPdfPages(), properties.getMaxRenderedPageImageSize().toBytes());
     }
 
     private List<DocumentImage> validImages(List<DocumentImage> images, int maxImages, long maxImageBytes) {
@@ -316,12 +321,19 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
     }
 
     String sendGeminiInput(List<Map<String, Object>> input, String operation) {
+        return sendGeminiInput(input, operation, null);
+    }
+
+    private String sendGeminiInput(
+            List<Map<String, Object>> input,
+            String operation,
+            Map<String, Object> responseSchema) {
         RestClientException lastException = null;
         List<String> models = candidateModels();
         for (int index = 0; index < models.size(); index++) {
             String model = models.get(index);
             try {
-                String output = sendGeminiInputOnce(input, model, operation);
+                String output = sendGeminiInputOnce(input, model, operation, responseSchema);
                 if (index > 0) {
                     log.info(
                             "Gemini flashcard document {} recovered with fallback model={}",
@@ -366,7 +378,8 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
     private String sendGeminiInputOnce(
             List<Map<String, Object>> input,
             String model,
-            String operation) {
+            String operation,
+            Map<String, Object> responseSchema) {
         try {
             String response = restClient
                     .post()
@@ -374,7 +387,7 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
                     .contentType(MediaType.APPLICATION_JSON)
                     .header("x-goog-api-key", properties.getApiKey())
                     .header("Api-Revision", "2026-05-20")
-                    .body(buildRequestBody(input, model))
+                    .body(buildRequestBody(input, model, responseSchema))
                     .retrieve()
                     .body(String.class);
             String outputText = extractOutputText(objectMapper.readTree(response == null ? "{}" : response));
@@ -398,10 +411,16 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         }
     }
 
-    private Map<String, Object> buildRequestBody(List<Map<String, Object>> input, String model) {
+    private Map<String, Object> buildRequestBody(
+            List<Map<String, Object>> input,
+            String model,
+            Map<String, Object> responseSchema) {
         Map<String, Object> responseFormat = new LinkedHashMap<>();
         responseFormat.put("type", "text");
         responseFormat.put("mime_type", "application/json");
+        if (responseSchema != null && !responseSchema.isEmpty()) {
+            responseFormat.put("schema", responseSchema);
+        }
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
@@ -409,6 +428,51 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         body.put("response_format", responseFormat);
         body.put("store", false);
         return body;
+    }
+
+    private Map<String, Object> flashcardResponseSchema() {
+        Map<String, Object> nullableString = Map.of("type", List.of("string", "null"));
+        Map<String, Object> card = new LinkedHashMap<>();
+        card.put("type", "object");
+        card.put("properties", Map.of(
+                "frontText", Map.of("type", "string"),
+                "backText", Map.of("type", "string"),
+                "hint", nullableString,
+                "explanation", nullableString,
+                "sourceExcerpt", nullableString));
+        card.put("required", List.of("frontText", "backText", "hint", "explanation", "sourceExcerpt"));
+        card.put("additionalProperties", false);
+
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        schema.put("properties", Map.of(
+                "cards", Map.of(
+                        "type", "array",
+                        "items", card)));
+        schema.put("required", List.of("cards"));
+        schema.put("additionalProperties", false);
+        return schema;
+    }
+
+    private Map<String, Object> imageInsightResponseSchema() {
+        Map<String, Object> image = new LinkedHashMap<>();
+        image.put("type", "object");
+        image.put("properties", Map.of(
+                "fileName", Map.of("type", "string"),
+                "ocrText", Map.of("type", "string"),
+                "description", Map.of("type", "string")));
+        image.put("required", List.of("fileName", "ocrText", "description"));
+        image.put("additionalProperties", false);
+
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        schema.put("properties", Map.of(
+                "images", Map.of(
+                        "type", "array",
+                        "items", image)));
+        schema.put("required", List.of("images"));
+        schema.put("additionalProperties", false);
+        return schema;
     }
 
     private List<String> candidateModels() {
@@ -731,16 +795,65 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         if (direct != null) return direct;
         direct = text(root, "outputText");
         if (direct != null) return direct;
+        String fromSteps = extractLastModelOutput(root == null ? null : root.get("steps"));
+        if (fromSteps != null) return fromSteps;
         JsonNode output = root.get("output");
-        String fromOutput = findTextValue(output);
+        String fromOutput = joinTextBlocks(output);
         if (fromOutput != null) return fromOutput;
         JsonNode candidates = root.get("candidates");
-        String fromCandidates = findTextValue(candidates);
+        String fromCandidates = joinTextBlocks(candidates);
         if (fromCandidates != null) return fromCandidates;
-        JsonNode steps = root.get("steps");
-        String fromSteps = findTextValue(steps);
-        if (fromSteps != null) return fromSteps;
         return findTextValue(root);
+    }
+
+    private String extractLastModelOutput(JsonNode steps) {
+        if (steps == null || !steps.isArray()) {
+            return null;
+        }
+        for (int index = steps.size() - 1; index >= 0; index -= 1) {
+            JsonNode step = steps.get(index);
+            if (!"model_output".equals(text(step, "type"))) {
+                continue;
+            }
+            String output = joinTextBlocks(step.get("content"));
+            if (output != null) {
+                return output;
+            }
+        }
+        return null;
+    }
+
+    private String joinTextBlocks(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        List<String> values = new ArrayList<>();
+        collectTextBlocks(node, values);
+        String joined = String.join("", values).trim();
+        return joined.isBlank() ? null : joined;
+    }
+
+    private void collectTextBlocks(JsonNode node, List<String> values) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+        if (node.isObject()) {
+            String value = text(node, "text");
+            if (value != null && !value.isBlank()) {
+                values.add(value);
+                return;
+            }
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                collectTextBlocks(fields.next().getValue(), values);
+            }
+            return;
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                collectTextBlocks(child, values);
+            }
+        }
     }
 
     private String findTextValue(JsonNode node) {
@@ -773,7 +886,7 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
     private String stripJsonFence(String value) {
         String trimmed = value.trim();
         if (trimmed.startsWith("```")) {
-            trimmed = trimmed.replaceFirst("^```(?:json)?", "").trim();
+            trimmed = trimmed.replaceFirst("(?i)^```(?:json)?", "").trim();
             if (trimmed.endsWith("```")) {
                 trimmed = trimmed.substring(0, trimmed.length() - 3).trim();
             }
@@ -843,10 +956,6 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
             return normalized;
         }
         return normalized.substring(0, maxLength) + "...<truncated>";
-    }
-
-    private long elapsedMillis(long startedAtNanos) {
-        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 
     private record GeminiCardsPayload(List<GeminiCardPayload> cards) {

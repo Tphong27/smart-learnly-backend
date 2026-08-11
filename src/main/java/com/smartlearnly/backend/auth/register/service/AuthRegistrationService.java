@@ -1,11 +1,11 @@
-package com.smartlearnly.backend.auth.registration.service;
+package com.smartlearnly.backend.auth.register.service;
 
 import com.smartlearnly.backend.auth.config.AuthProperties;
-import com.smartlearnly.backend.auth.registration.dto.RegisterRequest;
-import com.smartlearnly.backend.auth.registration.dto.ResendVerificationRequest;
-import com.smartlearnly.backend.auth.registration.dto.VerifyEmailRequest;
-import com.smartlearnly.backend.auth.registration.entity.OtpVerification;
-import com.smartlearnly.backend.auth.registration.repository.OtpVerificationRepository;
+import com.smartlearnly.backend.auth.register.dto.RegisterRequest;
+import com.smartlearnly.backend.auth.register.dto.ResendVerificationRequest;
+import com.smartlearnly.backend.auth.register.dto.VerifyEmailRequest;
+import com.smartlearnly.backend.auth.register.entity.OtpVerification;
+import com.smartlearnly.backend.auth.register.repository.OtpVerificationRepository;
 import com.smartlearnly.backend.auth.service.EmailService;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
@@ -15,7 +15,6 @@ import com.smartlearnly.backend.user.repository.UserRepository;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Locale;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,7 +64,7 @@ public class AuthRegistrationService {
     @Transactional(noRollbackFor = BusinessException.class)
     // Gửi lại OTP cho tài khoản chưa xác thực mà không tiết lộ email không tồn tại.
     public void resendVerification(ResendVerificationRequest request) {
-        findUserByEmail(request.email())
+        userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(normalizeEmail(request.email()))
                 .filter(user -> !user.isEmailVerified())
                 .ifPresent(this::issueVerificationOtp);
     }
@@ -124,7 +123,7 @@ public class AuthRegistrationService {
                 OtpVerification.EMAIL_VERIFY_PURPOSE,
                 now);
 
-        String otpCode = generateOtpCode();
+        String otpCode = "%06d".formatted(secureRandom.nextInt(1_000_000));;
         OtpVerification otp = new OtpVerification();
         otp.setUser(user);
         otp.setEmail(user.getEmail());
@@ -137,16 +136,6 @@ public class AuthRegistrationService {
 
         logDebugToken(user.getEmail(), otpCode, otp.getExpiresAt());
         emailService.sendVerificationOtp(user.getEmail(), user.getFullName(), otpCode);
-    }
-
-    // Tìm tài khoản theo email đã chuẩn hóa để giữ response chống enumeration.
-    private Optional<UserAccount> findUserByEmail(String email) {
-        return userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(normalizeEmail(email));
-    }
-
-    // Sinh OTP sáu chữ số bằng bộ sinh số ngẫu nhiên bảo mật.
-    private String generateOtpCode() {
-        return "%06d".formatted(secureRandom.nextInt(1_000_000));
     }
 
     // Chỉ ghi OTP rõ trong môi trường debug được cấu hình tường minh.

@@ -77,8 +77,8 @@ public class MasterCurriculumAccessService {
         return section;
     }
 
-    // Tìm section thuộc master curriculum và kiểm tra quyền cập nhật khóa học sở hữu nó.
-    CurriculumSection findUpdatableSection(UUID sectionId) {
+    /** Tìm section thuộc master curriculum và kiểm tra quyền cập nhật khóa học sở hữu nó. */
+    public CurriculumSection findUpdatableSection(UUID sectionId) {
         CurriculumSection section = sectionRepository.findById(sectionId)
                 .map(this::requireMasterSection)
                 .orElseGet(() -> findUpdatableModuleSnapshot(sectionId));

@@ -11,8 +11,6 @@ import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/settings")
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin System Settings", description = "Admin-only email configuration.")
 public class EmailSettingsController {
     private final SystemSettingsService settingsService;
     private final EmailService emailService;
@@ -38,7 +35,6 @@ public class EmailSettingsController {
 
     // Trả cấu hình email hiện tại và chỉ cho biết API key có tồn tại hay không.
     @GetMapping("/email")
-    @Operation(summary = "Get current email settings (secret masked)")
     public ApiResponse<EmailSettingsResponse> getEmailSettings() {
         EmailSettingsResponse response = new EmailSettingsResponse(
                 settingsService.hasValue(SettingKeys.EMAIL_API_KEY),
@@ -51,7 +47,6 @@ public class EmailSettingsController {
     // Lưu cấu hình gửi email, bảo vệ API key và ghi audit người thay đổi.
     @PutMapping("/email")
     @Transactional
-    @Operation(summary = "Update email settings")
     public ApiResponse<EmailSettingsResponse> updateEmailSettings(
             @Valid @RequestBody EmailSettingsUpdateRequest request) {
         UUID actor = support.currentUserId();
@@ -66,7 +61,6 @@ public class EmailSettingsController {
 
     // Gửi email thử tới địa chỉ request hoặc email của admin hiện tại.
     @PostMapping("/email/test")
-    @Operation(summary = "Send a test email using the active configuration")
     public ApiResponse<Void> testEmail(@Valid @RequestBody(required = false) TestEmailRequest request) {
         String recipient = request != null && request.to() != null && !request.to().isBlank()
                 ? request.to()

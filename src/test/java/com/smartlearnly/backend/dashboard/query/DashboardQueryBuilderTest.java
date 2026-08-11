@@ -11,8 +11,8 @@ class DashboardQueryBuilderTest {
     private final DashboardQueryBuilder builder = new DashboardQueryBuilder();
 
     @Test
-    void buildUserStatsQuery_withAllColumns_includesAllConditions() {
-        String sql = builder.buildUserStatsQuery(true, true, true);
+    void buildUserStatsQuery_includesAllConditions() {
+        String sql = builder.buildUserStatsQuery();
 
         assertThat(sql).contains("COUNT(*) FILTER (WHERE");
         assertThat(sql).contains("total");
@@ -52,6 +52,17 @@ class DashboardQueryBuilderTest {
     void buildContentStatsQuery_includesModulesAndLessons() {
         String sql = builder.buildContentStatsQuery();
 
+        assertThat(sql).contains("WITH module_stats AS");
+        assertThat(sql).contains("lesson_stats AS");
+        assertThat(sql).contains("current_curriculum_versions AS");
+        assertThat(sql).contains("public.curriculum_lessons");
+        assertThat(sql).contains("public.curriculum_versions");
+        assertThat(sql).contains("SELECT DISTINCT ON");
+        assertThat(sql).contains("curriculum_version.scope");
+        assertThat(sql).contains("curriculum_version.class_id");
+        assertThat(sql).contains("curriculum_version.version_number DESC");
+        assertThat(sql).contains("curriculum_version.status <> 'archived'");
+        assertThat(sql).contains("lesson.deleted_at IS NULL");
         assertThat(sql).contains("modules");
         assertThat(sql).contains("lessons");
         assertThat(sql).contains("published_lessons");
@@ -76,16 +87,6 @@ class DashboardQueryBuilderTest {
     }
 
     @Test
-    void buildColumnExistsQuery_containsCorrectSchema() {
-        String sql = builder.buildColumnExistsQuery("users", "status");
-
-        assertThat(sql).contains("information_schema.columns");
-        assertThat(sql).contains("table_schema = 'public'");
-        assertThat(sql).contains("table_name = :tableName");
-        assertThat(sql).contains("column_name = :columnName");
-    }
-
-    @Test
     void buildTimeRangeParams_addsFromAndTo() {
         Instant from = Instant.parse("2024-01-01T00:00:00Z");
         Instant to = Instant.parse("2024-12-31T23:59:59Z");
@@ -96,11 +97,4 @@ class DashboardQueryBuilderTest {
         assertThat(params.getValue("to")).isNotNull();
     }
 
-    @Test
-    void buildColumnCheckParams_returnsMapWithKeys() {
-        var params = builder.buildColumnCheckParams("users", "status");
-
-        assertThat(params).containsEntry("tableName", "users");
-        assertThat(params).containsEntry("columnName", "status");
-    }
 }

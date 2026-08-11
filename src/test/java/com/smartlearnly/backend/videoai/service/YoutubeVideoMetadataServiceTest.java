@@ -106,29 +106,16 @@ class YoutubeVideoMetadataServiceTest {
         }
 
         @Test
-        void fetchYoutubeVideoMetadata_throwsBusinessRuleViolation_whenVideoHasNoCaptions() {
-                // GIVEN: Video cho phép embed nhưng caption bằng false.
+        void fetchYoutubeVideoMetadata_returnsMetadata_whenVideoHasNoCaptions() {
+                // GIVEN: Video cho phép embed, có thời lượng hợp lệ nhưng không có caption.
                 expectMetadata("PT17M1S", "false", true);
 
-                /*
-                 * DEBUG FLOW:
-                 * 1. Dòng 73: embeddable=true nên !embeddable=false, tiếp tục.
-                 * 2. Dòng 79-80 đọc caption="false";
-                 * "true".equalsIgnoreCase("false")=false.
-                 * 3. Dòng 81: !captionsAvailable=true.
-                 * 4. Dòng 82 ném BUSINESS_RULE_VIOLATION với message thiếu captions.
-                 * 5. Duration dòng 87 không chạy; catchThrowable bắt BusinessException.
-                 */
-                // WHEN: Service kiểm tra caption.
-                Throwable actualException = catchThrowable(
-                                () -> service.fetchYoutubeVideoMetadata(VIDEO_ID));
+                // WHEN: Service kiểm tra metadata của video.
+                YoutubeVideoMetadata actualMetadata =
+                                service.fetchYoutubeVideoMetadata(VIDEO_ID);
 
-                // THEN: Video thiếu caption phải bị từ chối.
-                assertErrorCode(
-                                actualException,
-                                ErrorCode.BUSINESS_RULE_VIOLATION);
-                assertThat(actualException)
-                                .hasMessage("This YouTube video does not have captions");
+                // THEN: Gemini trực tiếp vẫn có thể xử lý audio/video không có caption.
+                assertThat(actualMetadata.durationSeconds()).isEqualTo(1_021);
                 youtubeServer.verify();
         }
 

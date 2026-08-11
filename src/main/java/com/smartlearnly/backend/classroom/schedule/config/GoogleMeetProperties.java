@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.integrations.google-meet")
 public class GoogleMeetProperties {
     private boolean enabled = false;
+    private String clientId;
+    private String clientSecret;
     private String refreshToken;
     private String tokenBaseUrl = "https://oauth2.googleapis.com";
     private String apiBaseUrl = "https://meet.googleapis.com";

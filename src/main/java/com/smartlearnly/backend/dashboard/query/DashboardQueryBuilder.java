@@ -3,7 +3,6 @@ package com.smartlearnly.backend.dashboard.query;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Map;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.stereotype.Component;
 
@@ -16,37 +15,27 @@ public class DashboardQueryBuilder {
     private static final String USERS_TABLE = "public.users";
     private static final String COURSES_TABLE = "public.courses";
     private static final String CLASSES_TABLE = "public.classes";
-    private static final String LESSONS_TABLE = "public.lessons";
+    private static final String CURRICULUM_LESSONS_TABLE = "public.curriculum_lessons";
+    private static final String CURRICULUM_VERSIONS_TABLE = "public.curriculum_versions";
     private static final String MODULES_TABLE = "public.modules";
     private static final String QUESTIONS_TABLE = "public.questions";
 
     /**
      * Builds the SQL query for user statistics.
      */
-    public String buildUserStatsQuery(boolean hasStatus, boolean hasDeletedAt, boolean hasCreatedAt) {
-        String liveCondition = hasDeletedAt ? "deleted_at IS NULL" : "TRUE";
-        String activeCondition = hasStatus ? liveCondition + " AND status = 'active'" : "FALSE";
-        String pendingCondition = hasStatus ? liveCondition + " AND status = 'pending_verify'" : "FALSE";
-        String inactiveCondition = hasStatus ? liveCondition + " AND status = 'inactive'" : "FALSE";
-        String bannedCondition = hasStatus ? liveCondition + " AND status = 'banned'" : "FALSE";
-        String newCondition = hasCreatedAt ? liveCondition + " AND created_at BETWEEN :from AND :to" : "FALSE";
-
+    public String buildUserStatsQuery() {
         return """
                 SELECT
-                    COUNT(*) FILTER (WHERE %s) AS total,
-                    COUNT(*) FILTER (WHERE %s) AS active,
-                    COUNT(*) FILTER (WHERE %s) AS pending_verify,
-                    COUNT(*) FILTER (WHERE %s) AS inactive,
-                    COUNT(*) FILTER (WHERE %s) AS banned,
-                    COUNT(*) FILTER (WHERE %s) AS new_in_range
+                    COUNT(*) FILTER (WHERE deleted_at IS NULL) AS total,
+                    COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'active') AS active,
+                    COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'pending_verify') AS pending_verify,
+                    COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'inactive') AS inactive,
+                    COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'banned') AS banned,
+                    COUNT(*) FILTER (
+                        WHERE deleted_at IS NULL AND created_at BETWEEN :from AND :to
+                    ) AS new_in_range
                 FROM %s
                 """.formatted(
-                        liveCondition,
-                        activeCondition,
-                        pendingCondition,
-                        inactiveCondition,
-                        bannedCondition,
-                        newCondition,
                         USERS_TABLE);
     }
 
@@ -86,31 +75,66 @@ public class DashboardQueryBuilder {
      */
     public String buildContentStatsQuery() {
         return """
+                WITH module_stats AS (
+                    SELECT
+                        COUNT(*) AS modules,
+                        COUNT(*) FILTER (
+                            WHERE module.created_at BETWEEN :from AND :to
+                        ) AS new_modules_in_range
+                    FROM %s module
+                    JOIN %s course ON course.id = module.course_id
+                    WHERE course.deleted_at IS NULL
+                      AND module.is_system = false
+                ),
+                current_curriculum_versions AS (
+                    SELECT DISTINCT ON (
+                        curriculum_version.course_id,
+                        curriculum_version.scope,
+                        curriculum_version.class_id
+                    )
+                        curriculum_version.id,
+                        curriculum_version.status
+                    FROM %s curriculum_version
+                    JOIN %s course ON course.id = curriculum_version.course_id
+                    WHERE course.deleted_at IS NULL
+                    ORDER BY
+                        curriculum_version.course_id,
+                        curriculum_version.scope,
+                        curriculum_version.class_id,
+                        curriculum_version.version_number DESC,
+                        curriculum_version.created_at DESC
+                ),
+                lesson_stats AS (
+                    SELECT
+                        COUNT(*) AS lessons,
+                        COUNT(*) FILTER (WHERE lesson.status = 'published') AS published_lessons,
+                        COUNT(*) FILTER (WHERE lesson.status = 'draft') AS draft_lessons,
+                        COUNT(*) FILTER (WHERE lesson.status = 'inactive') AS inactive_lessons,
+                        COUNT(*) FILTER (
+                            WHERE lesson.created_at BETWEEN :from AND :to
+                    ) AS new_lessons_in_range
+                    FROM %s lesson
+                    JOIN current_curriculum_versions curriculum_version
+                      ON curriculum_version.id = lesson.curriculum_version_id
+                    WHERE curriculum_version.status <> 'archived'
+                      AND lesson.deleted_at IS NULL
+                )
                 SELECT
-                    (
-                        SELECT COUNT(*)
-                        FROM %s module
-                        JOIN %s course ON course.id = module.course_id
-                        WHERE course.deleted_at IS NULL
-                          AND module.is_system = false
-                    ) AS modules,
-                    (
-                        SELECT COUNT(*)
-                        FROM %s module
-                        JOIN %s course ON course.id = module.course_id
-                        WHERE course.deleted_at IS NULL
-                          AND module.is_system = false
-                          AND module.created_at BETWEEN :from AND :to
-                    ) AS new_modules_in_range,
-                    COUNT(*) AS lessons,
-                    COUNT(*) FILTER (WHERE lesson.status = 'published') AS published_lessons,
-                    COUNT(*) FILTER (WHERE lesson.status = 'draft') AS draft_lessons,
-                    COUNT(*) FILTER (WHERE lesson.status = 'inactive') AS inactive_lessons,
-                    COUNT(*) FILTER (WHERE lesson.created_at BETWEEN :from AND :to) AS new_lessons_in_range
-                FROM %s lesson
-                JOIN %s course ON course.id = lesson.course_id
-                WHERE course.deleted_at IS NULL
-                """.formatted(MODULES_TABLE, COURSES_TABLE, MODULES_TABLE, COURSES_TABLE, LESSONS_TABLE, COURSES_TABLE);
+                    module_stats.modules,
+                    lesson_stats.lessons,
+                    lesson_stats.published_lessons,
+                    lesson_stats.draft_lessons,
+                    lesson_stats.inactive_lessons,
+                    module_stats.new_modules_in_range,
+                    lesson_stats.new_lessons_in_range
+                FROM module_stats
+                CROSS JOIN lesson_stats
+                """.formatted(
+                        MODULES_TABLE,
+                        COURSES_TABLE,
+                        CURRICULUM_VERSIONS_TABLE,
+                        COURSES_TABLE,
+                        CURRICULUM_LESSONS_TABLE);
     }
 
     /**
@@ -136,21 +160,6 @@ public class DashboardQueryBuilder {
     }
 
     /**
-     * Builds SQL to check if a column exists.
-     */
-    public String buildColumnExistsQuery(String tableName, String columnName) {
-        return """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public'
-                      AND table_name = :tableName
-                      AND column_name = :columnName
-                )
-                """;
-    }
-
-    /**
      * Builds parameters for time range queries.
      */
     public MapSqlParameterSource buildTimeRangeParams(Instant from, Instant to) {
@@ -161,10 +170,4 @@ public class DashboardQueryBuilder {
                         java.sql.Types.TIMESTAMP_WITH_TIMEZONE);
     }
 
-    /**
-     * Builds parameters for column existence check.
-     */
-    public Map<String, String> buildColumnCheckParams(String tableName, String columnName) {
-        return Map.of("tableName", tableName, "columnName", columnName);
-    }
 }

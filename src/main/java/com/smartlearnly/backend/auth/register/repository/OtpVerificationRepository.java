@@ -1,6 +1,6 @@
-package com.smartlearnly.backend.auth.registration.repository;
+package com.smartlearnly.backend.auth.register.repository;
 
-import com.smartlearnly.backend.auth.registration.entity.OtpVerification;
+import com.smartlearnly.backend.auth.register.entity.OtpVerification;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;

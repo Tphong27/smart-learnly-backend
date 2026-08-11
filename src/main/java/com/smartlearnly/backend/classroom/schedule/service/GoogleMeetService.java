@@ -1,5 +1,7 @@
 package com.smartlearnly.backend.classroom.schedule.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
@@ -9,6 +11,7 @@ import com.smartlearnly.backend.classroom.schedule.config.GoogleMeetProperties;
 import com.smartlearnly.backend.classroom.schedule.dto.MeetingUrlResponse;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
@@ -27,13 +30,19 @@ import org.springframework.web.client.RestClientResponseException;
 @Service
 public class GoogleMeetService {
 
+    private static final String CREATE_SPACE_SCOPE =
+            "https://www.googleapis.com/auth/meetings.space.created";
+    private static final ObjectMapper GOOGLE_ERROR_JSON = new ObjectMapper();
+
     private final GoogleMeetProperties properties;
     private final SystemSettingsService settingsService;
     private final RestClient tokenClient;
     private final RestClient meetClient;
 
+    /**
+     * Khởi tạo client Google Meet từ cấu hình hệ thống có thể thay đổi khi chạy.
+     */
     @Autowired
-    // Khởi tạo client Google Meet từ cấu hình hệ thống có thể thay đổi khi chạy.
     public GoogleMeetService(GoogleMeetProperties properties, SystemSettingsService settingsService) {
         this(
                 properties,
@@ -42,7 +51,9 @@ public class GoogleMeetService {
                 createRestClient(properties.getApiBaseUrl(), properties.getTimeout()));
     }
 
-    // Khởi tạo service với HTTP client tùy biến để phục vụ kiểm thử và cấu hình timeout.
+    /**
+     * Khởi tạo service với HTTP client tùy biến để phục vụ kiểm thử.
+     */
     GoogleMeetService(
             GoogleMeetProperties properties,
             SystemSettingsService settingsService,
@@ -54,14 +65,15 @@ public class GoogleMeetService {
         this.meetClient = meetClient;
     }
 
-    // Lấy access token OAuth rồi tạo Google Meet Space mới cho lớp học.
+    /**
+     * Lấy access token OAuth rồi tạo Google Meet Space mới cho lớp học.
+     */
     public MeetingUrlResponse createMeetingUrl() {
         GoogleMeetSettings meetSettings = settingsService.resolveGoogleMeetSettings();
         GoogleOAuthSettings oauthSettings = requireConfiguration(meetSettings);
+        String accessToken = requestAccessToken(oauthSettings, meetSettings);
 
         try {
-            String accessToken = requestAccessToken(oauthSettings, meetSettings);
-
             GoogleMeetSpaceResponse space = meetClient
                     .post()
                     .uri("/v2/spaces")
@@ -81,8 +93,7 @@ public class GoogleMeetService {
             throw exception;
 
         } catch (RestClientResponseException exception) {
-            log.warn("Google Meet request failed: status={}", exception.getStatusCode().value());
-            throw unavailable("Google Meet rejected the request. " + "Check the OAuth credentials and refresh token.");
+            throw meetApiFailure(exception);
 
         } catch (RestClientException exception) {
             log.warn("Google Meet request failed: errorType={}", exception.getClass().getSimpleName());
@@ -90,7 +101,9 @@ public class GoogleMeetService {
         }
     }
 
-    // Đổi refresh token thành access token Google trước khi gọi Meet API.
+    /**
+     * Đổi refresh token thành access token Google trước khi gọi Meet API.
+     */
     private String requestAccessToken(GoogleOAuthSettings oauthSettings, GoogleMeetSettings meetSettings) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
 
@@ -99,22 +112,35 @@ public class GoogleMeetService {
         form.add("refresh_token", meetSettings.refreshToken());
         form.add("grant_type", "refresh_token");
 
-        GoogleAccessTokenResponse response = tokenClient
-                .post()
-                .uri("/token")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(form)
-                .retrieve()
-                .body(GoogleAccessTokenResponse.class);
+        try {
+            GoogleAccessTokenResponse response = tokenClient
+                    .post()
+                    .uri("/token")
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .body(GoogleAccessTokenResponse.class);
 
-        if (response == null || !StringUtils.hasText(response.accessToken())) {
-            throw unavailable("Google OAuth did not return an access token");
+            if (response == null || !StringUtils.hasText(response.accessToken())) {
+                throw unavailable("Google OAuth did not return an access token");
+            }
+
+            return response.accessToken().trim();
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (RestClientResponseException exception) {
+            throw oauthFailure(exception);
+        } catch (RestClientException exception) {
+            log.warn(
+                    "Google OAuth token request failed: errorType={}",
+                    exception.getClass().getSimpleName());
+            throw unavailable("Google OAuth is temporarily unavailable");
         }
-
-        return response.accessToken().trim();
     }
 
-    // Kiểm tra OAuth/Meet đã được cấu hình đủ trước khi cho phép tạo link.
+    /**
+     * Kiểm tra OAuth/Meet đã được cấu hình đủ trước khi cho phép tạo link.
+     */
     private GoogleOAuthSettings requireConfiguration(GoogleMeetSettings meetSettings) {
         if (meetSettings == null) {
             throw unavailable("Google Meet link generation is not configured");
@@ -124,26 +150,107 @@ public class GoogleMeetService {
             throw unavailable("Google Meet link generation is disabled");
         }
 
-        GoogleOAuthSettings oauthSettings = settingsService.resolveGoogleSettings();
+        GoogleOAuthSettings sharedSettings = settingsService.resolveGoogleSettings();
+        String clientId = preferredValue(
+                properties.getClientId(),
+                sharedSettings == null ? null : sharedSettings.clientId());
+        String clientSecret = preferredValue(
+                properties.getClientSecret(),
+                sharedSettings == null ? null : sharedSettings.clientSecret());
 
-        boolean configured = oauthSettings != null
-                && StringUtils.hasText(oauthSettings.clientId())
-                && StringUtils.hasText(oauthSettings.clientSecret())
+        boolean configured = StringUtils.hasText(clientId)
+                && StringUtils.hasText(clientSecret)
                 && StringUtils.hasText(meetSettings.refreshToken());
 
         if (!configured) {
             throw unavailable("Google Meet link generation is not configured");
         }
 
-        return oauthSettings;
+        return new GoogleOAuthSettings(clientId.trim(), clientSecret.trim(), CREATE_SPACE_SCOPE);
     }
 
-    // Tạo lỗi nghiệp vụ nhất quán khi tích hợp Google Meet chưa sẵn sàng.
+    /**
+     * Ưu tiên credential riêng của Meet rồi mới dùng credential Google chung.
+     */
+    private String preferredValue(String dedicatedValue, String sharedValue) {
+        return StringUtils.hasText(dedicatedValue) ? dedicatedValue : sharedValue;
+    }
+
+    /**
+     * Ánh xạ lỗi OAuth refresh token thành thông báo có thể xử lý được.
+     */
+    private BusinessException oauthFailure(RestClientResponseException exception) {
+        String providerCode = googleErrorCode(exception);
+        log.warn(
+                "Google OAuth token request rejected: status={} providerCode={}",
+                exception.getStatusCode().value(),
+                providerCode);
+
+        return switch (providerCode) {
+            case "invalid_grant" -> unavailable(
+                    "Google Meet refresh token is expired or revoked. Reconnect Google Meet.");
+            case "invalid_client" -> unavailable(
+                    "Google Meet OAuth client ID or client secret is invalid.");
+            default -> unavailable("Google OAuth rejected the refresh token request.");
+        };
+    }
+
+    /**
+     * Ánh xạ lỗi Meet API theo quyền, quota hoặc trạng thái dịch vụ.
+     */
+    private BusinessException meetApiFailure(RestClientResponseException exception) {
+        int status = exception.getStatusCode().value();
+        String providerCode = googleErrorCode(exception);
+        log.warn(
+                "Google Meet API request rejected: status={} providerCode={}",
+                status,
+                providerCode);
+
+        if (status == 401) {
+            return unavailable("Google Meet rejected the access token. Reconnect Google Meet.");
+        }
+        if (status == 403) {
+            return unavailable(
+                    "Google Meet permission is missing. Re-authorize the meetings.space.created scope and enable Google Meet REST API.");
+        }
+        if (status == 429) {
+            return unavailable("Google Meet quota has been exceeded. Try again later.");
+        }
+        if (status >= 500) {
+            return unavailable("Google Meet is temporarily unavailable");
+        }
+        return unavailable("Google Meet rejected the create-space request.");
+    }
+
+    /**
+     * Đọc mã lỗi Google an toàn mà không ghi response hoặc token vào log.
+     */
+    private String googleErrorCode(RestClientResponseException exception) {
+        try {
+            JsonNode root = GOOGLE_ERROR_JSON.readTree(exception.getResponseBodyAsString());
+            JsonNode error = root == null ? null : root.path("error");
+            if (error == null || error.isMissingNode() || error.isNull()) {
+                return "unknown";
+            }
+            if (error.isTextual()) {
+                return error.asText("unknown");
+            }
+            return error.path("status").asText("unknown");
+        } catch (IOException | RuntimeException ignored) {
+            return "unknown";
+        }
+    }
+
+    /**
+     * Tạo lỗi nghiệp vụ nhất quán khi tích hợp Google Meet chưa sẵn sàng.
+     */
     private BusinessException unavailable(String message) {
         return new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, message);
     }
 
-    // Tạo HTTP client có base URL và timeout cho một Google API.
+    /**
+     * Tạo HTTP client có base URL và timeout cho một Google API.
+     */
     private static RestClient createRestClient(String baseUrl, Duration timeout) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
 

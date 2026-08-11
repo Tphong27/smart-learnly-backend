@@ -34,7 +34,9 @@ public class GoogleAuthService {
             String deviceInfo,
             String ipAddress) {
         GoogleIdTokenService.GoogleIdentity identity = googleIdTokenService.verify(request.idToken());
-        String email = normalizeEmail(identity.email());
+        String email = identity.email() == null
+                ? null
+                : identity.email().trim().toLowerCase(Locale.ROOT);
         UserAccount user = userRepository.findByGoogleIdAndDeletedAtIsNull(identity.subject())
                 .orElseGet(() -> linkOrCreateGoogleUser(identity, email));
 
@@ -90,8 +92,4 @@ public class GoogleAuthService {
         loginHistoryRepository.save(history);
     }
 
-    // Chuẩn hóa email Google trước khi tra cứu tài khoản nội bộ.
-    private String normalizeEmail(String email) {
-        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
-    }
 }

@@ -36,7 +36,7 @@ public class DefaultFlashcardTranscriptTextExtractionService implements Flashcar
         if (value == null || value.isBlank()) {
             return "";
         }
-        String normalized = stripBom(value)
+        String normalized = (value.startsWith("\uFEFF") ? value.substring(1) : value)
                 .replace("\r\n", "\n")
                 .replace('\r', '\n')
                 .replace('\u00a0', ' ');
@@ -105,10 +105,6 @@ public class DefaultFlashcardTranscriptTextExtractionService implements Flashcar
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Uploaded transcript file name is invalid");
         }
         return fileName;
-    }
-
-    private String stripBom(String value) {
-        return value.startsWith("\uFEFF") ? value.substring(1) : value;
     }
 
     private String normalizeLine(String value) {

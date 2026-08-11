@@ -10,8 +10,6 @@ import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.Goo
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +25,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/settings")
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin System Settings", description = "Admin-only Google OAuth and Meet configuration.")
 public class GoogleSettingsController {
     private static final String GOOGLE_REDIRECT_URI_HINT = "/login/oauth2/code/google";
 
@@ -37,7 +34,6 @@ public class GoogleSettingsController {
 
     // Trả trạng thái cấu hình OAuth Google mà không lộ client secret.
     @GetMapping("/oauth/google")
-    @Operation(summary = "Get current Google OAuth settings (secrets masked)")
     public ApiResponse<GoogleOAuthSettingsResponse> getGoogleOAuth() {
         GoogleOAuthSettingsResponse response = new GoogleOAuthSettingsResponse(
                 settingsService.hasValue(SettingKeys.GOOGLE_CLIENT_ID),
@@ -50,7 +46,6 @@ public class GoogleSettingsController {
     // Lưu client OAuth Google và ghi audit người thay đổi.
     @PutMapping("/oauth/google")
     @Transactional
-    @Operation(summary = "Update Google OAuth settings")
     public ApiResponse<GoogleOAuthSettingsResponse> updateGoogleOAuth(
             @Valid @RequestBody GoogleOAuthSettingsUpdateRequest request) {
         UUID actor = support.currentUserId();
@@ -67,7 +62,6 @@ public class GoogleSettingsController {
 
     // Trả trạng thái bật và trạng thái secret của tích hợp Google Meet.
     @GetMapping("/integrations/google-meet")
-    @Operation(summary = "Get current Google Meet integration settings (secret masked)")
     public ApiResponse<GoogleMeetSettingsResponse> getGoogleMeetSettings() {
         GoogleMeetSettings settings = settingsService.resolveGoogleMeetSettings();
         GoogleMeetSettingsResponse response = new GoogleMeetSettingsResponse(
@@ -80,7 +74,6 @@ public class GoogleSettingsController {
     // Bật/tắt Google Meet, cập nhật refresh token khi có và ghi audit.
     @PutMapping("/integrations/google-meet")
     @Transactional
-    @Operation(summary = "Update Google Meet integration settings")
     public ApiResponse<GoogleMeetSettingsResponse> updateGoogleMeetSettings(
             @Valid @RequestBody GoogleMeetSettingsUpdateRequest request) {
         UUID actor = support.currentUserId();

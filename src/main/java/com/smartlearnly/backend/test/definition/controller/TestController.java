@@ -80,10 +80,11 @@ public class TestController {
     @PostMapping("/{id}/access-code/verify")
     public ResponseEntity<TestModel.AccessCodeVerifyResponse> verifyAccessCode(
             @PathVariable UUID id,
+            @RequestParam(required = false) UUID classId,
             @RequestBody TestModel.AccessCodeVerifyRequest request) {
 
         return ResponseEntity.ok(
-                testService.verifyAccessCode(id, request));
+                testService.verifyAccessCode(id, request, classId));
     }
 
     /** Cập nhật đề trong phạm vi caller được quản lý. */

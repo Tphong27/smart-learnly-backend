@@ -28,6 +28,7 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    /** Tạo tài khoản quản trị với email chuẩn hóa và mật khẩu ngẫu nhiên chỉ lưu dạng hash. */
     @Transactional
     public AdminUserResponse create(CreateAdminUserRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
@@ -51,6 +52,7 @@ public class AdminUserService {
         return toResponse(userRepository.save(user));
     }
 
+    /** Liệt kê tài khoản chưa bị xóa mềm sau khi chuẩn hóa bộ lọc và giới hạn page size. */
     @Transactional(readOnly = true)
     public AdminUserPageResponse list(String role, String status, String keyword, int page, int size) {
         int normalizedPage = Math.max(page, 0);
@@ -70,6 +72,7 @@ public class AdminUserService {
         );
     }
 
+    /** Lấy một tài khoản chưa bị xóa mềm hoặc trả lỗi không tìm thấy. */
     @Transactional(readOnly = true)
     public AdminUserResponse get(UUID userId) {
         return userRepository.findByIdAndDeletedAtIsNull(userId)
@@ -77,6 +80,7 @@ public class AdminUserService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "User was not found"));
     }
 
+    /** Cập nhật các trường được gửi và từ chối payload không có thay đổi. */
     @Transactional
     public AdminUserResponse update(UUID userId, UpdateAdminUserRequest request) {
         UserAccount user = userRepository.findByIdAndDeletedAtIsNull(userId)
@@ -130,6 +134,17 @@ public class AdminUserService {
         return toResponse(userRepository.save(user));
     }
 
+    /** Đánh dấu tài khoản đã xóa và vô hiệu hóa đăng nhập nhưng vẫn giữ mọi khóa ngoại lịch sử. */
+    @Transactional
+    public void softDelete(UUID userId) {
+        UserAccount user = userRepository.findByIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "User was not found"));
+        user.setStatus("inactive");
+        user.setDeletedAt(Instant.now());
+        userRepository.save(user);
+    }
+
+    /** Giới hạn page size về khoảng an toàn của API quản trị. */
     private int normalizeSize(int size) {
         if (size <= 0) {
             return DEFAULT_PAGE_SIZE;
@@ -140,16 +155,19 @@ public class AdminUserService {
         return size;
     }
 
+    /** Chuẩn hóa role về enum chữ hoa mà PostgreSQL đang sử dụng. */
     private String normalizeRole(String role) {
         String normalized = normalizeNullable(role);
         return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
     }
 
+    /** Chuẩn hóa trạng thái về chữ thường và dùng active khi bộ lọc trống. */
     private String normalizeStatus(String status) {
         String normalized = normalizeNullable(status);
         return normalized == null ? DEFAULT_STATUS : normalized.toLowerCase(Locale.ROOT);
     }
 
+    /** Escape wildcard để từ khóa ILIKE được hiểu là văn bản người dùng nhập. */
     private String normalizeKeyword(String keyword) {
         String normalized = normalizeNullable(keyword);
         if (normalized == null) {
@@ -161,6 +179,7 @@ public class AdminUserService {
                 .replace("_", "\\_") + "%";
     }
 
+    /** Biến chuỗi rỗng hoặc chỉ có khoảng trắng thành null. */
     private String normalizeNullable(String value) {
         if (value == null) {
             return null;
@@ -169,6 +188,7 @@ public class AdminUserService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    /** Chuẩn hóa trường cập nhật bắt buộc và trả lỗi nghiệp vụ khi rỗng. */
     private String requireUpdateText(String value, String message) {
         String normalized = normalizeNullable(value);
         if (normalized == null) {
@@ -177,10 +197,12 @@ public class AdminUserService {
         return normalized;
     }
 
+    /** Sinh mật khẩu tạm đủ phức tạp trước khi mã hóa, không trả giá trị này cho client. */
     private String generateTemporaryPassword() {
         return "Aa1!" + UUID.randomUUID();
     }
 
+    /** Chuyển entity tài khoản thành DTO an toàn không chứa thông tin xác thực. */
     private AdminUserResponse toResponse(UserAccount user) {
         return new AdminUserResponse(
                 user.getId(),

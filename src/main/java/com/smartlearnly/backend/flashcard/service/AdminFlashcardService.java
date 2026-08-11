@@ -58,6 +58,7 @@ public class AdminFlashcardService {
     private final CourseAccessService courseAccessService;
     private final MasterCurriculumAccessService masterCurriculumAccessService;
 
+    /** Tạo lesson flashcard trong master curriculum và liên kết bộ thẻ rỗng để biên tập. */
     @Transactional
     public FlashcardLessonCreatedResponse createFlashcardLesson(
             UUID courseId,
@@ -65,9 +66,7 @@ public class AdminFlashcardService {
             CreateFlashcardLessonRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
         Course course = findCourse(courseId);
-        // Frontend gửi section.id = sourceModuleId (module id) như mọi endpoint authoring
-        // khác, nên resolve qua module snapshot thay vì tìm theo section PK.
-        CurriculumSection section = masterCurriculumAccessService.findUpdatableModuleSnapshot(sectionId);
+        CurriculumSection section = masterCurriculumAccessService.findUpdatableSection(sectionId);
         if (!courseId.equals(section.getCurriculumVersion().getCourseId())) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Section was not found");
         }
@@ -81,7 +80,7 @@ public class AdminFlashcardService {
         lesson.setStatus(parseLessonStatus(request.status(), LessonStatus.DRAFT));
         lesson.setPreview(Boolean.TRUE.equals(request.isPreview()));
         lesson.setSortOrder(request.sortOrder() == null
-                ? curriculumLessonRepository.findMaxSortOrderBySectionId(sectionId) + 1
+                ? curriculumLessonRepository.findMaxSortOrderBySectionId(section.getId()) + 1
                 : request.sortOrder());
 
         CurriculumLesson savedLesson = curriculumLessonRepository.save(lesson);
@@ -206,6 +205,10 @@ public class AdminFlashcardService {
                 .toList());
     }
 
+    /**
+     * Tìm bộ thẻ từ mọi dạng tham chiếu lesson dùng trong master và class curriculum.
+     * Khi lesson lớp là một bản sao, {@code lessonIdentityId} nối nó về bộ thẻ của lesson nguồn.
+     */
     private FlashcardSet resolveFlashcardSetByLessonReference(UUID lessonReferenceId) {
         // Trường hợp 1:
         // ID frontend gửi là legacy lesson ID.
@@ -261,6 +264,18 @@ public class AdminFlashcardService {
 
             if (bySourceCurriculumLesson.isPresent()) {
                 return bySourceCurriculumLesson.get();
+            }
+        }
+
+        UUID lessonIdentityId = curriculumLesson.getLessonIdentityId();
+        if (lessonIdentityId != null) {
+            List<FlashcardSet> equivalentSets = flashcardSetRepository
+                    .findActiveByLessonIdentityIdAndCurriculumStateOrderByUpdatedAtDesc(
+                            lessonIdentityId,
+                            CurriculumScope.MASTER,
+                            CurriculumStatus.PUBLISHED);
+            if (!equivalentSets.isEmpty()) {
+                return equivalentSets.get(0);
             }
         }
 

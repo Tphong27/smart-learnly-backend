@@ -2,6 +2,42 @@
 
 This file gives AI coding agents the minimum context and rules required before changing this repository.
 
+## Required shared organization rules
+
+Before reorganizing, refactoring, renaming, moving, or deleting backend code,
+read `../AI_CODE_ORGANIZATION_RULES.md` in full. Its simplicity, dead-code
+evidence, small-batch, and verification rules are mandatory in addition to this
+file. In particular, do not create tiny pass-through services/helpers and do
+not treat Spring-managed code as unused based only on static imports.
+
+If the repository is opened without the parent workspace, these core rules
+still apply:
+
+- Preserve behavior and separate structural refactors from feature changes.
+- Prefer the fewest files, functions, layers, and abstractions that keep each
+  responsibility clear.
+- Keep one-use one-to-three-line operations inline unless they name an
+  important business rule.
+- Extract code only for reuse, a distinct business responsibility, meaningful
+  complexity or side effects, independent testing, or materially clearer flow.
+- Do not add pass-through helpers, services, factories, builders, managers, or
+  mappers with no independent responsibility.
+- Before deleting code, check direct use, Spring injection and annotations,
+  scheduled jobs, reflection, serialization, scripts, tests, docs, and public
+  API contracts. Report uncertain candidates instead of deleting them.
+- Never delete historical migrations, payment/learning records, uploads,
+  secrets, deployment files, or unrelated working-tree changes.
+- Refactor one bounded feature at a time and compile/test after every batch.
+- Use feature-first role folders. Checkout belongs under
+  `commerce/checkout/controller|dto|service`; SePay belongs under
+  `payment/sepay/controller|dto|service|config`. Shared commerce entities and
+  repositories stay at the commerce level when multiple subfeatures use them.
+- Add a concise Vietnamese documentation comment above every named production
+  method. Business methods explain purpose and important rules; trivial
+  technical helpers need one sentence. Do not comment obvious lines, and keep
+  comments synchronized with behavior. Apply this to every production file
+  created or materially edited in the current task.
+
 ## Repository responsibility
 
 This repository contains the backend service for Smart Learnly Platform (SLP).

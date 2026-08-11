@@ -101,6 +101,7 @@ public class AssignmentService {
                 .toList();
     }
 
+    /** Trả assignment mà staff hiện tại sở hữu hoặc được phân công quản lý. */
     public List<AssignmentModel.Response> getMyAssignments(UUID courseId, Boolean isFlashtest) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         return assignmentRepository.findStaffAssignments(actor.getId(), courseId, isFlashtest)
@@ -109,16 +110,7 @@ public class AssignmentService {
                 .toList();
     }
 
-    // public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId,
-    // Boolean isFlashtest) {
-    // UserAccount actor = currentUserService.requireAuthenticatedUser();
-    // return assignmentRepository.findAvailableForStudent(actor.getId(), courseId,
-    // isFlashtest)
-    // .stream()
-    // .map(this::mapToResponse)
-    // .toList();
-    // }
-
+    /** Trả assignment khả dụng cho học viên theo course, lớp và loại bài. */
     public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId, UUID classId, Boolean isFlashtest) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 

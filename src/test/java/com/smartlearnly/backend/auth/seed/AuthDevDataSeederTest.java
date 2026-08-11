@@ -10,8 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.auth.password.dto.ForgotPasswordRequest;
 import com.smartlearnly.backend.auth.password.service.AuthPasswordService;
-import com.smartlearnly.backend.auth.registration.dto.ResendVerificationRequest;
-import com.smartlearnly.backend.auth.registration.service.AuthRegistrationService;
+import com.smartlearnly.backend.auth.register.dto.ResendVerificationRequest;
+import com.smartlearnly.backend.auth.register.service.AuthRegistrationService;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -44,6 +44,13 @@ class AuthDevDataSeederTest {
         when(passwordEncoder.encode(any())).thenReturn("encoded-password");
     }
 
+    /**
+     * Kịch bản: dữ liệu dev đã đạt giới hạn gửi OTP khi seeder chuẩn bị tài khoản mẫu.
+     * Given: đăng ký user mẫu thành công nhưng resend verification trả RATE_LIMIT_EXCEEDED.
+     * When: AuthDevDataSeeder chạy.
+     * Then: seeder bỏ qua riêng lỗi rate-limit dự kiến và vẫn hoàn tất các bước seed còn lại.
+     * Ý nghĩa vận hành: khởi động profile dev lặp lại không bị thất bại chỉ vì quota OTP của dữ liệu mẫu.
+     */
     @Test
     void runShouldContinueWhenSeedVerificationOtpIsRateLimited() {
         doThrow(new BusinessException(
@@ -58,6 +65,13 @@ class AuthDevDataSeederTest {
         verify(userRepository, times(3)).save(any(UserAccount.class));
     }
 
+    /**
+     * Kịch bản: bước phát OTP của seeder gặp một BusinessException không phải rate-limit.
+     * Given: registration service trả lỗi bất ngờ.
+     * When: AuthDevDataSeeder chạy.
+     * Then: lỗi được ném lại thay vì bị nuốt như trường hợp quota OTP dự kiến.
+     * Ý nghĩa vận hành: lỗi seed thật không bị che giấu, giúp môi trường dev phản ánh cấu hình/dữ liệu hỏng.
+     */
     @Test
     void runShouldRethrowUnexpectedVerificationOtpError() {
         doThrow(new BusinessException(

@@ -7,11 +7,13 @@ import com.smartlearnly.backend.videoai.dto.VideoAiDtos.GenerateSummaryResponse;
 import com.smartlearnly.backend.videoai.service.YoutubeVideoMetadataService.YoutubeVideoMetadata;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
+import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
 
+@Slf4j
 @Service
 public class VideoSummaryService {
 
@@ -19,6 +21,9 @@ public class VideoSummaryService {
     private final YoutubeTranscriptService transcriptService;
     private final GeminiVideoSummaryService summaryService;
 
+    /**
+     * Khởi tạo service điều phối metadata, Gemini và transcript fallback.
+     */
     public VideoSummaryService(
             YoutubeVideoMetadataService metadataService,
             YoutubeTranscriptService transcriptService,
@@ -28,22 +33,26 @@ public class VideoSummaryService {
         this.summaryService = summaryService;
     }
 
+    /**
+     * Tạo summary trực tiếp từ video và chỉ dùng transcript khi Gemini trực tiếp lỗi.
+     */
     public GenerateSummaryResponse generateVideoSummary(String youtubeUrl) {
         String videoId = extractVideoIdFromYoutubeUrl(youtubeUrl);
         YoutubeVideoMetadata metadata = metadataService.fetchYoutubeVideoMetadata(videoId);
-        YoutubeTranscriptService.TranscriptResult transcript = transcriptService.fetchYoutubeTranscript(videoId);
-        GeneratedSummary summary = summaryService.generateSummaryFromTranscript(
-                transcript.language(),
-                transcript.text());
+        String canonicalUrl = buildCanonicalYoutubeUrl(videoId);
+        GeneratedSummary summary = generateSummaryWithFallback(videoId, canonicalUrl);
         long durationSeconds = metadata.durationSeconds();
         return new GenerateSummaryResponse(
                 videoId,
-                buildCanonicalYoutubeUrl(videoId),
+                canonicalUrl,
                 durationSeconds,
                 Math.toIntExact((durationSeconds + 59) / 60),
                 summary);
     }
 
+    /**
+     * Chuẩn hóa URL của video lesson hoặc giữ nguyên URL hiện tại hợp lệ.
+     */
     public String normalizeLessonVideoUrl(
             String currentVideoUrl,
             String requestedVideoUrl,
@@ -69,6 +78,37 @@ public class VideoSummaryService {
                 extractVideoIdFromYoutubeUrl(requested));
     }
 
+    /**
+     * Ưu tiên Gemini video input rồi dùng transcript scraper làm đường dự phòng.
+     */
+    private GeneratedSummary generateSummaryWithFallback(
+            String videoId,
+            String canonicalUrl) {
+        try {
+            return summaryService.generateSummaryFromYoutubeVideo(canonicalUrl);
+        } catch (BusinessException directFailure) {
+            if (directFailure.errorCode() != ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE) {
+                throw directFailure;
+            }
+            log.warn(
+                    "Direct Gemini YouTube summary failed; using transcript fallback: videoId={}",
+                    videoId);
+            try {
+                YoutubeTranscriptService.TranscriptResult transcript =
+                        transcriptService.fetchYoutubeTranscript(videoId);
+                return summaryService.generateSummaryFromTranscript(
+                        transcript.language(),
+                        transcript.text());
+            } catch (BusinessException fallbackFailure) {
+                directFailure.addSuppressed(fallbackFailure);
+                throw directFailure;
+            }
+        }
+    }
+
+    /**
+     * Trim chuỗi và đổi giá trị rỗng thành null.
+     */
     private String normalize(String value) {
         if (value == null) {
             return null;
@@ -77,6 +117,9 @@ public class VideoSummaryService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    /**
+     * Trích xuất video ID từ hai dạng URL YouTube HTTPS được hỗ trợ.
+     */
     String extractVideoIdFromYoutubeUrl(String value) {
         String normalized = normalize(value);
         if (normalized == null) {
@@ -127,6 +170,9 @@ public class VideoSummaryService {
         }
     }
 
+    /**
+     * Tạo URL watch chuẩn từ video ID đã được kiểm tra.
+     */
     private String buildCanonicalYoutubeUrl(String videoId) {
         return "https://www.youtube.com/watch?v=" + videoId;
     }

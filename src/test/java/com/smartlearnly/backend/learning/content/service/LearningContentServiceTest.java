@@ -779,4 +779,66 @@ class LearningContentServiceTest {
                 new LearningStats(0, 0, 0, 0, 0, 0),
                 metadata);
     }
+@Test
+void getLearningFlashcardsResolvesSetFromEquivalentCurriculumLessonIdentity() {
+    UUID courseId = UUID.randomUUID();
+    UUID studentId = UUID.randomUUID();
+    UUID classLessonId = UUID.randomUUID();
+    UUID lessonIdentityId = UUID.randomUUID();
+    UUID setId = UUID.randomUUID();
+
+    UserAccount student = new UserAccount();
+    student.setId(studentId);
+    when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+    when(classEnrollmentRepository.findActiveClassIdsByCourseIdAndStudentId(courseId, studentId))
+            .thenReturn(List.of());
+
+    CurriculumVersion version = new CurriculumVersion();
+    version.setId(UUID.randomUUID());
+    version.setCourseId(courseId);
+    version.setScope(CurriculumScope.CLASS);
+    version.setStatus(CurriculumStatus.PUBLISHED);
+
+    CurriculumSection section = new CurriculumSection();
+    section.setId(UUID.randomUUID());
+    version.addSection(section);
+
+    CurriculumLesson classLesson = new CurriculumLesson();
+    classLesson.setId(classLessonId);
+    classLesson.setLessonIdentityId(lessonIdentityId);
+    classLesson.setType(LessonType.FLASHCARD);
+    classLesson.setStatus(LessonStatus.PUBLISHED);
+    section.addLesson(classLesson);
+
+    when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+            .thenReturn(new CurriculumResolution(
+                    version,
+                    null,
+                    null,
+                    false,
+                    "class_customized"));
+
+    when(compositionService.isCompositionVersion(version)).thenReturn(false);
+
+    when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(classLessonId))
+            .thenReturn(Optional.empty());
+
+    FlashcardSet sourceSet = new FlashcardSet();
+    sourceSet.setId(setId);
+    sourceSet.setTitle("Inherited flashcards");
+
+    when(flashcardSetRepository.findActiveByLessonIdentityIdAndCurriculumStateOrderByUpdatedAtDesc(
+            lessonIdentityId,
+            CurriculumScope.MASTER,
+            CurriculumStatus.PUBLISHED))
+            .thenReturn(List.of(sourceSet));
+
+    when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(setId))
+            .thenReturn(List.of());
+
+    var response = service.getLearningFlashcards(courseId, null, classLessonId);
+
+    assertThat(response.id()).isEqualTo(setId);
+    assertThat(response.lessonId()).isEqualTo(classLessonId);
+}
 }

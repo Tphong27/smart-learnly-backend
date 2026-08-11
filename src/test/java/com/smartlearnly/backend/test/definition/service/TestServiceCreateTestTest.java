@@ -11,6 +11,7 @@ import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.test.definition.dto.TestModel;
 import com.smartlearnly.backend.test.entity.TestType;
@@ -43,6 +44,8 @@ class TestServiceCreateTestTest {
     private CurriculumSectionRepository curriculumSectionRepository;
     @Mock
     private ClassOfferingRepository classOfferingRepository;
+    @Mock
+    private CourseAccessService courseAccessService;
 
     private TestService service;
 
@@ -54,7 +57,8 @@ class TestServiceCreateTestTest {
                 testAttemptRepository,
                 studentTestAnswerRepository,
                 curriculumSectionRepository,
-                classOfferingRepository);
+                classOfferingRepository,
+                courseAccessService);
     }
 
     @Test
@@ -133,14 +137,25 @@ class TestServiceCreateTestTest {
     }
 
     @Test
-    void createTestShouldRejectWhenClassIdIsMissing() {
-        TestModel.CreateRequest request = createRequest(null, UUID.randomUUID());
+    void createTestShouldPersistCourseScopedTestWhenClassIdIsMissing() {
+        UUID staffId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        TestModel.CreateRequest request = createRequest(null, courseId);
 
-        assertThatThrownBy(() -> service.createTest(request))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("A class is required for every test");
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(staffId, "SME"));
+        when(testRepository.save(any(com.smartlearnly.backend.test.entity.Test.class))).thenAnswer(invocation -> {
+            com.smartlearnly.backend.test.entity.Test saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            saved.setCreatedAt(Instant.now());
+            saved.setUpdatedAt(Instant.now());
+            return saved;
+        });
 
-        verify(testRepository, never()).save(any(com.smartlearnly.backend.test.entity.Test.class));
+        TestModel.Response response = service.createTest(request);
+
+        assertThat(response.getClassId()).isNull();
+        assertThat(response.getCourseId()).isEqualTo(courseId);
+        verify(courseAccessService).requireUpdatableCourse(courseId);
     }
 
     @Test
@@ -192,6 +207,32 @@ class TestServiceCreateTestTest {
                 .hasMessage("Selected module was not found");
 
         verify(testRepository, never()).save(any(com.smartlearnly.backend.test.entity.Test.class));
+    }
+
+    @Test
+    void verifyAccessCodeShouldUseRequestedClassContext() {
+        UUID testId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        com.smartlearnly.backend.test.entity.Test test =
+                new com.smartlearnly.backend.test.entity.Test();
+        test.setId(testId);
+        test.setAccessCode("123456");
+        test.setAccessCodeExpiresAt(Instant.now().plusSeconds(300));
+        TestModel.AccessCodeVerifyRequest request = new TestModel.AccessCodeVerifyRequest();
+        request.setAccessCode("123456");
+
+        when(testRepository.findById(testId)).thenReturn(java.util.Optional.of(test));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(studentId, "TRAINEE"));
+        when(testRepository.existsAvailableCourseTestForStudentClass(testId, studentId, classId))
+                .thenReturn(true);
+
+        TestModel.AccessCodeVerifyResponse response =
+                service.verifyAccessCode(testId, request, classId);
+
+        assertThat(response.getValid()).isTrue();
+        verify(testRepository)
+                .existsAvailableCourseTestForStudentClass(testId, studentId, classId);
     }
 
     private TestModel.CreateRequest createRequest(UUID classId, UUID courseId) {

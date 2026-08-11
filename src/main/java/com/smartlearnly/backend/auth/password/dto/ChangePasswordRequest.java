@@ -1,16 +1,14 @@
 package com.smartlearnly.backend.auth.password.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record ChangePasswordRequest(
-        @Schema(example = "Active@123")
         @NotBlank(message = "Current password is required")
+        @Size(max = 100, message = "Current password must not exceed 100 characters")
         String currentPassword,
 
-        @Schema(example = "Changed@123")
         @NotBlank(message = "New password is required")
         @Size(min = 8, max = 100, message = "New password must be between 8 and 100 characters")
         @Pattern(
@@ -19,8 +17,8 @@ public record ChangePasswordRequest(
         )
         String newPassword,
 
-        @Schema(example = "Changed@123")
         @NotBlank(message = "Password confirmation is required")
+        @Size(min = 8, max = 100, message = "Password confirmation must be between 8 and 100 characters")
         String confirmPassword
 ) {
 }

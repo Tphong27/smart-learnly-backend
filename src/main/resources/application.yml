@@ -76,6 +76,8 @@ app:
         payment-provider: ${PAYMENT_PROVIDER:none}
         google-meet:
             enabled: ${APP_GOOGLE_MEET_ENABLED:false}
+            client-id: ${APP_GOOGLE_MEET_CLIENT_ID:}
+            client-secret: ${APP_GOOGLE_MEET_CLIENT_SECRET:}
             refresh-token: ${APP_GOOGLE_MEET_REFRESH_TOKEN:}
             token-base-url: ${APP_GOOGLE_MEET_TOKEN_BASE_URL:https://oauth2.googleapis.com}
             api-base-url: ${APP_GOOGLE_MEET_API_BASE_URL:https://meet.googleapis.com}
@@ -178,12 +180,4 @@ app:
             api-base-url: ${GEMINI_API_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
             model: ${APP_VIDEO_AI_GEMINI_MODEL:${GEMINI_MODEL:gemini-3.5-flash}}
             timeout: ${APP_VIDEO_AI_GENERATION_TIMEOUT:PT90S}
-
-springdoc:
-    api-docs:
-        path: /v3/api-docs
-    swagger-ui:
-        path: /swagger-ui.html
-        display-request-duration: true
-        try-it-out-enabled: true
 

@@ -2,9 +2,6 @@ package com.smartlearnly.backend.common.audit;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.time.Instant;
@@ -24,13 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/api/v1/admin/audit-logs")
-@Tag(name = "Admin Audit Logs", description = "FT-18 Admin-only system activity log query APIs")
-@SecurityRequirement(name = "bearerAuth")
 public class AdminAuditLogController {
     private final AuditLogQueryService auditLogQueryService;
 
     @GetMapping
-    @Operation(summary = "List audit logs with filters")
     public ApiResponse<PageResponse<AuditLogSummaryResponse>> list(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String domain,
@@ -55,7 +49,6 @@ public class AdminAuditLogController {
     }
 
     @GetMapping("/{auditLogId}")
-    @Operation(summary = "Get audit log detail")
     public ApiResponse<AuditLogDetailResponse> get(@PathVariable UUID auditLogId) {
         return ApiResponse.success("Audit log loaded successfully", auditLogQueryService.get(auditLogId));
     }

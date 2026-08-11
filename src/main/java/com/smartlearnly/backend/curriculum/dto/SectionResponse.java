@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record SectionResponse(
         UUID id,
+        UUID moduleId,
         UUID courseId,
         String title,
         Integer sortOrder,

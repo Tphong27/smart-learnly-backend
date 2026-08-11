@@ -3,6 +3,8 @@ package com.smartlearnly.backend.question.ai.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -549,7 +551,11 @@ class AiQuestionDraftServiceTest {
         Question nearDuplicate = question("explain polymorphism clearly", QuestionStatus.DRAFT);
         batches.add(batch);
         drafts.add(draft);
-        when(questionRepository.findByCourseId(courseId)).thenReturn(List.of(nearDuplicate));
+        when(questionRepository.findNearDuplicateCandidatesInCourse(
+                eq(courseId),
+                any(),
+                anyDouble(),
+                anyInt())).thenReturn(List.of(nearDuplicate));
 
         AiQuestionDraftDtos.DraftResponse response = service.updateDraft(courseId, batch.getId(), draft.getId(),
                 new AiQuestionDraftDtos.UpdateDraftRequest(
@@ -974,7 +980,11 @@ class AiQuestionDraftServiceTest {
             return revision;
         });
         lenient().when(questionRepository.findExactDuplicateCandidatesInCourse(any(), any())).thenReturn(List.of());
-        lenient().when(questionRepository.findByCourseId(any())).thenReturn(List.of());
+        lenient().when(questionRepository.findNearDuplicateCandidatesInCourse(
+                any(),
+                any(),
+                anyDouble(),
+                anyInt())).thenReturn(List.of());
         lenient().when(questionRepository.existsActiveDuplicateInCourse(any(), any(), any())).thenReturn(false);
         lenient().when(questionRepository.save(any())).thenAnswer(invocation -> {
             Question question = invocation.getArgument(0);

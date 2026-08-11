@@ -6,10 +6,6 @@ import com.smartlearnly.backend.course.authoring.dto.CourseResponse;
 import com.smartlearnly.backend.course.authoring.dto.CreateCourseRequest;
 import com.smartlearnly.backend.course.authoring.dto.UpdateCourseRequest;
 import com.smartlearnly.backend.course.authoring.service.CourseAdminService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -35,14 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/courses")
-@Tag(name = "Admin Courses", description = "Administrator course management APIs.")
-@SecurityRequirement(name = "bearerAuth")
 public class AdminCourseController {
     private final CourseAdminService courseAdminService;
 
     // Liệt kê khóa học quản trị theo phân trang, từ khóa và các bộ lọc được phép.
     @GetMapping
-    @Operation(summary = "List courses for admin")
     public ApiResponse<PageResponse<CourseResponse>> list(
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
@@ -59,11 +52,6 @@ public class AdminCourseController {
     // Tạo khóa học nháp mới và trả vị trí tài nguyên vừa tạo.
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Create a course")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Course created"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Slug conflict")
-    })
     public ResponseEntity<ApiResponse<CourseResponse>> create(@Valid @RequestBody CreateCourseRequest request) {
         CourseResponse course = courseAdminService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/courses/" + course.id()))
@@ -72,7 +60,6 @@ public class AdminCourseController {
 
     // Trả chi tiết khóa học cho người có quyền quản trị hoặc được phân công.
     @GetMapping("/{courseId}")
-    @Operation(summary = "Get course details for admin")
     public ApiResponse<CourseResponse> get(@PathVariable UUID courseId) {
         return ApiResponse.success("Course loaded successfully", courseAdminService.get(courseId));
     }
@@ -80,7 +67,6 @@ public class AdminCourseController {
     // Cập nhật riêng các trường metadata được gửi trong yêu cầu PATCH.
     @PatchMapping("/{courseId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'TRAINER')")
-    @Operation(summary = "Update selected course fields")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,
             @Valid @RequestBody UpdateCourseRequest request
@@ -91,7 +77,6 @@ public class AdminCourseController {
     // Lưu trữ mềm khóa học để dữ liệu lịch sử không bị xóa vật lý.
     @DeleteMapping("/{courseId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Soft delete a course")
     public ApiResponse<Void> delete(@PathVariable UUID courseId) {
         courseAdminService.delete(courseId);
         return ApiResponse.success("Course deleted successfully");

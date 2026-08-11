@@ -5,10 +5,6 @@ import com.smartlearnly.backend.course.category.dto.CategoryResponse;
 import com.smartlearnly.backend.course.category.dto.CreateCategoryRequest;
 import com.smartlearnly.backend.course.category.dto.UpdateCategoryRequest;
 import com.smartlearnly.backend.course.category.service.CategoryService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -32,14 +28,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/categories")
-@Tag(name = "Admin Categories", description = "Course-category management APIs.")
-@SecurityRequirement(name = "bearerAuth")
 public class AdminCategoryController {
     private final CategoryService categoryService;
 
     // Tải danh sách category phẳng cho màn hình quản trị.
     @GetMapping
-    @Operation(summary = "List categories as a flat collection")
     public ApiResponse<List<CategoryResponse>> list(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean active,
@@ -50,12 +43,6 @@ public class AdminCategoryController {
     // Tạo category gốc hoặc category con và trả URL resource vừa tạo.
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Create a root or child category")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Category created"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Slug conflict"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Invalid hierarchy")
-    })
     public ResponseEntity<ApiResponse<CategoryResponse>> create(@Valid @RequestBody CreateCategoryRequest request) {
         CategoryResponse category = categoryService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/categories/" + category.id()))
@@ -64,7 +51,6 @@ public class AdminCategoryController {
 
     // Trả chi tiết một category quản trị.
     @GetMapping("/{categoryId}")
-    @Operation(summary = "Get category details")
     public ApiResponse<CategoryResponse> get(@PathVariable UUID categoryId) {
         return ApiResponse.success("Category loaded successfully", categoryService.get(categoryId));
     }
@@ -72,7 +58,6 @@ public class AdminCategoryController {
     // Cập nhật các trường category được gửi lên.
     @PatchMapping("/{categoryId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Update selected category fields")
     public ApiResponse<CategoryResponse> update(@PathVariable UUID categoryId, @Valid @RequestBody UpdateCategoryRequest request) {
         return ApiResponse.success("Category updated successfully", categoryService.update(categoryId, request));
     }
@@ -80,7 +65,6 @@ public class AdminCategoryController {
     // Xóa category khi chưa có category con hoặc khóa học sử dụng.
     @DeleteMapping("/{categoryId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    @Operation(summary = "Delete an unused category")
     public ApiResponse<Void> delete(@PathVariable UUID categoryId) {
         categoryService.delete(categoryId);
         return ApiResponse.success("Category deleted successfully");

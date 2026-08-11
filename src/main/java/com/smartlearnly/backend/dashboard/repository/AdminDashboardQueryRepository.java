@@ -7,7 +7,6 @@ import com.smartlearnly.backend.dashboard.dto.DashboardQuestionsResponse;
 import com.smartlearnly.backend.dashboard.dto.DashboardUsersResponse;
 import com.smartlearnly.backend.dashboard.query.DashboardQueryBuilder;
 import java.time.Instant;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -19,12 +18,9 @@ public class AdminDashboardQueryRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final DashboardQueryBuilder queryBuilder;
 
+    /** Đếm user bằng schema chuẩn hiện tại, không truy vấn information_schema ở mỗi request. */
     public DashboardUsersResponse countUsers(Instant from, Instant to) {
-        boolean hasStatus = hasColumn("users", "status");
-        boolean hasDeletedAt = hasColumn("users", "deleted_at");
-        boolean hasCreatedAt = hasColumn("users", "created_at");
-
-        String sql = queryBuilder.buildUserStatsQuery(hasStatus, hasDeletedAt, hasCreatedAt);
+        String sql = queryBuilder.buildUserStatsQuery();
         MapSqlParameterSource params = queryBuilder.buildTimeRangeParams(from, to);
 
         return jdbcTemplate.queryForObject(sql, params, (rs, rowNum) -> new DashboardUsersResponse(
@@ -97,10 +93,4 @@ public class AdminDashboardQueryRepository {
         ));
     }
 
-    private boolean hasColumn(String tableName, String columnName) {
-        String sql = queryBuilder.buildColumnExistsQuery(tableName, columnName);
-        Map<String, String> params = queryBuilder.buildColumnCheckParams(tableName, columnName);
-        Boolean exists = jdbcTemplate.queryForObject(sql, params, Boolean.class);
-        return Boolean.TRUE.equals(exists);
-    }
 }

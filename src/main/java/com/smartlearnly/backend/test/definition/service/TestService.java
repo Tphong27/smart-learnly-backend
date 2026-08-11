@@ -6,6 +6,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.enrollment.repository.ClassEnrollmentRepository;
 import com.smartlearnly.backend.enrollment.repository.CourseEnrollmentRepository;
@@ -46,6 +47,7 @@ public class TestService {
     private final StudentTestAnswerRepository studentTestAnswerRepository;
     private final CurriculumSectionRepository curriculumSectionRepository;
     private final ClassOfferingRepository classOfferingRepository;
+    private final CourseAccessService courseAccessService;
     private NotificationService notificationService;
     private ClassEnrollmentRepository notificationClassEnrollmentRepository;
     private CourseEnrollmentRepository notificationCourseEnrollmentRepository;
@@ -179,6 +181,7 @@ public class TestService {
         return requireCurrentTraineeAccess(testId, null);
     }
 
+    /** Xác thực quyền bắt đầu attempt trong context lớp cụ thể của học viên. */
     public UUID requireCurrentTraineeAccess(UUID testId, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         if (!isTrainee(actor)) {
@@ -198,6 +201,7 @@ public class TestService {
         requireAttemptAccess(testId, studentId, null);
     }
 
+    /** Xác thực quyền xem attempt trong context lớp cụ thể của học viên. */
     public void requireAttemptAccess(UUID testId, UUID studentId, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         Test test = testRepository.findById(testId)
@@ -228,6 +232,7 @@ public class TestService {
         return getTestById(id, null);
     }
 
+    /** Trả chi tiết đề theo context lớp để hỗ trợ quiz được kế thừa từ course. */
     public TestModel.Response getTestById(UUID id, UUID classId) {
 
         Test test = testRepository.findById(id)
@@ -247,12 +252,20 @@ public class TestService {
     public TestModel.AccessCodeVerifyResponse verifyAccessCode(
             UUID id,
             TestModel.AccessCodeVerifyRequest request) {
+        return verifyAccessCode(id, request, null);
+    }
+
+    /** Kiểm tra mã truy cập sau khi xác thực enrollment trong context lớp. */
+    public TestModel.AccessCodeVerifyResponse verifyAccessCode(
+            UUID id,
+            TestModel.AccessCodeVerifyRequest request,
+            UUID classId) {
 
         Test test = testRepository.findById(id)
                 .orElseThrow(() ->
                         new EntityNotFoundException(
                                 "Test not found"));
-        requireTestAccess(test, currentUserService.requireAuthenticatedUser());
+        requireTestAccess(test, currentUserService.requireAuthenticatedUser(), classId);
         test = ensureAccessCode(test);
 
         TestModel.AccessCodeVerifyResponse response =
@@ -509,6 +522,7 @@ public class TestService {
         requireTestAccess(test, actor, null);
     }
 
+    /** Cho phép course quiz dùng enrollment của đúng lớp đang học làm context truy cập. */
     private void requireTestAccess(Test test, UserAccount actor, UUID contextClassId) {
         if (isTrainee(actor)) {
             if (testRepository.existsAvailableForStudent(test.getId(), actor.getId())
@@ -544,20 +558,19 @@ public class TestService {
                 "You cannot manage tests outside your assigned classes");
     }
 
-    /** Kiểm tra course, lớp và quyền trainer trước khi tạo hoặc đổi phạm vi đề. */
+    /** Kiểm tra course và quyền quản lý; đề cấp lớp còn phải thuộc đúng lớp được phân công. */
     private void validateClassScope(
             UUID classId,
             UUID courseId,
             UserAccount actor) {
-        if (classId == null) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_REQUEST,
-                    "A class is required for every test");
-        }
         if (courseId == null) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST,
                     "A course is required for every test");
+        }
+        if (classId == null) {
+            courseAccessService.requireUpdatableCourse(courseId);
+            return;
         }
 
         ClassOffering classOffering = classOfferingRepository

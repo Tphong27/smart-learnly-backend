@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.curriculum.entity.ClassCurriculumBinding;
 import com.smartlearnly.backend.curriculum.entity.CurriculumCustomizationState;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
@@ -31,6 +33,8 @@ class ClassCurriculumBindingProvisioningServiceTest {
     private ClassCurriculumBindingRepository bindingRepository;
     @Mock
     private CurriculumVersionRepository curriculumVersionRepository;
+    @Mock
+    private ClassOfferingRepository classOfferingRepository;
 
     @InjectMocks
     private ClassCurriculumBindingProvisioningService service;
@@ -41,6 +45,8 @@ class ClassCurriculumBindingProvisioningServiceTest {
         UUID courseId = UUID.randomUUID();
         CurriculumVersion master = publishedMaster(courseId);
 
+        when(classOfferingRepository.findByIdForUpdate(classId))
+                .thenReturn(Optional.of(classOffering(classId, courseId)));
         when(bindingRepository.findByClassId(classId)).thenReturn(Optional.empty());
         when(curriculumVersionRepository
                 .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
@@ -67,6 +73,8 @@ class ClassCurriculumBindingProvisioningServiceTest {
         existing.setClassId(classId);
         existing.setCourseId(courseId);
 
+        when(classOfferingRepository.findByIdForUpdate(classId))
+                .thenReturn(Optional.of(classOffering(classId, courseId)));
         when(bindingRepository.findByClassId(classId)).thenReturn(Optional.of(existing));
 
         assertThat(service.ensureBinding(classId, courseId)).isSameAs(existing);
@@ -77,6 +85,8 @@ class ClassCurriculumBindingProvisioningServiceTest {
     void ensureBindingExplainsWhenPublishedMasterDoesNotExist() {
         UUID classId = UUID.randomUUID();
         UUID courseId = UUID.randomUUID();
+        when(classOfferingRepository.findByIdForUpdate(classId))
+                .thenReturn(Optional.of(classOffering(classId, courseId)));
         when(bindingRepository.findByClassId(classId)).thenReturn(Optional.empty());
         when(curriculumVersionRepository
                 .findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
@@ -87,6 +97,27 @@ class ClassCurriculumBindingProvisioningServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
+    @Test
+    void ensureBindingRejectsMissingClassBeforeCreatingBinding() {
+        UUID classId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        when(classOfferingRepository.findByIdForUpdate(classId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.ensureBinding(classId, courseId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+
+        verify(bindingRepository, never()).save(any());
+    }
+
+    private ClassOffering classOffering(UUID classId, UUID courseId) {
+        ClassOffering offering = new ClassOffering();
+        offering.setId(classId);
+        offering.setCourseId(courseId);
+        return offering;
     }
 
     private CurriculumVersion publishedMaster(UUID courseId) {

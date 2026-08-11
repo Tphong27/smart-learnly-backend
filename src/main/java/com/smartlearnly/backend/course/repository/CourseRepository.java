@@ -8,13 +8,20 @@ import java.util.UUID;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.domain.Specification;
 
 public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecificationExecutor<Course> {
+    /** Lấy trang course cùng category để mapper không phát sinh N+1 query. */
+    @Override
+    @EntityGraph(attributePaths = "category")
+    Page<Course> findAll(Specification<Course> specification, Pageable pageable);
+
     boolean existsByCategory_Id(UUID categoryId);
 
     @Query(value = """
@@ -60,12 +67,21 @@ public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecif
             FROM public.courses c
             JOIN public.categories category
                 ON category.id = c.category_id
+            LEFT JOIN (
+                SELECT enrollment.course_id, COUNT(*) AS enrollment_count
+                FROM public.course_enrollments enrollment
+                WHERE enrollment.status IN (
+                    'active'::public.enroll_status,
+                    'completed'::public.enroll_status
+                )
+                GROUP BY enrollment.course_id
+            ) popularity ON popularity.course_id = c.id
             WHERE c.status = 'published'::public.course_status
               AND c.deleted_at IS NULL
               AND (
                   :searchPattern IS NULL
-                  OR c.title ILIKE :searchPattern ESCAPE '\\'
-                  OR COALESCE(c.description, '') ILIKE :searchPattern ESCAPE '\\'
+                  OR (c.title::text || ' ' || COALESCE(c.description, ''))
+                      ILIKE :searchPattern ESCAPE '\\'
               )
               AND (
                   :categorySlug IS NULL
@@ -127,15 +143,7 @@ public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecif
                 END DESC,
                 CASE
                     WHEN :sort = 'POPULAR'
-                    THEN (
-                        SELECT COUNT(*)
-                        FROM public.course_enrollments enrollment
-                        WHERE enrollment.course_id = c.id
-                          AND enrollment.status IN (
-                              'active'::public.enroll_status,
-                              'completed'::public.enroll_status
-                          )
-                    )
+                    THEN COALESCE(popularity.enrollment_count, 0)
                 END DESC,
                 CASE
                     WHEN :sort = 'POPULAR'
@@ -156,8 +164,8 @@ public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecif
               AND c.deleted_at IS NULL
               AND (
                   :searchPattern IS NULL
-                  OR c.title ILIKE :searchPattern ESCAPE '\\'
-                  OR COALESCE(c.description, '') ILIKE :searchPattern ESCAPE '\\'
+                  OR (c.title::text || ' ' || COALESCE(c.description, ''))
+                      ILIKE :searchPattern ESCAPE '\\'
               )
               AND (
                   :categorySlug IS NULL
@@ -225,8 +233,8 @@ public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecif
             WHERE c.status = 'published'::public.course_status
               AND c.deleted_at IS NULL
               AND (
-                  c.title ILIKE :searchPattern ESCAPE '\\'
-                  OR COALESCE(c.description, '') ILIKE :searchPattern ESCAPE '\\'
+                  (c.title::text || ' ' || COALESCE(c.description, ''))
+                      ILIKE :searchPattern ESCAPE '\\'
               )
             ORDER BY c.is_featured DESC, c.created_at DESC, c.id ASC
             """, countQuery = """
@@ -236,8 +244,8 @@ public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecif
             WHERE c.status = 'published'::public.course_status
               AND c.deleted_at IS NULL
               AND (
-                  c.title ILIKE :searchPattern ESCAPE '\\'
-                  OR COALESCE(c.description, '') ILIKE :searchPattern ESCAPE '\\'
+                  (c.title::text || ' ' || COALESCE(c.description, ''))
+                      ILIKE :searchPattern ESCAPE '\\'
               )
             """, nativeQuery = true)
     Page<CourseListProjection> searchPublishedCourses(

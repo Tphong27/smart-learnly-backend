@@ -85,7 +85,7 @@ public class DefaultFlashcardDocumentTextExtractionService implements FlashcardD
                 text.length(),
                 result.images().size(),
                 result.renderedPageImages().size(),
-                elapsedMillis(startedAtNanos)
+                (System.nanoTime() - startedAtNanos) / 1_000_000L
         );
         return result;
     }
@@ -235,7 +235,7 @@ public class DefaultFlashcardDocumentTextExtractionService implements FlashcardD
     }
 
     private List<DocumentImage> renderPdfPageImages(PDDocument document) {
-        int maxPages = maxRenderedPdfPages();
+        int maxPages = Math.max(0, properties.getMaxRenderedPdfPages());
         if (maxPages <= 0 || document.getNumberOfPages() <= 0) {
             return List.of();
         }
@@ -244,7 +244,10 @@ public class DefaultFlashcardDocumentTextExtractionService implements FlashcardD
         int pageLimit = Math.min(maxPages, document.getNumberOfPages());
         for (int pageIndex = 0; pageIndex < pageLimit; pageIndex += 1) {
             try {
-                BufferedImage pageImage = renderer.renderImageWithDPI(pageIndex, pdfRenderDpi(), ImageType.RGB);
+                BufferedImage pageImage = renderer.renderImageWithDPI(
+                        pageIndex,
+                        Math.max(72F, properties.getPdfRenderDpi()),
+                        ImageType.RGB);
                 byte[] content = encodeRenderedPageImage(pageImage);
                 if (content.length == 0) {
                     continue;
@@ -430,24 +433,12 @@ public class DefaultFlashcardDocumentTextExtractionService implements FlashcardD
         return Math.max(1L, properties.getMaxEmbeddedImageSize().toBytes());
     }
 
-    private int maxRenderedPdfPages() {
-        return Math.max(0, properties.getMaxRenderedPdfPages());
-    }
-
-    private float pdfRenderDpi() {
-        return Math.max(72F, properties.getPdfRenderDpi());
-    }
-
     private long maxRenderedPageImageBytes() {
         return Math.max(1L, properties.getMaxRenderedPageImageSize().toBytes());
     }
 
     private float renderedPageJpegQuality() {
         return Math.max(0.1F, Math.min(1F, properties.getRenderedPageJpegQuality()));
-    }
-
-    private long elapsedMillis(long startedAtNanos) {
-        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 
     private String normalizeImageContentType(String contentType) {

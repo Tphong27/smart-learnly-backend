@@ -9,7 +9,14 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/student-test-answers")
@@ -20,6 +27,7 @@ public class StudentTestAnswerController {
 
     /** Lưu đáp án đang làm của học viên cho một attempt. */
     @PostMapping("/save")
+    @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<StudentTestAnswerModel.Response>
     saveStudentAnswer(
             @Valid @RequestBody
@@ -35,6 +43,7 @@ public class StudentTestAnswerController {
 
     /** Lưu kết quả chấm thủ công cho một đáp án. */
     @PutMapping("/{id}/grade")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<StudentTestAnswerModel.Response>
     gradeStudentAnswer(
             @PathVariable UUID id,
@@ -49,6 +58,7 @@ public class StudentTestAnswerController {
 
     /** Lấy các đáp án thuộc một attempt. */
     @GetMapping("/attempt/{attemptId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER', 'TRAINEE')")
     public ResponseEntity<
             List<StudentTestAnswerModel.Response>>
     getAnswersByAttempt(

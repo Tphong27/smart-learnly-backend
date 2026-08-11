@@ -17,11 +17,11 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
             WHERE q.course_id = :courseId
               AND (CAST(:moduleId AS uuid) IS NULL OR q.module_id = CAST(:moduleId AS uuid))
               AND (CAST(:search AS text) IS NULL OR LOWER(q.question_text) LIKE CONCAT('%', LOWER(CAST(:search AS text)), '%'))
-              AND (CAST(:type AS text) IS NULL OR q.question_type::text = CAST(:type AS text))
-              AND (CAST(:status AS text) IS NULL OR q.status::text = CAST(:status AS text))
-              AND (CAST(:includeArchived AS boolean) = TRUE OR q.status::text <> 'archived')
+              AND (CAST(:type AS text) IS NULL OR q.question_type = CAST(:type AS public.question_type))
+              AND (CAST(:status AS text) IS NULL OR q.status = CAST(:status AS public.question_status))
+              AND (CAST(:includeArchived AS boolean) = TRUE OR q.status <> 'archived'::public.question_status)
               AND (CAST(:difficulty AS smallint) IS NULL OR q.difficulty = CAST(:difficulty AS smallint))
-            ORDER BY q.updated_at DESC
+            ORDER BY q.updated_at DESC, q.id ASC
             """,
             countQuery = """
             SELECT COUNT(*)
@@ -29,9 +29,9 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
             WHERE q.course_id = :courseId
               AND (CAST(:moduleId AS uuid) IS NULL OR q.module_id = CAST(:moduleId AS uuid))
               AND (CAST(:search AS text) IS NULL OR LOWER(q.question_text) LIKE CONCAT('%', LOWER(CAST(:search AS text)), '%'))
-              AND (CAST(:type AS text) IS NULL OR q.question_type::text = CAST(:type AS text))
-              AND (CAST(:status AS text) IS NULL OR q.status::text = CAST(:status AS text))
-              AND (CAST(:includeArchived AS boolean) = TRUE OR q.status::text <> 'archived')
+              AND (CAST(:type AS text) IS NULL OR q.question_type = CAST(:type AS public.question_type))
+              AND (CAST(:status AS text) IS NULL OR q.status = CAST(:status AS public.question_status))
+              AND (CAST(:includeArchived AS boolean) = TRUE OR q.status <> 'archived'::public.question_status)
               AND (CAST(:difficulty AS smallint) IS NULL OR q.difficulty = CAST(:difficulty AS smallint))
             """,
             nativeQuery = true)
@@ -47,6 +47,28 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
     );
 
     List<Question> findByCourseId(UUID courseId);
+
+    /** Tìm ứng viên gần trùng bằng Jaccard token trong PostgreSQL và chỉ trả số lượng nhỏ nhất cần thiết. */
+    @Query(value = """
+            WITH input AS (
+                SELECT public.smartlearnly_normalized_terms(CAST(:questionText AS text)) AS terms
+            )
+            SELECT q.*
+            FROM public.questions q
+            CROSS JOIN input
+            WHERE q.course_id = :courseId
+              AND public.smartlearnly_normalized_terms(q.question_text) && input.terms
+              AND public.smartlearnly_token_jaccard(q.question_text, CAST(:questionText AS text)) >= :threshold
+            ORDER BY public.smartlearnly_token_jaccard(q.question_text, CAST(:questionText AS text)) DESC,
+                     q.updated_at DESC,
+                     q.id ASC
+            LIMIT :candidateLimit
+            """, nativeQuery = true)
+    List<Question> findNearDuplicateCandidatesInCourse(
+            @Param("courseId") UUID courseId,
+            @Param("questionText") String questionText,
+            @Param("threshold") double threshold,
+            @Param("candidateLimit") int candidateLimit);
 
     @Query(value = """
             SELECT EXISTS (
