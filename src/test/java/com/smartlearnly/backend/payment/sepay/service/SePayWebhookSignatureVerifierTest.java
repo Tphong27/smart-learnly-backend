@@ -83,6 +83,61 @@ class SePayWebhookSignatureVerifierTest {
     }
 
     @Test
+    void verifyShouldRejectMissingTimestamp() {
+        String signature = signature(NOW, RAW_BODY, SECRET);
+
+        assertThatThrownBy(() -> verifier.verify(RAW_BODY, signature, null))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.UNAUTHENTICATED));
+    }
+
+    @Test
+    void verifyShouldRejectInvalidTimestamp() {
+        String signature = signature(NOW, RAW_BODY, SECRET);
+
+        assertThatThrownBy(() -> verifier.verify(RAW_BODY, signature, "not-a-timestamp"))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.UNAUTHENTICATED));
+    }
+
+    @Test
+    void verifyShouldRejectTimestampTooFarInFuture() {
+        long futureTimestamp = NOW + 301;
+        String signature = signature(futureTimestamp, RAW_BODY, SECRET);
+
+        assertThatThrownBy(() -> verifier.verify(RAW_BODY, signature, Long.toString(futureTimestamp)))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.UNAUTHENTICATED));
+    }
+
+    @Test
+    void verifyShouldRejectSignatureWithInvalidPrefix() {
+        String signatureWithoutPrefix = "a".repeat(64);
+
+        assertThatThrownBy(() -> verifier.verify(RAW_BODY, signatureWithoutPrefix, Long.toString(NOW)))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.UNAUTHENTICATED));
+    }
+
+    @Test
+    void verifyShouldRejectMalformedSignatureHex() {
+        String malformedSignature = "sha256=" + "g".repeat(64);
+
+        assertThatThrownBy(() -> verifier.verify(RAW_BODY, malformedSignature, Long.toString(NOW)))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.UNAUTHENTICATED));
+    }
+
+    @Test
+    void verifyShouldTreatNullRawBodyAsEmptyBody() {
+        String signature = signature(NOW, new byte[0], SECRET);
+
+        long timestamp = verifier.verify(null, signature, Long.toString(NOW));
+
+        assertThat(timestamp).isEqualTo(NOW);
+    }
+
+    @Test
     void verifyShouldRejectMissingSecretWithoutExposingToken() {
         when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings(API_TOKEN, ""));
         String signature = signature(NOW, RAW_BODY, SECRET);
