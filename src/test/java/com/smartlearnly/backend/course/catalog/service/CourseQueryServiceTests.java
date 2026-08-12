@@ -241,7 +241,10 @@ class CourseQueryServiceTests {
 				.contains("CASE WHEN :sort = 'PRICE_DESC'")
 				.contains("CASE WHEN :sort = 'POPULAR'")
 				.contains("FROM public.course_enrollments enrollment")
-				.contains("enrollment.course_id = c.id")
+				.contains("SELECT enrollment.course_id, COUNT(*) AS enrollment_count")
+				.contains("GROUP BY enrollment.course_id")
+				.contains("popularity.course_id = c.id")
+				.contains("COALESCE(popularity.enrollment_count, 0)")
 				.contains("'active'::public.enroll_status")
 				.contains("'completed'::public.enroll_status");
 
@@ -252,6 +255,7 @@ class CourseQueryServiceTests {
 		assertThat(normalizedCountQuery)
 				.contains("c.status = 'published'::public.course_status")
 				.contains("c.deleted_at IS NULL")
+				.contains("category.slug = :categorySlug")
 				.contains("c.discounted_price < c.price");
 	}
 
@@ -261,15 +265,20 @@ class CourseQueryServiceTests {
 				.getMethod("searchPublishedCourses", String.class, Pageable.class)
 				.getAnnotation(Query.class);
 
-		assertThat(query.value())
-				.contains("c.title ILIKE :searchPattern ESCAPE '\\'")
-				.contains("COALESCE(c.description, '') ILIKE :searchPattern ESCAPE '\\'")
+		String normalizedQuery = query.value()
+				.replaceAll("\\s+", " ")
+				.trim();
+		String normalizedCountQuery = query.countQuery()
+				.replaceAll("\\s+", " ")
+				.trim();
+
+		assertThat(normalizedQuery)
+				.contains("(c.title::text || ' ' || COALESCE(c.description, '')) ILIKE :searchPattern ESCAPE '\\'")
 				.contains("c.status = 'published'::public.course_status")
 				.contains("c.deleted_at IS NULL")
 				.contains("ORDER BY c.is_featured DESC, c.created_at DESC, c.id ASC");
-		assertThat(query.countQuery())
-				.contains("c.title ILIKE :searchPattern ESCAPE '\\'")
-				.contains("COALESCE(c.description, '') ILIKE :searchPattern ESCAPE '\\'")
+		assertThat(normalizedCountQuery)
+				.contains("(c.title::text || ' ' || COALESCE(c.description, '')) ILIKE :searchPattern ESCAPE '\\'")
 				.contains("c.status = 'published'::public.course_status")
 				.contains("c.deleted_at IS NULL");
 	}
