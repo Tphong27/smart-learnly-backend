@@ -15,7 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
+// import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -49,10 +49,4 @@ public class OrderController {
         return ApiResponse.success("Order loaded successfully", orderService.getOrder(orderId));
     }
 
-    @PostMapping("/{orderId}/cancel")
-    @PreAuthorize("hasRole('TRAINEE')")
-    // Yêu cầu hủy một đơn đang chờ thanh toán thuộc về học viên hiện tại.
-    public ApiResponse<OrderResponse> cancel(@PathVariable UUID orderId) {
-        return ApiResponse.success("Order cancelled successfully", orderService.cancel(orderId));
-    }
 }

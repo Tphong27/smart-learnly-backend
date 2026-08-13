@@ -95,40 +95,6 @@ public class OrderService {
     }
 
     @Transactional
-    // Hủy đơn pending của học viên, đóng phiên thanh toán và ghi audit/thông báo.
-    public OrderResponse cancel(UUID orderId) {
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        PurchaseOrder order = orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Order was not found"));
-        if (!order.getUserId().equals(actor.getId())) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "Only the order owner can cancel this order");
-        }
-        if (order.getStatus() != OrderStatus.PENDING) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Only pending orders can be cancelled");
-        }
-
-        order.setStatus(OrderStatus.CANCELLED);
-        order.setCancelledAt(Instant.now());
-        PurchaseOrder saved = orderRepository.save(order);
-
-        closePendingPaymentSession(saved);
-
-        auditLogService.recordUser(
-                actor, AuditAction.ORDER_CANCELLED, AuditDomain.ORDER, AuditResult.SUCCESS,
-                "ORDER", saved.getId().toString(), "Order was cancelled",
-                Map.of("status", OrderStatus.PENDING.name()),
-                Map.of("status", OrderStatus.CANCELLED.name()),
-                Map.of("orderCode", saved.getOrderCode())
-        );
-        emitOrderNotification(
-                saved,
-                "Order cancelled",
-                "Your pending order was cancelled.",
-                "order:" + saved.getId() + ":cancelled");
-        return toOrderResponse(saved);
-    }
-
-    @Transactional
     // Hết hạn một batch mặc định các đơn đã vượt quá cửa sổ checkout.
     public int expireDueOrders() {
         return expireDueOrders(DEFAULT_EXPIRE_BATCH_SIZE);

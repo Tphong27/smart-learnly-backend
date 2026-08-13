@@ -191,9 +191,6 @@ class AssignmentServiceTest {
                         classId,
                         false,
                         CurriculumResolutionService.SOURCE_MASTER_INHERITED));
-        when(curriculumLessonRepository.findEffectiveLessonReference(versionId, lessonId))
-                .thenReturn(Optional.empty());
-
         assertThatThrownBy(() -> service.createAssignment(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("Assignment lesson must belong to this class curriculum");

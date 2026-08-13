@@ -2,6 +2,7 @@ package com.smartlearnly.backend.curriculum.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,12 +18,17 @@ import com.smartlearnly.backend.curriculum.repository.ClassCurriculumEntryReposi
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
+import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
+import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
+import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,13 +47,22 @@ class ClassCurriculumCompositionServiceTest {
     private CurriculumSectionRepository sectionRepository;
     @Mock
     private CurriculumVersionRepository versionRepository;
+    @Mock
+    private FlashcardSetRepository flashcardSetRepository;
+    @Mock
+    private FlashcardCardRepository flashcardCardRepository;
 
     private ClassCurriculumCompositionService service;
 
     @BeforeEach
     void setUp() {
         service = new ClassCurriculumCompositionService(
-                entryRepository, lessonRepository, sectionRepository, versionRepository);
+                entryRepository,
+                lessonRepository,
+                sectionRepository,
+                versionRepository,
+                flashcardSetRepository,
+                flashcardCardRepository);
     }
 
     @Test
@@ -97,6 +112,74 @@ class ClassCurriculumCompositionServiceTest {
         assertThat(entry.getSection().getCurriculumVersion()).isEqualTo(draft);
         verify(sectionRepository).save(any(CurriculumSection.class));
         verify(lessonRepository, never()).save(any(CurriculumLesson.class));
+    }
+
+    @Test
+    void snapshotStructureFromClassVersionShouldCopyFlashcardSetAndCards() {
+        CurriculumVersion draft = version(CurriculumScope.CLASS, CurriculumStatus.DRAFT);
+        CurriculumVersion source = version(CurriculumScope.CLASS, CurriculumStatus.PUBLISHED);
+        CurriculumSection sourceSection = section(source, 0);
+        source.addSection(sourceSection);
+
+        CurriculumLesson sourceLesson = materializedLesson("Published flashcards");
+        sourceLesson.setType(LessonType.FLASHCARD);
+        sourceLesson.setLessonIdentityId(UUID.randomUUID());
+        sourceLesson.setSection(sourceSection);
+        ClassCurriculumEntry sourceEntry = entry(
+                sourceSection, null, sourceLesson.getLessonIdentityId(), sourceLesson.getId());
+
+        FlashcardSet sourceSet = new FlashcardSet();
+        sourceSet.setId(UUID.randomUUID());
+        sourceSet.setCurriculumLessonId(sourceLesson.getId());
+        sourceSet.setTitle("Published flashcards");
+        sourceSet.setDescription("Three terms");
+        sourceSet.setIsPublic(false);
+        sourceSet.setIsOfficial(false);
+        FlashcardCard sourceCard = new FlashcardCard();
+        sourceCard.setId(UUID.randomUUID());
+        sourceCard.setFlashcardSet(sourceSet);
+        sourceCard.setFrontText("Front");
+        sourceCard.setBackText("Back");
+        sourceCard.setOrderIndex(0);
+
+        when(sectionRepository.save(any(CurriculumSection.class))).thenAnswer(invocation -> {
+            CurriculumSection saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(entryRepository.findByClassVersionIdAndSectionIdOrderBySortOrderAsc(
+                source.getId(), sourceSection.getId())).thenReturn(List.of(sourceEntry));
+        when(lessonRepository.findById(sourceLesson.getId())).thenReturn(Optional.of(sourceLesson));
+        when(lessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {
+            CurriculumLesson saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(entryRepository.save(any(ClassCurriculumEntry.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(sourceLesson.getId()))
+                .thenReturn(Optional.of(sourceSet));
+        when(flashcardSetRepository.save(any(FlashcardSet.class))).thenAnswer(invocation -> {
+            FlashcardSet saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(sourceSet.getId()))
+                .thenReturn(List.of(sourceCard));
+
+        service.snapshotStructure(draft, source);
+
+        ArgumentCaptor<FlashcardSet> setCaptor = ArgumentCaptor.forClass(FlashcardSet.class);
+        verify(flashcardSetRepository).save(setCaptor.capture());
+        assertThat(setCaptor.getValue().getCurriculumLessonId()).isNotEqualTo(sourceLesson.getId());
+        assertThat(setCaptor.getValue().getTitle()).isEqualTo(sourceSet.getTitle());
+        verify(flashcardCardRepository).saveAll(argThat(cards -> {
+            List<FlashcardCard> copiedCards = StreamSupport.stream(cards.spliterator(), false).toList();
+            return copiedCards.size() == 1
+                    && "Front".equals(copiedCards.get(0).getFrontText())
+                    && "Back".equals(copiedCards.get(0).getBackText())
+                    && setCaptor.getValue() == copiedCards.get(0).getFlashcardSet();
+        }));
     }
 
     @Test

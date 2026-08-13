@@ -9,9 +9,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 @ConfigurationProperties(prefix = "app.payment.sepay")
 public class SePayProperties {
-    public static final String DEFAULT_QR_URL_TEMPLATE =
-            "https://img.vietqr.io/image/{bankName}-{accountNumber}-compact2.png"
-                    + "?amount={amount}&addInfo={transferContent}&accountName={accountName}";
+    public static final String DEFAULT_QR_URL_TEMPLATE = "https://vietqr.app/img"
+            + "?acc={accountNumber}"
+            + "&bank={bankName}"
+            + "&amount={amount}"
+            + "&des={transferContent}"
+            + "&template=compact"
+            + "&showinfo=true";
     public static final String DEFAULT_API_BASE_URL = "https://userapi.sepay.vn";
 
     private String webhookSecret = "";
