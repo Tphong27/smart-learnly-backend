@@ -378,6 +378,10 @@ class LearningContentServiceTest {
                 when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
                 when(curriculumLessonRepository.findById(curriculumLessonId)).thenReturn(Optional.of(lesson));
                 when(enrollmentAccessService.requireCourseAccess(courseId)).thenReturn(enrollment(courseId, studentId));
+                when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+                                .thenReturn(new CurriculumResolution(version, null, null, false, "master_published"));
+                when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId))
+                                .thenReturn(Optional.of(flashcardSet));
                 when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
                                 .thenReturn(Optional.empty());
                 when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
@@ -604,7 +608,11 @@ class LearningContentServiceTest {
                 UUID courseId = UUID.randomUUID();
                 UUID studentId = UUID.randomUUID();
                 UUID cardId = UUID.randomUUID();
-                FlashcardSet flashcardSet = flashcardSet(UUID.randomUUID(), UUID.randomUUID(), "Course set");
+                UUID curriculumLessonId = UUID.randomUUID();
+                CurriculumVersion version = publishedVersion(courseId);
+                CurriculumSection section = sectionIn(version);
+                flashcardLessonIn(section, curriculumLessonId);
+                FlashcardSet flashcardSet = flashcardSet(UUID.randomUUID(), curriculumLessonId, "Course set");
                 flashcardSet.setCourse(course(courseId));
                 FlashcardCard card = flashcardCard(cardId, flashcardSet, "front", "back", 0);
                 FlashcardProgress progress = progress(studentId, card, "learning", "still_learning", 3, 2);
@@ -612,6 +620,10 @@ class LearningContentServiceTest {
 
                 when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
                 when(enrollmentAccessService.requireCourseAccess(courseId)).thenReturn(enrollment);
+                when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+                                .thenReturn(new CurriculumResolution(version, null, null, false, "master_published"));
+                when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId))
+                                .thenReturn(Optional.of(flashcardSet));
                 when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
                                 .thenReturn(Optional.of(progress));
                 when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
@@ -640,13 +652,21 @@ class LearningContentServiceTest {
                 UUID courseId = UUID.randomUUID();
                 UUID studentId = UUID.randomUUID();
                 UUID cardId = UUID.randomUUID();
-                FlashcardSet flashcardSet = flashcardSet(UUID.randomUUID(), UUID.randomUUID(), "Course set");
+                UUID curriculumLessonId = UUID.randomUUID();
+                CurriculumVersion version = publishedVersion(courseId);
+                CurriculumSection section = sectionIn(version);
+                flashcardLessonIn(section, curriculumLessonId);
+                FlashcardSet flashcardSet = flashcardSet(UUID.randomUUID(), curriculumLessonId, "Course set");
                 flashcardSet.setCourse(course(courseId));
                 FlashcardCard card = flashcardCard(cardId, flashcardSet, "front", "back", 0);
                 CourseEnrollment enrollment = enrollment(courseId, studentId);
 
                 when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
                 when(enrollmentAccessService.requireCourseAccess(courseId)).thenReturn(enrollment);
+                when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+                                .thenReturn(new CurriculumResolution(version, null, null, false, "master_published"));
+                when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId))
+                                .thenReturn(Optional.of(flashcardSet));
                 when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
                                 .thenReturn(Optional.empty());
                 when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
@@ -676,13 +696,21 @@ class LearningContentServiceTest {
                 UUID courseId = UUID.randomUUID();
                 UUID studentId = UUID.randomUUID();
                 UUID cardId = UUID.randomUUID();
-                FlashcardSet flashcardSet = flashcardSet(UUID.randomUUID(), UUID.randomUUID(), "Course set");
+                UUID curriculumLessonId = UUID.randomUUID();
+                CurriculumVersion version = publishedVersion(courseId);
+                CurriculumSection section = sectionIn(version);
+                flashcardLessonIn(section, curriculumLessonId);
+                FlashcardSet flashcardSet = flashcardSet(UUID.randomUUID(), curriculumLessonId, "Course set");
                 flashcardSet.setCourse(course(courseId));
                 FlashcardCard card = flashcardCard(cardId, flashcardSet, "front", "back", 0);
                 CourseEnrollment enrollment = enrollment(courseId, studentId);
 
                 when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
                 when(enrollmentAccessService.requireCourseAccess(courseId)).thenReturn(enrollment);
+                when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+                                .thenReturn(new CurriculumResolution(version, null, null, false, "master_published"));
+                when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId))
+                                .thenReturn(Optional.of(flashcardSet));
 
                 assertThatThrownBy(
                                 () -> service.submitFlashcardProgress(cardId, null,
