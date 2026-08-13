@@ -31,4 +31,17 @@ public interface FlashcardProgressRepository extends JpaRepository<FlashcardProg
             @Param("studentId") UUID studentId,
             @Param("cardIds") Collection<UUID> cardIds
     );
+
+    @Query("""
+            select count(distinct progress.flashcard.id)
+            from FlashcardProgress progress
+            join progress.flashcard card
+            where progress.studentId = :studentId
+              and card.flashcardSet.id = :setId
+              and card.deletedAt is null
+            """)
+    long countDistinctProgressedActiveCardsByStudentIdAndSetId(
+            @Param("studentId") UUID studentId,
+            @Param("setId") UUID setId
+    );
 }

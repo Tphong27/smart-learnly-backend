@@ -166,6 +166,15 @@ public interface FlashcardSetRepository extends JpaRepository<FlashcardSet, UUID
             @Param("ownerId") UUID ownerId
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select flashcardSet
+            from FlashcardSet flashcardSet
+            where flashcardSet.id = :setId
+              and flashcardSet.deletedAt is null
+            """)
+    Optional<FlashcardSet> findByIdAndDeletedAtIsNullForUpdate(@Param("setId") UUID setId);
+
     @Query("""
             select flashcardSet
             from FlashcardSet flashcardSet

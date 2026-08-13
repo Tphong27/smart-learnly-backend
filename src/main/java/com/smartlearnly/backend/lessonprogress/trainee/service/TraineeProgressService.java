@@ -115,29 +115,13 @@ public class TraineeProgressService {
                                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
                                                 "Lesson not found in the effective curriculum"));
 
-                LessonProgress progress = findLessonProgress(
+                LessonProgress saved = saveResolvedLessonProgress(
                                 student.getId(),
                                 courseId,
                                 classId,
-                                lesson.getLessonIdentityId()).orElseGet(() -> {
-                                        LessonProgress created = new LessonProgress();
-                                        created.setStudentId(student.getId());
-                                        created.setCourseId(courseId);
-                                        created.setClassId(classId);
-                                        created.setLessonIdentityId(lesson.getLessonIdentityId());
-                                        created.setLessonId(lesson.getId());
-                                        return created;
-                                });
-
-                progress.setCourseId(courseId);
-                progress.setClassId(classId);
-                progress.setLessonIdentityId(lesson.getLessonIdentityId());
-                progress.setLessonId(lesson.getId());
-                progress.setCompleted(completed);
-                progress.setLastAccessedAt(Instant.now());
-                progress.setCompletedAt(completed ? Instant.now() : null);
-
-                LessonProgress saved = lessonProgressRepository.save(progress);
+                                lesson,
+                                completed,
+                                false);
 
                 return new LessonProgressResponse(
                                 saved.getLessonId(),
@@ -147,6 +131,41 @@ public class TraineeProgressService {
                                 saved.getLastAccessedAt(),
                                 saved.getClassId(),
                                 saved.getLessonIdentityId());
+        }
+
+        @Transactional
+        public LessonProgressResponse completeResolvedLesson(
+                        UUID studentId,
+                        UUID courseId,
+                        UUID classId,
+                        CurriculumLesson lesson) {
+                LessonProgress saved = saveResolvedLessonProgress(
+                                studentId,
+                                courseId,
+                                classId,
+                                lesson,
+                                true,
+                                true);
+
+                return new LessonProgressResponse(
+                                saved.getLessonId(),
+                                saved.getCourseId(),
+                                saved.isCompleted(),
+                                saved.getCompletedAt(),
+                                saved.getLastAccessedAt(),
+                                saved.getClassId(),
+                                saved.getLessonIdentityId());
+        }
+
+        @Transactional(readOnly = true)
+        public boolean isResolvedLessonCompleted(
+                        UUID studentId,
+                        UUID courseId,
+                        UUID classId,
+                        CurriculumLesson lesson) {
+                return findLessonProgress(studentId, courseId, classId, lesson.getLessonIdentityId())
+                                .map(LessonProgress::isCompleted)
+                                .orElse(false);
         }
 
         /** Tính phần trăm hoàn thành curriculum của một học viên trong lớp cụ thể. */
@@ -173,6 +192,46 @@ public class TraineeProgressService {
                 }
                 return lessonProgressRepository.findByStudentIdAndClassIdAndLessonIdentityId(studentId, classId,
                                 lessonIdentityId);
+        }
+
+        private LessonProgress saveResolvedLessonProgress(
+                        UUID studentId,
+                        UUID courseId,
+                        UUID classId,
+                        CurriculumLesson lesson,
+                        boolean completed,
+                        boolean preserveExistingCompletedAt) {
+                LessonProgress progress = findLessonProgress(
+                                studentId,
+                                courseId,
+                                classId,
+                                lesson.getLessonIdentityId()).orElseGet(() -> {
+                                        LessonProgress created = new LessonProgress();
+                                        created.setStudentId(studentId);
+                                        created.setCourseId(courseId);
+                                        created.setClassId(classId);
+                                        created.setLessonIdentityId(lesson.getLessonIdentityId());
+                                        created.setLessonId(lesson.getId());
+                                        return created;
+                                });
+
+                boolean wasCompleted = progress.isCompleted();
+                Instant now = Instant.now();
+                progress.setCourseId(courseId);
+                progress.setClassId(classId);
+                progress.setLessonIdentityId(lesson.getLessonIdentityId());
+                progress.setLessonId(lesson.getId());
+                progress.setCompleted(completed);
+                progress.setLastAccessedAt(now);
+                if (completed) {
+                        if (!preserveExistingCompletedAt || !wasCompleted || progress.getCompletedAt() == null) {
+                                progress.setCompletedAt(now);
+                        }
+                } else {
+                        progress.setCompletedAt(null);
+                }
+
+                return lessonProgressRepository.save(progress);
         }
 
         /** Tạo một dòng tiến độ cho khóa học mà học viên học qua lớp. */

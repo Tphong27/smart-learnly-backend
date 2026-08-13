@@ -35,6 +35,7 @@ import com.smartlearnly.backend.learning.content.dto.LearningFlashcardPracticeDt
 import com.smartlearnly.backend.learning.content.dto.LearningFlashcardPracticeDtos.FlashcardProgressSummary;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
+import com.smartlearnly.backend.lessonprogress.trainee.service.TraineeProgressService;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.user.entity.UserAccount;
@@ -76,6 +77,7 @@ public class LearningContentService {
         private final FlashcardSetRepository flashcardSetRepository;
         private final FlashcardCardRepository flashcardCardRepository;
         private final FlashcardProgressRepository flashcardProgressRepository;
+        private final TraineeProgressService traineeProgressService;
 
         /** Tạo nội dung học thật cho học viên sau khi kiểm tra quyền enrollment và scope lớp học. */
         @Transactional(readOnly = true)
@@ -275,8 +277,14 @@ public class LearningContentService {
                         studentId = student.getId();
                         resolution = curriculumResolutionService.resolveClassLearning(courseId, classId, studentId);
                 }
-                requireFlashcardSetInCurriculum(resolution.version(), flashcardSet.getId());
+                CurriculumLesson flashcardLesson = requireFlashcardLessonInCurriculum(
+                                resolution.version(),
+                                flashcardSet.getId());
                 String result = normalizeResult(request.result());
+                flashcardSetRepository.findByIdAndDeletedAtIsNullForUpdate(flashcardSet.getId())
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Flashcard card was not found"));
 
                 FlashcardProgress progress = flashcardProgressRepository
                                 .findByStudentIdAndCardId(studentId, cardId)
@@ -300,21 +308,44 @@ public class LearningContentService {
                 }
                 progress.setUpdatedAt(now);
 
-                return toProgressResponse(flashcardProgressRepository.save(progress));
+                FlashcardProgress savedProgress = flashcardProgressRepository.saveAndFlush(progress);
+                boolean lessonCompleted = isFlashcardLessonComplete(studentId, flashcardSet.getId());
+                if (lessonCompleted) {
+                        traineeProgressService.completeResolvedLesson(studentId, courseId, classId, flashcardLesson);
+                } else {
+                        lessonCompleted = traineeProgressService.isResolvedLessonCompleted(
+                                        studentId,
+                                        courseId,
+                                        classId,
+                                        flashcardLesson);
+                }
+
+                return toProgressResponse(savedProgress, lessonCompleted);
         }
 
         /** Chặn việc ghi tiến độ cho set không thuộc curriculum publish hiện hành của học viên. */
-        private void requireFlashcardSetInCurriculum(CurriculumVersion version, UUID flashcardSetId) {
-                boolean isAvailable = version.getSections().stream()
+        private CurriculumLesson requireFlashcardLessonInCurriculum(CurriculumVersion version, UUID flashcardSetId) {
+                return version.getSections().stream()
                                 .flatMap(section -> effectiveLessons(section).stream())
                                 .filter(lesson -> lesson.getStatus() == LessonStatus.PUBLISHED)
                                 .filter(lesson -> lesson.getType() == LessonType.FLASHCARD)
-                                .map(this::resolveFlashcardSet)
-                                .flatMap(Optional::stream)
-                                .anyMatch(set -> flashcardSetId.equals(set.getId()));
-                if (!isAvailable) {
-                        throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard card was not found");
+                                .filter(lesson -> resolveFlashcardSet(lesson)
+                                                .map(set -> flashcardSetId.equals(set.getId()))
+                                                .orElse(false))
+                                .findFirst()
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Flashcard card was not found"));
+        }
+
+        private boolean isFlashcardLessonComplete(UUID studentId, UUID flashcardSetId) {
+                long activeCardCount = flashcardCardRepository.countActiveBySetId(flashcardSetId);
+                if (activeCardCount <= 0) {
+                        return false;
                 }
+                long progressedActiveCardCount = flashcardProgressRepository
+                                .countDistinctProgressedActiveCardsByStudentIdAndSetId(studentId, flashcardSetId);
+                return progressedActiveCardCount >= activeCardCount;
         }
 
         private UUID resolveEffectiveClassId(UUID courseId, UUID classId, UUID studentId) {
@@ -428,7 +459,7 @@ public class LearningContentService {
                                 progress.getNextReviewAt());
         }
 
-        private FlashcardProgressResponse toProgressResponse(FlashcardProgress progress) {
+        private FlashcardProgressResponse toProgressResponse(FlashcardProgress progress, boolean lessonCompleted) {
                 return new FlashcardProgressResponse(
                                 progress.getFlashcard().getId(),
                                 progress.getLearningStatus(),
@@ -436,7 +467,8 @@ public class LearningContentService {
                                 progress.getRepetitions(),
                                 progress.getIntervalDays(),
                                 progress.getLastReviewedAt(),
-                                progress.getNextReviewAt());
+                                progress.getNextReviewAt(),
+                                lessonCompleted);
         }
 
         private FlashcardProgress newProgress(UUID studentId, FlashcardCard card) {

@@ -43,6 +43,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
+import com.smartlearnly.backend.lessonprogress.trainee.service.TraineeProgressService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -84,6 +85,8 @@ class LearningContentServiceTest {
         private FlashcardCardRepository flashcardCardRepository;
         @Mock
         private FlashcardProgressRepository flashcardProgressRepository;
+        @Mock
+        private TraineeProgressService traineeProgressService;
 
         private LearningContentService service;
 
@@ -102,7 +105,8 @@ class LearningContentServiceTest {
                                 compositionService,
                                 flashcardSetRepository,
                                 flashcardCardRepository,
-                                flashcardProgressRepository);
+                                flashcardProgressRepository,
+                                traineeProgressService);
         }
 
         @Test
@@ -382,10 +386,18 @@ class LearningContentServiceTest {
                                 .thenReturn(new CurriculumResolution(version, null, null, false, "master_published"));
                 when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId))
                                 .thenReturn(Optional.of(flashcardSet));
+                when(flashcardSetRepository.findByIdAndDeletedAtIsNullForUpdate(flashcardSet.getId()))
+                                .thenReturn(Optional.of(flashcardSet));
                 when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
                                 .thenReturn(Optional.empty());
-                when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
+                when(flashcardProgressRepository.saveAndFlush(any(FlashcardProgress.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
+                when(flashcardCardRepository.countActiveBySetId(flashcardSet.getId())).thenReturn(2L);
+                when(flashcardProgressRepository
+                                .countDistinctProgressedActiveCardsByStudentIdAndSetId(studentId, flashcardSet.getId()))
+                                .thenReturn(1L);
+                when(traineeProgressService.isResolvedLessonCompleted(studentId, courseId, null, lesson))
+                                .thenReturn(false);
 
                 var response = service.submitFlashcardProgress(cardId, null, new FlashcardProgressRequest("known"));
 
@@ -393,8 +405,10 @@ class LearningContentServiceTest {
                 assertThat(response.learningStatus()).isEqualTo("known");
                 assertThat(response.repetitions()).isEqualTo(1);
                 assertThat(response.intervalDays()).isEqualTo(1);
+                assertThat(response.lessonCompleted()).isFalse();
                 verify(curriculumLessonRepository).findById(curriculumLessonId);
                 verify(enrollmentAccessService).requireCourseAccess(courseId);
+                verify(traineeProgressService, never()).completeResolvedLesson(studentId, courseId, null, lesson);
         }
 
         @Test
@@ -611,7 +625,7 @@ class LearningContentServiceTest {
                 UUID curriculumLessonId = UUID.randomUUID();
                 CurriculumVersion version = publishedVersion(courseId);
                 CurriculumSection section = sectionIn(version);
-                flashcardLessonIn(section, curriculumLessonId);
+                CurriculumLesson lesson = flashcardLessonIn(section, curriculumLessonId);
                 FlashcardSet flashcardSet = flashcardSet(UUID.randomUUID(), curriculumLessonId, "Course set");
                 flashcardSet.setCourse(course(courseId));
                 FlashcardCard card = flashcardCard(cardId, flashcardSet, "front", "back", 0);
@@ -624,10 +638,18 @@ class LearningContentServiceTest {
                                 .thenReturn(new CurriculumResolution(version, null, null, false, "master_published"));
                 when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId))
                                 .thenReturn(Optional.of(flashcardSet));
+                when(flashcardSetRepository.findByIdAndDeletedAtIsNullForUpdate(flashcardSet.getId()))
+                                .thenReturn(Optional.of(flashcardSet));
                 when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
                                 .thenReturn(Optional.of(progress));
-                when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
+                when(flashcardProgressRepository.saveAndFlush(any(FlashcardProgress.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
+                when(flashcardCardRepository.countActiveBySetId(flashcardSet.getId())).thenReturn(2L);
+                when(flashcardProgressRepository
+                                .countDistinctProgressedActiveCardsByStudentIdAndSetId(studentId, flashcardSet.getId()))
+                                .thenReturn(1L);
+                when(traineeProgressService.isResolvedLessonCompleted(studentId, courseId, null, lesson))
+                                .thenReturn(false);
 
                 var response = service.submitFlashcardProgress(cardId, null, new FlashcardProgressRequest(" known "));
 
@@ -638,13 +660,19 @@ class LearningContentServiceTest {
                 assertThat(response.intervalDays()).isEqualTo(4);
                 assertThat(response.lastReviewedAt()).isNotNull();
                 assertThat(response.nextReviewAt()).isEqualTo(response.lastReviewedAt().plus(4, ChronoUnit.DAYS));
+                assertThat(response.lessonCompleted()).isFalse();
 
                 ArgumentCaptor<FlashcardProgress> captor = ArgumentCaptor.forClass(FlashcardProgress.class);
                 verify(enrollmentAccessService).requireCourseAccess(courseId);
                 verify(flashcardProgressRepository).findByStudentIdAndCardId(studentId, cardId);
-                verify(flashcardProgressRepository).save(captor.capture());
+                verify(flashcardProgressRepository).saveAndFlush(captor.capture());
                 assertThat(captor.getValue()).isSameAs(progress);
                 assertThat(captor.getValue().getUpdatedAt()).isEqualTo(response.lastReviewedAt());
+                verify(traineeProgressService, never()).completeResolvedLesson(
+                                studentId,
+                                courseId,
+                                null,
+                                lesson);
         }
 
         @Test
@@ -655,7 +683,7 @@ class LearningContentServiceTest {
                 UUID curriculumLessonId = UUID.randomUUID();
                 CurriculumVersion version = publishedVersion(courseId);
                 CurriculumSection section = sectionIn(version);
-                flashcardLessonIn(section, curriculumLessonId);
+                CurriculumLesson lesson = flashcardLessonIn(section, curriculumLessonId);
                 FlashcardSet flashcardSet = flashcardSet(UUID.randomUUID(), curriculumLessonId, "Course set");
                 flashcardSet.setCourse(course(courseId));
                 FlashcardCard card = flashcardCard(cardId, flashcardSet, "front", "back", 0);
@@ -667,10 +695,18 @@ class LearningContentServiceTest {
                                 .thenReturn(new CurriculumResolution(version, null, null, false, "master_published"));
                 when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(curriculumLessonId))
                                 .thenReturn(Optional.of(flashcardSet));
+                when(flashcardSetRepository.findByIdAndDeletedAtIsNullForUpdate(flashcardSet.getId()))
+                                .thenReturn(Optional.of(flashcardSet));
                 when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
                                 .thenReturn(Optional.empty());
-                when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
+                when(flashcardProgressRepository.saveAndFlush(any(FlashcardProgress.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
+                when(flashcardCardRepository.countActiveBySetId(flashcardSet.getId())).thenReturn(2L);
+                when(flashcardProgressRepository
+                                .countDistinctProgressedActiveCardsByStudentIdAndSetId(studentId, flashcardSet.getId()))
+                                .thenReturn(1L);
+                when(traineeProgressService.isResolvedLessonCompleted(studentId, courseId, null, lesson))
+                                .thenReturn(false);
 
                 var response = service.submitFlashcardProgress(cardId, null,
                                 new FlashcardProgressRequest("still_learning"));
@@ -682,13 +718,19 @@ class LearningContentServiceTest {
                 assertThat(response.intervalDays()).isEqualTo(1);
                 assertThat(response.lastReviewedAt()).isNotNull();
                 assertThat(response.nextReviewAt()).isEqualTo(response.lastReviewedAt().plus(1, ChronoUnit.DAYS));
+                assertThat(response.lessonCompleted()).isFalse();
 
                 ArgumentCaptor<FlashcardProgress> captor = ArgumentCaptor.forClass(FlashcardProgress.class);
                 verify(enrollmentAccessService).requireCourseAccess(courseId);
                 verify(flashcardProgressRepository).findByStudentIdAndCardId(studentId, cardId);
-                verify(flashcardProgressRepository).save(captor.capture());
+                verify(flashcardProgressRepository).saveAndFlush(captor.capture());
                 assertThat(captor.getValue().getStudentId()).isEqualTo(studentId);
                 assertThat(captor.getValue().getFlashcard()).isSameAs(card);
+                verify(traineeProgressService, never()).completeResolvedLesson(
+                                studentId,
+                                courseId,
+                                null,
+                                lesson);
         }
 
         @Test
@@ -722,7 +764,7 @@ class LearningContentServiceTest {
 
                 verify(enrollmentAccessService).requireCourseAccess(courseId);
                 verify(flashcardProgressRepository, never()).findByStudentIdAndCardId(studentId, cardId);
-                verify(flashcardProgressRepository, never()).save(any());
+                verify(flashcardProgressRepository, never()).saveAndFlush(any());
         }
 
         private UserAccount authenticatedStudent(UUID studentId) {
@@ -953,10 +995,16 @@ class LearningContentServiceTest {
                 when(compositionService.effectiveLessons(section)).thenReturn(List.of(lesson));
                 when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lessonId))
                                 .thenReturn(Optional.of(flashcardSet));
+                when(flashcardSetRepository.findByIdAndDeletedAtIsNullForUpdate(setId))
+                                .thenReturn(Optional.of(flashcardSet));
                 when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
                                 .thenReturn(Optional.empty());
-                when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
+                when(flashcardProgressRepository.saveAndFlush(any(FlashcardProgress.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
+                when(flashcardCardRepository.countActiveBySetId(setId)).thenReturn(1L);
+                when(flashcardProgressRepository
+                                .countDistinctProgressedActiveCardsByStudentIdAndSetId(studentId, setId))
+                                .thenReturn(1L);
 
                 var response = service.submitFlashcardProgress(
                                 cardId,
@@ -965,7 +1013,9 @@ class LearningContentServiceTest {
 
                 assertThat(response.cardId()).isEqualTo(cardId);
                 assertThat(response.learningStatus()).isEqualTo("known");
+                assertThat(response.lessonCompleted()).isTrue();
                 verify(curriculumResolutionService).resolveClassLearning(courseId, classId, studentId);
+                verify(traineeProgressService).completeResolvedLesson(studentId, courseId, classId, lesson);
                 verifyNoInteractions(enrollmentAccessService);
         }
 }
