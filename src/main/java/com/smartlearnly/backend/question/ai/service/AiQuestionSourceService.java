@@ -4,8 +4,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.file.config.StorageProperties;
-import com.smartlearnly.backend.file.service.FileStorageService.StoredFile;
-import com.smartlearnly.backend.file.service.SupabaseStorageClient;
+import com.smartlearnly.backend.file.service.CloudflareR2StorageClient;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
@@ -19,6 +18,7 @@ import com.smartlearnly.backend.question.ai.repository.AiQuestionGenerationSourc
 import com.smartlearnly.backend.videoai.entity.VideoAiContent;
 import com.smartlearnly.backend.videoai.entity.VideoAiTranscriptSegment;
 import com.smartlearnly.backend.videoai.repository.VideoAiContentRepository;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -58,7 +58,7 @@ public class AiQuestionSourceService {
     private final AiQuestionGenerationSourceRepository sourceRepository;
     private final AiQuestionGenerationSourceChunkRepository sourceChunkRepository;
     private final StorageProperties storageProperties;
-    private final SupabaseStorageClient supabaseStorageClient;
+    private final CloudflareR2StorageClient r2StorageClient;
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final VideoAiContentRepository videoAiContentRepository;
 
@@ -126,7 +126,7 @@ public class AiQuestionSourceService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "This source does not have a downloadable audit file");
         }
         Instant expiresAt = Instant.now().plusSeconds(SIGNED_URL_TTL_SECONDS);
-        String url = supabaseStorageClient.createSignedUrl(
+        String url = r2StorageClient.getPresignedUrl(
                 storageProperties.getAiQuestionSourceFileBucket(),
                 source.getSourcePayloadRef(),
                 SIGNED_URL_TTL_SECONDS
@@ -187,19 +187,16 @@ public class AiQuestionSourceService {
                 source = sourceRepository.save(source);
 
                 if (spec.fileContent() != null) {
-                    StoredFile stored = supabaseStorageClient.store(
+                    r2StorageClient.putPrivateObject(
                             storageProperties.getAiQuestionSourceFileBucket(),
                             filePayloadRef,
                             spec.mimeType(),
-                            spec.fileContent()
+                            new ByteArrayInputStream(spec.fileContent()),
+                            spec.fileContent().length
                     );
                     uploadedObjects.add(new UploadedObject(
                             storageProperties.getAiQuestionSourceFileBucket(),
-                            stored.objectPath()));
-                    if (!stored.objectPath().equals(source.getSourcePayloadRef())) {
-                        source.setSourcePayloadRef(stored.objectPath());
-                    }
-                    source = sourceRepository.save(source);
+                            filePayloadRef));
                 }
 
                 persistSourceChunks(source, spec.chunks());
@@ -209,7 +206,7 @@ public class AiQuestionSourceService {
         }
         catch (RuntimeException exception) {
             uploadedObjects.forEach(upload ->
-                    supabaseStorageClient.deleteObject(upload.bucket(), upload.objectPath()));
+                    r2StorageClient.deleteObject(upload.bucket(), upload.objectPath()));
             throw exception;
         }
     }

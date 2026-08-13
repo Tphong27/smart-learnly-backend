@@ -10,11 +10,13 @@ import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardSetRes
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.ReorderFlashcardCardsRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.UpdateFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.UpdateFlashcardSetRequest;
+import com.smartlearnly.backend.flashcard.dto.FlashcardImageUploadResponse;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,7 +26,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Trainer flashcard CRUD scoped to a class-draft lesson. Every route is
@@ -40,7 +44,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class TrainerLessonFlashcardController {
     private final TrainerLessonFlashcardService trainerLessonFlashcardService;
 
+    /** Tạo flashcard set cho lesson của lớp; TMO chỉ có quyền xem. */
     @PostMapping
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ResponseEntity<ApiResponse<FlashcardLessonCreatedResponse>> createFlashcardSet(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -54,6 +60,7 @@ public class TrainerLessonFlashcardController {
                 .body(ApiResponse.success("Flashcard set created successfully", response));
     }
 
+    /** Trả flashcard set của lesson cho role có quyền xem lớp. */
     @GetMapping("/set")
     public ApiResponse<FlashcardSetResponse> getSetByLesson(
             @PathVariable UUID classId,
@@ -65,7 +72,9 @@ public class TrainerLessonFlashcardController {
         );
     }
 
+    /** Cập nhật metadata flashcard set trong class curriculum draft. */
     @PatchMapping("/set/{setId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<FlashcardSetResponse> updateSet(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -78,7 +87,9 @@ public class TrainerLessonFlashcardController {
         );
     }
 
+    /** Xóa flashcard set khỏi lesson trong class curriculum draft. */
     @DeleteMapping("/set/{setId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<Void> deleteSet(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -88,7 +99,9 @@ public class TrainerLessonFlashcardController {
         return ApiResponse.success("Flashcard set deleted successfully");
     }
 
+    /** Thêm card mới vào flashcard set của lớp. */
     @PostMapping("/set/{setId}/cards")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ResponseEntity<ApiResponse<FlashcardCardResponse>> addCard(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -104,7 +117,9 @@ public class TrainerLessonFlashcardController {
                 .body(ApiResponse.success("Flashcard card created successfully", response));
     }
 
+    /** Cập nhật card trong flashcard set của lớp. */
     @PatchMapping("/set/{setId}/cards/{cardId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<FlashcardCardResponse> updateCard(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -118,7 +133,9 @@ public class TrainerLessonFlashcardController {
         );
     }
 
+    /** Xóa card khỏi flashcard set của lớp. */
     @DeleteMapping("/set/{setId}/cards/{cardId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<Void> deleteCard(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -129,7 +146,9 @@ public class TrainerLessonFlashcardController {
         return ApiResponse.success("Flashcard card deleted successfully");
     }
 
+    /** Lưu thứ tự card mới trong flashcard set của lớp. */
     @PatchMapping("/set/{setId}/cards/reorder")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<FlashcardSetResponse> reorderCards(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -139,6 +158,21 @@ public class TrainerLessonFlashcardController {
         return ApiResponse.success(
                 "Flashcard cards reordered successfully",
                 trainerLessonFlashcardService.reorderCards(classId, lessonId, setId, request)
+        );
+    }
+
+    /** Tải ảnh cho card của class flashcard set; chỉ Trainer hoặc Admin được thay đổi. */
+    @PostMapping(value = "/set/{setId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
+    public ApiResponse<FlashcardImageUploadResponse> uploadImage(
+            @PathVariable UUID classId,
+            @PathVariable UUID lessonId,
+            @PathVariable UUID setId,
+            @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        return ApiResponse.success(
+                "Flashcard image uploaded successfully",
+                trainerLessonFlashcardService.uploadImage(classId, lessonId, setId, file)
         );
     }
 }

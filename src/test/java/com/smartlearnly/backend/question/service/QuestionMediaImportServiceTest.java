@@ -111,6 +111,18 @@ class QuestionMediaImportServiceTest {
     }
 
     @Test
+    void validateMediaReferences_reportsDocumentationPlaceholderHost() {
+        List<String> errors = service.validateMediaReferences(
+                List.of("https://example.com/question.png"),
+                null);
+
+        assertThat(errors).singleElement()
+                .asString()
+                .contains("Image URL is invalid")
+                .contains("real, publicly accessible file");
+    }
+
+    @Test
     void validateMediaReferences_reportsLocalhostHost() {
         List<String> errors = service.validateMediaReferences(
                 null,

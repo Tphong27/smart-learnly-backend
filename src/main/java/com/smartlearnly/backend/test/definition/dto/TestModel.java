@@ -29,7 +29,6 @@ public class TestModel {
         private Boolean shuffleAnswers;
         private Boolean showAnswersAfter;
         private Boolean isPublished;
-        private Boolean isFlashtest;
         private Instant opensAt;
         private Instant closesAt;
     }
@@ -53,7 +52,6 @@ public class TestModel {
         private Boolean showAnswersAfter;
         private Boolean isPublished;
         private Boolean isArchived;
-        private Boolean isFlashtest;
         private Instant opensAt;
         private Instant closesAt;
     }
@@ -78,7 +76,6 @@ public class TestModel {
         private Boolean showAnswersAfter;
         private Boolean isPublished;
         private Boolean isArchived;
-        private Boolean isFlashtest;
         private UUID createdBy;
         private Instant createdAt;
         private Instant updatedAt;

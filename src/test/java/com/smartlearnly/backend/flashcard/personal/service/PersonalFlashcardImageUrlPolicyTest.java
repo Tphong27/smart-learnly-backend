@@ -13,12 +13,10 @@ class PersonalFlashcardImageUrlPolicyTest {
     @Test
     void shouldAllowOnlyConfiguredOwnedSetImageUrlsForNewImages() {
         StorageProperties properties = new StorageProperties();
-        properties.setProvider("supabase");
-        properties.setSupabaseUrl("https://project.supabase.co");
-        properties.setLessonResourceBucket("lesson-resources");
+        properties.setR2LessonResourcePublicUrl("https://resources.example.test");
         PersonalFlashcardImageUrlPolicy policy = new PersonalFlashcardImageUrlPolicy(properties);
         UUID setId = UUID.randomUUID();
-        String ownedImageUrl = "https://project.supabase.co/storage/v1/object/public/lesson-resources/flashcard-sets/"
+        String ownedImageUrl = "https://resources.example.test/flashcard-sets/"
                 + setId + "/images/card.png";
 
         assertThatCode(() -> policy.validateNewOrUnchanged(ownedImageUrl, null, setId))
@@ -28,7 +26,7 @@ class PersonalFlashcardImageUrlPolicyTest {
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 org.assertj.core.api.Assertions.assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
         assertThatThrownBy(() -> policy.validateNewOrUnchanged(
-                "https://project.supabase.co/storage/v1/object/public/lesson-resources/flashcard-sets/"
+                "https://resources.example.test/flashcard-sets/"
                         + UUID.randomUUID() + "/images/card.png",
                 null,
                 setId
@@ -39,7 +37,6 @@ class PersonalFlashcardImageUrlPolicyTest {
     @Test
     void shouldRetainAnUnchangedExistingUrlWithoutTreatingItAsANewExternalUrl() {
         StorageProperties properties = new StorageProperties();
-        properties.setSupabaseUrl("https://project.supabase.co");
         PersonalFlashcardImageUrlPolicy policy = new PersonalFlashcardImageUrlPolicy(properties);
         String existingUrl = "https://legacy.example.test/image.png";
 

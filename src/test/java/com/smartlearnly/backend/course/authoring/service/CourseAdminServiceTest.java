@@ -76,7 +76,7 @@ class CourseAdminServiceTest {
         @BeforeEach
         void setUp() {
                 storageProperties = new StorageProperties();
-                storageProperties.setSupabaseUrl("https://project.supabase.co");
+                storageProperties.setR2CourseThumbnailPublicUrl("https://thumbnails.example.test");
                 storageProperties.setCourseThumbnailBucket("course-thumbnails");
                 courseAdminService = new CourseAdminService(
                                 courseRepository,
@@ -112,7 +112,7 @@ class CourseAdminServiceTest {
                                 "Requirements",
                                 "vi",
                                 "beginner",
-                                "https://project.supabase.co/storage/v1/object/public/course-thumbnails/2026/06/thumb.webp",
+                                "https://thumbnails.example.test/2026/06/thumb.webp",
                                 BigDecimal.ZERO,
                                 null,
                                 true,
@@ -122,7 +122,7 @@ class CourseAdminServiceTest {
                 assertThat(response.slug()).isEqualTo("java-backend-co-ban");
                 assertThat(response.categoryId()).isEqualTo(categoryId);
                 assertThat(response.creatorId()).isEqualTo(admin.getId());
-                assertThat(response.thumbnailUrl()).contains("course-thumbnails");
+                assertThat(response.thumbnailUrl()).contains("thumbnails.example.test");
                 assertThat(response.status()).isEqualTo("draft");
 
                 ArgumentCaptor<Course> courseCaptor = ArgumentCaptor.forClass(Course.class);
@@ -283,7 +283,6 @@ class CourseAdminServiceTest {
 
         @Test
         void createShouldAcceptR2ThumbnailFromConfiguredBucketPublicUrl() {
-                storageProperties.setProvider("r2");
                 storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
                 UUID categoryId = UUID.randomUUID();
                 UserAccount admin = admin();
@@ -317,7 +316,6 @@ class CourseAdminServiceTest {
 
         @Test
         void createShouldRejectR2ThumbnailOutsideConfiguredBucketPublicUrl() {
-                storageProperties.setProvider("r2");
                 storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
                 UUID categoryId = UUID.randomUUID();
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());

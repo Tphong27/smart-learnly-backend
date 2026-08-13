@@ -16,7 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 class AssignmentAuthorizationAnnotationTest {
 
     @Test
-    void assignmentAuthoringShouldRemainStaffOnly() throws Exception {
+    void assignmentAuthoringShouldRejectTmo() throws Exception {
         Method create = AssignmentController.class.getMethod(
                 "create", AssignmentModel.CreateRequest.class);
         Method update = AssignmentController.class.getMethod(
@@ -31,30 +31,33 @@ class AssignmentAuthorizationAnnotationTest {
                 String.class,
                 MultipartFile.class);
 
-        assertThat(preAuthorizeValue(create)).contains("ADMIN", "TMO", "SME", "TRAINER");
-        assertThat(preAuthorizeValue(update)).contains("ADMIN", "TMO", "SME", "TRAINER");
-        assertThat(preAuthorizeValue(delete)).contains("ADMIN", "TMO", "SME", "TRAINER");
-        assertThat(preAuthorizeValue(aiDraft)).contains("ADMIN", "TMO", "SME", "TRAINER");
+        assertThat(preAuthorizeValue(create)).contains("ADMIN", "SME", "TRAINER").doesNotContain("TMO");
+        assertThat(preAuthorizeValue(update)).contains("ADMIN", "SME", "TRAINER").doesNotContain("TMO");
+        assertThat(preAuthorizeValue(delete)).contains("ADMIN", "SME", "TRAINER").doesNotContain("TMO");
+        assertThat(preAuthorizeValue(aiDraft)).contains("ADMIN", "SME", "TRAINER").doesNotContain("TMO");
     }
 
     @Test
-    void assignmentFilesCanBeUploadedByStaffAndTrainees() throws Exception {
+    void assignmentFilesCanBeUploadedByAuthorsAndTraineesButNotTmo() throws Exception {
         Method upload = AssignmentSubmissionController.class.getMethod(
                 "uploadSubmissionFile", MultipartFile.class);
 
         assertThat(preAuthorizeValue(upload))
-                .contains("ADMIN", "TMO", "SME", "TRAINER", "TRAINEE");
+                .contains("ADMIN", "SME", "TRAINER", "TRAINEE")
+                .doesNotContain("TMO");
     }
 
     @Test
-    void traineeCanSubmitButCannotGradeAssignments() throws Exception {
+    void traineeAndTmoCannotGradeAssignments() throws Exception {
         Method submit = AssignmentSubmissionController.class.getMethod(
                 "submitAssignment", AssignmentSubmissionModel.CreateRequest.class);
         Method grade = AssignmentSubmissionController.class.getMethod(
                 "gradeSubmission", UUID.class, AssignmentSubmissionModel.GradeRequest.class);
 
         assertThat(preAuthorizeValue(submit)).isEqualTo("hasRole('TRAINEE')");
-        assertThat(preAuthorizeValue(grade)).contains("ADMIN", "TMO", "SME", "TRAINER");
+        assertThat(preAuthorizeValue(grade))
+                .contains("ADMIN", "SME", "TRAINER")
+                .doesNotContain("TMO", "TRAINEE");
     }
 
     private String preAuthorizeValue(Method method) {

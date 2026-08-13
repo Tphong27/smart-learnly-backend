@@ -545,27 +545,15 @@ public class CourseAdminService {
         if (thumbnailUrl == null) {
             return null;
         }
-        if ("r2".equalsIgnoreCase(normalizeNullable(storageProperties.getProvider()))) {
-            String expectedPrefix = normalizeNullable(storageProperties.getR2CourseThumbnailPublicUrl());
-            if (expectedPrefix == null) {
-                expectedPrefix = normalizeNullable(storageProperties.getR2PublicUrl());
-            }
-            if (expectedPrefix == null) {
-                return thumbnailUrl;
-            }
-            return validateUrlPrefix(thumbnailUrl, expectedPrefix,
-                    "Course thumbnail URL must come from the configured R2 course thumbnail bucket");
+        String expectedPrefix = normalizeNullable(storageProperties.getR2CourseThumbnailPublicUrl());
+        if (expectedPrefix == null) {
+            expectedPrefix = normalizeNullable(storageProperties.getR2PublicUrl());
         }
-        String supabaseUrl = normalizeNullable(storageProperties.getSupabaseUrl());
-        if (supabaseUrl == null) {
+        if (expectedPrefix == null) {
             return thumbnailUrl;
         }
-        String expectedPrefix = supabaseUrl.replaceAll("/+$", "")
-                + "/storage/v1/object/public/"
-                + storageProperties.getCourseThumbnailBucket()
-                + "/";
         return validateUrlPrefix(thumbnailUrl, expectedPrefix,
-                "Course thumbnail URL must come from the configured course thumbnail storage bucket");
+                "Course thumbnail URL must come from the configured R2 course thumbnail bucket");
     }
 
     // Kiểm tra URL có bắt đầu bằng tiền tố public hợp lệ của vùng lưu trữ.

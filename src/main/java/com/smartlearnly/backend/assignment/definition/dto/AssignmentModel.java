@@ -28,7 +28,6 @@ public class AssignmentModel {
         private Instant lockoutDate;
         private BigDecimal maxScore;
         private UUID testId;
-        private Boolean isFlashtest;
     }
 
     /** Dữ liệu cập nhật bài tập, bao gồm classId để sửa liên kết lớp bị thiếu. */
@@ -49,7 +48,6 @@ public class AssignmentModel {
         private BigDecimal maxScore;
         private Boolean isArchived;
         private UUID testId;
-        private Boolean isFlashtest;
     }
 
     /** Dữ liệu bài tập trả về cho màn hình chi tiết và danh sách. */
@@ -72,7 +70,6 @@ public class AssignmentModel {
         private Instant lockoutDate;
         private BigDecimal maxScore;
         private Boolean isArchived;
-        private Boolean isFlashtest;
         private UUID createdBy;
         private Instant createdAt;
         private Instant updatedAt;

@@ -387,6 +387,13 @@ class AiQuestionDraftServiceTest {
 
         assertThat(response.generationInstruction()).isEqualTo("Use concise English wording.");
         assertThat(response.drafts().get(0).moduleId()).isEqualTo(moduleId);
+        ArgumentCaptor<NotificationCreateCommand> notification =
+                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+        verify(notificationService).emit(notification.capture());
+        assertThat(notification.getValue().actionUrl()).isEqualTo(
+                "/admin/courses/" + courseId + "/modules/" + moduleId
+                        + "/questions/ai-drafts/" + response.batchId());
+        assertThat(notification.getValue().payload()).containsEntry("moduleId", moduleId);
     }
 
     @Test

@@ -211,8 +211,7 @@ class TraineeProgressTest {
                 when(assignmentRepository.findAvailableForStudent(
                                 studentId,
                                 classCourseId,
-                                classId,
-                                false))
+                                classId))
                                 .thenReturn(List.of());
 
                 TraineeProgressResponse response = service.getMyProgress();
@@ -406,26 +405,12 @@ class TraineeProgressTest {
                 when(lessonProgressRepository.findByStudentIdAndClassIdAndCourseId(
                                 studentId, classId, courseId))
                                 .thenReturn(List.of(completedVideo));
-                when(assignmentRepository.findAvailableForStudent(studentId, courseId, classId, false))
+                when(assignmentRepository.findAvailableForStudent(studentId, courseId, classId))
                                 .thenReturn(assignments);
-                when(assignmentSubmissionRepository.findByAssignmentIdAndStudentId(assignments.get(0).getId(),
-                                studentId))
-                                .thenReturn(Optional.of(submission(SubmissionStatus.SUBMITTED)));
-                when(assignmentSubmissionRepository.findByAssignmentIdAndStudentId(assignments.get(1).getId(),
-                                studentId))
-                                .thenReturn(Optional.of(submission(SubmissionStatus.GRADED)));
-                when(assignmentSubmissionRepository.findByAssignmentIdAndStudentId(assignments.get(2).getId(),
-                                studentId))
-                                .thenReturn(Optional.of(submission(SubmissionStatus.LATE)));
-                when(assignmentSubmissionRepository.findByAssignmentIdAndStudentId(assignments.get(3).getId(),
-                                studentId))
-                                .thenReturn(Optional.of(submission(SubmissionStatus.EXPIRED)));
-                when(assignmentSubmissionRepository.findByAssignmentIdAndStudentId(assignments.get(4).getId(),
-                                studentId))
-                                .thenReturn(Optional.of(submission(SubmissionStatus.DOING)));
-                when(assignmentSubmissionRepository.findByAssignmentIdAndStudentId(assignments.get(5).getId(),
-                                studentId))
-                                .thenReturn(Optional.empty());
+                when(assignmentSubmissionRepository.countCompletedByStudentIdAndAssignmentIds(
+                                studentId,
+                                assignments.stream().map(Assignment::getId).toList()))
+                                .thenReturn(4L);
 
                 CourseProgressItemResponse item = service.getMyProgress().courses().get(0);
 

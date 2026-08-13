@@ -538,17 +538,24 @@ public class TrainerClassCurriculumService {
         );
     }
 
+    /** Áp dụng dữ liệu lesson và cho phép tạo khung video draft trước khi nhập URL trong editor. */
     private void applyLessonRequest(CurriculumLesson lesson, LessonRequest request, boolean create) {
         lesson.setTitle(CurriculumRequestNormalizer.normalizeRequired(request.title(), "Lesson title is required"));
         String currentVideoUrl = lesson.getVideoUrl();
         LessonType newType = CurriculumParseService.parseLessonType(request,
                 create ? LessonType.RICH_TEXT : lesson.getType());
         lesson.setType(newType);
-        lesson.setVideoUrl(videoSummaryService.normalizeLessonVideoUrl(
-                currentVideoUrl,
-                request.videoUrl(),
-                newType == LessonType.VIDEO
-        ));
+        boolean videoLesson = newType == LessonType.VIDEO;
+        String requestedVideoUrl = CurriculumRequestNormalizer.normalizeNullable(request.videoUrl());
+        if (create && videoLesson && requestedVideoUrl == null) {
+            // Curriculum modal chỉ tạo khung; URL hợp lệ được nhập ở Lesson Editor dùng chung.
+            lesson.setVideoUrl(null);
+        } else {
+            lesson.setVideoUrl(videoSummaryService.normalizeLessonVideoUrl(
+                    currentVideoUrl,
+                    requestedVideoUrl,
+                    videoLesson));
+        }
         String content = CurriculumRequestNormalizer.normalizeNullable(request.content());
         if (newType == LessonType.QUIZ) {
             quizContentValidator.validate(content);

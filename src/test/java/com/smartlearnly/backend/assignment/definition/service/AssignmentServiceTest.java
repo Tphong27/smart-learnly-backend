@@ -89,7 +89,6 @@ class AssignmentServiceTest {
         request.setTitle("Final project");
         request.setDescription("Submit the completed project.");
         request.setAllowLateSubmission(false);
-        request.setIsFlashtest(false);
 
         when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
         when(assignmentRepository.save(any(Assignment.class))).thenAnswer(invocation -> {
@@ -145,6 +144,20 @@ class AssignmentServiceTest {
         assertThat(response.getClassId()).isEqualTo(classId);
         verify(assignmentRepository).save(any(Assignment.class));
         verify(curriculumResolutionService, never()).resolveClassEffectivePublished(any(), any());
+    }
+
+    @Test
+    void getAssignmentByIdShouldHideLegacyFlashTestAssignment() {
+        UUID assignmentId = UUID.randomUUID();
+        Assignment assignment = new Assignment();
+        assignment.setId(assignmentId);
+        assignment.setIsFlashtest(true);
+        when(assignmentRepository.findById(assignmentId))
+                .thenReturn(Optional.of(assignment));
+
+        assertThatThrownBy(() -> service.getAssignmentById(assignmentId))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessage("Assignment not found");
     }
 
     @Test

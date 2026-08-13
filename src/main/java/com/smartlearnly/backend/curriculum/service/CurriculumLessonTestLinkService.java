@@ -8,6 +8,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.test.definition.dto.TestModel;
 import com.smartlearnly.backend.test.definition.service.TestService;
 import com.smartlearnly.backend.test.entity.TestType;
+import com.smartlearnly.backend.test.repository.TestRepository;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CurriculumLessonTestLinkService {
     private final CurriculumLessonRepository lessonRepository;
     private final TestService testService;
+    private final TestRepository testRepository;
 
     @Transactional
     public UUID ensureQuizTest(CurriculumLesson lesson) {
@@ -25,6 +27,7 @@ public class CurriculumLessonTestLinkService {
             return null;
         }
         if (lesson.getTestId() != null) {
+            synchronizeExistingQuizTest(lesson);
             return lesson.getTestId();
         }
 
@@ -45,12 +48,33 @@ public class CurriculumLessonTestLinkService {
         request.setShuffleAnswers(false);
         request.setShowAnswersAfter(true);
         request.setIsPublished(lesson.getStatus() != null && "PUBLISHED".equals(lesson.getStatus().name()));
-        request.setIsFlashtest(false);
 
         TestModel.Response created = testService.createTest(request);
         lesson.setTestId(created.getId());
         lessonRepository.save(lesson);
         return created.getId();
+    }
+
+    /** Giữ trạng thái test nội bộ đồng bộ khi quiz lesson chuyển giữa draft và published. */
+    private void synchronizeExistingQuizTest(CurriculumLesson lesson) {
+        testRepository.findById(lesson.getTestId()).ifPresent(test -> {
+            boolean shouldPublish = lesson.getStatus() != null
+                    && "PUBLISHED".equals(lesson.getStatus().name());
+            String expectedTitle = defaultTestTitle(lesson);
+            Integer expectedDurationMinutes = durationMinutes(lesson.getDurationSeconds());
+
+            boolean changed = !java.util.Objects.equals(test.getIsPublished(), shouldPublish)
+                    || !java.util.Objects.equals(test.getTitle(), expectedTitle)
+                    || !java.util.Objects.equals(test.getDurationMinutes(), expectedDurationMinutes);
+            if (!changed) {
+                return;
+            }
+
+            test.setIsPublished(shouldPublish);
+            test.setTitle(expectedTitle);
+            test.setDurationMinutes(expectedDurationMinutes);
+            testRepository.save(test);
+        });
     }
 
     private Integer durationMinutes(Integer durationSeconds) {

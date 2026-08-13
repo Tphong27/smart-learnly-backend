@@ -74,15 +74,13 @@ public class Notification {
     @Column(name = "clicked_at")
     private Instant clickedAt;
 
-    @Column(name = "archived_at")
-    private Instant archivedAt;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Khởi tạo ID, timestamp giao nhận và payload trước khi lưu mới. */
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();
@@ -101,6 +99,7 @@ public class Notification {
         updatedAt = now;
     }
 
+    /** Chuẩn hóa payload và cập nhật timestamp trước khi ghi thay đổi. */
     @PreUpdate
     void preUpdate() {
         if (payload == null) {

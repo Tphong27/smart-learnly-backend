@@ -21,7 +21,15 @@ public interface TestRepository
 
     List<Test> findByCreatedByAndCourseId(UUID createdBy, UUID courseId);
 
-    List<Test> findByIsPublishedTrueAndIsArchivedFalse();
+    @Query("""
+            select test
+            from Test test
+            where test.isPublished = true
+              and test.isArchived = false
+              and (test.isFlashtest = false or test.isFlashtest is null)
+            order by test.createdAt desc
+            """)
+    List<Test> findPublishedRegularTests();
 
     @Query("""
             select test
@@ -35,6 +43,7 @@ public interface TestRepository
                   or test.createdBy = :createdBy
                   or classOffering.trainerId = :createdBy
               )
+              and (test.isFlashtest = false or test.isFlashtest is null)
             order by test.createdAt desc
             """)
     List<Test> findStaffTests(
@@ -56,17 +65,13 @@ public interface TestRepository
               and test.isArchived = false
               and (:courseId is null or test.courseId = :courseId)
               and (:classId is null or test.classId = :classId)
-              and (
-                  :isFlashtest is null
-                  or test.isFlashtest = :isFlashtest
-              )
+              and (test.isFlashtest = false or test.isFlashtest is null)
             order by test.createdAt desc
             """)
     List<Test> findAvailableForStudent(
             @Param("studentId") UUID studentId,
             @Param("courseId") UUID courseId,
-            @Param("classId") UUID classId,
-            @Param("isFlashtest") Boolean isFlashtest);
+            @Param("classId") UUID classId);
 
     @Query("""
             select case when count(test) > 0 then true else false end
@@ -81,6 +86,7 @@ public interface TestRepository
               )
               and test.isPublished = true
               and test.isArchived = false
+              and (test.isFlashtest = false or test.isFlashtest is null)
             """)
     boolean existsAvailableForStudent(
             @Param("testId") UUID testId,
@@ -108,8 +114,24 @@ public interface TestRepository
             where test.id = :testId
               and test.classId is null
               and (courseEnrollment.id is not null or classEnrollment.id is not null)
-              and test.isPublished = true
+              and (
+                  test.isPublished = true
+                  or exists (
+                      select lesson.id
+                      from CurriculumLesson lesson
+                      join CurriculumVersion version
+                          on version.id = lesson.curriculumVersionId
+                      where lesson.testId = test.id
+                        and lesson.type = com.smartlearnly.backend.learning.lesson.entity.LessonType.QUIZ
+                        and lesson.status = com.smartlearnly.backend.learning.lesson.entity.LessonStatus.PUBLISHED
+                        and version.courseId = test.courseId
+                        and version.classId is null
+                        and version.scope = com.smartlearnly.backend.curriculum.entity.CurriculumScope.MASTER
+                        and version.status = com.smartlearnly.backend.curriculum.entity.CurriculumStatus.PUBLISHED
+                  )
+              )
               and test.isArchived = false
+              and (test.isFlashtest = false or test.isFlashtest is null)
             """)
     boolean existsAvailableCourseTestForStudent(
             @Param("testId") UUID testId,
@@ -124,12 +146,30 @@ public interface TestRepository
             join ClassEnrollment classEnrollment
                 on classEnrollment.classId = classOffering.id
             where test.id = :testId
+              and test.classId is null
               and classEnrollment.studentId = :studentId
               and classEnrollment.status in (
                   com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE,
                   com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.COMPLETED
               )
+              and (
+                  test.isPublished = true
+                  or exists (
+                      select lesson.id
+                      from CurriculumLesson lesson
+                      join CurriculumVersion version
+                          on version.id = lesson.curriculumVersionId
+                      where lesson.testId = test.id
+                        and lesson.type = com.smartlearnly.backend.learning.lesson.entity.LessonType.QUIZ
+                        and lesson.status = com.smartlearnly.backend.learning.lesson.entity.LessonStatus.PUBLISHED
+                        and version.courseId = test.courseId
+                        and version.classId is null
+                        and version.scope = com.smartlearnly.backend.curriculum.entity.CurriculumScope.MASTER
+                        and version.status = com.smartlearnly.backend.curriculum.entity.CurriculumStatus.PUBLISHED
+                  )
+              )
               and test.isArchived = false
+              and (test.isFlashtest = false or test.isFlashtest is null)
             """)
     boolean existsAvailableCourseTestForStudentClass(
             @Param("testId") UUID testId,
@@ -142,6 +182,7 @@ public interface TestRepository
             left join ClassOffering classOffering
                 on classOffering.id = test.classId
             where test.id = :testId
+              and (test.isFlashtest = false or test.isFlashtest is null)
               and (
                   test.createdBy = :staffId
                   or classOffering.trainerId = :staffId

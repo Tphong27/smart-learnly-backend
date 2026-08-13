@@ -49,33 +49,6 @@ class NotificationServiceTest {
     }
 
     @Test
-    void listWithStatusShouldDelegateToQueryService() {
-        NotificationResponse expected = createNotificationResponse(NotificationType.PAYMENT);
-        PageResponse<NotificationResponse> pageResponse = new PageResponse<>(
-                List.of(expected), 0, 20, 1, 1);
-        when(queryService.list(0, 20, "unread")).thenReturn(pageResponse);
-
-        var response = service.list(0, 20, "unread");
-
-        assertThat(response.items()).hasSize(1);
-        verify(queryService).list(0, 20, "unread");
-    }
-
-    @Test
-    void listWithStatusAndTypeShouldDelegateToQueryService() {
-        NotificationResponse expected = createNotificationResponse(NotificationType.PAYMENT);
-        PageResponse<NotificationResponse> pageResponse = new PageResponse<>(
-                List.of(expected), 0, 20, 1, 1);
-        when(queryService.list(0, 20, "read", "PAYMENT")).thenReturn(pageResponse);
-
-        var response = service.list(0, 20, "read", "PAYMENT");
-
-        assertThat(response.items()).hasSize(1);
-        verify(queryService).list(0, 20, "read", "PAYMENT");
-    }
-
-
-    @Test
     void unreadCountShouldDelegateToQueryService() {
         UnreadCountResponse expected = new UnreadCountResponse(5L);
         when(queryService.unreadCount()).thenReturn(expected);
@@ -84,18 +57,6 @@ class NotificationServiceTest {
 
         assertThat(response.unreadCount()).isEqualTo(5L);
         verify(queryService).unreadCount();
-    }
-
-    @Test
-    void markReadShouldDelegateToWriteService() {
-        UUID notificationId = UUID.randomUUID();
-        NotificationResponse expected = createNotificationResponseWithTimestamp(NotificationType.ASSIGNMENT);
-        when(writeService.markRead(notificationId)).thenReturn(expected);
-
-        NotificationResponse response = service.markRead(notificationId);
-
-        assertThat(response.readAt()).isNotNull();
-        verify(writeService).markRead(notificationId);
     }
 
     @Test
@@ -119,29 +80,6 @@ class NotificationServiceTest {
 
         assertThat(response.clickedAt()).isNotNull();
         verify(writeService).recordClick(notificationId);
-    }
-
-    @Test
-    void archiveShouldDelegateToWriteService() {
-        UUID notificationId = UUID.randomUUID();
-        NotificationResponse expected = createNotificationResponseWithArchivedAt(NotificationType.SYSTEM);
-        when(writeService.archive(notificationId)).thenReturn(expected);
-
-        NotificationResponse response = service.archive(notificationId);
-
-        assertThat(response.archivedAt()).isNotNull();
-        verify(writeService).archive(notificationId);
-    }
-
-    @Test
-    void archiveAllShouldDelegateToWriteService() {
-        UnreadCountResponse expected = new UnreadCountResponse(0L);
-        when(writeService.archiveAll()).thenReturn(expected);
-
-        var response = service.archiveAll();
-
-        assertThat(response.unreadCount()).isZero();
-        verify(writeService).archiveAll();
     }
 
     @Test
@@ -229,12 +167,12 @@ class NotificationServiceTest {
     @Test
     void cleanupShouldDelegateToWriteService() {
         Instant cutoff = Instant.now().minusSeconds(3600);
-        when(writeService.cleanupReadOrArchivedCreatedBefore(cutoff)).thenReturn(7);
+        when(writeService.cleanupReadCreatedBefore(cutoff)).thenReturn(7);
 
-        int result = service.cleanupReadOrArchivedCreatedBefore(cutoff);
+        int result = service.cleanupReadCreatedBefore(cutoff);
 
         assertThat(result).isEqualTo(7);
-        verify(writeService).cleanupReadOrArchivedCreatedBefore(cutoff);
+        verify(writeService).cleanupReadCreatedBefore(cutoff);
     }
 
     private NotificationResponse createNotificationResponse(NotificationType type) {
@@ -251,7 +189,6 @@ class NotificationServiceTest {
                 Map.of(),
                 null,
                 Instant.now(),
-                null,
                 null,
                 null,
                 Instant.now());
@@ -273,28 +210,6 @@ class NotificationServiceTest {
                 now,
                 now,
                 now,
-                now,
-                null,
-                now);
-    }
-
-    private NotificationResponse createNotificationResponseWithArchivedAt(NotificationType type) {
-        Instant now = Instant.now();
-        return new NotificationResponse(
-                UUID.randomUUID(),
-                type,
-                "Title",
-                "Body",
-                null,
-                null,
-                null,
-                null,
-                null,
-                Map.of(),
-                now,
-                now,
-                now,
-                null,
                 now,
                 now);
     }

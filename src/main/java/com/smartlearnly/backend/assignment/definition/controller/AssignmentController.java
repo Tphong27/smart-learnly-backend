@@ -23,7 +23,7 @@ public class AssignmentController {
 
     /** Tạo bài tập sau khi backend kiểm tra quyền và dữ liệu đầu vào. */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> create(@Valid @RequestBody AssignmentModel.CreateRequest request) {
         AssignmentModel.Response response = assignmentService.createAssignment(request);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
@@ -41,9 +41,8 @@ public class AssignmentController {
     @GetMapping("/mine")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.Response>> getMine(
-            @RequestParam(required = false) UUID courseId,
-            @RequestParam(required = false) Boolean isFlashtest) {
-        return ResponseEntity.ok(assignmentService.getMyAssignments(courseId, isFlashtest));
+            @RequestParam(required = false) UUID courseId) {
+        return ResponseEntity.ok(assignmentService.getMyAssignments(courseId));
     }
 
     /** Lấy bài tập mà học viên hiện tại có thể thực hiện trong khóa/lớp đã chọn. */
@@ -51,10 +50,9 @@ public class AssignmentController {
     @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<List<AssignmentModel.Response>> getAvailable(
             @RequestParam(required = false) UUID courseId,
-            @RequestParam(required = false) UUID classId,
-            @RequestParam(required = false) Boolean isFlashtest) {
+            @RequestParam(required = false) UUID classId) {
         return ResponseEntity.ok(
-                assignmentService.getAvailableAssignments(courseId, classId, isFlashtest));
+                assignmentService.getAvailableAssignments(courseId, classId));
     }
 
     /** Lấy lớp mà người dùng có thể gán bài tập. */
@@ -84,7 +82,7 @@ public class AssignmentController {
 
     /** Cập nhật cấu hình bài tập khi người dùng có quyền biên soạn. */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> update(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentModel.UpdateRequest request) {
@@ -94,7 +92,7 @@ public class AssignmentController {
 
     /** Xóa bài tập theo quy tắc nghiệp vụ của service. */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         assignmentService.deleteAssignment(id);
         return ResponseEntity.noContent().build();

@@ -94,8 +94,7 @@ public class TestService {
         test.setShowAnswersAfter(
                 request.getShowAnswersAfter());
         test.setIsPublished(request.getIsPublished());
-        test.setIsFlashtest(
-                request.getIsFlashtest());
+        test.setIsFlashtest(false);
         test.setOpensAt(request.getOpensAt());
         test.setClosesAt(request.getClosesAt());
         ensureAccessCode(test);
@@ -118,7 +117,7 @@ public class TestService {
     public List<TestModel.Response> getAllTests() {
 
         List<Test> tests =
-                testRepository.findByIsPublishedTrueAndIsArchivedFalse();
+                testRepository.findPublishedRegularTests();
 
         List<TestModel.Response> responses =
                 new ArrayList<>();
@@ -156,8 +155,7 @@ public class TestService {
     /** Trả các đề mà học viên hiện tại được phép làm trong phạm vi đã lọc. */
     public List<TestModel.Response> getAvailableTests(
             UUID courseId,
-            UUID classId,
-            Boolean isFlashtest) {
+            UUID classId) {
 
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         if (!isTrainee(actor)) {
@@ -169,8 +167,7 @@ public class TestService {
         return testRepository.findAvailableForStudent(
                         actor.getId(),
                         courseId,
-                        classId,
-                        isFlashtest)
+                        classId)
                 .stream()
                 .map(test -> mapToResponse(test, false))
                 .toList();
@@ -305,17 +302,6 @@ public class TestService {
                 : test.getCourseId();
         validateClassScope(nextClassId, nextCourseId, actor);
 
-        boolean isFlashTest = Boolean.TRUE.equals(test.getIsFlashtest()) ||
-                Boolean.TRUE.equals(request.getIsFlashtest());
-        if (isFlashTest) {
-            boolean hasActiveAttempt = testAttemptRepository.existsActiveByTestId(id);
-            if (hasActiveAttempt) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_RULE_VIOLATION,
-                        "Cannot update this test while students are taking it");
-            }
-        }
-
         if (request.getModuleId() != null) test.setModuleId(request.getModuleId());
         if (request.getCurriculumSectionId() != null) {
             validateCurriculumSection(nextCourseId, request.getCurriculumSectionId());
@@ -334,16 +320,11 @@ public class TestService {
         if (request.getShowAnswersAfter() != null) test.setShowAnswersAfter(request.getShowAnswersAfter());
         if (request.getIsPublished() != null) test.setIsPublished(request.getIsPublished());
         if (request.getIsArchived() != null) test.setIsArchived(request.getIsArchived());
-        if (request.getIsFlashtest() != null) test.setIsFlashtest(request.getIsFlashtest());
         if (request.getOpensAt() != null) test.setOpensAt(request.getOpensAt());
         if (request.getClosesAt() != null) test.setClosesAt(request.getClosesAt());
         ensureAccessCode(test);
 
         Test updated = testRepository.save(test);
-        if (isFlashTest) {
-            resetAttempts(id);
-        }
-
         if (Boolean.TRUE.equals(updated.getIsPublished())) {
             emitTestNotificationToStudents(
                     updated,
@@ -476,8 +457,6 @@ public class TestService {
                 test.getIsPublished());
         response.setIsArchived(
                 test.getIsArchived());
-        response.setIsFlashtest(
-                test.getIsFlashtest());
         response.setCreatedBy(
                 test.getCreatedBy());
         response.setCreatedAt(
@@ -524,6 +503,9 @@ public class TestService {
 
     /** Cho phép course quiz dùng enrollment của đúng lớp đang học làm context truy cập. */
     private void requireTestAccess(Test test, UserAccount actor, UUID contextClassId) {
+        if (Boolean.TRUE.equals(test.getIsFlashtest())) {
+            throw new EntityNotFoundException("Test not found");
+        }
         if (isTrainee(actor)) {
             if (testRepository.existsAvailableForStudent(test.getId(), actor.getId())
                     || testRepository.existsAvailableCourseTestForStudent(test.getId(), actor.getId())
@@ -547,6 +529,9 @@ public class TestService {
 
     /** Bảo vệ quyền chỉnh sửa/xóa đề theo quyền toàn cục hoặc lớp được phân công. */
     private void requireManageAccess(Test test, UserAccount actor) {
+        if (Boolean.TRUE.equals(test.getIsFlashtest())) {
+            throw new EntityNotFoundException("Test not found");
+        }
         if (isPrivilegedStaff(actor)
                 || (canManageTests(actor)
                 && testRepository.existsManagedByStaff(test.getId(), actor.getId()))) {

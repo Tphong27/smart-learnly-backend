@@ -2,6 +2,8 @@ package com.smartlearnly.backend.curriculum.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +64,64 @@ class TrainerClassCurriculumServiceFlashcardTest {
 
     @InjectMocks
     private TrainerClassCurriculumService service;
+
+    @Test
+    void createVideoLessonShouldAllowDraftWithoutYoutubeUrl() {
+        UUID classId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID trainerId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+
+        UserAccount trainer = new UserAccount();
+        trainer.setId(trainerId);
+        trainer.setRole("TRAINER");
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(classId);
+        classOffering.setCourseId(courseId);
+        classOffering.setTrainerId(trainerId);
+        ClassCurriculumBinding binding = new ClassCurriculumBinding();
+        binding.setClassId(classId);
+        binding.setCourseId(courseId);
+        binding.setDraftVersionId(versionId);
+        CurriculumVersion draft = new CurriculumVersion();
+        draft.setId(versionId);
+        draft.setCourseId(courseId);
+        draft.setClassId(classId);
+        draft.setScope(CurriculumScope.CLASS);
+        draft.setStatus(CurriculumStatus.DRAFT);
+        CurriculumSection section = new CurriculumSection();
+        section.setId(sectionId);
+        section.setCurriculumVersion(draft);
+
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId)).thenReturn(Optional.of(classOffering));
+        when(authenticatedUserResolver.resolve()).thenReturn(Optional.empty());
+        when(bindingRepository.findByClassIdForUpdate(classId)).thenReturn(Optional.of(binding));
+        when(curriculumVersionRepository.findById(versionId)).thenReturn(Optional.of(draft));
+        when(sectionRepository.findByIdAndCurriculumVersionId(sectionId, versionId)).thenReturn(Optional.of(section));
+        when(entryRepository.save(any(ClassCurriculumEntry.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(lessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createLesson(classId, sectionId, new LessonRequest(
+                "Draft video",
+                "video",
+                "video",
+                null,
+                null,
+                null,
+                0,
+                false,
+                "draft",
+                List.of(),
+                0));
+
+        ArgumentCaptor<CurriculumLesson> lessonCaptor = ArgumentCaptor.forClass(CurriculumLesson.class);
+        verify(lessonRepository).save(lessonCaptor.capture());
+        assertThat(lessonCaptor.getValue().getType()).isEqualTo(LessonType.VIDEO);
+        assertThat(lessonCaptor.getValue().getVideoUrl()).isNull();
+        verify(videoSummaryService, never()).normalizeLessonVideoUrl(any(), any(), anyBoolean());
+    }
 
     @Test
     void createFlashcardLessonShouldCreateItsSetInTheSameServiceCall() {

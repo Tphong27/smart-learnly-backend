@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.test.definition.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -14,7 +15,9 @@ import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -54,13 +57,11 @@ class TestServiceClassScopeTest {
         when(testRepository.findAvailableForStudent(
                 traineeId,
                 courseId,
-                classId,
-                false)).thenReturn(List.of(test));
+                classId)).thenReturn(List.of(test));
 
         List<TestModel.Response> result = service.getAvailableTests(
                 courseId,
-                classId,
-                false);
+                classId);
 
         assertThat(result).extracting(TestModel.Response::getId)
                 .containsExactly(test.getId());
@@ -98,6 +99,23 @@ class TestServiceClassScopeTest {
         verify(testRepository).findStaffTests(null, courseId, null);
     }
 
+    @Test
+    void legacyFlashTestIsNoLongerAccessibleById() {
+        UUID testId = UUID.randomUUID();
+        UserAccount admin = user(UUID.randomUUID(), "ADMIN");
+        com.smartlearnly.backend.test.entity.Test test = publishedTest(
+                UUID.randomUUID(), UUID.randomUUID());
+        test.setId(testId);
+        test.setIsFlashtest(true);
+
+        when(testRepository.findById(testId)).thenReturn(Optional.of(test));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+
+        assertThatThrownBy(() -> service.getTestById(testId))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessage("Test not found");
+    }
+
     private UserAccount user(UUID id, String role) {
         UserAccount user = new UserAccount();
         user.setId(id);
@@ -115,7 +133,6 @@ class TestServiceClassScopeTest {
         test.setCourseId(courseId);
         test.setIsPublished(true);
         test.setIsArchived(false);
-        test.setIsFlashtest(false);
         return test;
     }
 }

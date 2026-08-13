@@ -334,8 +334,8 @@ public class TraineeProgressService {
 
         /** Tính chỉ số hoàn thành bài tập trong lớp cho học viên. */
         private ProgressMetricResponse calculateAssignmentMetric(UUID studentId, UUID courseId, UUID classId) {
-                List<Assignment> assignments = assignmentRepository.findAvailableForStudent(studentId, courseId,
-                                classId, false);
+                List<Assignment> assignments = assignmentRepository.findAvailableForStudent(
+                                studentId, courseId, classId);
                 int total = assignments.size();
                 int completed = assignments.isEmpty()
                                 ? 0

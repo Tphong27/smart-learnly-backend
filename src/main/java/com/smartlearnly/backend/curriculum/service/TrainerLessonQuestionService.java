@@ -137,7 +137,6 @@ public class TrainerLessonQuestionService {
         createRequest.setShuffleQuestions(false);
         createRequest.setShuffleAnswers(false);
         createRequest.setShowAnswersAfter(true);
-        createRequest.setIsFlashtest(false);
         TestModel.Response created = testService.createTest(createRequest);
         UUID createdId = created.getId();
         lesson.setTestId(createdId);

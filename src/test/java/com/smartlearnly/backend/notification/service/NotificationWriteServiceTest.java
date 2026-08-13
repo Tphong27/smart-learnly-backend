@@ -51,53 +51,6 @@ class NotificationWriteServiceTest {
     }
 
     @Test
-    void markRead_marksNotificationAsRead() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        Notification notification = notification(notificationId, userId);
-        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notificationId, userId))
-                .thenReturn(Optional.of(notification));
-        when(notificationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        NotificationResponse response = service.markRead(notificationId);
-
-        assertThat(response).isNotNull();
-        assertThat(notification.getReadAt()).isNotNull();
-        assertThat(notification.getSeenAt()).isNotNull();
-        verify(notificationRepository).save(notification);
-    }
-
-    @Test
-    void markRead_doesNotOverwriteExistingReadTimestamp() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        Notification notification = notification(notificationId, userId);
-        notification.setReadAt(Instant.now().minusSeconds(60));
-        notification.setSeenAt(Instant.now().minusSeconds(60));
-        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notificationId, userId))
-                .thenReturn(Optional.of(notification));
-        when(notificationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        Instant originalReadAt = notification.getReadAt();
-        Instant originalSeenAt = notification.getSeenAt();
-
-        service.markRead(notificationId);
-
-        assertThat(notification.getReadAt()).isEqualTo(originalReadAt);
-        assertThat(notification.getSeenAt()).isEqualTo(originalSeenAt);
-    }
-
-    @Test
-    void markRead_throwsWhenNotificationNotFound() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notificationId, userId))
-                .thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.markRead(notificationId))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
-    }
-
-    @Test
     void markAllRead_callsRepositoryAndReturnsCount() {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
         UnreadCountResponse expectedCount = new UnreadCountResponse(0);
@@ -113,7 +66,7 @@ class NotificationWriteServiceTest {
     void recordClick_marksReadSeenAndClicked() {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
         Notification notification = notification(notificationId, userId);
-        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notificationId, userId))
+        when(notificationRepository.findByIdAndUserId(notificationId, userId))
                 .thenReturn(Optional.of(notification));
         when(notificationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -123,32 +76,6 @@ class NotificationWriteServiceTest {
         assertThat(notification.getReadAt()).isNotNull();
         assertThat(notification.getSeenAt()).isNotNull();
         assertThat(notification.getClickedAt()).isNotNull();
-    }
-
-    @Test
-    void archive_marksNotificationAsArchived() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        Notification notification = notification(notificationId, userId);
-        when(notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notificationId, userId))
-                .thenReturn(Optional.of(notification));
-        when(notificationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        NotificationResponse response = service.archive(notificationId);
-
-        assertThat(response).isNotNull();
-        assertThat(notification.getArchivedAt()).isNotNull();
-    }
-
-    @Test
-    void archiveAll_callsRepositoryAndReturnsUnreadCount() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user);
-        UnreadCountResponse expectedCount = new UnreadCountResponse(0);
-        when(queryService.unreadCount()).thenReturn(expectedCount);
-
-        UnreadCountResponse response = service.archiveAll();
-
-        assertThat(response).isEqualTo(expectedCount);
-        verify(notificationRepository).archiveAllForUser(eq(userId), any(Instant.class));
     }
 
     @Test
@@ -262,19 +189,19 @@ class NotificationWriteServiceTest {
     }
 
     @Test
-    void cleanupReadOrArchivedCreatedBefore_deletesOldNotifications() {
+    void cleanupReadCreatedBefore_deletesOldNotifications() {
         Instant cutoff = Instant.now();
-        when(notificationRepository.deleteReadOrArchivedCreatedBefore(cutoff)).thenReturn(10);
+        when(notificationRepository.deleteReadCreatedBefore(cutoff)).thenReturn(10);
 
-        int deleted = service.cleanupReadOrArchivedCreatedBefore(cutoff);
+        int deleted = service.cleanupReadCreatedBefore(cutoff);
 
         assertThat(deleted).isEqualTo(10);
-        verify(notificationRepository).deleteReadOrArchivedCreatedBefore(cutoff);
+        verify(notificationRepository).deleteReadCreatedBefore(cutoff);
     }
 
     @Test
-    void cleanupReadOrArchivedCreatedBefore_throwsWhenCutoffIsNull() {
-        assertThatThrownBy(() -> service.cleanupReadOrArchivedCreatedBefore(null))
+    void cleanupReadCreatedBefore_throwsWhenCutoffIsNull() {
+        assertThatThrownBy(() -> service.cleanupReadCreatedBefore(null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INVALID_REQUEST);

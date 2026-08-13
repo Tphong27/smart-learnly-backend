@@ -12,7 +12,7 @@ import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.entity.NotificationType;
 import com.smartlearnly.backend.notification.service.NotificationService;
-import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
+import com.smartlearnly.backend.test.monitor.dto.MonitorEvent;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.test.attempt.dto.TestAttemptModel;
@@ -97,7 +97,7 @@ class TestAttemptServiceTest {
         request.setAccessCode("123456");
 
         when(testRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(testService.requireCurrentTraineeAccess(testId)).thenReturn(studentId);
+        when(testService.requireCurrentTraineeAccess(testId, null)).thenReturn(studentId);
         when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(true);
         when(testService.accessCodeMatches(test, "123456")).thenReturn(true);
         when(testAttemptRepository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId))
@@ -132,7 +132,7 @@ class TestAttemptServiceTest {
         request.setAccessCode("654321");
 
         when(testRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(testService.requireCurrentTraineeAccess(testId)).thenReturn(studentId);
+        when(testService.requireCurrentTraineeAccess(testId, null)).thenReturn(studentId);
         when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(true);
         when(testService.accessCodeMatches(test, "654321")).thenReturn(true);
         when(testAttemptRepository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId))
@@ -156,7 +156,7 @@ class TestAttemptServiceTest {
         request.setAccessCode("000000");
 
         when(testRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(testService.requireCurrentTraineeAccess(testId)).thenReturn(studentId);
+        when(testService.requireCurrentTraineeAccess(testId, null)).thenReturn(studentId);
         when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(true);
         when(testService.accessCodeMatches(test, "000000")).thenReturn(false);
 
@@ -176,7 +176,7 @@ class TestAttemptServiceTest {
         request.setAccessCode("123456");
 
         when(testRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(testService.requireCurrentTraineeAccess(testId)).thenReturn(studentId);
+        when(testService.requireCurrentTraineeAccess(testId, null)).thenReturn(studentId);
         when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(false);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.startAttempt(request))
@@ -209,7 +209,7 @@ class TestAttemptServiceTest {
         request.setAccessCode("222222");
 
         when(testRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(testService.requireCurrentTraineeAccess(testId)).thenReturn(studentId);
+        when(testService.requireCurrentTraineeAccess(testId, null)).thenReturn(studentId);
         when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(true);
         when(testService.accessCodeMatches(test, "222222")).thenReturn(true);
         when(testAttemptRepository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId))

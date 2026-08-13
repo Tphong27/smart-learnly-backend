@@ -11,13 +11,6 @@ import org.springframework.util.unit.DataSize;
 @Component
 @ConfigurationProperties(prefix = "app.storage")
 public class StorageProperties {
-    private String provider = "supabase"; // "supabase" or "r2"
-
-    // Supabase configuration
-    private String supabaseUrl;
-    private String supabaseServiceRoleKey;
-
-    // Cloudflare R2 configuration
     private String r2AccountId;
     private String r2Endpoint;
     private String r2Region = "auto";

@@ -30,18 +30,13 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
                   or classOffering.trainerId = :createdBy
                   or curriculumVersion.createdBy = :createdBy
               )
-              and (
-                  :isFlashtest is null
-                  or (:isFlashtest = true and assignment.isFlashtest = true)
-                  or (:isFlashtest = false and (assignment.isFlashtest = false or assignment.isFlashtest is null))
-              )
+              and (assignment.isFlashtest = false or assignment.isFlashtest is null)
               and assignment.isArchived = false
             order by assignment.createdAt desc
             """)
     List<Assignment> findStaffAssignments(
             @Param("createdBy") UUID createdBy,
-            @Param("courseId") UUID courseId,
-            @Param("isFlashtest") Boolean isFlashtest);
+            @Param("courseId") UUID courseId);
 
     /** Kiểm tra nhân sự có sở hữu nội dung hoặc được phân công lớp của assignment. */
     @Query("""
@@ -51,6 +46,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
             left join CurriculumLesson curriculumLesson on curriculumLesson.id = assignment.lessonId
             left join CurriculumVersion curriculumVersion on curriculumVersion.id = curriculumLesson.curriculumVersionId
             where assignment.id = :assignmentId
+              and (assignment.isFlashtest = false or assignment.isFlashtest is null)
               and (
                   assignment.createdBy = :staffId
                   or classOffering.trainerId = :staffId
@@ -75,25 +71,14 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
               )
               and (:courseId is null or classOffering.courseId = :courseId)
               and (:classId is null or assignment.classId = :classId)
-              and (
-                  :isFlashtest is null
-                  or (:isFlashtest = true and assignment.isFlashtest = true)
-                  or (
-                      :isFlashtest = false
-                      and (
-                          assignment.isFlashtest = false
-                          or assignment.isFlashtest is null
-                      )
-                  )
-              )
+              and (assignment.isFlashtest = false or assignment.isFlashtest is null)
               and assignment.isArchived = false
             order by assignment.createdAt desc
             """)
     List<Assignment> findAvailableForStudent(
             @Param("studentId") UUID studentId,
             @Param("courseId") UUID courseId,
-            @Param("classId") UUID classId,
-            @Param("isFlashtest") Boolean isFlashtest);
+            @Param("classId") UUID classId);
 
     /** Kiểm tra học viên đang hoặc đã ghi danh đúng lớp của assignment. */
     @Query("""
@@ -107,6 +92,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
                   com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.COMPLETED
               )
               and assignment.isArchived = false
+              and (assignment.isFlashtest = false or assignment.isFlashtest is null)
             """)
     boolean existsAvailableForStudent(
             @Param("assignmentId") UUID assignmentId,

@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.smartlearnly.backend.notification.entity.Notification;
 import jakarta.persistence.Column;
@@ -15,6 +16,8 @@ class NotificationMigrationContractTest {
                         .of("src/main/resources/db/migration/V81__notification_lifecycle_and_delivery.sql");
         private static final Path LEGACY_CONTENT_MIGRATION = Path
                         .of("src/main/resources/db/migration/V82__reconcile_legacy_notification_content.sql");
+        private static final Path REMOVE_ARCHIVE_MIGRATION = Path
+                        .of("src/main/resources/db/migration/V95__remove_notification_archive.sql");
 
         @Test
         void migrationShouldDefineNotificationFoundation() throws Exception {
@@ -48,8 +51,8 @@ class NotificationMigrationContractTest {
                                 .isEqualTo("seen_at");
                 assertThat(Notification.class.getDeclaredField("clickedAt").getAnnotation(Column.class).name())
                                 .isEqualTo("clicked_at");
-                assertThat(Notification.class.getDeclaredField("archivedAt").getAnnotation(Column.class).name())
-                                .isEqualTo("archived_at");
+                assertThatThrownBy(() -> Notification.class.getDeclaredField("archivedAt"))
+                                .isInstanceOf(NoSuchFieldException.class);
         }
 
         @Test
@@ -72,5 +75,15 @@ class NotificationMigrationContractTest {
                 assertThat(sql).contains("column_name = 'content'");
                 assertThat(sql).contains("SET body = COALESCE(body, NULLIF(btrim(content::text), ''))");
                 assertThat(sql).contains("ALTER COLUMN content DROP NOT NULL");
+        }
+
+        @Test
+        void removeArchiveMigrationShouldDeleteHiddenRowsAndDropArchiveSchema() throws Exception {
+                String sql = Files.readString(REMOVE_ARCHIVE_MIGRATION);
+
+                assertThat(sql).contains("DELETE FROM public.notifications");
+                assertThat(sql).contains("WHERE archived_at IS NOT NULL");
+                assertThat(sql).contains("DROP COLUMN IF EXISTS archived_at");
+                assertThat(sql).contains("WHERE read_at IS NOT NULL");
         }
 }

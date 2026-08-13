@@ -31,26 +31,11 @@ public class NotificationService {
         return queryService.list(page, size);
     }
 
-    public PageResponse<NotificationResponse> list(int page, int size, String status) {
-        return queryService.list(page, size, status);
-    }
-
-    public PageResponse<NotificationResponse> list(int page, int size, String status, String type) {
-        return queryService.list(page, size, status, type);
-    }
-
     /**
      * Đếm số notification chưa đọc.
      */
     public UnreadCountResponse unreadCount() {
         return queryService.unreadCount();
-    }
-
-    /**
-     * Đánh dấu notification là đã đọc.
-     */
-    public NotificationResponse markRead(UUID notificationId) {
-        return writeService.markRead(notificationId);
     }
 
     /**
@@ -65,17 +50,6 @@ public class NotificationService {
      */
     public NotificationResponse recordClick(UUID notificationId) {
         return writeService.recordClick(notificationId);
-    }
-
-    /**
-     * Lưu trữ một notification.
-     */
-    public NotificationResponse archive(UUID notificationId) {
-        return writeService.archive(notificationId);
-    }
-
-    public UnreadCountResponse archiveAll() {
-        return writeService.archiveAll();
     }
 
     /**
@@ -95,7 +69,7 @@ public class NotificationService {
     /**
      * Xóa notification cũ theo retention policy.
      */
-    public int cleanupReadOrArchivedCreatedBefore(java.time.Instant cutoff) {
-        return writeService.cleanupReadOrArchivedCreatedBefore(cutoff);
+    public int cleanupReadCreatedBefore(java.time.Instant cutoff) {
+        return writeService.cleanupReadCreatedBefore(cutoff);
     }
 }

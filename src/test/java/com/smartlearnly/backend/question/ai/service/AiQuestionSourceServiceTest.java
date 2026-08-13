@@ -14,8 +14,7 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.file.config.StorageProperties;
-import com.smartlearnly.backend.file.service.FileStorageService.StoredFile;
-import com.smartlearnly.backend.file.service.SupabaseStorageClient;
+import com.smartlearnly.backend.file.service.CloudflareR2StorageClient;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentTextExtractionService.DocumentTextExtractionResult;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
@@ -58,7 +57,7 @@ class AiQuestionSourceServiceTest {
     @Mock
     private StorageProperties storageProperties;
     @Mock
-    private SupabaseStorageClient supabaseStorageClient;
+    private CloudflareR2StorageClient r2StorageClient;
     @Mock
     private FlashcardDocumentTextExtractionService documentTextExtractionService;
     @Mock
@@ -80,7 +79,7 @@ class AiQuestionSourceServiceTest {
                 sourceRepository,
                 sourceChunkRepository,
                 storageProperties,
-                supabaseStorageClient,
+                r2StorageClient,
                 documentTextExtractionService,
                 videoAiContentRepository
         );
@@ -132,7 +131,7 @@ class AiQuestionSourceServiceTest {
         AiQuestionGenerationSource source = source(batchId, true, "sources/file.txt");
         when(batchRepository.findById(batchId)).thenReturn(Optional.of(batch));
         when(sourceRepository.findById(sourceId)).thenReturn(Optional.of(source));
-        when(supabaseStorageClient.createSignedUrl("ai-question-source-files", "sources/file.txt", 300))
+        when(r2StorageClient.getPresignedUrl("ai-question-source-files", "sources/file.txt", 300))
                 .thenReturn("https://signed.example.com/file.txt");
 
         AiQuestionDraftDtos.SourceDownloadUrlResponse response =
@@ -256,14 +255,6 @@ class AiQuestionSourceServiceTest {
                 "folder\\source!.txt",
                 "application/octet-stream",
                 longText("TXT file").getBytes(StandardCharsets.UTF_8));
-        when(supabaseStorageClient.store(eq("ai-question-source-files"), any(), eq("text/plain"), any()))
-                .thenAnswer(invocation -> new StoredFile(
-                        "https://storage.example/source.txt",
-                        invocation.getArgument(1),
-                        "source.txt",
-                        "text/plain",
-                        ((byte[]) invocation.getArgument(3)).length));
-
         List<QuestionGenerationProvider.SourceInput> inputs =
                 service.persistAndBuildSourceInputs(courseId, batch, request(List.of(), List.of()), List.of(file));
 
@@ -274,10 +265,16 @@ class AiQuestionSourceServiceTest {
         assertThat(savedSources.get(0).getDownloadable()).isTrue();
         assertThat(savedSources.get(0).getSourcePayloadRef()).contains(batchId.toString());
         assertThat(savedChunks).hasSize(1);
+        verify(r2StorageClient).putPrivateObject(
+                eq("ai-question-source-files"),
+                eq(savedSources.get(0).getSourcePayloadRef()),
+                eq("text/plain"),
+                any(),
+                eq((long) file.getSize()));
     }
 
     @Test
-    void persistAndBuildSourceInputs_persistsDocxUsingExtractorAndStoredObjectPathOverride() {
+    void persistAndBuildSourceInputs_persistsDocxUsingExtractorAndGeneratedObjectPath() {
         AiQuestionGenerationBatch batch = batch(courseId);
         MockMultipartFile file = new MockMultipartFile(
                 "files",
@@ -286,13 +283,11 @@ class AiQuestionSourceServiceTest {
                 "binary".getBytes(StandardCharsets.UTF_8));
         when(documentTextExtractionService.extract(file))
                 .thenReturn(new DocumentTextExtractionResult("DOCX", "lesson.docx", longText("Extracted docx")));
-        when(supabaseStorageClient.store(eq("ai-question-source-files"), any(), any(), any()))
-                .thenReturn(new StoredFile("https://storage.example/override", "override/path.docx", "lesson.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 6));
 
         service.persistAndBuildSourceInputs(courseId, batch, request(List.of(), List.of()), List.of(file));
 
         assertThat(savedSources.get(0).getSourceVersion()).isEqualTo("DOCX");
-        assertThat(savedSources.get(0).getSourcePayloadRef()).isEqualTo("override/path.docx");
+        assertThat(savedSources.get(0).getSourcePayloadRef()).contains(batchId.toString());
     }
 
     @Test
@@ -305,9 +300,6 @@ class AiQuestionSourceServiceTest {
                 "pdf".getBytes(StandardCharsets.UTF_8));
         when(documentTextExtractionService.extract(file))
                 .thenReturn(new DocumentTextExtractionResult(" ", "slides.pdf", longText("PDF text")));
-        when(supabaseStorageClient.store(eq("ai-question-source-files"), any(), any(), any()))
-                .thenAnswer(invocation -> new StoredFile("url", invocation.getArgument(1), "slides.pdf", "application/pdf", 3));
-
         service.persistAndBuildSourceInputs(courseId, batch, request(List.of(), List.of()), List.of(file));
 
         assertThat(savedSources.get(0).getSourceVersion()).isEqualTo("PDF");
@@ -323,9 +315,6 @@ class AiQuestionSourceServiceTest {
                 .thenReturn(new DocumentTextExtractionResult("PDF", "paper.pdf", longText("pdf")));
         when(documentTextExtractionService.extract(docx))
                 .thenReturn(new DocumentTextExtractionResult("DOCX", "paper.docx", longText("docx")));
-        when(supabaseStorageClient.store(eq("ai-question-source-files"), any(), any(), any()))
-                .thenAnswer(invocation -> new StoredFile("url", invocation.getArgument(1), "file", invocation.getArgument(2), 10));
-
         service.persistAndBuildSourceInputs(courseId, batch, request(List.of(), List.of()), List.of(txt, pdf, docx));
 
         assertThat(savedSources).extracting(AiQuestionGenerationSource::getMimeType)
@@ -520,15 +509,15 @@ class AiQuestionSourceServiceTest {
                 "source.txt",
                 "text/plain",
                 longText("rollback").getBytes(StandardCharsets.UTF_8));
-        when(supabaseStorageClient.store(eq("ai-question-source-files"), any(), any(), any()))
-                .thenReturn(new StoredFile("url", "stored/source.txt", "source.txt", "text/plain", 100));
         doThrow(new BusinessException(ErrorCode.AI_SOURCE_INVALID, "chunk failed"))
                 .when(sourceChunkRepository).save(any());
 
         assertThatThrownBy(() -> service.persistAndBuildSourceInputs(courseId, batch, request(List.of(), List.of()), List.of(file)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.AI_SOURCE_INVALID));
-        verify(supabaseStorageClient).deleteObject("ai-question-source-files", "stored/source.txt");
+        verify(r2StorageClient).deleteObject(
+                "ai-question-source-files",
+                savedSources.get(0).getSourcePayloadRef());
     }
 
     @Test

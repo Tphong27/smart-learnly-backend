@@ -35,6 +35,7 @@ public class TrainerLessonQuestionController {
 
     private final TrainerLessonQuestionService trainerLessonQuestionService;
 
+    /** Liệt kê câu hỏi quiz của lesson để TMO vẫn có thể xem curriculum lớp. */
     @GetMapping
     public ApiResponse<List<TestQuestionModel.Response>> listQuestions(
             @PathVariable UUID classId,
@@ -46,7 +47,9 @@ public class TrainerLessonQuestionController {
         );
     }
 
+    /** Gắn câu hỏi vào quiz lesson; chỉ Trainer hoặc Admin được thay đổi. */
     @PostMapping
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ResponseEntity<ApiResponse<TestQuestionModel.Response>> attachQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -57,7 +60,9 @@ public class TrainerLessonQuestionController {
                 .body(ApiResponse.success("Question attached successfully", response));
     }
 
+    /** Cập nhật câu hỏi đã gắn trong class curriculum draft. */
     @PutMapping("/{questionId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<TestQuestionModel.Response> updateQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -70,7 +75,9 @@ public class TrainerLessonQuestionController {
         );
     }
 
+    /** Gỡ câu hỏi khỏi quiz lesson trong class curriculum draft. */
     @DeleteMapping("/{questionId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<Void> detachQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -80,7 +87,9 @@ public class TrainerLessonQuestionController {
         return ApiResponse.success("Question detached successfully");
     }
 
+    /** Lưu thứ tự câu hỏi mới trong quiz lesson của lớp. */
     @PostMapping("/reorder")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<List<TestQuestionModel.Response>> reorderQuestions(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,

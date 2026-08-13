@@ -51,7 +51,7 @@ public class AdminCourseController {
 
     // Tạo khóa học nháp mới và trả vị trí tài nguyên vừa tạo.
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CourseResponse>> create(@Valid @RequestBody CreateCourseRequest request) {
         CourseResponse course = courseAdminService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/courses/" + course.id()))
@@ -66,7 +66,7 @@ public class AdminCourseController {
 
     // Cập nhật riêng các trường metadata được gửi trong yêu cầu PATCH.
     @PatchMapping("/{courseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRAINER')")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,
             @Valid @RequestBody UpdateCourseRequest request
@@ -76,7 +76,7 @@ public class AdminCourseController {
 
     // Lưu trữ mềm khóa học để dữ liệu lịch sử không bị xóa vật lý.
     @DeleteMapping("/{courseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> delete(@PathVariable UUID courseId) {
         courseAdminService.delete(courseId);
         return ApiResponse.success("Course deleted successfully");

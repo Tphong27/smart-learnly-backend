@@ -1,7 +1,7 @@
 package com.smartlearnly.backend.test.attempt.service;
 
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
-import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
+import com.smartlearnly.backend.test.monitor.dto.MonitorEvent;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;

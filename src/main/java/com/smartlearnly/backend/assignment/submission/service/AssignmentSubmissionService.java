@@ -10,7 +10,7 @@ import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionReposi
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
-import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
+import com.smartlearnly.backend.test.monitor.dto.MonitorEvent;
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.entity.NotificationType;
 import com.smartlearnly.backend.notification.service.NotificationService;
@@ -332,6 +332,7 @@ public class AssignmentSubmissionService {
         }
 
         Assignment assignment = assignmentRepository.findByInstructionFileUrl(fileUrl)
+                .filter(item -> !Boolean.TRUE.equals(item.getIsFlashtest()))
                 .orElseThrow(() -> new EntityNotFoundException("Submission file not found"));
         if ("TRAINEE".equalsIgnoreCase(actor.getRole())) {
             requireTraineeAccess(assignment, actor.getId());
@@ -342,6 +343,7 @@ public class AssignmentSubmissionService {
 
     private Assignment loadAssignment(UUID assignmentId) {
         return assignmentRepository.findById(assignmentId)
+                .filter(item -> !Boolean.TRUE.equals(item.getIsFlashtest()))
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
     }
 

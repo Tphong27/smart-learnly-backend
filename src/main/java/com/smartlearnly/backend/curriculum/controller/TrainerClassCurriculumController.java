@@ -35,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class TrainerClassCurriculumController {
     private final TrainerClassCurriculumService trainerClassCurriculumService;
 
+    /** Trả curriculum hiệu lực của lớp cho Trainer, Admin hoặc TMO ở chế độ xem. */
     @GetMapping
     public ApiResponse<ClassCurriculumEditorResponse> getCurriculum(@PathVariable UUID classId) {
         return ApiResponse.success(
@@ -43,14 +44,18 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Khởi tạo draft lớp; TMO bị loại vì không có quyền author curriculum. */
     @PostMapping("/draft")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ClassCurriculumEditorResponse>> initializeDraft(@PathVariable UUID classId) {
         ClassCurriculumEditorResponse response = trainerClassCurriculumService.initializeDraft(classId);
         return ResponseEntity.created(URI.create("/api/v1/trainer/classes/" + classId + "/curriculum"))
                 .body(ApiResponse.success("Class curriculum draft initialized successfully", response));
     }
 
+    /** Xuất bản draft curriculum của lớp cho các role author được phép. */
     @PostMapping("/publish")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<ClassCurriculumEditorResponse> publishDraft(@PathVariable UUID classId) {
         return ApiResponse.success(
                 "Class curriculum published successfully",
@@ -58,7 +63,9 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Tạo section mới trong class curriculum draft. */
     @PostMapping("/sections")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ResponseEntity<ApiResponse<SectionResponse>> createSection(
             @PathVariable UUID classId,
             @Valid @RequestBody SectionRequest request
@@ -68,7 +75,9 @@ public class TrainerClassCurriculumController {
                 .body(ApiResponse.success("Section created successfully", section));
     }
 
+    /** Lưu thứ tự section mới trong class curriculum draft. */
     @PutMapping("/sections/order")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<List<SectionResponse>> reorderSections(
             @PathVariable UUID classId,
             @Valid @RequestBody ReorderRequest request
@@ -79,7 +88,9 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Cập nhật section thuộc curriculum draft của lớp. */
     @PutMapping("/sections/{sectionId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<SectionResponse> updateSection(
             @PathVariable UUID classId,
             @PathVariable UUID sectionId,
@@ -91,7 +102,9 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Xóa section thuộc curriculum draft của lớp. */
     @DeleteMapping("/sections/{sectionId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<Void> deleteSection(
             @PathVariable UUID classId,
             @PathVariable UUID sectionId
@@ -100,7 +113,9 @@ public class TrainerClassCurriculumController {
         return ApiResponse.success("Section deleted successfully");
     }
 
+    /** Tạo lesson trong section của class curriculum draft. */
     @PostMapping("/sections/{sectionId}/lessons")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ResponseEntity<ApiResponse<LessonResponse>> createLesson(
             @PathVariable UUID classId,
             @PathVariable UUID sectionId,
@@ -111,7 +126,9 @@ public class TrainerClassCurriculumController {
                 .body(ApiResponse.success("Lesson created successfully", lesson));
     }
 
+    /** Lưu thứ tự lesson trong section của lớp. */
     @PutMapping("/sections/{sectionId}/lessons/order")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<List<LessonResponse>> reorderLessons(
             @PathVariable UUID classId,
             @PathVariable UUID sectionId,
@@ -123,6 +140,7 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Trả chi tiết lesson trong class curriculum cho role có quyền xem lớp. */
     @GetMapping("/lessons/{lessonId}")
     public ApiResponse<LessonResponse> getLesson(
             @PathVariable UUID classId,
@@ -134,7 +152,9 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Cập nhật lesson trong class curriculum draft. */
     @PutMapping("/lessons/{lessonId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<LessonResponse> updateLesson(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -146,7 +166,9 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Xóa lesson trong class curriculum draft. */
     @DeleteMapping("/lessons/{lessonId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<Void> deleteLesson(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId
@@ -155,7 +177,9 @@ public class TrainerClassCurriculumController {
         return ApiResponse.success("Lesson deleted successfully");
     }
 
+    /** Thêm resource vào lesson của class curriculum draft. */
     @PostMapping("/lessons/{lessonId}/resources")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ResponseEntity<ApiResponse<LessonResourceResponse>> addResource(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -166,7 +190,9 @@ public class TrainerClassCurriculumController {
                 .body(ApiResponse.success("Resource added successfully", resource));
     }
 
+    /** Thay toàn bộ resource của lesson trong class curriculum draft. */
     @PutMapping("/lessons/{lessonId}/resources")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<List<LessonResourceResponse>> replaceResources(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -178,7 +204,9 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Lưu thứ tự resource của lesson trong class curriculum draft. */
     @PutMapping("/lessons/{lessonId}/resources/order")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<List<LessonResourceResponse>> reorderResources(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -190,7 +218,9 @@ public class TrainerClassCurriculumController {
         );
     }
 
+    /** Xóa resource khỏi lesson trong class curriculum draft. */
     @DeleteMapping("/lessons/{lessonId}/resources/{resourceId}")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
     public ApiResponse<Void> removeResource(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,

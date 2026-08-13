@@ -22,12 +22,12 @@ class NotificationRetentionSchedulerTest {
     void cleanupShouldUseAtLeastOneDayRetention() throws Exception {
         NotificationRetentionScheduler scheduler = new NotificationRetentionScheduler(notificationService);
         setRetentionDays(scheduler, 0);
-        when(notificationService.cleanupReadOrArchivedCreatedBefore(any(Instant.class))).thenReturn(2);
+        when(notificationService.cleanupReadCreatedBefore(any(Instant.class))).thenReturn(2);
 
         scheduler.cleanup();
 
         ArgumentCaptor<Instant> cutoffCaptor = ArgumentCaptor.forClass(Instant.class);
-        verify(notificationService).cleanupReadOrArchivedCreatedBefore(cutoffCaptor.capture());
+        verify(notificationService).cleanupReadCreatedBefore(cutoffCaptor.capture());
         assertThat(cutoffCaptor.getValue()).isBefore(Instant.now());
     }
 

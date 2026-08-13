@@ -24,8 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Xử lý các thao tác ghi notification: đánh dấu đã đọc, lưu trữ,
- * tạo và xóa notification.
+ * Xử lý các thao tác ghi notification: click, đánh dấu tất cả đã đọc,
+ * tạo và dọn notification cũ.
  */
 @Service
 @RequiredArgsConstructor
@@ -39,27 +39,6 @@ public class NotificationWriteService {
     private final NotificationRepository notificationRepository;
     private final CurrentUserService currentUserService;
     private final NotificationQueryService queryService;
-
-    /**
-     * Đánh dấu một notification là đã đọc và đã xem.
-     *
-     * @param notificationId ID của notification
-     * @return notification sau khi cập nhật
-     */
-    @Transactional
-    public NotificationResponse markRead(UUID notificationId) {
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        Notification notification = findActiveOwnedNotification(notificationId, actor.getId());
-        Instant now = Instant.now();
-        if (notification.getReadAt() == null) {
-            notification.setReadAt(now);
-        }
-        if (notification.getSeenAt() == null) {
-            notification.setSeenAt(now);
-        }
-        notification = notificationRepository.save(notification);
-        return NotificationMapper.toResponse(notification);
-    }
 
     /**
      * Đánh dấu tất cả notification của người dùng là đã đọc.
@@ -82,7 +61,7 @@ public class NotificationWriteService {
     @Transactional
     public NotificationResponse recordClick(UUID notificationId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        Notification notification = findActiveOwnedNotification(notificationId, actor.getId());
+        Notification notification = findOwnedNotification(notificationId, actor.getId());
         Instant now = Instant.now();
         if (notification.getReadAt() == null) {
             notification.setReadAt(now);
@@ -94,34 +73,6 @@ public class NotificationWriteService {
             notification.setClickedAt(now);
         }
         return NotificationMapper.toResponse(notificationRepository.save(notification));
-    }
-
-    /**
-     * Lưu trữ một notification: đánh dấu đã đọc, đã xem và đặt thời điểm lưu trữ.
-     *
-     * @param notificationId ID của notification
-     * @return notification sau khi cập nhật
-     */
-    @Transactional
-    public NotificationResponse archive(UUID notificationId) {
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        Notification notification = findActiveOwnedNotification(notificationId, actor.getId());
-        Instant now = Instant.now();
-        if (notification.getReadAt() == null) {
-            notification.setReadAt(now);
-        }
-        if (notification.getSeenAt() == null) {
-            notification.setSeenAt(now);
-        }
-        notification.setArchivedAt(now);
-        return NotificationMapper.toResponse(notificationRepository.save(notification));
-    }
-
-    @Transactional
-    public UnreadCountResponse archiveAll() {
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        notificationRepository.archiveAllForUser(actor.getId(), Instant.now());
-        return queryService.unreadCount();
     }
 
     /**
@@ -171,25 +122,27 @@ public class NotificationWriteService {
     }
 
     /**
-     * Xóa các notification đã đọc hoặc đã lưu trữ trước thời điểm cutoff.
+     * Xóa các notification đã đọc trước thời điểm cutoff.
      * Dùng cho cleanup theo retention policy.
      *
      * @param cutoff thời điểm cutoff, notification trước thời điểm này sẽ bị xóa
      * @return số notification đã xóa
      */
     @Transactional
-    public int cleanupReadOrArchivedCreatedBefore(Instant cutoff) {
+    public int cleanupReadCreatedBefore(Instant cutoff) {
         if (cutoff == null) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Notification retention cutoff is required");
         }
-        return notificationRepository.deleteReadOrArchivedCreatedBefore(cutoff);
+        return notificationRepository.deleteReadCreatedBefore(cutoff);
     }
 
-    private Notification findActiveOwnedNotification(UUID notificationId, UUID userId) {
-        return notificationRepository.findByIdAndUserIdAndArchivedAtIsNull(notificationId, userId)
+    /** Tìm notification thuộc đúng người dùng hoặc trả lỗi không tồn tại. */
+    private Notification findOwnedNotification(UUID notificationId, UUID userId) {
+        return notificationRepository.findByIdAndUserId(notificationId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Notification was not found"));
     }
 
+    /** Chuẩn hóa command và bỏ qua notification trùng event key. */
     private Optional<Notification> buildNotification(NotificationCreateCommand command) {
         UUID userId = require(command.userId(), "Notification user is required");
         String eventKey = normalize(command.eventKey(), MAX_EVENT_KEY_LENGTH);
@@ -213,6 +166,7 @@ public class NotificationWriteService {
         return Optional.of(notification);
     }
 
+    /** Bắt buộc chuỗi có nội dung và không vượt quá giới hạn. */
     private static String requireText(String value, String message, int maxLength) {
         String normalized = normalize(value, maxLength);
         if (normalized == null) {
@@ -221,6 +175,7 @@ public class NotificationWriteService {
         return normalized;
     }
 
+    /** Chuẩn hóa chuỗi tùy chọn và kiểm tra chiều dài. */
     private static String normalize(String value, int maxLength) {
         if (value == null) {
             return null;
@@ -235,6 +190,7 @@ public class NotificationWriteService {
         return trimmed;
     }
 
+    /** Bắt buộc giá trị nghiệp vụ không được null. */
     private static <T> T require(T value, String message) {
         if (value == null) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, message);

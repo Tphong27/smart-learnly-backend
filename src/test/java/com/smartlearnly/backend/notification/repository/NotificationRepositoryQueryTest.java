@@ -3,6 +3,7 @@ package com.smartlearnly.backend.notification.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Method;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
@@ -10,53 +11,28 @@ import org.springframework.data.jpa.repository.Query;
 
 class NotificationRepositoryQueryTest {
     @Test
-    void findActiveForUserShouldReturnOnlyActiveNotificationsNewestFirst() throws Exception {
+    void listQueryShouldUseSimpleDerivedOrderingWithoutArchiveFilter() throws Exception {
         Method method = NotificationRepository.class.getMethod(
-                "findActiveForUser",
+                "findByUserIdOrderByCreatedAtDesc",
                 UUID.class,
                 Pageable.class);
 
         Query query = method.getAnnotation(Query.class);
 
-        assertThat(query).isNotNull();
-        assertThat(query.nativeQuery()).isTrue();
-        assertThat(query.value())
-                .contains("notification.user_id = :userId")
-                .contains("notification.archived_at IS NULL")
-                .contains("ORDER BY notification.created_at DESC")
-                .doesNotContain("notification.type")
-                .doesNotContain("notification.read_at");
-        assertThat(query.countQuery())
-                .contains("SELECT COUNT(*)")
-                .contains("notification.user_id = :userId")
-                .contains("notification.archived_at IS NULL")
-                .doesNotContain("ORDER BY")
-                .doesNotContain("notification.type")
-                .doesNotContain("notification.read_at");
+        assertThat(query).isNull();
     }
 
     @Test
-    void findActiveForUserByStatusAndTypeShouldUsePostgresSafeTypeCast() throws Exception {
+    void retentionQueryShouldDeleteOnlyReadNotifications() throws Exception {
         Method method = NotificationRepository.class.getMethod(
-                "findActiveForUserByStatusAndType",
-                UUID.class,
-                String.class,
-                String.class,
-                Pageable.class);
+                "deleteReadCreatedBefore",
+                Instant.class);
 
         Query query = method.getAnnotation(Query.class);
 
         assertThat(query).isNotNull();
-        assertThat(query.nativeQuery()).isTrue();
         assertThat(query.value())
-                .contains("notification.archived_at IS NULL")
-                .contains("CAST(:status AS text) = 'unread'")
-                .contains("notification.read_at IS NULL")
-                .contains("notification.read_at IS NOT NULL")
-                .contains("notification.type::text = CAST(:type AS text)");
-        assertThat(query.countQuery())
-                .contains("SELECT COUNT(*)")
-                .contains("notification.type::text = CAST(:type AS text)")
-                .doesNotContain("ORDER BY");
+                .contains("notification.readAt IS NOT NULL")
+                .doesNotContain("archivedAt");
     }
 }

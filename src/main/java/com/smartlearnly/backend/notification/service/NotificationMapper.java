@@ -35,7 +35,6 @@ public final class NotificationMapper {
                 notification.getDeliveredAt(),
                 notification.getSeenAt(),
                 notification.getClickedAt(),
-                notification.getArchivedAt(),
                 notification.getCreatedAt());
     }
 

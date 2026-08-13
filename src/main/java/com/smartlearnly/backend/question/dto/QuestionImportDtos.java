@@ -53,11 +53,67 @@ public final class QuestionImportDtos {
     ) {
     }
 
+    /** Một dòng import module-scoped, không chứa field Module ID. */
+    public record ModuleImportRow(
+            @NotNull(message = "Row number is required")
+            @Min(value = 1, message = "Row number must be 1 or greater")
+            Integer rowNumber,
+
+            @NotBlank(message = "Question text is required")
+            @Size(max = 10000, message = "Question text must not exceed 10000 characters")
+            String questionText,
+
+            @NotBlank(message = "Question type is required")
+            String questionType,
+
+            @NotEmpty(message = "At least two answers are required")
+            @Size(max = 6, message = "Multiple choice questions support 2 to 6 answers")
+            List<@NotBlank(message = "Answer text is required") @Size(max = 4000, message = "Answer text must not exceed 4000 characters") String> options,
+
+            @NotBlank(message = "Correct answer is required")
+            String correctAnswer,
+
+            @Size(max = 10000, message = "Explanation must not exceed 10000 characters")
+            String explanation,
+
+            @Min(value = 1, message = "Difficulty must be between 1 and 5")
+            @Max(value = 5, message = "Difficulty must be between 1 and 5")
+            Short difficulty,
+
+            String bloomLevel,
+
+            @Size(max = 5, message = "A question can have at most 5 image URLs")
+            List<@Size(max = 2048, message = "Image URL must not exceed 2048 characters") String> imageFiles,
+
+            @Size(max = 3, message = "A question can have at most 3 audio URLs")
+            List<@Size(max = 2048, message = "Audio URL must not exceed 2048 characters") String> audioFiles
+    ) {
+        /** Chuyển row module-scoped sang model nội bộ mà không lấy module từ client. */
+        public ImportRow toImportRow() {
+            return new ImportRow(
+                    rowNumber, questionText, questionType, options,
+                    correctAnswer, explanation, difficulty, bloomLevel,
+                    null, imageFiles, audioFiles
+            );
+        }
+    }
+
     public record ImportBatchRequest(
             @NotNull(message = "Rows are required")
             @Size(min = 1, max = 1000, message = "Batch size must be between 1 and 1000 rows")
             @Valid
             List<ImportRow> rows,
+
+            String importSource
+    ) {
+    }
+
+    /** Batch import cho module hiện tại; mọi row tự động thuộc module trên URL. */
+    public record ModuleImportBatchRequest(
+            @NotNull(message = "Rows are required")
+            @Size(min = 1, max = 1000, message = "Batch size must be between 1 and 1000 rows")
+            @Valid
+            List<ModuleImportRow> rows,
 
             String importSource
     ) {

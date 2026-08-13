@@ -36,6 +36,7 @@ public class FlashcardImageUploadService {
     private final StorageProperties storageProperties;
     private final Tika tika = new Tika();
 
+    /** Tải ảnh cho master flashcard sau khi kiểm tra quyền chỉnh sửa course. */
     @Transactional(readOnly = true)
     public FlashcardImageUploadResponse upload(UUID setId, MultipartFile file) {
         FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
@@ -44,6 +45,14 @@ public class FlashcardImageUploadService {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         requireEditAccess(actor, course);
 
+        return uploadOwnedSet(flashcardSet, file);
+    }
+
+    /** Lưu ảnh cho flashcard set đã được service gọi kiểm tra ownership trước đó. */
+    public FlashcardImageUploadResponse uploadOwnedSet(FlashcardSet flashcardSet, MultipartFile file) {
+        if (flashcardSet == null || flashcardSet.getId() == null || flashcardSet.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found");
+        }
         byte[] content = readAndValidateSize(file);
         String contentType = detectContentType(content);
         String extension = ALLOWED_TYPES.get(contentType);
@@ -54,7 +63,8 @@ public class FlashcardImageUploadService {
             );
         }
 
-        String objectPath = "flashcard-sets/%s/images/%s.%s".formatted(setId, UUID.randomUUID(), extension);
+        String objectPath = "flashcard-sets/%s/images/%s.%s".formatted(
+                flashcardSet.getId(), UUID.randomUUID(), extension);
         FileStorageService.StoredFile stored = fileStorageService.store(
                 storageProperties.getLessonResourceBucket(),
                 objectPath,

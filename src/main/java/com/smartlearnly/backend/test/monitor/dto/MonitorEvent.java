@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.flashtest.dto;
+package com.smartlearnly.backend.test.monitor.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;

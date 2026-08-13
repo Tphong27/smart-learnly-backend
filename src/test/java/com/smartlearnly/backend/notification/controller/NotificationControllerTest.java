@@ -47,7 +47,7 @@ class NotificationControllerTest {
     @Test
     void listShouldDeclarePaginationValidation() throws Exception {
         Method method = NotificationController.class.getMethod(
-                "list", int.class, int.class, String.class, String.class);
+                "list", int.class, int.class);
 
         Min pageMin = method.getParameters()[0].getAnnotation(Min.class);
         Min sizeMin = method.getParameters()[1].getAnnotation(Min.class);
@@ -61,9 +61,9 @@ class NotificationControllerTest {
     @Test
     void listShouldReturnApiResponse() {
         PageResponse<NotificationResponse> page = new PageResponse<>(List.of(response()), 0, 20, 1, 1);
-        when(notificationService.list(0, 20, "all", "PAYMENT")).thenReturn(page);
+        when(notificationService.list(0, 20)).thenReturn(page);
 
-        var response = controller.list(0, 20, "all", "PAYMENT");
+        var response = controller.list(0, 20);
 
         assertThat(response.success()).isTrue();
         assertThat(response.message()).isEqualTo("Notifications loaded successfully");
@@ -82,17 +82,6 @@ class NotificationControllerTest {
     }
 
     @Test
-    void markReadShouldReturnApiResponse() {
-        NotificationResponse notification = response();
-        when(notificationService.markRead(notificationId)).thenReturn(notification);
-
-        var response = controller.markRead(notificationId);
-
-        assertThat(response.success()).isTrue();
-        assertThat(response.data()).isSameAs(notification);
-    }
-
-    @Test
     void recordClickShouldReturnApiResponse() {
         NotificationResponse notification = response();
         when(notificationService.recordClick(notificationId)).thenReturn(notification);
@@ -105,18 +94,6 @@ class NotificationControllerTest {
     }
 
     @Test
-    void archiveShouldReturnApiResponse() {
-        NotificationResponse notification = response();
-        when(notificationService.archive(notificationId)).thenReturn(notification);
-
-        var response = controller.archive(notificationId);
-
-        assertThat(response.success()).isTrue();
-        assertThat(response.message()).isEqualTo("Notification archived");
-        assertThat(response.data()).isSameAs(notification);
-    }
-
-    @Test
     void markAllReadShouldReturnApiResponse() {
         UnreadCountResponse count = new UnreadCountResponse(0);
         when(notificationService.markAllRead()).thenReturn(count);
@@ -124,18 +101,6 @@ class NotificationControllerTest {
         var response = controller.markAllRead();
 
         assertThat(response.success()).isTrue();
-        assertThat(response.data()).isSameAs(count);
-    }
-
-    @Test
-    void archiveAllShouldReturnApiResponse() {
-        UnreadCountResponse count = new UnreadCountResponse(0);
-        when(notificationService.archiveAll()).thenReturn(count);
-
-        var response = controller.archiveAll();
-
-        assertThat(response.success()).isTrue();
-        assertThat(response.message()).isEqualTo("Notifications archived");
         assertThat(response.data()).isSameAs(count);
     }
 
@@ -151,7 +116,6 @@ class NotificationControllerTest {
                 null,
                 "payment:" + notificationId,
                 Map.of(),
-                null,
                 null,
                 null,
                 null,

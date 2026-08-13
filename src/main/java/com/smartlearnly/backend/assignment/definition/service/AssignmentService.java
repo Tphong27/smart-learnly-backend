@@ -79,7 +79,7 @@ public class AssignmentService {
         assignment.setLockoutDate(request.getLockoutDate());
         assignment.setMaxScore(request.getMaxScore());
         assignment.setTestId(request.getTestId());
-        assignment.setIsFlashtest(request.getIsFlashtest());
+        assignment.setIsFlashtest(false);
         assignment.setCreatedBy(currentUserService.requireAuthenticatedUser().getId());
 
         Assignment saved = assignmentRepository.save(assignment);
@@ -97,24 +97,25 @@ public class AssignmentService {
 
         return assignmentRepository.findAll()
                 .stream()
+                .filter(this::isSupportedAssignment)
                 .map(this::mapToResponse)
                 .toList();
     }
 
     /** Trả assignment mà staff hiện tại sở hữu hoặc được phân công quản lý. */
-    public List<AssignmentModel.Response> getMyAssignments(UUID courseId, Boolean isFlashtest) {
+    public List<AssignmentModel.Response> getMyAssignments(UUID courseId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        return assignmentRepository.findStaffAssignments(actor.getId(), courseId, isFlashtest)
+        return assignmentRepository.findStaffAssignments(actor.getId(), courseId)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
     }
 
-    /** Trả assignment khả dụng cho học viên theo course, lớp và loại bài. */
-    public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId, UUID classId, Boolean isFlashtest) {
+    /** Trả assignment khả dụng cho học viên theo course và lớp. */
+    public List<AssignmentModel.Response> getAvailableAssignments(UUID courseId, UUID classId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 
-        return assignmentRepository.findAvailableForStudent(actor.getId(), courseId, classId, isFlashtest)
+        return assignmentRepository.findAvailableForStudent(actor.getId(), courseId, classId)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -133,6 +134,7 @@ public class AssignmentService {
 
         Assignment assignment = assignmentRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
+        requireSupportedAssignment(assignment);
 
         return mapToResponse(assignment);
     }
@@ -227,6 +229,7 @@ public class AssignmentService {
 
         for (UUID reference : lessonReferences) {
             Optional<Assignment> match = assignments.stream()
+                    .filter(this::isSupportedAssignment)
                     .filter(assignment -> reference.equals(assignment.getLessonId()))
                     .max(newestFirst);
             if (match.isPresent()) {
@@ -248,6 +251,7 @@ public class AssignmentService {
 
         Assignment assignment = assignmentRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
+        requireSupportedAssignment(assignment);
 
         UUID targetClassId = request.getClassId() != null
                 ? request.getClassId()
@@ -285,13 +289,7 @@ public class AssignmentService {
             assignment.setIsArchived(request.getIsArchived());
         if (request.getTestId() != null)
             assignment.setTestId(request.getTestId());
-        if (request.getIsFlashtest() != null)
-            assignment.setIsFlashtest(request.getIsFlashtest());
-
         Assignment updated = assignmentRepository.save(assignment);
-        if (Boolean.TRUE.equals(updated.getIsFlashtest())) {
-            assignmentSubmissionRepository.deleteByAssignmentId(updated.getId());
-        }
 
         emitAssignmentNotificationToStudents(
                 updated,
@@ -307,6 +305,7 @@ public class AssignmentService {
 
         Assignment assignment = assignmentRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
+        requireSupportedAssignment(assignment);
         emitAssignmentNotificationToStudents(
                 assignment,
                 "Assignment removed",
@@ -371,13 +370,24 @@ public class AssignmentService {
         response.setLockoutDate(assignment.getLockoutDate());
         response.setMaxScore(assignment.getMaxScore());
         response.setIsArchived(assignment.getIsArchived());
-        response.setIsFlashtest(assignment.getIsFlashtest());
         response.setCreatedBy(assignment.getCreatedBy());
         response.setCreatedAt(assignment.getCreatedAt());
         response.setUpdatedAt(assignment.getUpdatedAt());
         response.setTestId(assignment.getTestId());
 
         return response;
+    }
+
+    /** Nhận diện assignment thường; bản ghi legacy bị giữ lại chỉ để bảo toàn lịch sử. */
+    private boolean isSupportedAssignment(Assignment assignment) {
+        return assignment != null && !Boolean.TRUE.equals(assignment.getIsFlashtest());
+    }
+
+    /** Chặn truy cập nghiệp vụ tới assignment legacy đã ngừng hỗ trợ. */
+    private void requireSupportedAssignment(Assignment assignment) {
+        if (!isSupportedAssignment(assignment)) {
+            throw new EntityNotFoundException("Assignment not found");
+        }
     }
 
     /**

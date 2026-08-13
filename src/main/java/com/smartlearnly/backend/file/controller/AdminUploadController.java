@@ -18,12 +18,13 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 // Nới cho TRAINER để trainer có thể upload lesson material / resource / media
 // khi tùy biến curriculum của class draft.
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/uploads")
 public class AdminUploadController {
     private final CourseThumbnailService courseThumbnailService;
     private final LessonFileUploadService lessonFileUploadService;
 
+    /** Tải thumbnail course cho các role authoring, không mở mutation này cho TMO. */
     @PostMapping(value = "/course-thumbnails", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<CourseThumbnailUploadResponse> uploadCourseThumbnail(
             @RequestPart("file") MultipartFile file
@@ -34,6 +35,7 @@ public class AdminUploadController {
         );
     }
 
+    /** Tải material chính của lesson cho authoring workflow. */
     @PostMapping(value = "/lesson-material", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<LessonFileUploadResponse> uploadLessonMaterial(
             @RequestPart("file") MultipartFile file
@@ -44,6 +46,7 @@ public class AdminUploadController {
         );
     }
 
+    /** Tải resource bổ sung của lesson cho authoring workflow. */
     @PostMapping(value = "/lesson-resource", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<LessonFileUploadResponse> uploadLessonResource(
             @RequestPart("file") MultipartFile file

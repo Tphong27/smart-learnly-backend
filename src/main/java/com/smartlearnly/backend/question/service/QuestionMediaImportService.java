@@ -303,11 +303,29 @@ public class QuestionMediaImportService {
         }
         for (String url : normalized) {
             try {
-                parseAndValidateUri(url);
+                URI uri = parseAndValidateUri(url);
+                if (isReservedPlaceholderHost(uri.getHost())) {
+                    throw new BusinessException(
+                            ErrorCode.INVALID_REQUEST,
+                            "Media URL must point to a real, publicly accessible file"
+                    );
+                }
             } catch (BusinessException exception) {
                 errors.add((mediaType == QuestionMediaType.IMAGE ? "Image" : "Audio") + " URL is invalid: " + exception.getMessage());
             }
         }
+    }
+
+    /** Chặn các domain dành riêng cho tài liệu mẫu vì chúng không chứa media import thật. */
+    private boolean isReservedPlaceholderHost(String host) {
+        if (host == null || host.isBlank()) return false;
+        String normalized = host.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("example.com")
+                || normalized.endsWith(".example.com")
+                || normalized.equals("example.org")
+                || normalized.endsWith(".example.org")
+                || normalized.equals("example.net")
+                || normalized.endsWith(".example.net");
     }
 
     private List<String> normalizeUrls(List<String> urls) {

@@ -110,8 +110,7 @@ Keep startup and infrastructure settings in environment variables or a secret ma
 - `SPRING_PROFILES_ACTIVE`
 - `JWT_SECRET`
 - `SETTINGS_ENCRYPTION_KEY`
-- Storage provider selection such as `APP_STORAGE_PROVIDER`
-- Storage credentials and bucket wiring
+- Cloudflare R2 credentials, public URLs, and bucket wiring
 - HLS token/callback secrets and external pipeline credentials
 
 These values are required before the application can safely read database-backed settings or have startup-time wiring concerns.

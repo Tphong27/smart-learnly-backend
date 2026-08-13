@@ -59,11 +59,10 @@ public class TestController {
     @PreAuthorize("hasRole('TRAINEE')")
     public ResponseEntity<List<TestModel.Response>> getAvailable(
             @RequestParam(required = false) UUID courseId,
-            @RequestParam(required = false) UUID classId,
-            @RequestParam(required = false) Boolean isFlashtest) {
+            @RequestParam(required = false) UUID classId) {
 
         return ResponseEntity.ok(
-                testService.getAvailableTests(courseId, classId, isFlashtest));
+                testService.getAvailableTests(courseId, classId));
     }
 
     /** Trả chi tiết đề nếu caller có quyền đọc đề đó. */

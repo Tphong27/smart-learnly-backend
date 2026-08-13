@@ -15,6 +15,8 @@ class QuestionAuthorizationAnnotationTest {
     void courseQuestionReadBlockAllowsCourseAuthoringRoles() {
         assertThat(preAuthorizeValue(CourseQuestionController.class))
                 .isEqualTo("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')");
+        assertThat(preAuthorizeValue(CourseModuleQuestionController.class))
+                .isEqualTo("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')");
     }
 
     @Test
@@ -26,6 +28,14 @@ class QuestionAuthorizationAnnotationTest {
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "archive")))
                 .isEqualTo("hasAnyRole('ADMIN', 'SME')");
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "importBatch")))
+                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+        assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "create")))
+                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+        assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "update")))
+                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+        assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "archive")))
+                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+        assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "importBatch")))
                 .isEqualTo("hasAnyRole('ADMIN', 'SME')");
     }
 

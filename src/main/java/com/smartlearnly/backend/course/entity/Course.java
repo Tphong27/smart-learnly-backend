@@ -83,7 +83,7 @@ public class Course {
 
     @Convert(converter = CourseStatusConverter.class)
     @Column(nullable = false, columnDefinition = "course_status")
-    @ColumnTransformer(write = "?::course_status")
+    @ColumnTransformer(read = "status::text", write = "?::course_status")
     private CourseStatus status;
 
     @Column(name = "created_at", nullable = false, updatable = false)

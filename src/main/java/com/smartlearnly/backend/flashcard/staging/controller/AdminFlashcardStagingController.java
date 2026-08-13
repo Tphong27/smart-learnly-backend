@@ -43,7 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
 public class AdminFlashcardStagingController {
     private final AdminFlashcardStagingService adminFlashcardStagingService;
@@ -51,6 +51,7 @@ public class AdminFlashcardStagingController {
     private final FlashcardStagingGenerationService flashcardStagingGenerationService;
     private final FlashcardStagingCardEditService flashcardStagingCardEditService;
 
+    /** Liệt kê question đã duyệt có thể dùng làm nguồn flashcard. */
     @GetMapping("/flashcard-sets/{setId}/staging/source-questions")
     public ApiResponse<List<SourceQuestionResponse>> listSourceQuestions(
             @PathVariable UUID setId,
@@ -71,6 +72,7 @@ public class AdminFlashcardStagingController {
         );
     }
 
+    /** Nhập question của course vào staging batch để author duyệt. */
     @PostMapping("/flashcard-sets/{setId}/staging/import-course-questions")
     public ResponseEntity<ApiResponse<StagingBatchResponse>> importCourseQuestions(
             @PathVariable UUID setId,
@@ -81,6 +83,7 @@ public class AdminFlashcardStagingController {
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
 
+    /** Tạo preview tạm từ question của course mà chưa ghi staging. */
     @PostMapping("/flashcard-sets/{setId}/temporary-review/import-course-questions")
     public ApiResponse<TemporaryFlashcardCandidateBatchResponse> temporaryCourseQuestions(
             @PathVariable UUID setId,
@@ -92,6 +95,7 @@ public class AdminFlashcardStagingController {
         );
     }
 
+    /** Sinh staging flashcard từ văn bản do author cung cấp. */
     @PostMapping("/flashcard-sets/{setId}/staging/generate-from-text")
     public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromText(
             @PathVariable UUID setId,
@@ -102,6 +106,7 @@ public class AdminFlashcardStagingController {
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
 
+    /** Sinh staging flashcard từ file nguồn và các tùy chọn đếm/ngôn ngữ. */
     @PostMapping(
             value = "/flashcard-sets/{setId}/staging/generate-from-file",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -124,6 +129,7 @@ public class AdminFlashcardStagingController {
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
 
+    /** Tạo preview flashcard tạm từ file mà chưa lưu vào staging. */
     @PostMapping(
             value = "/flashcard-sets/{setId}/temporary-review/generate-from-file",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -147,6 +153,7 @@ public class AdminFlashcardStagingController {
         );
     }
 
+    /** Sinh staging flashcard từ transcript dạng text. */
     @PostMapping("/flashcard-sets/{setId}/staging/generate-from-transcript")
     public ResponseEntity<ApiResponse<StagingBatchResponse>> generateFromTranscript(
             @PathVariable UUID setId,
@@ -157,6 +164,7 @@ public class AdminFlashcardStagingController {
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
 
+    /** Sinh staging flashcard từ file transcript. */
     @PostMapping(
             value = "/flashcard-sets/{setId}/staging/generate-from-transcript-file",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -179,6 +187,7 @@ public class AdminFlashcardStagingController {
                 .body(ApiResponse.success("Flashcard staging batch created successfully", response));
     }
 
+    /** Liệt kê các staging batch của flashcard set. */
     @GetMapping("/flashcard-sets/{setId}/staging")
     public ApiResponse<List<StagingBatchResponse>> listStaging(@PathVariable UUID setId) {
         return ApiResponse.success(
@@ -187,6 +196,7 @@ public class AdminFlashcardStagingController {
         );
     }
 
+    /** Cập nhật nội dung một staging card trước khi duyệt. */
     @PatchMapping("/flashcard-staging-cards/{stagingCardId}")
     public ApiResponse<StagingCardResponse> updateCard(
             @PathVariable UUID stagingCardId,
@@ -198,12 +208,14 @@ public class AdminFlashcardStagingController {
         );
     }
 
+    /** Từ chối một staging card riêng lẻ. */
     @DeleteMapping("/flashcard-staging-cards/{stagingCardId}")
     public ApiResponse<Void> rejectCard(@PathVariable UUID stagingCardId) {
         adminFlashcardStagingService.rejectCard(stagingCardId);
         return ApiResponse.success("Flashcard staging card rejected successfully");
     }
 
+    /** Từ chối một nhóm staging card theo request. */
     @PostMapping("/flashcard-sets/{setId}/staging/reject")
     public ApiResponse<RejectStagingCardsResponse> reject(
             @PathVariable UUID setId,
@@ -215,6 +227,7 @@ public class AdminFlashcardStagingController {
         );
     }
 
+    /** Duyệt staging card và ghi vào flashcard set chính thức. */
     @PostMapping("/flashcard-sets/{setId}/staging/approve")
     public ApiResponse<ApproveStagingCardsResponse> approve(
             @PathVariable UUID setId,
@@ -226,6 +239,7 @@ public class AdminFlashcardStagingController {
         );
     }
 
+    /** Duyệt trực tiếp candidate tạm vào flashcard set. */
     @PostMapping("/flashcard-sets/{setId}/temporary-review/approve")
     public ApiResponse<ApproveTemporaryFlashcardsResponse> approveTemporary(
             @PathVariable UUID setId,

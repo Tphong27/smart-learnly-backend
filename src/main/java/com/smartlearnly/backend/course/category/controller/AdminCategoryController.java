@@ -42,7 +42,7 @@ public class AdminCategoryController {
 
     // Tạo category gốc hoặc category con và trả URL resource vừa tạo.
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CategoryResponse>> create(@Valid @RequestBody CreateCategoryRequest request) {
         CategoryResponse category = categoryService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/categories/" + category.id()))
@@ -57,14 +57,14 @@ public class AdminCategoryController {
 
     // Cập nhật các trường category được gửi lên.
     @PatchMapping("/{categoryId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<CategoryResponse> update(@PathVariable UUID categoryId, @Valid @RequestBody UpdateCategoryRequest request) {
         return ApiResponse.success("Category updated successfully", categoryService.update(categoryId, request));
     }
 
     // Xóa category khi chưa có category con hoặc khóa học sử dụng.
     @DeleteMapping("/{categoryId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> delete(@PathVariable UUID categoryId) {
         categoryService.delete(categoryId);
         return ApiResponse.success("Category deleted successfully");

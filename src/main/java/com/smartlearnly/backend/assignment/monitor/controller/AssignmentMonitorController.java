@@ -1,6 +1,6 @@
 package com.smartlearnly.backend.assignment.monitor.controller;
 
-import com.smartlearnly.backend.flashtest.dto.MonitorEvent;
+import com.smartlearnly.backend.test.monitor.dto.MonitorEvent;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;

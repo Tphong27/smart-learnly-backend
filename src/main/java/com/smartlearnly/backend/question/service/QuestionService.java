@@ -82,6 +82,14 @@ public class QuestionService {
         return new PageResponse<>(questionPage.getContent().stream().map(this::toResponse).toList(), questionPage.getNumber(), questionPage.getSize(), questionPage.getTotalElements(), questionPage.getTotalPages());
     }
 
+    /** Liệt kê câu hỏi của đúng module đang mở và từ chối module không thuộc course. */
+    @Transactional(readOnly = true)
+    public PageResponse<QuestionModel.Response> listByCourseModule(UUID courseId, UUID moduleId, String search, String type, String status, boolean includeArchived, Short difficulty, int page, int size) {
+        courseAccessService.requireReadableCourse(courseId);
+        UUID resolvedModuleId = validateRequiredCourseModuleId(courseId, moduleId);
+        return listByCourse(courseId, resolvedModuleId, search, type, status, includeArchived, difficulty, page, size);
+    }
+
     @Transactional(readOnly = true)
     public QuestionModel.Response getInCourse(UUID courseId, UUID questionId) {
         courseAccessService.requireReadableCourse(courseId);
@@ -91,8 +99,24 @@ public class QuestionService {
         return toResponse(question);
     }
 
+    /** Lấy câu hỏi trong đúng module để URL của module khác không thể truy cập chéo dữ liệu. */
+    @Transactional(readOnly = true)
+    public QuestionModel.Response getInCourse(UUID courseId, UUID moduleId, UUID questionId) {
+        courseAccessService.requireReadableCourse(courseId);
+        UUID resolvedModuleId = validateRequiredCourseModuleId(courseId, moduleId);
+        Question question = findQuestion(questionId);
+        assertQuestionBelongsToCourseModule(question, courseId, resolvedModuleId);
+        return toResponse(question);
+    }
+
     @Transactional
     public QuestionModel.Response createForCourse(UUID courseId, QuestionModel.CreateRequest request) {
+        return createForCourse(courseId, request.moduleId(), request);
+    }
+
+    /** Tạo câu hỏi trong module từ path; body không được phép quyết định module đích. */
+    @Transactional
+    public QuestionModel.Response createForCourse(UUID courseId, UUID moduleId, QuestionModel.CreateRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
         QuestionType questionType = parseSupportedQuestionType(request.questionType());
         validateAnswers(questionType, request.answers());
@@ -104,7 +128,7 @@ public class QuestionService {
 
         Question question = new Question();
         question.setCourseId(courseId);
-        question.setModuleId(validateRequiredCourseModuleId(courseId, request.moduleId()));
+        question.setModuleId(validateRequiredCourseModuleId(courseId, moduleId));
         question.setQuestionText(questionText);
         question.setQuestionType(questionType);
         question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
@@ -122,9 +146,22 @@ public class QuestionService {
 
     @Transactional
     public QuestionModel.Response updateInCourse(UUID courseId, UUID questionId, QuestionModel.UpdateRequest request) {
+        return updateInCourse(courseId, request.moduleId(), questionId, request);
+    }
+
+    /** Tạo câu hỏi từ DTO công khai không chứa module, rồi dùng module từ path. */
+    @Transactional
+    public QuestionModel.Response createForCourse(UUID courseId, UUID moduleId, QuestionModel.ModuleCreateRequest request) {
+        return createForCourse(courseId, moduleId, request.toCreateRequest());
+    }
+
+    /** Cập nhật nội dung câu hỏi nhưng giữ nguyên phạm vi module được xác định bởi path. */
+    @Transactional
+    public QuestionModel.Response updateInCourse(UUID courseId, UUID moduleId, UUID questionId, QuestionModel.UpdateRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
         Question question = findQuestion(questionId);
-        assertQuestionBelongsToCourse(question, courseId);
+        UUID resolvedModuleId = validateRequiredCourseModuleId(courseId, moduleId);
+        assertQuestionBelongsToCourseModule(question, courseId, resolvedModuleId);
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question");
         }
@@ -135,7 +172,6 @@ public class QuestionService {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A question with the same text already exists in this course");
         }
 
-        question.setModuleId(validateRequiredCourseModuleId(courseId, request.moduleId()));
         question.setQuestionText(questionText);
         question.setQuestionType(questionType);
         question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
@@ -161,6 +197,30 @@ public class QuestionService {
         questionRepository.save(question);
     }
 
+    /** Cập nhật câu hỏi từ DTO công khai không chứa field module. */
+    @Transactional
+    public QuestionModel.Response updateInCourse(UUID courseId, UUID moduleId, UUID questionId, QuestionModel.ModuleUpdateRequest request) {
+        return updateInCourse(courseId, moduleId, questionId, request.toUpdateRequest());
+    }
+
+    /** Lưu trữ câu hỏi chỉ khi câu hỏi thực sự thuộc module trên URL. */
+    @Transactional
+    public void archiveInCourse(UUID courseId, UUID moduleId, UUID questionId) {
+        courseAccessService.requireUpdatableCourse(courseId);
+        UUID resolvedModuleId = validateRequiredCourseModuleId(courseId, moduleId);
+        Question question = findQuestion(questionId);
+        assertQuestionBelongsToCourseModule(question, courseId, resolvedModuleId);
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
+        }
+        question.setStatus(QuestionStatus.ARCHIVED);
+        questionRepository.save(question);
+    }
+
+    /**
+     * Trả ID module chuẩn thuộc course; chấp nhận thêm ID curriculum section để tương thích URL cũ.
+     * Giá trị không thuộc course hoặc trỏ tới module đã ngừng hoạt động đều bị từ chối.
+     */
     private UUID validateRequiredCourseModuleId(UUID courseId, UUID moduleId) {
         if (moduleId == null) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module is required");
@@ -170,26 +230,57 @@ public class QuestionService {
                 courseId,
                 CourseModule.STATUS_ACTIVE
         );
-        if (!exists) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Question module must belong to the selected course");
+        if (exists) {
+            return moduleId;
         }
-        return moduleId;
+        return courseModuleRepository.findActiveModuleIdByCourseIdAndSectionId(
+                        courseId,
+                        moduleId,
+                        CourseModule.STATUS_ACTIVE
+                )
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Question module must belong to the selected course"
+                ));
     }
 
     @Transactional
     public QuestionImportDtos.ImportBatchResponse importBatchForCourse(UUID courseId, QuestionImportDtos.ImportBatchRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
-        List<Question> savedQuestions = importReviewedRowsForCourse(courseId, request.rows(), false, null, normalizeImportMediaSource(request.importSource()));
+        List<Question> savedQuestions = importReviewedRowsForCourse(courseId, null, request.rows(), false, null, normalizeImportMediaSource(request.importSource()));
         List<UUID> createdIds = savedQuestions.stream().map(Question::getId).toList();
         return new QuestionImportDtos.ImportBatchResponse(request.rows().size(), createdIds.size(), createdIds, List.of());
     }
 
+    /** Import toàn bộ batch vào module trên URL và bỏ qua mọi module do client gửi. */
     @Transactional
-    public List<Question> importReviewedRowsForCourse(UUID courseId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource) {
-        return importReviewedRowsForCourse(courseId, rows, aiGenerated, importSource, importSource == null ? null : importSource);
+    public QuestionImportDtos.ImportBatchResponse importBatchForCourse(UUID courseId, UUID moduleId, QuestionImportDtos.ImportBatchRequest request) {
+        courseAccessService.requireUpdatableCourse(courseId);
+        UUID resolvedModuleId = validateRequiredCourseModuleId(courseId, moduleId);
+        List<Question> savedQuestions = importReviewedRowsForCourse(courseId, resolvedModuleId, request.rows(), false, null, normalizeImportMediaSource(request.importSource()));
+        List<UUID> createdIds = savedQuestions.stream().map(Question::getId).toList();
+        return new QuestionImportDtos.ImportBatchResponse(request.rows().size(), createdIds.size(), createdIds, List.of());
     }
 
-    private List<Question> importReviewedRowsForCourse(UUID courseId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource, String mediaImportSource) {
+    /** Import DTO module-scoped và gán module path cho mọi row ở phía server. */
+    @Transactional
+    public QuestionImportDtos.ImportBatchResponse importBatchForCourse(UUID courseId, UUID moduleId, QuestionImportDtos.ModuleImportBatchRequest request) {
+        List<QuestionImportDtos.ImportRow> rows = request.rows().stream()
+                .map(QuestionImportDtos.ModuleImportRow::toImportRow)
+                .toList();
+        return importBatchForCourse(
+                courseId,
+                moduleId,
+                new QuestionImportDtos.ImportBatchRequest(rows, request.importSource())
+        );
+    }
+
+    @Transactional
+    public List<Question> importReviewedRowsForCourse(UUID courseId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource) {
+        return importReviewedRowsForCourse(courseId, null, rows, aiGenerated, importSource, importSource == null ? null : importSource);
+    }
+
+    private List<Question> importReviewedRowsForCourse(UUID courseId, UUID fixedModuleId, List<QuestionImportDtos.ImportRow> rows, boolean aiGenerated, String importSource, String mediaImportSource) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         if (rows == null || rows.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one question row is required");
@@ -198,7 +289,7 @@ public class QuestionService {
         List<QuestionImportDtos.ImportRowError> errors = new ArrayList<>();
         List<QuestionImportDtos.ImportRow> validatedRows = new ArrayList<>();
         for (QuestionImportDtos.ImportRow row : rows) {
-            List<String> rowErrors = validateImportRowForCourse(courseId, row);
+            List<String> rowErrors = validateImportRowForCourse(courseId, fixedModuleId, row);
             if (!rowErrors.isEmpty()) {
                 errors.add(new QuestionImportDtos.ImportRowError(row.rowNumber(), rowErrors));
             } else {
@@ -219,18 +310,31 @@ public class QuestionService {
 
         List<Question> savedQuestions = new ArrayList<>();
         for (QuestionImportDtos.ImportRow row : validatedRows) {
-            Question savedQuestion = persistImportedQuestionForCourse(courseId, row, actor, aiGenerated, importSource);
-            questionMediaImportService.attachImportedMedia(savedQuestion, row.imageFiles(), row.audioFiles(), mediaImportSource);
+            Question savedQuestion = persistImportedQuestionForCourse(courseId, fixedModuleId, row, actor, aiGenerated, importSource);
+            try {
+                questionMediaImportService.attachImportedMedia(
+                        savedQuestion,
+                        row.imageFiles(),
+                        row.audioFiles(),
+                        mediaImportSource
+                );
+            } catch (BusinessException exception) {
+                throw new BusinessException(
+                        exception.errorCode(),
+                        "Row " + row.rowNumber() + " media import failed: " + exception.getMessage()
+                );
+            }
             savedQuestions.add(savedQuestion);
         }
         return savedQuestions;
     }
 
-    private Question persistImportedQuestionForCourse(UUID courseId, QuestionImportDtos.ImportRow row, UserAccount actor, boolean aiGenerated, String importSource) {
+    private Question persistImportedQuestionForCourse(UUID courseId, UUID fixedModuleId, QuestionImportDtos.ImportRow row, UserAccount actor, boolean aiGenerated, String importSource) {
         QuestionType questionType = parseSupportedQuestionType(row.questionType());
         Question question = new Question();
         question.setCourseId(courseId);
-        question.setModuleId(validateRequiredCourseModuleId(courseId, row.moduleId()));
+        UUID resolvedModuleId = fixedModuleId != null ? fixedModuleId : row.moduleId();
+        question.setModuleId(validateRequiredCourseModuleId(courseId, resolvedModuleId));
         question.setQuestionText(normalizeRequired(row.questionText(), "Question text is required"));
         question.setQuestionType(questionType);
         question.setBloomLevel(parseBloomLevel(row.bloomLevel()));
@@ -313,14 +417,15 @@ public class QuestionService {
         return indexes;
     }
 
-    private List<String> validateImportRowForCourse(UUID courseId, QuestionImportDtos.ImportRow row) {
+    private List<String> validateImportRowForCourse(UUID courseId, UUID fixedModuleId, QuestionImportDtos.ImportRow row) {
         List<String> rowErrors = validateImportRowContent(row);
 
-        if (row.moduleId() == null) {
+        UUID resolvedModuleId = fixedModuleId != null ? fixedModuleId : row.moduleId();
+        if (resolvedModuleId == null) {
             rowErrors.add("Question module is required");
         } else {
             boolean moduleExists = courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
-                    row.moduleId(),
+                    resolvedModuleId,
                     courseId,
                     CourseModule.STATUS_ACTIVE
             );
@@ -478,6 +583,13 @@ public class QuestionService {
 
     private void assertQuestionBelongsToCourse(Question question, UUID courseId) {
         if (!courseId.equals(question.getCourseId())) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question not found");
+        }
+    }
+
+    /** Che giấu câu hỏi khi course hoặc module trên URL không khớp bản ghi. */
+    private void assertQuestionBelongsToCourseModule(Question question, UUID courseId, UUID moduleId) {
+        if (!courseId.equals(question.getCourseId()) || !moduleId.equals(question.getModuleId())) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Question not found");
         }
     }

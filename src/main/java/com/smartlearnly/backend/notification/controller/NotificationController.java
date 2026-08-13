@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * REST controller xử lý các API liên quan đến notification của người dùng.
- * Cung cấp endpoints để xem, đánh dấu đã đọc và lưu trữ notification.
+ * Cung cấp danh sách, số chưa đọc, click và thao tác đánh dấu tất cả đã đọc.
  */
 @RestController
 @Validated
@@ -36,12 +36,10 @@ public class NotificationController {
     @GetMapping
     public ApiResponse<PageResponse<NotificationResponse>> list(
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
-            @RequestParam(defaultValue = "all") String status,
-            @RequestParam(required = false) String type) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ApiResponse.success(
                 "Notifications loaded successfully",
-                notificationService.list(page, size, status, type));
+                notificationService.list(page, size));
     }
 
     /**
@@ -55,16 +53,6 @@ public class NotificationController {
     }
 
     /**
-     * Đánh dấu một notification là đã đọc.
-     */
-    @PatchMapping("/{notificationId}/read")
-    public ApiResponse<NotificationResponse> markRead(@PathVariable UUID notificationId) {
-        return ApiResponse.success(
-                "Notification marked as read",
-                notificationService.markRead(notificationId));
-    }
-
-    /**
      * Ghi nhận thao tác click vào notification.
      */
     @PatchMapping("/{notificationId}/clicked")
@@ -72,23 +60,6 @@ public class NotificationController {
         return ApiResponse.success(
                 "Notification click recorded",
                 notificationService.recordClick(notificationId));
-    }
-
-    /**
-     * Lưu trữ một notification.
-     */
-    @PatchMapping("/{notificationId}/archive")
-    public ApiResponse<NotificationResponse> archive(@PathVariable UUID notificationId) {
-        return ApiResponse.success(
-                "Notification archived",
-                notificationService.archive(notificationId));
-    }
-
-    @PatchMapping("/archive-all")
-    public ApiResponse<UnreadCountResponse> archiveAll() {
-        return ApiResponse.success(
-                "Notifications archived",
-                notificationService.archiveAll());
     }
 
     /**

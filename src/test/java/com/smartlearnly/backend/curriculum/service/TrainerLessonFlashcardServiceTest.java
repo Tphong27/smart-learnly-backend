@@ -24,6 +24,7 @@ import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
+import com.smartlearnly.backend.flashcard.service.FlashcardImageUploadService;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
@@ -51,6 +52,8 @@ class TrainerLessonFlashcardServiceTest {
     private FlashcardCardRepository flashcardCardRepository;
     @Mock
     private CurrentUserService currentUserService;
+    @Mock
+    private FlashcardImageUploadService flashcardImageUploadService;
 
     private TrainerLessonFlashcardService service;
 
@@ -65,7 +68,8 @@ class TrainerLessonFlashcardServiceTest {
                 courseRepository,
                 flashcardSetRepository,
                 flashcardCardRepository,
-                currentUserService);
+                currentUserService,
+                flashcardImageUploadService);
     }
 
     @Test

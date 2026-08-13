@@ -20,7 +20,6 @@ public record NotificationResponse(
         Instant deliveredAt,
         Instant seenAt,
         Instant clickedAt,
-        Instant archivedAt,
         Instant createdAt
 ) {
 }

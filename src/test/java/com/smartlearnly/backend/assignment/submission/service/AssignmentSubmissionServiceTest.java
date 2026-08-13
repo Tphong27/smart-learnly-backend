@@ -265,7 +265,6 @@ class AssignmentSubmissionServiceTest {
         assignment.setTitle("Course assignment");
         assignment.setAllowLateSubmission(false);
         assignment.setIsArchived(false);
-        assignment.setIsFlashtest(false);
         assignment.setCreatedBy(UUID.randomUUID());
         return assignment;
     }

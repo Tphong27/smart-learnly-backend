@@ -17,10 +17,12 @@ import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardSetRes
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.ReorderFlashcardCardsRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.UpdateFlashcardCardRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.UpdateFlashcardSetRequest;
+import com.smartlearnly.backend.flashcard.dto.FlashcardImageUploadResponse;
 import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
+import com.smartlearnly.backend.flashcard.service.FlashcardImageUploadService;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
@@ -34,6 +36,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Trainer-scoped flashcard authoring for class-draft curriculum lessons.
@@ -51,6 +54,7 @@ public class TrainerLessonFlashcardService {
     private final FlashcardSetRepository flashcardSetRepository;
     private final FlashcardCardRepository flashcardCardRepository;
     private final CurrentUserService currentUserService;
+    private final FlashcardImageUploadService flashcardImageUploadService;
 
     @Transactional
     public FlashcardLessonCreatedResponse createFlashcardSet(
@@ -210,6 +214,19 @@ public class TrainerLessonFlashcardService {
         return toSetResponse(lesson, flashcardSet, activeCards.stream()
                 .sorted(Comparator.comparing(FlashcardCard::getOrderIndex))
                 .toList());
+    }
+
+    /** Tải ảnh cho card sau khi xác minh set thuộc đúng class draft lesson. */
+    @Transactional(readOnly = true)
+    public FlashcardImageUploadResponse uploadImage(
+            UUID classId,
+            UUID lessonId,
+            UUID setId,
+            MultipartFile file
+    ) {
+        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId);
+        FlashcardSet flashcardSet = requireSetForLesson(lesson.getId(), setId);
+        return flashcardImageUploadService.uploadOwnedSet(flashcardSet, file);
     }
 
     private FlashcardSet requireSetByLesson(UUID curriculumLessonId) {

@@ -178,7 +178,7 @@ class QuestionServiceRaceConditionTest {
         return new QuestionImportDtos.ImportRow(
                 Integer.valueOf(rowNumber),
                 text,
-                QuestionType.MULTIPLE_CHOICE.name().toLowerCase(),
+                QuestionType.SINGLE_CHOICE.name().toLowerCase(),
                 List.of("A", "B"),
                 "A",
                 null,

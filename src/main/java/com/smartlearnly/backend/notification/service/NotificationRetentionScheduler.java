@@ -19,15 +19,16 @@ public class NotificationRetentionScheduler {
     @Value("${app.notification.retention.days:90}")
     private int retentionDays;
 
+    /** Xóa định kỳ các notification đã đọc vượt quá thời hạn lưu giữ. */
     @Scheduled(
             cron = "${app.notification.retention.cron:0 30 2 * * *}",
             zone = "${app.notification.retention.zone:Asia/Ho_Chi_Minh}")
     public void cleanup() {
         int days = Math.max(1, retentionDays);
         Instant cutoff = Instant.now().minus(Duration.ofDays(days));
-        int deleted = notificationService.cleanupReadOrArchivedCreatedBefore(cutoff);
+        int deleted = notificationService.cleanupReadCreatedBefore(cutoff);
         if (deleted > 0) {
-            log.info("Notification retention cleanup deleted {} read/archived notification(s) older than {} day(s)",
+            log.info("Notification retention cleanup deleted {} read notification(s) older than {} day(s)",
                     deleted, days);
         }
     }

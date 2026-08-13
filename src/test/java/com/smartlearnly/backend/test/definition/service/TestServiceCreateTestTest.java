@@ -249,7 +249,6 @@ class TestServiceCreateTestTest {
         request.setShuffleAnswers(true);
         request.setShowAnswersAfter(false);
         request.setIsPublished(false);
-        request.setIsFlashtest(false);
         request.setOpensAt(Instant.parse("2026-08-05T09:00:00Z"));
         request.setClosesAt(Instant.parse("2026-08-05T10:00:00Z"));
         return request;

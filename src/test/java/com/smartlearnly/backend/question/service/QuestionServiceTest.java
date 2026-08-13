@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -293,6 +294,79 @@ class QuestionServiceTest {
         verify(answerRepository).deleteByQuestionId(questionId);
         verify(answerRepository, times(2)).save(any(QuestionAnswer.class));
         verify(courseAccessService).requireUpdatableCourse(courseId);
+    }
+
+    /**
+     * Xác nhận API module-scoped có thể tạo câu hỏi dù request body không chứa moduleId.
+     * Module lưu vào entity phải luôn là module nhận từ path.
+     */
+    @Test
+    void createForCourse_usesPathModule_whenModuleRequestHasNoModuleField() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "What is Java?", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(questionId);
+            return saved;
+        });
+        QuestionModel.ModuleCreateRequest request = new QuestionModel.ModuleCreateRequest(
+                "What is Java?",
+                "single_choice",
+                "remember",
+                (short) 2,
+                "Basic Java question",
+                "draft",
+                answers()
+        );
+
+        QuestionModel.Response response = service.createForCourse(courseId, moduleId, request);
+
+        assertThat(response.moduleId()).isEqualTo(moduleId);
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionRepository).save(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getModuleId()).isEqualTo(moduleId);
+    }
+
+    /**
+     * Xác nhận URL cũ chứa curriculum section ID vẫn được đổi sang canonical module ID.
+     * Đây là trường hợp từng gây lỗi "Question module must belong to the selected course".
+     */
+    @Test
+    void createForCourse_resolvesCurriculumSectionIdToCanonicalModuleId() {
+        UUID sectionId = UUID.randomUUID();
+        when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
+                sectionId,
+                courseId,
+                CourseModule.STATUS_ACTIVE
+        )).thenReturn(false);
+        when(courseModuleRepository.findActiveModuleIdByCourseIdAndSectionId(
+                courseId,
+                sectionId,
+                CourseModule.STATUS_ACTIVE
+        )).thenReturn(Optional.of(moduleId));
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "What is Java?", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(questionId);
+            return saved;
+        });
+        QuestionModel.ModuleCreateRequest request = new QuestionModel.ModuleCreateRequest(
+                "What is Java?",
+                "single_choice",
+                "remember",
+                (short) 2,
+                "Basic Java question",
+                "draft",
+                answers()
+        );
+
+        QuestionModel.Response response = service.createForCourse(courseId, sectionId, request);
+
+        assertThat(response.moduleId()).isEqualTo(moduleId);
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionRepository).save(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getModuleId()).isEqualTo(moduleId);
     }
 
     @Test
@@ -808,6 +882,68 @@ class QuestionServiceTest {
                 eq("excel_import"));
         verify(answerRepository).deleteByQuestionId(response.createdQuestionIds().get(0));
         verify(answerRepository, times(2)).save(any(QuestionAnswer.class));
+    }
+
+    /**
+     * Xác nhận URL của module A không thể sửa câu hỏi thuộc module B.
+     * Service trả RESOURCE_NOT_FOUND để không làm lộ bản ghi ở module khác.
+     */
+    @Test
+    void updateInCourse_throwsNotFound_whenQuestionBelongsToAnotherModule() {
+        UUID otherModuleId = UUID.randomUUID();
+        Question existing = question(questionId, courseId, QuestionStatus.DRAFT);
+        existing.setModuleId(otherModuleId);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(existing));
+        QuestionModel.ModuleUpdateRequest request = new QuestionModel.ModuleUpdateRequest(
+                "Updated question?",
+                "single_choice",
+                "understand",
+                (short) 3,
+                "Updated explanation",
+                "pending_review",
+                answers()
+        );
+
+        assertThatThrownBy(() -> service.updateInCourse(courseId, moduleId, questionId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+
+        verify(questionRepository, never()).save(any());
+        verify(answerRepository, never()).deleteByQuestionId(any());
+    }
+
+    @Test
+    void importBatchForCourse_reportsRowNumber_whenMediaDownloadFails() {
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Imported question?", null))
+                .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        QuestionImportDtos.ImportRow row = importRow(
+                7,
+                "Imported question?",
+                "single_choice",
+                List.of("A", "B"),
+                "B",
+                moduleId);
+        doThrow(new BusinessException(
+                ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                "Media URL returned HTTP 404"
+        )).when(questionMediaImportService).attachImportedMedia(
+                any(Question.class),
+                eq(row.imageFiles()),
+                eq(row.audioFiles()),
+                eq("excel_import"));
+
+        assertThatThrownBy(() -> service.importBatchForCourse(
+                courseId,
+                new QuestionImportDtos.ImportBatchRequest(List.of(row), "excel")))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE))
+                .hasMessageContaining("Row 7 media import failed")
+                .hasMessageContaining("HTTP 404");
     }
 
     @Test

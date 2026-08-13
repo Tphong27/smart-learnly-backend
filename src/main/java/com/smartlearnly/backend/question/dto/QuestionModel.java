@@ -65,6 +65,39 @@ public final class QuestionModel {
     ) {
     }
 
+    /** Request tạo câu hỏi theo module-scoped API; course và module đều lấy từ URL. */
+    public record ModuleCreateRequest(
+            @NotBlank(message = "Question text is required")
+            @Size(max = 10000, message = "Question text must not exceed 10000 characters")
+            String questionText,
+
+            @NotBlank(message = "Question type is required")
+            String questionType,
+
+            String bloomLevel,
+
+            @Min(value = 1, message = "Difficulty must be between 1 and 5")
+            @Max(value = 5, message = "Difficulty must be between 1 and 5")
+            Short difficulty,
+
+            @Size(max = 10000, message = "Explanation must not exceed 10000 characters")
+            String explanation,
+
+            String status,
+
+            @Valid
+            @NotEmpty(message = "At least two answers are required")
+            List<AnswerRequest> answers
+    ) {
+        /** Chuyển sang model nội bộ hiện hữu mà không đưa module vào request body. */
+        public CreateRequest toCreateRequest() {
+            return new CreateRequest(
+                    null, null, questionText, questionType, bloomLevel,
+                    difficulty, explanation, status, answers
+            );
+        }
+    }
+
     public record UpdateRequest(
             UUID courseId,
             UUID moduleId,
@@ -91,6 +124,39 @@ public final class QuestionModel {
             @NotEmpty(message = "At least two answers are required")
             List<AnswerRequest> answers
     ) {
+    }
+
+    /** Request cập nhật câu hỏi theo module-scoped API; không hỗ trợ đổi module. */
+    public record ModuleUpdateRequest(
+            @NotBlank(message = "Question text is required")
+            @Size(max = 10000, message = "Question text must not exceed 10000 characters")
+            String questionText,
+
+            @NotBlank(message = "Question type is required")
+            String questionType,
+
+            String bloomLevel,
+
+            @Min(value = 1, message = "Difficulty must be between 1 and 5")
+            @Max(value = 5, message = "Difficulty must be between 1 and 5")
+            Short difficulty,
+
+            @Size(max = 10000, message = "Explanation must not exceed 10000 characters")
+            String explanation,
+
+            String status,
+
+            @Valid
+            @NotEmpty(message = "At least two answers are required")
+            List<AnswerRequest> answers
+    ) {
+        /** Chuyển sang model nội bộ hiện hữu và để service giữ module từ URL. */
+        public UpdateRequest toUpdateRequest() {
+            return new UpdateRequest(
+                    null, null, questionText, questionType, bloomLevel,
+                    difficulty, explanation, status, answers
+            );
+        }
     }
 
     public record AnswerResponse(

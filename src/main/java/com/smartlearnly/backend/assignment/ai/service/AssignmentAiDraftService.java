@@ -47,22 +47,20 @@ public class AssignmentAiDraftService {
     private static final int MAX_DRAFT_COUNT = 5;
     private static final String UNSUPPORTED_SOURCE_MESSAGE = "Only PDF or DOCX files can be uploaded.";
     private static final Pattern DRAFT_COUNT_PATTERN = Pattern.compile(
-            "\\b(\\d{1,2}|mot|one|hai|two|ba|three|bon|four|nam|five|sau|six|bay|seven|tam|eight|chin|nine|muoi|ten)\\b\\s+(?:bai(?:\\s+van|\\s+phan\\s+tich)?|assignment|assignments|essay|essays|character\\s+analysis|animal\\s+analysis|de|task|tasks|exercise|exercises)"
+            "\\b(\\d{1,3}|mot|one|hai|two|ba|three|bon|four|nam|five|sau|six|bay|seven|tam|eight|chin|nine|muoi|ten)\\b\\s+(?:bai(?:\\s+van|\\s+phan\\s+tich)?|assignment|assignments|essay|essays|character\\s+analysis|animal\\s+analysis|de|task|tasks|exercise|exercises)"
     );
     private static final Pattern NUMBERED_DRAFT_ITEM_PATTERN = Pattern.compile("\\bbai\\s+\\d{1,2}\\b");
     private static final Pattern NEXT_DRAFT_ITEM_PATTERN = Pattern.compile("\\bbai\\s+tiep\\s+theo\\b");
     private static final Pattern ONE_MORE_DRAFT_ITEM_PATTERN = Pattern.compile("\\b(?:va\\s+)?(?:them\\s+)?1\\s+bai\\b");
     private static final String OUT_OF_SCOPE_RESPONSE_EN = """
             I can only help trainers create assignment or essay lesson drafts, submission requirements, and grading criteria.
-            Please enter a learning-related request and specify the exact number of drafts you want, from 1 to 5.
-            If you ask for more than 5 drafts, the response will be limited to 5.
-            Suggested keywords: assignment, essay, homework, rubric, grading criteria, exercise.
+            Please enter a learning-related request, for example: "Create an assignment from the current lesson and include a rubric."
+            The number of drafts is optional. I will create 1 by default and limit each request to 5 drafts.
             """;
     private static final String OUT_OF_SCOPE_RESPONSE_VI = """
             Tôi chỉ hỗ trợ trainer tạo nội dung bài, bài tập hoặc bài luận, yêu cầu nộp bài và tiêu chí chấm điểm.
-            Hãy nhập yêu cầu liên quan đến học tập và nêu số lượng bài muốn tạo, từ 1 đến 5.
-            Nếu yêu cầu hơn 5 bài, AI sẽ chỉ tạo tối đa 5 bài.
-            Gợi ý từ khóa: bài, bài tập, bài luận, yêu cầu nộp bài, tiêu chí đánh giá.
+            Hãy nhập yêu cầu liên quan đến học tập, ví dụ: "Tạo một bài tập từ nội dung bài học hiện tại và kèm tiêu chí đánh giá."
+            Bạn không bắt buộc phải nêu số lượng; AI sẽ mặc định tạo 1 bài và giới hạn tối đa 5 bài mỗi lần.
             """;
     private static final String UNSUPPORTED_LANGUAGE_RESPONSE_EN = """
             Please use English for this AI draft request.
@@ -82,6 +80,13 @@ public class AssignmentAiDraftService {
             "submission",
             "homework",
             "exercise",
+            "practice",
+            "project",
+            "activity",
+            "case study",
+            "lab",
+            "question",
+            "problem",
             "lesson",
             "course",
             "student",
@@ -108,7 +113,13 @@ public class AssignmentAiDraftService {
             "tao bai",
             "soan bai",
             "viet bai",
-            "noi dung giao bai"
+            "noi dung giao bai",
+            "thuc hanh",
+            "du an",
+            "hoat dong",
+            "tinh huong",
+            "cau hoi",
+            "van de"
     );
     private static final List<String> EDUCATIONAL_TOPIC_KEYWORDS = List.of(
             "algorithm",
@@ -168,6 +179,10 @@ public class AssignmentAiDraftService {
     private final FlashcardDocumentTextExtractionService documentTextExtractionService;
     private final Map<String, CachedSource> sourceCache = new ConcurrentHashMap<>();
 
+    /**
+     * Tạo tối đa 5 bản nháp assignment từ yêu cầu tự nhiên; nếu không nêu số lượng thì mặc định tạo 1 bản.
+     * Yêu cầu ngoài phạm vi được trả về hướng dẫn an toàn mà không gọi provider AI.
+     */
     public AssignmentAiDraftModel.Response generateDraft(
             String message,
             String mode,
@@ -183,7 +198,8 @@ public class AssignmentAiDraftService {
         if (!isSupportedPromptLanguage(normalizedMessage)) {
             return unsupportedLanguageResponse();
         }
-        if (!hasValidDraftCount(normalizedMessage)) {
+        int requestedDraftCount = resolveDraftCount(normalizedMessage);
+        if (requestedDraftCount == 0) {
             return outOfScopeResponse(normalizedMessage);
         }
         boolean sourceAttached = file != null && !file.isEmpty();
@@ -199,7 +215,8 @@ public class AssignmentAiDraftService {
                 normalizeMode(mode),
                 trimToMax(normalizeText(currentTitle), 300),
                 trimToMax(stripHtml(currentDescription), MAX_CONTEXT_LENGTH),
-                source
+                source,
+                requestedDraftCount
         );
         String output = generationClient.generate(List.of(Map.of("type", "text", "text", prompt)));
         DraftParts draft = splitDraftOutput(output);
@@ -415,12 +432,14 @@ public class AssignmentAiDraftService {
                 .replace("&apos;", "'");
     }
 
+    /** Dựng system prompt với số bản nháp đã chuẩn hóa để provider không phải tự suy đoán số lượng. */
     private String buildPrompt(
             String message,
             String mode,
             String currentTitle,
             String currentDescription,
-            SourceContent source
+            SourceContent source,
+            int requestedDraftCount
     ) {
         String label = "essay".equals(mode) ? "lesson essay" : "assignment";
         StringBuilder builder = new StringBuilder();
@@ -443,8 +462,8 @@ public class AssignmentAiDraftService {
                 Rules:
                 - Return plain text only. Do not use Markdown formatting of any kind, including # headings, bullet markers, numbered-list syntax, emphasis markers, block quotes, links, or tables.
                 - Write headings as normal text and separate sections with line breaks. Write list items as standalone sentences without bullets or Markdown numbering.
-                - Produce the number of drafts requested by the trainer, in the same order as the trainer listed them, but never more than 5 drafts per response.
-                - If the trainer asks for more than 5 drafts, create only the first 5 and briefly note that the response is limited to 5.
+                - Produce exactly the normalized draft count supplied below, in the same order as the trainer listed the requested items.
+                - The normalized count is already capped at 5. Do not create extra alternatives unless the trainer explicitly requested them.
                 - Do not merge, skip, replace, or summarize requested draft items.
                 - Each draft must contain a concrete student-facing assignment prompt, not only a fragment or outline.
                 - Create a separate rubric for every generated draft. Never use one shared rubric for multiple drafts.
@@ -464,6 +483,7 @@ public class AssignmentAiDraftService {
                 - Do not output JSON or Markdown code fences.
                 """);
         builder.append("\nDraft type: ").append(label).append('.');
+        builder.append("\nNormalized draft count: ").append(requestedDraftCount).append('.');
         builder.append("\nTrainer request:\n").append(message);
         if (!currentTitle.isBlank()) {
             builder.append("\n\nCurrent title:\n").append(currentTitle);
@@ -687,6 +707,7 @@ public class AssignmentAiDraftService {
         return score;
     }
 
+    /** Nhận diện yêu cầu tạo mới hoặc chỉnh sửa tiếp khi có ngữ cảnh assignment/tài liệu hợp lệ. */
     private boolean isAssignmentDraftRequest(
             String message,
             String currentTitle,
@@ -695,8 +716,7 @@ public class AssignmentAiDraftService {
     ) {
         String normalizedMessage = normalizeForScope(message);
         if (looksLikeDraftAction(normalizedMessage)
-                && (containsAssignmentIntentKeyword(normalizedMessage)
-                || containsEducationalTopicKeyword(normalizedMessage))) {
+                && containsAssignmentIntentKeyword(normalizedMessage)) {
             return true;
         }
         if (sourceAttached && looksLikeSourceBasedDraftRequest(normalizedMessage)) {
@@ -705,6 +725,9 @@ public class AssignmentAiDraftService {
         String existingContext = normalizeForScope((currentTitle == null ? "" : currentTitle)
                 + " "
                 + stripHtml(currentDescription));
+        if (!existingContext.isBlank() && looksLikeRevisionAction(normalizedMessage)) {
+            return true;
+        }
         return (containsAssignmentIntentKeyword(existingContext) || containsEducationalTopicKeyword(existingContext))
                 && looksLikeDraftAction(normalizedMessage);
     }
@@ -712,8 +735,14 @@ public class AssignmentAiDraftService {
     private boolean looksLikeSourceBasedDraftRequest(String normalizedMessage) {
         return looksLikeDraftAction(normalizedMessage)
                 || normalizedMessage.contains("dua tren")
+                || normalizedMessage.contains("dua theo")
+                || normalizedMessage.contains("dung tai lieu")
+                || normalizedMessage.contains("dung file")
+                || normalizedMessage.contains("file dinh kem")
                 || normalizedMessage.contains("based on")
                 || normalizedMessage.contains("from this")
+                || normalizedMessage.contains("attached file")
+                || normalizedMessage.contains("attached source")
                 || normalizedMessage.contains("tu tai lieu");
     }
 
@@ -721,11 +750,60 @@ public class AssignmentAiDraftService {
         return normalizedMessage.contains("tao")
                 || normalizedMessage.contains("soan")
                 || normalizedMessage.contains("viet")
+                || normalizedMessage.contains("thiet ke")
+                || normalizedMessage.contains("chuan bi")
+                || normalizedMessage.contains("xay dung")
+                || normalizedMessage.contains("de xuat")
+                || normalizedMessage.contains("ra de")
+                || normalizedMessage.contains("giao bai")
+                || normalizedMessage.contains("cho minh")
+                || normalizedMessage.contains("cho toi")
                 || normalizedMessage.contains("draft")
                 || normalizedMessage.contains("create")
                 || normalizedMessage.contains("generate")
                 || normalizedMessage.contains("write")
-                || normalizedMessage.contains("make");
+                || normalizedMessage.contains("make")
+                || normalizedMessage.contains("design")
+                || normalizedMessage.contains("prepare")
+                || normalizedMessage.contains("propose")
+                || normalizedMessage.contains("give me")
+                || normalizedMessage.contains("turn this")
+                || normalizedMessage.contains("convert this");
+    }
+
+    /** Nhận diện các follow-up phổ biến mà trainer dùng để tinh chỉnh bản nháp trong editor. */
+    private boolean looksLikeRevisionAction(String normalizedMessage) {
+        return containsKeyword(normalizedMessage, List.of(
+                "chinh sua",
+                "dieu chinh",
+                "viet lai",
+                "rut gon",
+                "rut ngan",
+                "chi tiet hon",
+                "kho hon",
+                "de hon",
+                "don gian hon",
+                "them vi du",
+                "them tieu chi",
+                "them phan",
+                "bo phan",
+                "doi thanh",
+                "doi doi tuong",
+                "lam lai",
+                "revise",
+                "rewrite",
+                "shorten",
+                "expand",
+                "simplify",
+                "more challenging",
+                "more detailed",
+                "add an example",
+                "add a criterion",
+                "add a section",
+                "remove the section",
+                "change it",
+                "make it"
+        ));
     }
 
     private boolean containsAssignmentIntentKeyword(String normalizedText) {
@@ -748,15 +826,24 @@ public class AssignmentAiDraftService {
         return false;
     }
 
-    private boolean hasValidDraftCount(String message) {
+    /**
+     * Chuẩn hóa số lượng bản nháp: mặc định 1, giữ yêu cầu hợp lệ và chặn trên ở 5.
+     * Giá trị 0 được giữ lại để caller trả hướng dẫn thay vì âm thầm tạo nội dung ngoài ý muốn.
+     */
+    private int resolveDraftCount(String message) {
         String normalized = normalizeForScope(message);
         Matcher matcher = DRAFT_COUNT_PATTERN.matcher(normalized);
         if (matcher.find()) {
             int count = parseDraftCount(matcher.group(1));
-            return count >= 1;
+            if (count == 0) {
+                return 0;
+            }
+            if (count > 0) {
+                return Math.min(count, MAX_DRAFT_COUNT);
+            }
         }
         int listedCount = countListedDraftItems(normalized);
-        return listedCount >= 1;
+        return listedCount > 0 ? Math.min(listedCount, MAX_DRAFT_COUNT) : 1;
     }
 
     private int countListedDraftItems(String normalizedMessage) {
@@ -814,7 +901,29 @@ public class AssignmentAiDraftService {
                 || normalized.contains("yeu cau")
                 || normalized.contains("nop bai")
                 || normalized.contains("hoc vien")
-                || normalized.contains("giang vien");
+                || normalized.contains("giang vien")
+                || normalized.contains("thiet ke")
+                || normalized.contains("chuan bi")
+                || normalized.contains("xay dung")
+                || normalized.contains("de xuat")
+                || normalized.contains("dua tren")
+                || normalized.contains("dua theo")
+                || normalized.contains("dung tai lieu")
+                || normalized.contains("dung file")
+                || normalized.contains("tai lieu")
+                || normalized.contains("thuc hanh")
+                || normalized.contains("ra de")
+                || normalized.contains("giao bai")
+                || normalized.contains("chinh sua")
+                || normalized.contains("dieu chinh")
+                || normalized.contains("rut gon")
+                || normalized.contains("rut ngan")
+                || normalized.contains("kho hon")
+                || normalized.contains("de hon")
+                || normalized.contains("lam lai")
+                || normalized.contains("them phan")
+                || normalized.contains("bo phan")
+                || normalized.contains("them tieu chi");
     }
 
     private boolean isLikelyEnglish(String value) {
@@ -833,6 +942,13 @@ public class AssignmentAiDraftService {
                 "criteria",
                 "exercise",
                 "exercises",
+                "practice",
+                "project",
+                "activity",
+                "case study",
+                "lab",
+                "question",
+                "problem",
                 "task",
                 "tasks",
                 "student",
@@ -842,6 +958,17 @@ public class AssignmentAiDraftService {
                 "write",
                 "draft",
                 "make",
+                "design",
+                "prepare",
+                "propose",
+                "revise",
+                "rewrite",
+                "shorten",
+                "expand",
+                "simplify",
+                "give me",
+                "turn this",
+                "convert this",
                 "based on",
                 "from this",
                 "oop",

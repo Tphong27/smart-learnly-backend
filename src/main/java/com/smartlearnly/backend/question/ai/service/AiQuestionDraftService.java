@@ -305,6 +305,7 @@ public class AiQuestionDraftService {
         return new AiQuestionDraftDtos.AddSelectedResponse(created, skipped);
     }
 
+    /** Sinh draft, lưu kết quả và phát notification khi batch hoàn tất. */
     private void generateAndPersistDrafts(
             AiQuestionGenerationBatch batch,
             UUID moduleId,
@@ -337,18 +338,19 @@ public class AiQuestionDraftService {
             }
             batch.setCompletedAt(Instant.now());
             refreshBatchCounts(batch);
-            emitAiBatchNotification(batch);
+            emitAiBatchNotification(batch, moduleId);
         } catch (BusinessException exception) {
             batch.setStatus(AiQuestionGenerationBatch.STATUS_FAILED);
             batch.setErrorCode(exception.errorCode().name());
             batch.setSafeErrorMessage(exception.getMessage());
             batch.setCompletedAt(Instant.now());
             refreshBatchCounts(batch);
-            emitAiBatchNotification(batch);
+            emitAiBatchNotification(batch, moduleId);
         }
     }
 
-    private void emitAiBatchNotification(AiQuestionGenerationBatch batch) {
+    /** Phát notification AI với deep-link đúng module khi batch kết thúc. */
+    private void emitAiBatchNotification(AiQuestionGenerationBatch batch, UUID moduleId) {
         if (notificationService == null || batch.getRequestedBy() == null) {
             return;
         }
@@ -368,11 +370,15 @@ public class AiQuestionDraftService {
                                 : batch.getSafeErrorMessage()),
                 "AI_QUESTION_BATCH",
                 batch.getId(),
-                "/admin/courses/" + batch.getCourseId() + "/questions/ai-drafts/" + batch.getId(),
+                moduleId == null
+                        ? "/admin/courses/" + batch.getCourseId() + "/questions/ai-drafts/" + batch.getId()
+                        : "/admin/courses/" + batch.getCourseId() + "/modules/" + moduleId
+                                + "/questions/ai-drafts/" + batch.getId(),
                 null,
                 "ai-question-batch:" + batch.getId() + ":" + batch.getStatus(),
                 NotificationPayloads.of(
                         "courseId", batch.getCourseId(),
+                        "moduleId", moduleId,
                         "status", batch.getStatus(),
                         "generatedCount", batch.getGeneratedCount() == null ? 0 : batch.getGeneratedCount())));
     }
