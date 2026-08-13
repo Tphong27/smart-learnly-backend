@@ -51,9 +51,10 @@ public class LearningController {
     @PreAuthorize("hasRole('TRAINEE')")
     public ApiResponse<FlashcardProgressResponse> submitFlashcardProgress(
             @PathVariable UUID cardId,
+            @RequestParam(required = false) UUID classId,
             @Valid @RequestBody FlashcardProgressRequest request) {
         return ApiResponse.success(
                 "Flashcard progress saved successfully",
-                learningContentService.submitFlashcardProgress(cardId, request));
+                learningContentService.submitFlashcardProgress(cardId, classId, request));
     }
 }
