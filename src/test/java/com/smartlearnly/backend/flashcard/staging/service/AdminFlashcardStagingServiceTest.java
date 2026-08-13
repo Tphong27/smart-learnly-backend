@@ -12,7 +12,15 @@ import static org.mockito.Mockito.when;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
+import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
+import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
+import com.smartlearnly.backend.curriculum.service.TrainerClassCurriculumService;
 import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
@@ -63,6 +71,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AdminFlashcardStagingServiceTest {
@@ -80,6 +89,12 @@ class AdminFlashcardStagingServiceTest {
     private QuestionAnswerRepository questionAnswerRepository;
     @Mock
     private CurrentUserService currentUserService;
+    @Mock
+    private CurriculumLessonRepository curriculumLessonRepository;
+    @Mock
+    private CourseAccessService courseAccessService;
+    @Mock
+    private TrainerClassCurriculumService trainerClassCurriculumService;
     @Mock
     private FlashcardTextGenerationService flashcardTextGenerationService;
     @Mock
@@ -102,6 +117,9 @@ class AdminFlashcardStagingServiceTest {
                 stagingCardRepository,
                 currentUserService
         );
+        ReflectionTestUtils.setField(service, "curriculumLessonRepository", curriculumLessonRepository);
+        ReflectionTestUtils.setField(service, "courseAccessService", courseAccessService);
+        ReflectionTestUtils.setField(service, "trainerClassCurriculumService", trainerClassCurriculumService);
         generationService = new FlashcardStagingGenerationService(
                 flashcardSetRepository,
                 flashcardCardRepository,
@@ -1320,6 +1338,319 @@ class AdminFlashcardStagingServiceTest {
     }
 
     @Test
+    void listStagingRequiresReadableCourseForLegacyLessonSet() {
+        FlashcardSet flashcardSet = flashcardSet();
+        UUID courseId = flashcardSet.getLesson().getCourse().getId();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(stagingBatchRepository.findByFlashcardSetIdAndStatusInOrderByCreatedAtDesc(
+                flashcardSet.getId(),
+                List.of("draft", "approved")
+        )).thenReturn(List.of());
+
+        List<StagingBatchResponse> response = service.listStaging(flashcardSet.getId());
+
+        assertThat(response).isEmpty();
+        verify(courseAccessService).requireReadableCourse(courseId);
+        verify(courseAccessService, never()).requireUpdatableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsMissingFlashcardSet() {
+        UUID setId = UUID.randomUUID();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)).thenReturn(Optional.empty());
+
+        assertBusinessException(
+                () -> service.listStaging(setId),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard set was not found"
+        );
+
+        verify(stagingBatchRepository, never()).findByFlashcardSetIdAndStatusInOrderByCreatedAtDesc(any(), anyList());
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsLegacyLessonWithoutCourse() {
+        FlashcardSet flashcardSet = flashcardSet();
+        flashcardSet.getLesson().setCourse(null);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertBusinessException(
+                () -> service.listStaging(flashcardSet.getId()),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard lesson was not found"
+        );
+
+        verify(stagingBatchRepository, never()).findByFlashcardSetIdAndStatusInOrderByCreatedAtDesc(any(), anyList());
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsDeletedLegacyLessonCourse() {
+        FlashcardSet flashcardSet = flashcardSet();
+        flashcardSet.getLesson().getCourse().setDeletedAt(Instant.now());
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertBusinessException(
+                () -> service.listStaging(flashcardSet.getId()),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard lesson was not found"
+        );
+
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsLegacyNonFlashcardLesson() {
+        FlashcardSet flashcardSet = flashcardSet();
+        flashcardSet.getLesson().setType(LessonType.VIDEO);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertBusinessException(
+                () -> service.listStaging(flashcardSet.getId()),
+                ErrorCode.INVALID_REQUEST,
+                "Flashcard set is not linked to a flashcard lesson"
+        );
+
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRequiresReadableCourseForCourseScopedCurriculumLessonSet() {
+        Course course = course();
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course);
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.MASTER, null, LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+        when(stagingBatchRepository.findByFlashcardSetIdAndStatusInOrderByCreatedAtDesc(
+                flashcardSet.getId(),
+                List.of("draft", "approved")
+        )).thenReturn(List.of());
+
+        List<StagingBatchResponse> response = service.listStaging(flashcardSet.getId());
+
+        assertThat(response).isEmpty();
+        verify(courseAccessService).requireReadableCourse(course.getId());
+        verify(trainerClassCurriculumService, never()).requireOwnedClassLessonForRead(any(), any());
+    }
+
+    @Test
+    void listStagingRequiresClassReadAccessForClassScopedCurriculumLessonSet() {
+        UUID classId = UUID.randomUUID();
+        Course course = course();
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course);
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.CLASS, classId, LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+        when(stagingBatchRepository.findByFlashcardSetIdAndStatusInOrderByCreatedAtDesc(
+                flashcardSet.getId(),
+                List.of("draft", "approved")
+        )).thenReturn(List.of());
+
+        List<StagingBatchResponse> response = service.listStaging(flashcardSet.getId());
+
+        assertThat(response).isEmpty();
+        verify(trainerClassCurriculumService).requireOwnedClassLessonForRead(classId, flashcardSet.getCurriculumLessonId());
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsClassScopedCurriculumLessonWithoutClassId() {
+        Course course = course();
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course);
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.CLASS, null, LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+
+        assertBusinessException(
+                () -> service.listStaging(flashcardSet.getId()),
+                ErrorCode.CONFLICT,
+                "Class curriculum is inconsistent"
+        );
+
+        verify(trainerClassCurriculumService, never()).requireOwnedClassLessonForRead(any(), any());
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsCurriculumSetWithoutCurriculumLessonId() {
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course());
+        flashcardSet.setCurriculumLessonId(null);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+
+        assertBusinessException(
+                () -> service.listStaging(flashcardSet.getId()),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard lesson was not found"
+        );
+
+        verify(curriculumLessonRepository, never()).findById(any());
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsCurriculumSetWhenRepositoryCannotResolveLesson() {
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course());
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.empty());
+
+        assertBusinessException(
+                () -> service.listStaging(flashcardSet.getId()),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard lesson was not found"
+        );
+
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsCurriculumLessonThatIsNotFlashcard() {
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course());
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.MASTER, null, LessonType.VIDEO);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+
+        assertBusinessException(
+                () -> service.listStaging(flashcardSet.getId()),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard lesson was not found"
+        );
+
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void listStagingRejectsCurriculumSetWithoutCourse() {
+        FlashcardSet flashcardSet = curriculumFlashcardSet(null);
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.MASTER, null, LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+
+        assertBusinessException(
+                () -> service.listStaging(flashcardSet.getId()),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard lesson was not found"
+        );
+
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void approveTemporaryRequiresUpdatableCourseForLegacyLessonSet() {
+        FlashcardSet flashcardSet = flashcardSet();
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId())).thenReturn(List.of());
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
+        when(flashcardCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> card.setId(UUID.randomUUID()));
+            return cards;
+        });
+
+        var response = service.approveTemporary(
+                flashcardSet.getId(),
+                new ApproveTemporaryFlashcardsRequest(List.of(temporaryCard("Front", "Back")))
+        );
+
+        assertThat(response.created()).isEqualTo(1);
+        verify(courseAccessService).requireUpdatableCourse(flashcardSet.getLesson().getCourse().getId());
+        verify(courseAccessService, never()).requireReadableCourse(any());
+    }
+
+    @Test
+    void approveTemporaryRequiresUpdatableCourseForCourseScopedCurriculumLessonSet() {
+        Course course = course();
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course);
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.MASTER, null, LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId())).thenReturn(List.of());
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
+        when(flashcardCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> card.setId(UUID.randomUUID()));
+            return cards;
+        });
+
+        var response = service.approveTemporary(
+                flashcardSet.getId(),
+                new ApproveTemporaryFlashcardsRequest(List.of(temporaryCard("Front", "Back")))
+        );
+
+        assertThat(response.created()).isEqualTo(1);
+        verify(courseAccessService).requireUpdatableCourse(course.getId());
+        verify(trainerClassCurriculumService, never()).requireOwnedClassLessonForWrite(any(), any());
+    }
+
+    @Test
+    void approveTemporaryRequiresClassWriteAccessForClassScopedCurriculumLessonSet() {
+        UUID classId = UUID.randomUUID();
+        Course course = course();
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course);
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.CLASS, classId, LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId())).thenReturn(List.of());
+        when(flashcardCardRepository.findMaxOrderIndexBySetId(flashcardSet.getId())).thenReturn(-1);
+        when(flashcardCardRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<FlashcardCard> cards = invocation.getArgument(0);
+            cards.forEach(card -> card.setId(UUID.randomUUID()));
+            return cards;
+        });
+
+        var response = service.approveTemporary(
+                flashcardSet.getId(),
+                new ApproveTemporaryFlashcardsRequest(List.of(temporaryCard("Front", "Back")))
+        );
+
+        assertThat(response.created()).isEqualTo(1);
+        verify(trainerClassCurriculumService).requireOwnedClassLessonForWrite(classId, flashcardSet.getCurriculumLessonId());
+        verify(courseAccessService, never()).requireUpdatableCourse(any());
+    }
+
+    @Test
+    void approveTemporaryRejectsDeletedCurriculumSetCourseBeforeCandidateValidation() {
+        Course course = course();
+        course.setDeletedAt(Instant.now());
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course);
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.MASTER, null, LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+
+        assertBusinessException(
+                () -> service.approveTemporary(
+                        flashcardSet.getId(),
+                        new ApproveTemporaryFlashcardsRequest(List.of(temporaryCard("Front", "Back")))
+                ),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Flashcard lesson was not found"
+        );
+
+        verify(courseAccessService, never()).requireUpdatableCourse(any());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void approveTemporaryRejectsClassScopedCurriculumLessonWithoutClassId() {
+        FlashcardSet flashcardSet = curriculumFlashcardSet(course());
+        CurriculumLesson curriculumLesson = curriculumLesson(CurriculumScope.CLASS, null, LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(flashcardSet.getId())).thenReturn(Optional.of(flashcardSet));
+        when(curriculumLessonRepository.findById(flashcardSet.getCurriculumLessonId())).thenReturn(Optional.of(curriculumLesson));
+
+        assertBusinessException(
+                () -> service.approveTemporary(
+                        flashcardSet.getId(),
+                        new ApproveTemporaryFlashcardsRequest(List.of(temporaryCard("Front", "Back")))
+                ),
+                ErrorCode.CONFLICT,
+                "Class curriculum is inconsistent"
+        );
+
+        verify(trainerClassCurriculumService, never()).requireOwnedClassLessonForWrite(any(), any());
+        verify(flashcardCardRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void approveCannotDuplicateAlreadyApprovedStagingCards() {
         FlashcardSet flashcardSet = flashcardSet();
         FlashcardStagingCard card = stagingCard(stagingBatch(flashcardSet), "approved", 0);
@@ -1553,6 +1884,13 @@ class AdminFlashcardStagingServiceTest {
         assertThat(response.get(0).imported()).isFalse();
     }
 
+    private void assertBusinessException(Runnable action, ErrorCode errorCode, String message) {
+        assertThatThrownBy(action::run)
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(errorCode))
+                .hasMessage(message);
+    }
+
     private void assertApproveBulkSize(int size) {
         FlashcardSet flashcardSet = flashcardSet();
         UserAccount actor = actor();
@@ -1640,6 +1978,43 @@ class AdminFlashcardStagingServiceTest {
         flashcardSet.setCreatedAt(Instant.now());
         flashcardSet.setUpdatedAt(Instant.now());
         return flashcardSet;
+    }
+
+    private FlashcardSet curriculumFlashcardSet(Course course) {
+        FlashcardSet flashcardSet = new FlashcardSet();
+        flashcardSet.setId(UUID.randomUUID());
+        flashcardSet.setCurriculumLessonId(UUID.randomUUID());
+        flashcardSet.setCourse(course);
+        flashcardSet.setTitle("Curriculum flashcards");
+        flashcardSet.setCreatedAt(Instant.now());
+        flashcardSet.setUpdatedAt(Instant.now());
+        return flashcardSet;
+    }
+
+    private CurriculumLesson curriculumLesson(CurriculumScope scope, UUID classId, LessonType type) {
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(UUID.randomUUID());
+        version.setCourseId(UUID.randomUUID());
+        version.setClassId(classId);
+        version.setScope(scope);
+        version.setStatus(CurriculumStatus.PUBLISHED);
+
+        CurriculumSection section = new CurriculumSection();
+        section.setId(UUID.randomUUID());
+        section.setTitle("Section");
+        section.setSortOrder(0);
+        version.addSection(section);
+
+        CurriculumLesson lesson = new CurriculumLesson();
+        lesson.setId(UUID.randomUUID());
+        lesson.setLessonIdentityId(UUID.randomUUID());
+        lesson.setTitle("Curriculum lesson");
+        lesson.setType(type);
+        lesson.setStatus(LessonStatus.PUBLISHED);
+        lesson.setPreview(false);
+        lesson.setSortOrder(0);
+        section.addLesson(lesson);
+        return lesson;
     }
 
     private String longSourceText() {

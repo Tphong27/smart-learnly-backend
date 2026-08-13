@@ -142,4 +142,39 @@ class DefaultSePayTransactionClientTest {
                 });
         server.verify();
     }
+
+    @Test
+    void findTransactionsShouldRejectMalformedJsonWithoutExposingToken() {
+        SePayProperties sePayProperties = new SePayProperties();
+        sePayProperties.setApiBaseUrl("https://sepay.example.test");
+        SystemSettingsService settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveSePayRuntimeSettings())
+                .thenReturn(new SePayRuntimeSettings("sensitive-api-token", "fake-webhook-secret"));
+        RestClient.Builder restClientBuilder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
+        DefaultSePayTransactionClient client = new DefaultSePayTransactionClient(
+                sePayProperties,
+                settingsService,
+                restClientBuilder
+        );
+        server.expect(requestTo("https://sepay.example.test/v2/transactions"
+                        + "?q=SLPABC123DEF456"
+                        + "&transfer_type=in"
+                        + "&amount_in_min=399000"
+                        + "&amount_in_max=399000"
+                        + "&per_page=20"
+                        + "&timestamp_format=iso8601"))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer sensitive-api-token"))
+                .andRespond(withSuccess("{", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.findTransactions(
+                SePayTransactionQuery.forPaymentCode("SLPABC123DEF456", new BigDecimal("399000"))
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
+                    assertThat(exception.getMessage()).isEqualTo("SePay transaction service is unavailable");
+                    assertThat(exception.getMessage()).doesNotContain("sensitive-api-token");
+                });
+        server.verify();
+    }
 }

@@ -3,11 +3,13 @@ package com.smartlearnly.backend.payment.sepay.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayRuntimeSettings;
 import com.smartlearnly.backend.commerce.entity.SePayOrder;
@@ -97,6 +99,44 @@ class SePayReconciliationServiceTest {
         verify(paymentMatchingService, never()).processReconciledTransaction(any());
     }
 
+    @Test
+    void reconcileNowShouldFailWhenApiTokenIsBlank() {
+        assertThatThrownBy(() -> service.reconcileNow())
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE));
+
+        verifyNoInteractions(sePayOrderRepository, sePayTransactionClient, paymentMatchingService);
+    }
+
+    @Test
+    void reconcileShouldContinueWhenOneCandidateFails() {
+        when(settingsService.resolveSePayRuntimeSettings()).thenReturn(new SePayRuntimeSettings("fake-api-token", "secret"));
+        SePayOrder sePayOrder = sePayOrder("SLPABC123DEF456", new BigDecimal("399000"));
+        SePayTransactionCandidate firstCandidate = candidateWithId(
+                "candidate-1",
+                "SLPABC123DEF456",
+                new BigDecimal("399000"));
+        SePayTransactionCandidate secondCandidate = candidateWithId(
+                "candidate-2",
+                "SLPABC123DEF456",
+                new BigDecimal("399000"));
+        when(sePayOrderRepository.findByStatusInOrderByCreatedAtAsc(any(), any(Pageable.class)))
+                .thenReturn(List.of(sePayOrder));
+        when(sePayTransactionClient.findTransactions(any())).thenReturn(List.of(firstCandidate, secondCandidate));
+        doThrow(new RuntimeException("candidate matching failed"))
+                .when(paymentMatchingService).processReconciledTransaction(firstCandidate);
+
+        SePayReconciliationService.ReconciliationSummary summary = service.reconcile();
+
+        assertThat(summary.pendingOrders()).isEqualTo(1);
+        assertThat(summary.queriedOrders()).isEqualTo(1);
+        assertThat(summary.matchedCandidates()).isEqualTo(1);
+        assertThat(summary.queryFailures()).isZero();
+        assertThat(summary.candidateFailures()).isEqualTo(1);
+        verify(paymentMatchingService).processReconciledTransaction(firstCandidate);
+        verify(paymentMatchingService).processReconciledTransaction(secondCandidate);
+    }
+
     private SePayOrder sePayOrder(String paymentCode, BigDecimal amount) {
         SePayOrder sePayOrder = new SePayOrder();
         sePayOrder.setId(UUID.randomUUID());
@@ -114,8 +154,12 @@ class SePayReconciliationServiceTest {
     }
 
     private SePayTransactionCandidate candidate(String paymentCode, BigDecimal amount) {
+        return candidateWithId("0f171a36-5a4e-4e00-b7fb-c8a4560d9c10", paymentCode, amount);
+    }
+
+    private SePayTransactionCandidate candidateWithId(String id, String paymentCode, BigDecimal amount) {
         return new SePayTransactionCandidate(
-                "0f171a36-5a4e-4e00-b7fb-c8a4560d9c10",
+                id,
                 "2026-06-19T17:30:00+07:00",
                 "123456789",
                 "in",
