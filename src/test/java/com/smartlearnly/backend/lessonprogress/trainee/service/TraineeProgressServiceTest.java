@@ -3,6 +3,7 @@ package com.smartlearnly.backend.lessonprogress.trainee.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
@@ -25,6 +26,7 @@ import com.smartlearnly.backend.lessonprogress.trainee.dto.LessonProgressRespons
 import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -173,6 +175,57 @@ class TraineeProgressServiceTest {
                                                 classB,
                                                 lessonIdentityId))
                                 .isEmpty();
+        }
+
+        @Test
+        void completeResolvedLessonReusesExistingCompletedProgressAndPreservesCompletedAt() {
+                UUID studentId = UUID.randomUUID();
+                UUID courseId = UUID.randomUUID();
+                UUID classId = UUID.randomUUID();
+                UUID lessonIdentityId = UUID.randomUUID();
+                UUID lessonId = UUID.randomUUID();
+                Instant originalCompletedAt = Instant.parse("2026-08-13T01:02:03Z");
+                CurriculumLesson lesson = lesson(lessonId, lessonIdentityId);
+
+                LessonProgress existing = new LessonProgress();
+                existing.setStudentId(studentId);
+                existing.setCourseId(courseId);
+                existing.setClassId(classId);
+                existing.setLessonIdentityId(lessonIdentityId);
+                existing.setLessonId(lessonId);
+                existing.setCompleted(true);
+                existing.setCompletedAt(originalCompletedAt);
+
+                when(lessonProgressRepository.findByStudentIdAndClassIdAndLessonIdentityId(
+                                studentId,
+                                classId,
+                                lessonIdentityId))
+                                .thenReturn(Optional.of(existing));
+                when(lessonProgressRepository.save(any(LessonProgress.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                LessonProgressResponse response = traineeProgressService.completeResolvedLesson(
+                                studentId,
+                                courseId,
+                                classId,
+                                lesson);
+
+                ArgumentCaptor<LessonProgress> captor = ArgumentCaptor.forClass(LessonProgress.class);
+                verify(lessonProgressRepository).save(captor.capture());
+                LessonProgress saved = captor.getValue();
+                assertThat(saved).isSameAs(existing);
+                assertThat(saved.isCompleted()).isTrue();
+                assertThat(saved.getCompletedAt()).isEqualTo(originalCompletedAt);
+                assertThat(saved.getLastAccessedAt()).isNotNull();
+                assertThat(response.completed()).isTrue();
+                assertThat(response.completedAt()).isEqualTo(originalCompletedAt);
+                assertThat(response.classId()).isEqualTo(classId);
+
+                verifyNoInteractions(
+                                currentUserService,
+                                classOfferingRepository,
+                                curriculumResolutionService,
+                                compositionService);
         }
 
         private ClassOffering classOffering(

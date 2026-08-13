@@ -32,6 +32,7 @@ import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.learning.content.dto.LearningFlashcardPracticeDtos.FlashcardProgressRequest;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
+import com.smartlearnly.backend.lessonprogress.trainee.service.TraineeProgressService;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.List;
 import java.util.Optional;
@@ -44,219 +45,248 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class LearningContentServiceTest {
-    @Mock private CourseRepository courseRepository;
-    @Mock private CurrentUserService currentUserService;
-    @Mock private LessonProgressRepository lessonProgressRepository;
-    @Mock private CurriculumResolutionService curriculumResolutionService;
-    @Mock private CurriculumDtoMapper curriculumDtoMapper;
-    @Mock private CourseAccessService courseAccessService;
-    @Mock private EnrollmentAccessService enrollmentAccessService;
-    @Mock private CurriculumLessonRepository curriculumLessonRepository;
-    @Mock private ClassEnrollmentRepository classEnrollmentRepository;
-    @Mock private ClassCurriculumCompositionService compositionService;
-    @Mock private FlashcardSetRepository flashcardSetRepository;
-    @Mock private FlashcardCardRepository flashcardCardRepository;
-    @Mock private FlashcardProgressRepository flashcardProgressRepository;
+        @Mock
+        private CourseRepository courseRepository;
+        @Mock
+        private CurrentUserService currentUserService;
+        @Mock
+        private LessonProgressRepository lessonProgressRepository;
+        @Mock
+        private CurriculumResolutionService curriculumResolutionService;
+        @Mock
+        private CurriculumDtoMapper curriculumDtoMapper;
+        @Mock
+        private CourseAccessService courseAccessService;
+        @Mock
+        private EnrollmentAccessService enrollmentAccessService;
+        @Mock
+        private CurriculumLessonRepository curriculumLessonRepository;
+        @Mock
+        private ClassEnrollmentRepository classEnrollmentRepository;
+        @Mock
+        private ClassCurriculumCompositionService compositionService;
+        @Mock
+        private FlashcardSetRepository flashcardSetRepository;
+        @Mock
+        private FlashcardCardRepository flashcardCardRepository;
+        @Mock
+        private FlashcardProgressRepository flashcardProgressRepository;
+        @Mock
+        private TraineeProgressService traineeProgressService;
+        private LearningContentService service;
 
-    private LearningContentService service;
+        @BeforeEach
+        void setUp() {
+                service = new LearningContentService(
+                                courseRepository,
+                                currentUserService,
+                                lessonProgressRepository,
+                                curriculumResolutionService,
+                                curriculumDtoMapper,
+                                courseAccessService,
+                                enrollmentAccessService,
+                                curriculumLessonRepository,
+                                classEnrollmentRepository,
+                                compositionService,
+                                flashcardSetRepository,
+                                flashcardCardRepository,
+                                flashcardProgressRepository,
+                                traineeProgressService);
+        }
 
-    @BeforeEach
-    void setUp() {
-        service = new LearningContentService(
-                courseRepository,
-                currentUserService,
-                lessonProgressRepository,
-                curriculumResolutionService,
-                curriculumDtoMapper,
-                courseAccessService,
-                enrollmentAccessService,
-                curriculumLessonRepository,
-                classEnrollmentRepository,
-                compositionService,
-                flashcardSetRepository,
-                flashcardCardRepository,
-                flashcardProgressRepository);
-    }
+        @Test
+        void getLearningFlashcardsResolvesSourceLessonSetWithoutClassDuplicate() {
+                UUID courseId = UUID.randomUUID();
+                UUID studentId = UUID.randomUUID();
+                UUID lessonId = UUID.randomUUID();
+                UUID sourceLessonId = UUID.randomUUID();
+                UUID setId = UUID.randomUUID();
 
-    @Test
-    void getLearningFlashcardsResolvesSourceLessonSetWithoutClassDuplicate() {
-        UUID courseId = UUID.randomUUID();
-        UUID studentId = UUID.randomUUID();
-        UUID lessonId = UUID.randomUUID();
-        UUID sourceLessonId = UUID.randomUUID();
-        UUID setId = UUID.randomUUID();
+                UserAccount student = new UserAccount();
+                student.setId(studentId);
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+                when(classEnrollmentRepository.findActiveClassIdsByCourseIdAndStudentId(courseId, studentId))
+                                .thenReturn(List.of());
 
-        UserAccount student = new UserAccount();
-        student.setId(studentId);
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
-        when(classEnrollmentRepository.findActiveClassIdsByCourseIdAndStudentId(courseId, studentId))
-                .thenReturn(List.of());
+                CurriculumVersion version = new CurriculumVersion();
+                version.setId(UUID.randomUUID());
+                version.setCourseId(courseId);
+                version.setScope(CurriculumScope.MASTER);
+                version.setStatus(CurriculumStatus.PUBLISHED);
+                CurriculumSection section = new CurriculumSection();
+                section.setId(UUID.randomUUID());
+                version.addSection(section);
+                CurriculumLesson lesson = new CurriculumLesson();
+                lesson.setId(lessonId);
+                lesson.setLessonIdentityId(UUID.randomUUID());
+                lesson.setSourceCurriculumLessonId(sourceLessonId);
+                lesson.setType(LessonType.FLASHCARD);
+                lesson.setStatus(LessonStatus.PUBLISHED);
+                section.addLesson(lesson);
 
-        CurriculumVersion version = new CurriculumVersion();
-        version.setId(UUID.randomUUID());
-        version.setCourseId(courseId);
-        version.setScope(CurriculumScope.MASTER);
-        version.setStatus(CurriculumStatus.PUBLISHED);
-        CurriculumSection section = new CurriculumSection();
-        section.setId(UUID.randomUUID());
-        version.addSection(section);
-        CurriculumLesson lesson = new CurriculumLesson();
-        lesson.setId(lessonId);
-        lesson.setLessonIdentityId(UUID.randomUUID());
-        lesson.setSourceCurriculumLessonId(sourceLessonId);
-        lesson.setType(LessonType.FLASHCARD);
-        lesson.setStatus(LessonStatus.PUBLISHED);
-        section.addLesson(lesson);
+                when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+                                .thenReturn(new CurriculumResolution(version, null, null, false, "master_inherited"));
+                when(compositionService.isCompositionVersion(version)).thenReturn(false);
+                when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lessonId))
+                                .thenReturn(Optional.empty());
 
-        when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
-                .thenReturn(new CurriculumResolution(version, null, null, false, "master_inherited"));
-        when(compositionService.isCompositionVersion(version)).thenReturn(false);
-        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lessonId))
-                .thenReturn(Optional.empty());
+                FlashcardSet sourceSet = new FlashcardSet();
+                sourceSet.setId(setId);
+                sourceSet.setCurriculumLessonId(sourceLessonId);
+                sourceSet.setTitle("Lesson flashcards");
+                when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(sourceLessonId))
+                                .thenReturn(Optional.of(sourceSet));
 
-        FlashcardSet sourceSet = new FlashcardSet();
-        sourceSet.setId(setId);
-        sourceSet.setCurriculumLessonId(sourceLessonId);
-        sourceSet.setTitle("Lesson flashcards");
-        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(sourceLessonId))
-                .thenReturn(Optional.of(sourceSet));
+                FlashcardCard card = new FlashcardCard();
+                card.setId(UUID.randomUUID());
+                card.setFlashcardSet(sourceSet);
+                card.setFrontText("front");
+                card.setBackText("back");
+                card.setOrderIndex(0);
+                when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(setId))
+                                .thenReturn(List.of(card));
+                FlashcardProgress progress = new FlashcardProgress();
+                progress.setStudentId(studentId);
+                progress.setFlashcard(card);
+                progress.setLearningStatus("known");
+                progress.setLastReviewResult("known");
+                progress.setRepetitions(1);
+                progress.setIntervalDays(1);
+                when(flashcardProgressRepository.findByStudentIdAndCardIds(studentId, List.of(card.getId())))
+                                .thenReturn(List.of(progress));
 
-        FlashcardCard card = new FlashcardCard();
-        card.setId(UUID.randomUUID());
-        card.setFlashcardSet(sourceSet);
-        card.setFrontText("front");
-        card.setBackText("back");
-        card.setOrderIndex(0);
-        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(setId))
-                .thenReturn(List.of(card));
-        FlashcardProgress progress = new FlashcardProgress();
-        progress.setStudentId(studentId);
-        progress.setFlashcard(card);
-        progress.setLearningStatus("known");
-        progress.setLastReviewResult("known");
-        progress.setRepetitions(1);
-        progress.setIntervalDays(1);
-        when(flashcardProgressRepository.findByStudentIdAndCardIds(studentId, List.of(card.getId())))
-                .thenReturn(List.of(progress));
+                var response = service.getLearningFlashcards(courseId, null, lessonId);
 
-        var response = service.getLearningFlashcards(courseId, null, lessonId);
+                assertThat(response.id()).isEqualTo(setId);
+                assertThat(response.lessonId()).isEqualTo(lessonId);
+                assertThat(response.cards()).hasSize(1);
+                assertThat(response.cards().get(0).frontText()).isEqualTo("front");
+                assertThat(response.cards().get(0).progress().learningStatus()).isEqualTo("known");
+        }
 
-        assertThat(response.id()).isEqualTo(setId);
-        assertThat(response.lessonId()).isEqualTo(lessonId);
-        assertThat(response.cards()).hasSize(1);
-        assertThat(response.cards().get(0).frontText()).isEqualTo("front");
-        assertThat(response.cards().get(0).progress().learningStatus()).isEqualTo("known");
-    }
+        @Test
+        void getLearningFlashcardsResolvesSetFromEquivalentCurriculumLessonIdentity() {
+                UUID courseId = UUID.randomUUID();
+                UUID studentId = UUID.randomUUID();
+                UUID classLessonId = UUID.randomUUID();
+                UUID lessonIdentityId = UUID.randomUUID();
+                UUID setId = UUID.randomUUID();
 
-    @Test
-    void getLearningFlashcardsResolvesSetFromEquivalentCurriculumLessonIdentity() {
-        UUID courseId = UUID.randomUUID();
-        UUID studentId = UUID.randomUUID();
-        UUID classLessonId = UUID.randomUUID();
-        UUID lessonIdentityId = UUID.randomUUID();
-        UUID setId = UUID.randomUUID();
+                UserAccount student = new UserAccount();
+                student.setId(studentId);
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+                when(classEnrollmentRepository.findActiveClassIdsByCourseIdAndStudentId(courseId, studentId))
+                                .thenReturn(List.of());
 
-        UserAccount student = new UserAccount();
-        student.setId(studentId);
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
-        when(classEnrollmentRepository.findActiveClassIdsByCourseIdAndStudentId(courseId, studentId))
-                .thenReturn(List.of());
+                CurriculumVersion version = new CurriculumVersion();
+                version.setId(UUID.randomUUID());
+                version.setCourseId(courseId);
+                version.setScope(CurriculumScope.CLASS);
+                version.setStatus(CurriculumStatus.PUBLISHED);
+                CurriculumSection section = new CurriculumSection();
+                section.setId(UUID.randomUUID());
+                version.addSection(section);
+                CurriculumLesson classLesson = new CurriculumLesson();
+                classLesson.setId(classLessonId);
+                classLesson.setLessonIdentityId(lessonIdentityId);
+                classLesson.setType(LessonType.FLASHCARD);
+                classLesson.setStatus(LessonStatus.PUBLISHED);
+                section.addLesson(classLesson);
 
-        CurriculumVersion version = new CurriculumVersion();
-        version.setId(UUID.randomUUID());
-        version.setCourseId(courseId);
-        version.setScope(CurriculumScope.CLASS);
-        version.setStatus(CurriculumStatus.PUBLISHED);
-        CurriculumSection section = new CurriculumSection();
-        section.setId(UUID.randomUUID());
-        version.addSection(section);
-        CurriculumLesson classLesson = new CurriculumLesson();
-        classLesson.setId(classLessonId);
-        classLesson.setLessonIdentityId(lessonIdentityId);
-        classLesson.setType(LessonType.FLASHCARD);
-        classLesson.setStatus(LessonStatus.PUBLISHED);
-        section.addLesson(classLesson);
+                when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
+                                .thenReturn(new CurriculumResolution(version, null, null, false, "class_customized"));
+                when(compositionService.isCompositionVersion(version)).thenReturn(false);
+                when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(classLessonId))
+                                .thenReturn(Optional.empty());
 
-        when(curriculumResolutionService.resolveOnlineLearning(courseId, studentId))
-                .thenReturn(new CurriculumResolution(version, null, null, false, "class_customized"));
-        when(compositionService.isCompositionVersion(version)).thenReturn(false);
-        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(classLessonId))
-                .thenReturn(Optional.empty());
+                FlashcardSet sourceSet = new FlashcardSet();
+                sourceSet.setId(setId);
+                sourceSet.setTitle("Inherited flashcards");
+                when(flashcardSetRepository.findActiveByLessonIdentityIdAndCurriculumStateOrderByUpdatedAtDesc(
+                                lessonIdentityId,
+                                CurriculumScope.MASTER,
+                                CurriculumStatus.PUBLISHED))
+                                .thenReturn(List.of(sourceSet));
+                when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(setId)).thenReturn(List.of());
 
-        FlashcardSet sourceSet = new FlashcardSet();
-        sourceSet.setId(setId);
-        sourceSet.setTitle("Inherited flashcards");
-        when(flashcardSetRepository.findActiveByLessonIdentityIdAndCurriculumStateOrderByUpdatedAtDesc(
-                lessonIdentityId,
-                CurriculumScope.MASTER,
-                CurriculumStatus.PUBLISHED))
-                .thenReturn(List.of(sourceSet));
-        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(setId)).thenReturn(List.of());
+                var response = service.getLearningFlashcards(courseId, null, classLessonId);
 
-        var response = service.getLearningFlashcards(courseId, null, classLessonId);
+                assertThat(response.id()).isEqualTo(setId);
+                assertThat(response.lessonId()).isEqualTo(classLessonId);
+        }
 
-        assertThat(response.id()).isEqualTo(setId);
-        assertThat(response.lessonId()).isEqualTo(classLessonId);
-    }
+        @Test
+        void submitFlashcardProgressShouldUseClassEnrollmentScopeWhenClassIdIsProvided() {
+                UUID courseId = UUID.randomUUID();
+                UUID classId = UUID.randomUUID();
+                UUID studentId = UUID.randomUUID();
+                UUID lessonId = UUID.randomUUID();
+                UUID setId = UUID.randomUUID();
+                UUID cardId = UUID.randomUUID();
 
-    @Test
-    void submitFlashcardProgressShouldUseClassEnrollmentScopeWhenClassIdIsProvided() {
-        UUID courseId = UUID.randomUUID();
-        UUID classId = UUID.randomUUID();
-        UUID studentId = UUID.randomUUID();
-        UUID lessonId = UUID.randomUUID();
-        UUID setId = UUID.randomUUID();
-        UUID cardId = UUID.randomUUID();
+                UserAccount student = new UserAccount();
+                student.setId(studentId);
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
 
-        UserAccount student = new UserAccount();
-        student.setId(studentId);
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+                Course course = new Course();
+                course.setId(courseId);
+                FlashcardSet flashcardSet = new FlashcardSet();
+                flashcardSet.setId(setId);
+                flashcardSet.setCourse(course);
+                flashcardSet.setCurriculumLessonId(lessonId);
+                flashcardSet.setTitle("Class cards");
+                FlashcardCard card = new FlashcardCard();
+                card.setId(cardId);
+                card.setFlashcardSet(flashcardSet);
+                when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
 
-        Course course = new Course();
-        course.setId(courseId);
-        FlashcardSet flashcardSet = new FlashcardSet();
-        flashcardSet.setId(setId);
-        flashcardSet.setCourse(course);
-        flashcardSet.setCurriculumLessonId(lessonId);
-        flashcardSet.setTitle("Class cards");
-        FlashcardCard card = new FlashcardCard();
-        card.setId(cardId);
-        card.setFlashcardSet(flashcardSet);
-        when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
+                CurriculumVersion version = new CurriculumVersion();
+                version.setId(UUID.randomUUID());
+                version.setCourseId(courseId);
+                version.setClassId(classId);
+                version.setScope(CurriculumScope.CLASS);
+                version.setStatus(CurriculumStatus.PUBLISHED);
+                CurriculumSection section = new CurriculumSection();
+                section.setId(UUID.randomUUID());
+                version.addSection(section);
+                CurriculumLesson lesson = new CurriculumLesson();
+                lesson.setId(lessonId);
+                lesson.setType(LessonType.FLASHCARD);
+                lesson.setStatus(LessonStatus.PUBLISHED);
+                section.addLesson(lesson);
+                when(curriculumResolutionService.resolveClassLearning(courseId, classId, studentId))
+                                .thenReturn(new CurriculumResolution(version, null, classId, true, "class_published"));
+                when(compositionService.isCompositionVersion(version)).thenReturn(true);
+                when(compositionService.effectiveLessons(section)).thenReturn(List.of(lesson));
+                when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lessonId))
+                                .thenReturn(Optional.of(flashcardSet));
 
-        CurriculumVersion version = new CurriculumVersion();
-        version.setId(UUID.randomUUID());
-        version.setCourseId(courseId);
-        version.setClassId(classId);
-        version.setScope(CurriculumScope.CLASS);
-        version.setStatus(CurriculumStatus.PUBLISHED);
-        CurriculumSection section = new CurriculumSection();
-        section.setId(UUID.randomUUID());
-        version.addSection(section);
-        CurriculumLesson lesson = new CurriculumLesson();
-        lesson.setId(lessonId);
-        lesson.setType(LessonType.FLASHCARD);
-        lesson.setStatus(LessonStatus.PUBLISHED);
-        section.addLesson(lesson);
-        when(curriculumResolutionService.resolveClassLearning(courseId, classId, studentId))
-                .thenReturn(new CurriculumResolution(version, null, classId, true, "class_published"));
-        when(compositionService.isCompositionVersion(version)).thenReturn(true);
-        when(compositionService.effectiveLessons(section)).thenReturn(List.of(lesson));
-        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lessonId))
-                .thenReturn(Optional.of(flashcardSet));
-        when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
-                .thenReturn(Optional.empty());
-        when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                when(flashcardSetRepository.findByIdAndDeletedAtIsNullForUpdate(setId))
+                                .thenReturn(Optional.of(flashcardSet));
 
-        var response = service.submitFlashcardProgress(
-                cardId,
-                classId,
-                new FlashcardProgressRequest("known"));
+                when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
+                                .thenReturn(Optional.empty());
 
-        assertThat(response.cardId()).isEqualTo(cardId);
-        assertThat(response.learningStatus()).isEqualTo("known");
-        verify(curriculumResolutionService).resolveClassLearning(courseId, classId, studentId);
-        verifyNoInteractions(enrollmentAccessService);
-    }
+                when(flashcardProgressRepository.saveAndFlush(any(FlashcardProgress.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                when(flashcardCardRepository.countActiveBySetId(setId))
+                                .thenReturn(1L);
+
+                when(flashcardProgressRepository
+                                .countDistinctProgressedActiveCardsByStudentIdAndSetId(studentId, setId))
+                                .thenReturn(1L);
+
+                var response = service.submitFlashcardProgress(
+                                cardId,
+                                classId,
+                                new FlashcardProgressRequest("known"));
+
+                assertThat(response.cardId()).isEqualTo(cardId);
+                assertThat(response.learningStatus()).isEqualTo("known");
+                assertThat(response.lessonCompleted()).isTrue();
+                verify(curriculumResolutionService).resolveClassLearning(courseId, classId, studentId);
+                verify(traineeProgressService).completeResolvedLesson(studentId, courseId, classId, lesson);
+                verifyNoInteractions(enrollmentAccessService);
+        }
 }

@@ -80,6 +80,90 @@ class CurriculumDtoMapperTest {
                 lessons.get(0).videoUrl());
     }
 
+    @Test
+    void toLearningContentResponseOmitsDraftFlashcardLessonsForTrainee() {
+        UUID courseId = UUID.randomUUID();
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(UUID.randomUUID());
+        version.setCourseId(courseId);
+        version.setScope(CurriculumScope.MASTER);
+        version.setStatus(CurriculumStatus.PUBLISHED);
+        version.setVersionNumber(1);
+
+        CurriculumSection section = new CurriculumSection();
+        section.setId(UUID.randomUUID());
+        section.setTitle("Flashcards");
+        section.setSortOrder(0);
+        section.setCreatedAt(Instant.now());
+        version.addSection(section);
+
+        CurriculumLesson publishedFlashcard = publishedLesson(LessonType.FLASHCARD, 0);
+        publishedFlashcard.setTitle("Published flashcards");
+        CurriculumLesson draftFlashcard = publishedLesson(LessonType.FLASHCARD, 1);
+        draftFlashcard.setTitle("Draft visibility integration test");
+        draftFlashcard.setStatus(LessonStatus.DRAFT);
+        section.addLesson(publishedFlashcard);
+        section.addLesson(draftFlashcard);
+
+        LearningContentResponse response = mapper.toLearningContentResponse(
+                version,
+                "Course",
+                null,
+                Set.of(),
+                null);
+
+        List<LearningLessonResponse> lessons = response.sections().get(0).lessons();
+        assertEquals(List.of("Published flashcards"), lessons.stream().map(LearningLessonResponse::title).toList());
+        assertEquals(1, response.stats().totalLessons());
+    }
+
+    @Test
+    void toLearningContentResponseOmitsDraftClassFlashcardEffectiveLessonsForTrainee() {
+        ClassCurriculumCompositionService compositionService =
+                org.mockito.Mockito.mock(ClassCurriculumCompositionService.class);
+        CurriculumDtoMapper classMapper = new CurriculumDtoMapper(compositionService);
+        UUID courseId = UUID.randomUUID();
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(UUID.randomUUID());
+        version.setCourseId(courseId);
+        version.setClassId(UUID.randomUUID());
+        version.setScope(CurriculumScope.CLASS);
+        version.setStatus(CurriculumStatus.PUBLISHED);
+        version.setVersionNumber(1);
+
+        CurriculumSection section = new CurriculumSection();
+        section.setId(UUID.randomUUID());
+        section.setTitle("Class flashcards");
+        section.setSortOrder(0);
+        section.setCreatedAt(Instant.now());
+        version.addSection(section);
+
+        CurriculumLesson publishedFlashcard = publishedLesson(LessonType.FLASHCARD, 0);
+        publishedFlashcard.setTitle("Published class flashcards");
+        CurriculumLesson draftFlashcard = publishedLesson(LessonType.FLASHCARD, 1);
+        draftFlashcard.setTitle("Hidden draft class flashcards");
+        draftFlashcard.setStatus(LessonStatus.DRAFT);
+        section.addLesson(publishedFlashcard);
+        section.addLesson(draftFlashcard);
+
+        org.mockito.Mockito.when(compositionService.isCompositionVersion(version)).thenReturn(true);
+        org.mockito.Mockito.when(compositionService.effectiveLessons(section))
+                .thenReturn(List.of(publishedFlashcard, draftFlashcard));
+
+        LearningContentResponse response = classMapper.toLearningContentResponse(
+                version,
+                "Class course",
+                null,
+                Set.of(),
+                null);
+
+        List<LearningLessonResponse> lessons = response.sections().get(0).lessons();
+        assertEquals(
+                List.of("Published class flashcards"),
+                lessons.stream().map(LearningLessonResponse::title).toList());
+        assertEquals(1, response.stats().totalLessons());
+    }
+
     private CurriculumLesson videoLesson() {
         return publishedLesson(LessonType.VIDEO, 0);
     }

@@ -57,7 +57,8 @@ public final class LearningFlashcardPracticeDtos {
             Integer repetitions,
             Integer intervalDays,
             Instant lastReviewedAt,
-            Instant nextReviewAt
+            Instant nextReviewAt,
+            boolean lessonCompleted
     ) {
     }
 }
