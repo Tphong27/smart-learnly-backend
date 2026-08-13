@@ -1,24 +1,14 @@
 package com.smartlearnly.backend.auth.profile.dto;
 
-import com.smartlearnly.backend.common.validation.PhoneNumberRules;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record UpdateProfileRequest(
-        @Pattern(regexp = "^(?!\\s*$).+$", message = "Full name must not be blank")
-        @Size(max = 150, message = "Full name must not exceed 150 characters")
-        String fullName,
+        @Pattern(regexp = "^(?!\\s*$).+$", message = "Full name must not be blank") @Size(max = 150, message = "Full name must not exceed 150 characters") String fullName,
 
-        @Size(max = 2048, message = "Avatar URL must not exceed 2048 characters")
-        String avatarUrl,
+        @Size(max = 2048, message = "Avatar URL must not exceed 2048 characters") String avatarUrl,
 
-        @Pattern(
-                regexp = PhoneNumberRules.VIETNAMESE_MOBILE_PATTERN,
-                message = PhoneNumberRules.VIETNAMESE_MOBILE_MESSAGE
-        )
-        String phoneNumber,
+        @Pattern(regexp = "^(?:$|(?:0|\\+84)[35789][0-9]{8})$", message = "Phone number must be a valid Vietnamese mobile number, for example 0901234567 or +84901234567") String phoneNumber,
 
-        @Size(max = 1000, message = "Bio must not exceed 1000 characters")
-        String bio
-) {
+        @Size(max = 1000, message = "Bio must not exceed 1000 characters") String bio) {
 }

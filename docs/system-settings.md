@@ -28,7 +28,27 @@ Google Meet settings now include:
 - `enabled`
 - `refreshToken`
 
-Google client ID and client secret continue to come from the Google OAuth settings group. Base URLs and timeout remain environment-backed operational defaults.
+Google Meet ưu tiên OAuth client riêng qua các biến môi trường sau và chỉ dùng
+Google OAuth settings chung làm fallback:
+
+- `APP_GOOGLE_MEET_CLIENT_ID`
+- `APP_GOOGLE_MEET_CLIENT_SECRET`
+- `APP_GOOGLE_MEET_REFRESH_TOKEN`
+
+Không khai báo `GOOGLE_CLIENT_ID` hai lần vì giá trị Meet sẽ ghi đè client dùng
+cho Google Login.
+
+Refresh token phải được cấp bằng đúng client ID/secret ở trên, với offline
+access và scope:
+
+```text
+https://www.googleapis.com/auth/meetings.space.created
+```
+
+Đồng thời phải bật Google Meet REST API trong cùng Google Cloud project. Nếu
+OAuth consent screen của ứng dụng External vẫn ở trạng thái Testing, refresh
+token có thể hết hạn sau 7 ngày; chuyển sang In production hoặc cấp lại token
+khi test.
 
 ### SePay
 

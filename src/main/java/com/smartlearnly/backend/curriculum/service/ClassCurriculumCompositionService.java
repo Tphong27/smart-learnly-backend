@@ -13,6 +13,11 @@ import com.smartlearnly.backend.curriculum.repository.ClassCurriculumEntryReposi
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.curriculum.repository.CurriculumVersionRepository;
+import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
+import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
+import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
+import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
+import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -45,6 +50,8 @@ public class ClassCurriculumCompositionService {
     private final CurriculumLessonRepository lessonRepository;
     private final CurriculumSectionRepository sectionRepository;
     private final CurriculumVersionRepository versionRepository;
+    private final FlashcardSetRepository flashcardSetRepository;
+    private final FlashcardCardRepository flashcardCardRepository;
 
     /**
      * Whether a version is governed by the composition model. Every CLASS-scoped version is a
@@ -87,6 +94,7 @@ public class ClassCurriculumCompositionService {
         });
     }
 
+    /** Sao chép cấu trúc lớp và các artifact class-owned cần tách biệt khỏi bản đã publish. */
     private void snapshotFromClassVersion(CurriculumVersion draft, CurriculumVersion source) {
         orderedSections(source).forEach(sourceSection -> {
             CurriculumSection savedSection = sectionRepository.save(copySectionRow(draft, sourceSection));
@@ -103,6 +111,7 @@ public class ClassCurriculumCompositionService {
                                 CurriculumLesson row = copyMaterializedLesson(sourceRow, savedSection, entry);
                                 CurriculumLesson savedRow = lessonRepository.save(row);
                                 entry.setMaterializedLessonId(savedRow.getId());
+                                copyFlashcards(sourceRow, savedRow);
                             });
                         }
                         entryRepository.save(entry);
@@ -419,6 +428,49 @@ public class ClassCurriculumCompositionService {
         row.setSortOrder(entry.getSortOrder());
         copyMasterContentInto(row, source, true);
         return row;
+    }
+
+    /**
+     * Sao chép flashcard set và card sang lesson của draft mới để trainer có thể chỉnh sửa
+     * độc lập mà không làm thay đổi nội dung của curriculum đang publish.
+     */
+    private void copyFlashcards(CurriculumLesson sourceLesson, CurriculumLesson targetLesson) {
+        if (sourceLesson.getType() != LessonType.FLASHCARD) {
+            return;
+        }
+        flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(sourceLesson.getId())
+                .ifPresent(sourceSet -> {
+                    FlashcardSet targetSet = new FlashcardSet();
+                    targetSet.setCurriculumLessonId(targetLesson.getId());
+                    targetSet.setCourse(sourceSet.getCourse());
+                    targetSet.setCreatedBy(sourceSet.getCreatedBy());
+                    targetSet.setTitle(sourceSet.getTitle());
+                    targetSet.setDescription(sourceSet.getDescription());
+                    targetSet.setIsPublic(sourceSet.getIsPublic());
+                    targetSet.setIsOfficial(sourceSet.getIsOfficial());
+                    FlashcardSet savedSet = flashcardSetRepository.save(targetSet);
+
+                    List<FlashcardCard> copiedCards = flashcardCardRepository
+                            .findActiveBySetIdOrderByOrderIndex(sourceSet.getId())
+                            .stream()
+                            .map(sourceCard -> copyFlashcardCard(sourceCard, savedSet))
+                            .toList();
+                    flashcardCardRepository.saveAll(copiedCards);
+                });
+    }
+
+    /** Tạo bản sao nội dung một card và gắn vào set của draft mới. */
+    private FlashcardCard copyFlashcardCard(FlashcardCard source, FlashcardSet targetSet) {
+        FlashcardCard card = new FlashcardCard();
+        card.setFlashcardSet(targetSet);
+        card.setFrontText(source.getFrontText());
+        card.setFrontImageUrl(source.getFrontImageUrl());
+        card.setBackText(source.getBackText());
+        card.setBackImageUrl(source.getBackImageUrl());
+        card.setHint(source.getHint());
+        card.setExplanation(source.getExplanation());
+        card.setOrderIndex(source.getOrderIndex());
+        return card;
     }
 
     private CurriculumLessonResource copyResource(CurriculumLessonResource source) {

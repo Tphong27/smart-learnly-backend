@@ -1,10 +1,14 @@
 package com.smartlearnly.backend.learning.content.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
+import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.repository.CourseRepository;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
@@ -26,6 +30,7 @@ import com.smartlearnly.backend.flashcard.repository.FlashcardProgressRepository
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.learning.lesson.entity.LessonStatus;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
+import com.smartlearnly.backend.learning.content.dto.LearningFlashcardPracticeDtos.FlashcardProgressRequest;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.List;
@@ -192,5 +197,66 @@ class LearningContentServiceTest {
 
         assertThat(response.id()).isEqualTo(setId);
         assertThat(response.lessonId()).isEqualTo(classLessonId);
+    }
+
+    @Test
+    void submitFlashcardProgressShouldUseClassEnrollmentScopeWhenClassIdIsProvided() {
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID lessonId = UUID.randomUUID();
+        UUID setId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+
+        UserAccount student = new UserAccount();
+        student.setId(studentId);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(student);
+
+        Course course = new Course();
+        course.setId(courseId);
+        FlashcardSet flashcardSet = new FlashcardSet();
+        flashcardSet.setId(setId);
+        flashcardSet.setCourse(course);
+        flashcardSet.setCurriculumLessonId(lessonId);
+        flashcardSet.setTitle("Class cards");
+        FlashcardCard card = new FlashcardCard();
+        card.setId(cardId);
+        card.setFlashcardSet(flashcardSet);
+        when(flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)).thenReturn(Optional.of(card));
+
+        CurriculumVersion version = new CurriculumVersion();
+        version.setId(UUID.randomUUID());
+        version.setCourseId(courseId);
+        version.setClassId(classId);
+        version.setScope(CurriculumScope.CLASS);
+        version.setStatus(CurriculumStatus.PUBLISHED);
+        CurriculumSection section = new CurriculumSection();
+        section.setId(UUID.randomUUID());
+        version.addSection(section);
+        CurriculumLesson lesson = new CurriculumLesson();
+        lesson.setId(lessonId);
+        lesson.setType(LessonType.FLASHCARD);
+        lesson.setStatus(LessonStatus.PUBLISHED);
+        section.addLesson(lesson);
+        when(curriculumResolutionService.resolveClassLearning(courseId, classId, studentId))
+                .thenReturn(new CurriculumResolution(version, null, classId, true, "class_published"));
+        when(compositionService.isCompositionVersion(version)).thenReturn(true);
+        when(compositionService.effectiveLessons(section)).thenReturn(List.of(lesson));
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lessonId))
+                .thenReturn(Optional.of(flashcardSet));
+        when(flashcardProgressRepository.findByStudentIdAndCardId(studentId, cardId))
+                .thenReturn(Optional.empty());
+        when(flashcardProgressRepository.save(any(FlashcardProgress.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.submitFlashcardProgress(
+                cardId,
+                classId,
+                new FlashcardProgressRequest("known"));
+
+        assertThat(response.cardId()).isEqualTo(cardId);
+        assertThat(response.learningStatus()).isEqualTo("known");
+        verify(curriculumResolutionService).resolveClassLearning(courseId, classId, studentId);
+        verifyNoInteractions(enrollmentAccessService);
     }
 }

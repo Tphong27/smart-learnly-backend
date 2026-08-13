@@ -12,6 +12,7 @@ import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
 import com.smartlearnly.backend.curriculum.entity.CurriculumSection;
 import com.smartlearnly.backend.curriculum.entity.CurriculumStatus;
+import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.curriculum.service.CurriculumDtoMapper;
 import com.smartlearnly.backend.curriculum.service.CurriculumResolution;
@@ -241,8 +242,16 @@ public class LearningContentService {
                 return toPracticeSetResponse(lesson, flashcardSet, cards, student.getId());
         }
 
+        /**
+         * Lưu kết quả ôn thẻ sau khi xác minh card thuộc curriculum học viên đang được phép học.
+         * Học viên lớp dùng class enrollment; học viên online tiếp tục dùng course enrollment.
+         */
         @Transactional
-        public FlashcardProgressResponse submitFlashcardProgress(UUID cardId, FlashcardProgressRequest request) {
+        public FlashcardProgressResponse submitFlashcardProgress(
+                        UUID cardId,
+                        UUID classId,
+                        FlashcardProgressRequest request) {
+                UserAccount student = currentUserService.requireAuthenticatedUser();
                 FlashcardCard card = flashcardCardRepository.findByIdAndDeletedAtIsNull(cardId)
                                 .orElseThrow(() -> new BusinessException(
                                                 ErrorCode.RESOURCE_NOT_FOUND,
@@ -256,12 +265,22 @@ public class LearningContentService {
                                 .orElseThrow(() -> new BusinessException(
                                                 ErrorCode.RESOURCE_NOT_FOUND,
                                                 "Flashcard set was not found"));
-                CourseEnrollment enrollment = enrollmentAccessService.requireCourseAccess(courseId);
+                CurriculumResolution resolution;
+                UUID studentId;
+                if (classId == null) {
+                        CourseEnrollment enrollment = enrollmentAccessService.requireCourseAccess(courseId);
+                        studentId = enrollment.getStudentId();
+                        resolution = curriculumResolutionService.resolveOnlineLearning(courseId, studentId);
+                } else {
+                        studentId = student.getId();
+                        resolution = curriculumResolutionService.resolveClassLearning(courseId, classId, studentId);
+                }
+                requireFlashcardSetInCurriculum(resolution.version(), flashcardSet.getId());
                 String result = normalizeResult(request.result());
 
                 FlashcardProgress progress = flashcardProgressRepository
-                                .findByStudentIdAndCardId(enrollment.getStudentId(), cardId)
-                                .orElseGet(() -> newProgress(enrollment.getStudentId(), card));
+                                .findByStudentIdAndCardId(studentId, cardId)
+                                .orElseGet(() -> newProgress(studentId, card));
 
                 Instant now = Instant.now();
                 if (RESULT_KNOWN.equals(result)) {
@@ -282,6 +301,20 @@ public class LearningContentService {
                 progress.setUpdatedAt(now);
 
                 return toProgressResponse(flashcardProgressRepository.save(progress));
+        }
+
+        /** Chặn việc ghi tiến độ cho set không thuộc curriculum publish hiện hành của học viên. */
+        private void requireFlashcardSetInCurriculum(CurriculumVersion version, UUID flashcardSetId) {
+                boolean isAvailable = version.getSections().stream()
+                                .flatMap(section -> effectiveLessons(section).stream())
+                                .filter(lesson -> lesson.getStatus() == LessonStatus.PUBLISHED)
+                                .filter(lesson -> lesson.getType() == LessonType.FLASHCARD)
+                                .map(this::resolveFlashcardSet)
+                                .flatMap(Optional::stream)
+                                .anyMatch(set -> flashcardSetId.equals(set.getId()));
+                if (!isAvailable) {
+                        throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard card was not found");
+                }
         }
 
         private UUID resolveEffectiveClassId(UUID courseId, UUID classId, UUID studentId) {
