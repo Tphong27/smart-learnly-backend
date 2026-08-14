@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -203,17 +204,19 @@ class FlashcardCourseQuestionImportServiceTest {
         Question otherCourseQuestion = question(UUID.randomUUID(), QuestionStatus.APPROVED, QuestionType.MULTIPLE_CHOICE, moduleId, "Other?");
         QuestionAnswer distractor = answer(importedQuestion.getId(), "No", false, 1);
         QuestionAnswer correct = answer(importedQuestion.getId(), "Yes", true, 0);
+        QuestionAnswer availableCorrect = answer(availableQuestion.getId(), "Ready", true, 0);
         when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
         when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(importedQuestion, otherCourseQuestion, availableQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(
                 List.of(importedQuestion.getId(), availableQuestion.getId())))
-                .thenReturn(List.of(distractor, correct));
+                .thenReturn(List.of(distractor, correct, availableCorrect));
         when(stagingCardRepository.findImportedSourceQuestionIds(
                 set.getId(),
                 List.of(importedQuestion.getId(), availableQuestion.getId()),
                 java.util.Set.of("draft", "approved")))
                 .thenReturn(List.of(importedQuestion.getId()));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(set.getId())).thenReturn(List.of());
 
         List<SourceQuestionResponse> response = importService.listSourceQuestions(
                 set.getId(),
@@ -227,10 +230,55 @@ class FlashcardCourseQuestionImportServiceTest {
         assertThat(response).extracting(SourceQuestionResponse::questionId)
                 .containsExactly(importedQuestion.getId(), availableQuestion.getId());
         assertThat(response).extracting(SourceQuestionResponse::imported).containsExactly(true, false);
+        assertThat(response).extracting(SourceQuestionResponse::eligibilityStatus)
+                .containsExactly("ALREADY_IMPORTED", "AVAILABLE");
         assertThat(response.get(0).answers()).hasSize(2);
         assertThat(response.get(0).answers()).extracting(answer -> answer.answerText()).containsExactly("Yes", "No");
         assertThat(response.get(0).correctAnswers()).containsExactly("Yes");
         verify(courseAccessService).requireReadableCourse(courseId);
+    }
+
+    @Test
+    void listSourceQuestionsClassifiesLinkedCurrentMatchesAndAvailableQuestions() {
+        FlashcardSet set = flashcardSet();
+        UUID courseId = set.getLesson().getCourse().getId();
+        UUID moduleId = UUID.randomUUID();
+        Question linked = question(courseId, QuestionStatus.APPROVED, QuestionType.ESSAY, moduleId, "Linked?");
+        Question currentMatch = question(courseId, QuestionStatus.APPROVED, QuestionType.ESSAY, moduleId,
+                "<p> Existing&nbsp;front? </p>");
+        Question available = question(courseId, QuestionStatus.APPROVED, QuestionType.ESSAY, moduleId, "Fresh?");
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
+        when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(linked, currentMatch, available)));
+        when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(
+                List.of(linked.getId(), currentMatch.getId(), available.getId())))
+                .thenReturn(List.of(
+                        answer(linked.getId(), "Linked answer", true, 0),
+                        answer(currentMatch.getId(), "<strong>Existing answer</strong>", true, 0),
+                        answer(available.getId(), "Fresh answer", true, 0)));
+        when(stagingCardRepository.findImportedSourceQuestionIds(
+                set.getId(),
+                List.of(linked.getId(), currentMatch.getId(), available.getId()),
+                java.util.Set.of("draft", "approved")))
+                .thenReturn(List.of(linked.getId()));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(set.getId()))
+                .thenReturn(List.of(flashcardCard(set, "Existing front?", "existing answer")));
+
+        List<SourceQuestionResponse> response = importService.listSourceQuestions(
+                set.getId(),
+                moduleId,
+                null,
+                null,
+                "approved"
+        );
+
+        assertThat(response).extracting(SourceQuestionResponse::eligibilityStatus)
+                .containsExactly("ALREADY_IMPORTED", "MATCHES_CURRENT_FLASHCARDS", "AVAILABLE");
+        assertThat(response).extracting(SourceQuestionResponse::eligibilityReason)
+                .containsExactly("Already imported", "Matches Current Flashcards", null);
+        assertThat(response).extracting(SourceQuestionResponse::imported)
+                .containsExactly(true, false, false);
+        verify(flashcardCardRepository, times(1)).findActiveBySetIdOrderByOrderIndex(set.getId());
     }
 
     @Test

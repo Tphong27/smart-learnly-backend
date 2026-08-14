@@ -1811,9 +1811,13 @@ class AdminFlashcardStagingServiceTest {
         when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(draftImportedQuestion, approvedImportedQuestion, notImportedQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(anyList()))
-                .thenReturn(List.of());
+                .thenReturn(List.of(
+                        answer(draftImportedQuestion.getId(), "Draft answer", true, 0),
+                        answer(approvedImportedQuestion.getId(), "Approved answer", true, 0),
+                        answer(notImportedQuestion.getId(), "Fresh answer", true, 0)));
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of(draftImportedQuestion.getId(), approvedImportedQuestion.getId()));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId())).thenReturn(List.of());
 
         List<SourceQuestionResponse> response = courseQuestionImportService.listSourceQuestions(
                 flashcardSet.getId(),
@@ -1868,9 +1872,10 @@ class AdminFlashcardStagingServiceTest {
         when(questionRepository.searchForAdmin(any(), any(), any(), any(), any(), anyBoolean(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(rejectedQuestion)));
         when(questionAnswerRepository.findByQuestionIdInOrderByQuestionIdAscOrderIndexAsc(List.of(rejectedQuestion.getId())))
-                .thenReturn(List.of());
+                .thenReturn(List.of(answer(rejectedQuestion.getId(), "Rejected answer", true, 0)));
         when(stagingCardRepository.findImportedSourceQuestionIds(any(), any(), any()))
                 .thenReturn(List.of());
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId())).thenReturn(List.of());
 
         List<SourceQuestionResponse> response = courseQuestionImportService.listSourceQuestions(
                 flashcardSet.getId(),
