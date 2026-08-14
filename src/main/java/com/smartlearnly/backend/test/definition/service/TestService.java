@@ -15,16 +15,12 @@ import com.smartlearnly.backend.notification.entity.NotificationType;
 import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.test.definition.dto.TestModel;
 import com.smartlearnly.backend.test.entity.Test;
-import com.smartlearnly.backend.test.entity.TestAttempt;
-import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
-import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +28,6 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -43,8 +38,6 @@ public class TestService {
 
     private final TestRepository testRepository;
     private final CurrentUserService currentUserService;
-    private final TestAttemptRepository testAttemptRepository;
-    private final StudentTestAnswerRepository studentTestAnswerRepository;
     private final CurriculumSectionRepository curriculumSectionRepository;
     private final ClassOfferingRepository classOfferingRepository;
     private final CourseAccessService courseAccessService;
@@ -105,72 +98,12 @@ public class TestService {
         if (Boolean.TRUE.equals(saved.getIsPublished())) {
             emitTestNotificationToStudents(
                     saved,
-                    "New test available",
-                    "A new test is available: " + saved.getTitle() + ".",
+                    "New course quiz available",
+                    "A new course quiz is available: " + saved.getTitle() + ".",
                     "created");
         }
 
         return mapToResponse(saved);
-    }
-
-    /** Trả catalog đề đã xuất bản mà không làm mới mã truy cập của đề. */
-    public List<TestModel.Response> getAllTests() {
-
-        List<Test> tests =
-                testRepository.findPublishedRegularTests();
-
-        List<TestModel.Response> responses =
-                new ArrayList<>();
-
-        for (Test test : tests) {
-            // This endpoint powers the trainee catalogue. Listing tests must be
-            // read-only: rotating every expired code here caused an N+1 write
-            // burst and leaked the active access code to learners.
-            responses.add(mapToResponse(test, false));
-        }
-
-        return responses;
-    }
-
-    /** Trả các đề trong phạm vi course/lớp mà nhân sự hiện tại được quản lý. */
-    public List<TestModel.Response> getMyTests(UUID courseId, UUID classId) {
-
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        UUID staffScope = isPrivilegedStaff(actor) ? null : actor.getId();
-        List<Test> tests = testRepository.findStaffTests(
-                staffScope,
-                courseId,
-                classId);
-
-        List<TestModel.Response> responses =
-                new ArrayList<>();
-
-        for (Test test : tests) {
-            responses.add(mapToResponse(test, true));
-        }
-
-        return responses;
-    }
-
-    /** Trả các đề mà học viên hiện tại được phép làm trong phạm vi đã lọc. */
-    public List<TestModel.Response> getAvailableTests(
-            UUID courseId,
-            UUID classId) {
-
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        if (!isTrainee(actor)) {
-            throw new BusinessException(
-                    ErrorCode.FORBIDDEN,
-                    "Only trainees can view class tests");
-        }
-
-        return testRepository.findAvailableForStudent(
-                        actor.getId(),
-                        courseId,
-                        classId)
-                .stream()
-                .map(test -> mapToResponse(test, false))
-                .toList();
     }
 
     /** Xác thực học viên hiện tại có quyền bắt đầu attempt của đề. */
@@ -184,7 +117,7 @@ public class TestService {
         if (!isTrainee(actor)) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN,
-                    "Only trainees can start a test attempt");
+                    "Only trainees can start a course quiz attempt");
         }
 
         Test test = testRepository.findById(testId)
@@ -245,119 +178,6 @@ public class TestService {
                 includeAccessCode);
     }
 
-    /** Kiểm tra mã truy cập còn hiệu lực cho người có quyền xem đề. */
-    public TestModel.AccessCodeVerifyResponse verifyAccessCode(
-            UUID id,
-            TestModel.AccessCodeVerifyRequest request) {
-        return verifyAccessCode(id, request, null);
-    }
-
-    /** Kiểm tra mã truy cập sau khi xác thực enrollment trong context lớp. */
-    public TestModel.AccessCodeVerifyResponse verifyAccessCode(
-            UUID id,
-            TestModel.AccessCodeVerifyRequest request,
-            UUID classId) {
-
-        Test test = testRepository.findById(id)
-                .orElseThrow(() ->
-                        new EntityNotFoundException(
-                                "Test not found"));
-        requireTestAccess(test, currentUserService.requireAuthenticatedUser(), classId);
-        test = ensureAccessCode(test);
-
-        TestModel.AccessCodeVerifyResponse response =
-                new TestModel.AccessCodeVerifyResponse();
-        response.setValid(isWithinSchedule(test, Instant.now()) &&
-                accessCodeMatches(test, request.getAccessCode()));
-        response.setExpiresAt(test.getAccessCodeExpiresAt());
-        return response;
-    }
-
-    /** Cập nhật đề sau khi bảo vệ lịch đang diễn ra, phạm vi lớp và quyền quản lý. */
-    @Transactional
-    public TestModel.Response updateTest(
-            UUID id,
-            TestModel.UpdateRequest request) {
-
-        Test test = testRepository.findById(id)
-                .orElseThrow(() ->
-                        new EntityNotFoundException(
-                                "Test not found"));
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        requireManageAccess(test, actor);
-
-        Instant nextOpensAt = request.getOpensAt() != null
-                ? request.getOpensAt()
-                : test.getOpensAt();
-        Instant nextClosesAt = request.getClosesAt() != null
-                ? request.getClosesAt()
-                : test.getClosesAt();
-        validateSchedule(nextOpensAt, nextClosesAt);
-
-        UUID nextClassId = request.getClassId() != null
-                ? request.getClassId()
-                : test.getClassId();
-        UUID nextCourseId = request.getCourseId() != null
-                ? request.getCourseId()
-                : test.getCourseId();
-        validateClassScope(nextClassId, nextCourseId, actor);
-
-        if (request.getModuleId() != null) test.setModuleId(request.getModuleId());
-        if (request.getCurriculumSectionId() != null) {
-            validateCurriculumSection(nextCourseId, request.getCurriculumSectionId());
-            test.setCurriculumSectionId(request.getCurriculumSectionId());
-        }
-        if (request.getClassId() != null) test.setClassId(request.getClassId());
-        if (request.getCourseId() != null) test.setCourseId(request.getCourseId());
-        if (request.getTitle() != null) test.setTitle(request.getTitle());
-        if (request.getDescription() != null) test.setDescription(request.getDescription());
-        if (request.getTestType() != null) test.setTestType(request.getTestType());
-        if (request.getDurationMinutes() != null) test.setDurationMinutes(request.getDurationMinutes());
-        if (request.getMaxAttempts() != null) test.setMaxAttempts(request.getMaxAttempts());
-        if (request.getPassScore() != null) test.setPassScore(request.getPassScore());
-        if (request.getShuffleQuestions() != null) test.setShuffleQuestions(request.getShuffleQuestions());
-        if (request.getShuffleAnswers() != null) test.setShuffleAnswers(request.getShuffleAnswers());
-        if (request.getShowAnswersAfter() != null) test.setShowAnswersAfter(request.getShowAnswersAfter());
-        if (request.getIsPublished() != null) test.setIsPublished(request.getIsPublished());
-        if (request.getIsArchived() != null) test.setIsArchived(request.getIsArchived());
-        if (request.getOpensAt() != null) test.setOpensAt(request.getOpensAt());
-        if (request.getClosesAt() != null) test.setClosesAt(request.getClosesAt());
-        ensureAccessCode(test);
-
-        Test updated = testRepository.save(test);
-        if (Boolean.TRUE.equals(updated.getIsPublished())) {
-            emitTestNotificationToStudents(
-                    updated,
-                    "Test updated",
-                    updated.getTitle() + " was updated.",
-                    "updated");
-        }
-
-        return mapToResponse(updated);
-    }
-
-    /** Xóa đề cùng attempt và đáp án phụ thuộc sau khi gửi thông báo phù hợp. */
-    @Transactional
-    public void deleteTest(UUID id) {
-
-        Test test = testRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
-        requireManageAccess(test, currentUserService.requireAuthenticatedUser());
-        if (Boolean.TRUE.equals(test.getIsPublished())) {
-            emitTestNotificationToStudents(
-                    test,
-                    "Test removed",
-                    test.getTitle() + " was removed.",
-                    "deleted");
-        }
-
-        // Attempts and their answers reference the test without database-level
-        // cascading. Remove those dependants first so staff can delete a test
-        // after it has been taken.
-        resetAttempts(id);
-        testRepository.deleteById(id);
-    }
-
     /** Gửi notification về đề cho học viên ghi danh trong lớp hoặc course của đề. */
     private void emitTestNotificationToStudents(Test test, String title, String body, String eventSuffix) {
         if (notificationService == null || test == null) {
@@ -377,7 +197,7 @@ public class TestService {
                     body,
                     "TEST",
                     test.getId(),
-                    "/tests/" + test.getId(),
+                    "/course-quizzes/" + test.getId(),
                     test.getCreatedBy(),
                     "test:" + test.getId() + ":" + eventSuffix,
                     notificationPayload(
@@ -398,22 +218,6 @@ public class TestService {
             }
         }
         return payload;
-    }
-
-    /** Xóa attempt và câu trả lời phụ thuộc khi đề cần được reset hoặc xóa. */
-    private void resetAttempts(UUID testId) {
-        List<TestAttempt> attempts =
-                testAttemptRepository.findByTestId(testId);
-        if (attempts.isEmpty()) {
-            return;
-        }
-
-        List<UUID> attemptIds = attempts.stream()
-                .map(TestAttempt::getId)
-                .toList();
-        studentTestAnswerRepository.deleteByAttemptIds(attemptIds);
-        testAttemptRepository.deleteAll(attempts);
-        testAttemptRepository.flush();
     }
 
     /** Chuyển entity đề sang DTO quản trị với mã truy cập được phép hiển thị. */
@@ -501,19 +305,22 @@ public class TestService {
         requireTestAccess(test, actor, null);
     }
 
-    /** Cho phép course quiz dùng enrollment của đúng lớp đang học làm context truy cập. */
+    /** Tách quyền quiz course trực tiếp khỏi quiz trong đúng lớp đang học. */
     private void requireTestAccess(Test test, UserAccount actor, UUID contextClassId) {
         if (Boolean.TRUE.equals(test.getIsFlashtest())) {
             throw new EntityNotFoundException("Test not found");
         }
         if (isTrainee(actor)) {
-            if (testRepository.existsAvailableForStudent(test.getId(), actor.getId())
-                    || testRepository.existsAvailableCourseTestForStudent(test.getId(), actor.getId())
-                    || (contextClassId != null
+            boolean hasAccess = contextClassId == null
+                    ? test.getClassId() == null
+                    && testRepository.existsAvailableCourseTestForStudent(
+                    test.getId(), actor.getId())
+                    : contextClassId.equals(test.getClassId())
+                    ? testRepository.existsAvailableForStudent(test.getId(), actor.getId())
+                    : test.getClassId() == null
                     && testRepository.existsAvailableCourseTestForStudentClass(
-                    test.getId(),
-                    actor.getId(),
-                    contextClassId))) {
+                    test.getId(), actor.getId(), contextClassId);
+            if (hasAccess) {
                 return;
             }
         } else if (isPrivilegedStaff(actor)

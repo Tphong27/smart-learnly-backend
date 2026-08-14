@@ -161,6 +161,7 @@ public class GlobalExceptionHandler {
         );
     }
 
+    /** Chuyển vi phạm constraint đã biết thành lỗi nghiệp vụ rõ ràng cho API. */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolationException(
             DataIntegrityViolationException exception,
@@ -174,6 +175,11 @@ public class GlobalExceptionHandler {
         if ("uq_questions_bank_lower_text".equalsIgnoreCase(constraintName)) {
             message = "A question with the same text already exists in this bank.";
             return buildResponse(ErrorCode.BUSINESS_RULE_VIOLATION, message, List.of(), request);
+        }
+        if ("courses_slug_key".equalsIgnoreCase(constraintName)
+                || "uq_courses_slug_lower_active".equalsIgnoreCase(constraintName)) {
+            message = "Course slug already exists";
+            return buildResponse(ErrorCode.CONFLICT, message, List.of(), request);
         }
         log.warn("DataIntegrityViolationException at {}: {}", request.getRequestURI(), rootMessage);
         return buildResponse(ErrorCode.BUSINESS_RULE_VIOLATION, message, List.of(), request);

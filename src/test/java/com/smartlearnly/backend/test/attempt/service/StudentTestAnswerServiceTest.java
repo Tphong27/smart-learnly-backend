@@ -21,7 +21,6 @@ import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
 import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestQuestionRepository;
 import jakarta.persistence.EntityNotFoundException;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -187,41 +186,6 @@ class StudentTestAnswerServiceTest {
     }
 
     @Test
-    void gradeStudentAnswer_updatesGradingFields() {
-        UUID answerId = UUID.randomUUID();
-        StudentTestAnswer entity = new StudentTestAnswer();
-        entity.setId(answerId);
-        entity.setAttemptId(attemptId);
-        entity.setQuestionId(questionId);
-        TestAttempt attempt = attempt(attemptId);
-        when(repository.findById(answerId)).thenReturn(Optional.of(entity));
-        when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
-        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        StudentTestAnswerModel.GradeRequest request = new StudentTestAnswerModel.GradeRequest();
-        request.setIsCorrect(true);
-        request.setScoreAwarded(BigDecimal.valueOf(10.0));
-        request.setIssueReported("none");
-
-        StudentTestAnswerModel.Response response = service.gradeStudentAnswer(answerId, request);
-
-        assertThat(response.getIsCorrect()).isTrue();
-        assertThat(response.getScoreAwarded()).isEqualTo(BigDecimal.valueOf(10.0));
-        assertThat(response.getIssueReported()).isEqualTo("none");
-    }
-
-    @Test
-    void gradeStudentAnswer_throwsWhenAnswerNotFound() {
-        UUID answerId = UUID.randomUUID();
-        when(repository.findById(answerId)).thenReturn(Optional.empty());
-
-        StudentTestAnswerModel.GradeRequest request = new StudentTestAnswerModel.GradeRequest();
-
-        assertThatThrownBy(() -> service.gradeStudentAnswer(answerId, request))
-                .isInstanceOf(EntityNotFoundException.class);
-    }
-
-    @Test
     void getAnswersByAttempt_returnsAllAnswers() {
         TestAttempt attempt = attempt(attemptId);
         StudentTestAnswer answer1 = new StudentTestAnswer();
@@ -277,7 +241,8 @@ class StudentTestAnswerServiceTest {
         BusinessException forbidden = new BusinessException(ErrorCode.FORBIDDEN, "Forbidden");
         doThrow(forbidden)
                 .when(testService)
-                .requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
+                .requireAttemptAccess(
+                        attempt.getTestId(), attempt.getStudentId(), attempt.getClassId());
 
         StudentTestAnswerModel.SaveRequest request = new StudentTestAnswerModel.SaveRequest();
         request.setAttemptId(attemptId);

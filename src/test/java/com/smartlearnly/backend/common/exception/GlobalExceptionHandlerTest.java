@@ -1,16 +1,22 @@
 package com.smartlearnly.backend.common.exception;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.smartlearnly.backend.common.api.ErrorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -24,14 +30,16 @@ import org.springframework.web.bind.annotation.ResponseBody;
 
 class GlobalExceptionHandlerTest {
     private MockMvc mockMvc;
+    private GlobalExceptionHandler exceptionHandler;
 
     @BeforeEach
     void setUp() {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
+        exceptionHandler = new GlobalExceptionHandler();
 
         mockMvc = MockMvcBuilders.standaloneSetup(new TestController())
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(exceptionHandler)
                 .setValidator(validator)
                 .build();
     }
@@ -77,6 +85,26 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.path").value("/api/test/users/not-a-uuid"))
                 .andExpect(jsonPath("$.errors[0].field").value("id"))
                 .andExpect(jsonPath("$.errors[0].message").value("Invalid value for request parameter"));
+    }
+
+    @Test
+    void shouldReturnConflictForCourseSlugUniqueConstraints() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/admin/courses");
+
+        for (String constraintName : List.of("courses_slug_key", "uq_courses_slug_lower_active")) {
+            DataIntegrityViolationException exception = new DataIntegrityViolationException(
+                    "Could not insert course",
+                    new RuntimeException(
+                            "ERROR: duplicate key value violates unique constraint \"" + constraintName + "\""));
+
+            ResponseEntity<ErrorResponse> response =
+                    exceptionHandler.handleDataIntegrityViolationException(exception, request);
+
+            assertThat(response.getStatusCode().value()).isEqualTo(409);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().code()).isEqualTo("CONFLICT");
+            assertThat(response.getBody().message()).isEqualTo("Course slug already exists");
+        }
     }
 
     @Controller

@@ -12,6 +12,8 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.file.service.FileStorageService;
 import com.smartlearnly.backend.flashcard.dto.FlashcardImageUploadResponse;
@@ -40,6 +42,8 @@ class FlashcardImageUploadServiceTest {
     @Mock
     private FlashcardSetRepository flashcardSetRepository;
     @Mock
+    private CurriculumLessonRepository curriculumLessonRepository;
+    @Mock
     private CurrentUserService currentUserService;
     @Mock
     private FileStorageService fileStorageService;
@@ -54,10 +58,38 @@ class FlashcardImageUploadServiceTest {
         storageProperties.setQuestionImageMaxSize(DataSize.ofMegabytes(5));
         uploadService = new FlashcardImageUploadService(
                 flashcardSetRepository,
+                curriculumLessonRepository,
                 currentUserService,
                 fileStorageService,
                 storageProperties
         );
+    }
+
+    @Test
+    void uploadShouldAllowCurriculumFlashcardLesson() {
+        UserAccount creator = user("SME");
+        FlashcardSet set = curriculumFlashcardSet(creator);
+        CurriculumLesson lesson = new CurriculumLesson();
+        lesson.setId(set.getCurriculumLessonId());
+        lesson.setType(LessonType.FLASHCARD);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(set.getId())).thenReturn(Optional.of(set));
+        when(curriculumLessonRepository.findById(set.getCurriculumLessonId())).thenReturn(Optional.of(lesson));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(creator);
+        when(fileStorageService.store(eq("lesson-resources"), any(), eq("image/png"), eq(PNG)))
+                .thenAnswer(invocation -> new FileStorageService.StoredFile(
+                        "https://cdn.test/" + invocation.getArgument(1),
+                        invocation.getArgument(1),
+                        "image.png",
+                        "image/png",
+                        PNG.length
+                ));
+
+        FlashcardImageUploadResponse response = uploadService.upload(
+                set.getId(),
+                new MockMultipartFile("file", "image.png", "image/png", PNG)
+        );
+
+        assertThat(response.url()).startsWith("https://cdn.test/flashcard-sets/" + set.getId() + "/images/");
     }
 
     @Test
@@ -176,6 +208,20 @@ class FlashcardImageUploadServiceTest {
         set.setId(UUID.randomUUID());
         set.setCourse(course);
         set.setLesson(lesson);
+        return set;
+    }
+
+    private FlashcardSet curriculumFlashcardSet(UserAccount creator) {
+        Course course = new Course();
+        course.setId(UUID.randomUUID());
+        course.setTitle("Course");
+        course.setSlug("course");
+        course.setCreator(creator);
+
+        FlashcardSet set = new FlashcardSet();
+        set.setId(UUID.randomUUID());
+        set.setCurriculumLessonId(UUID.randomUUID());
+        set.setCourse(course);
         return set;
     }
 }
