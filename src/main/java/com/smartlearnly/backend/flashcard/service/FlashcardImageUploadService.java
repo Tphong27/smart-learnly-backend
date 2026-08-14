@@ -4,6 +4,8 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.file.service.FileStorageService;
 import com.smartlearnly.backend.flashcard.dto.FlashcardImageUploadResponse;
@@ -31,6 +33,7 @@ public class FlashcardImageUploadService {
     );
 
     private final FlashcardSetRepository flashcardSetRepository;
+    private final CurriculumLessonRepository curriculumLessonRepository;
     private final CurrentUserService currentUserService;
     private final FileStorageService fileStorageService;
     private final StorageProperties storageProperties;
@@ -74,15 +77,32 @@ public class FlashcardImageUploadService {
         return new FlashcardImageUploadResponse(stored.url());
     }
 
+    /** Xác nhận bộ thẻ còn gắn với lesson flashcard legacy hoặc curriculum hiện tại. */
     private Course requireFlashcardCourse(FlashcardSet flashcardSet) {
         Lesson lesson = flashcardSet.getLesson();
-        Course course = lesson == null ? flashcardSet.getCourse() : lesson.getCourse();
-        if (lesson == null || lesson.getType() != LessonType.FLASHCARD || course == null || course.getDeletedAt() != null) {
+        if (lesson != null) {
+            Course course = lesson.getCourse();
+            if (lesson.getType() != LessonType.FLASHCARD || course == null || course.getDeletedAt() != null) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
+            }
+            return course;
+        }
+
+        UUID curriculumLessonId = flashcardSet.getCurriculumLessonId();
+        CurriculumLesson curriculumLesson = curriculumLessonId == null
+                ? null
+                : curriculumLessonRepository.findById(curriculumLessonId).orElse(null);
+        Course course = flashcardSet.getCourse();
+        if (curriculumLesson == null
+                || curriculumLesson.getType() != LessonType.FLASHCARD
+                || course == null
+                || course.getDeletedAt() != null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
         }
         return course;
     }
 
+    /** Chỉ cho admin hoặc người tạo course thuộc SME/Trainer tải ảnh vào bộ thẻ. */
     private void requireEditAccess(UserAccount actor, Course course) {
         if (actor == null) {
             throw new BusinessException(ErrorCode.UNAUTHENTICATED);
@@ -99,6 +119,7 @@ public class FlashcardImageUploadService {
         throw new BusinessException(ErrorCode.FORBIDDEN, "You are not allowed to edit this flashcard set");
     }
 
+    /** Đọc tệp và từ chối dữ liệu rỗng hoặc vượt giới hạn ảnh cấu hình. */
     private byte[] readAndValidateSize(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard image file is required");
@@ -118,6 +139,7 @@ public class FlashcardImageUploadService {
         }
     }
 
+    /** Nhận diện MIME từ nội dung thật để ngăn tệp giả mạo phần mở rộng. */
     private String detectContentType(byte[] content) {
         try {
             return tika.detect(content);

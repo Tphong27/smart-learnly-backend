@@ -1,4 +1,3 @@
-
 package com.smartlearnly.backend.test.attempt.controller;
 
 import com.smartlearnly.backend.test.attempt.dto.StudentTestAnswerModel;
@@ -7,66 +6,35 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/student-test-answers")
+@RequestMapping("/api/v1/course-quiz-answers")
 @RequiredArgsConstructor
 public class StudentTestAnswerController {
 
     private final StudentTestAnswerService service;
 
-    /** Lưu đáp án đang làm của học viên cho một attempt. */
+    /** Lưu lựa chọn đáp án hiện tại của trainee trong course quiz. */
     @PostMapping("/save")
     @PreAuthorize("hasRole('TRAINEE')")
-    public ResponseEntity<StudentTestAnswerModel.Response>
-    saveStudentAnswer(
-            @Valid @RequestBody
-            StudentTestAnswerModel.SaveRequest request) {
-
-        StudentTestAnswerModel.Response response =
-                service.saveStudentAnswer(request);
-
-        return new ResponseEntity<>(
-                response,
-                HttpStatus.OK);
+    public ResponseEntity<StudentTestAnswerModel.Response> saveStudentAnswer(
+            @Valid @RequestBody StudentTestAnswerModel.SaveRequest request) {
+        return ResponseEntity.ok(service.saveStudentAnswer(request));
     }
 
-    /** Lưu kết quả chấm thủ công cho một đáp án. */
-    @PutMapping("/{id}/grade")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
-    public ResponseEntity<StudentTestAnswerModel.Response>
-    gradeStudentAnswer(
-            @PathVariable UUID id,
-            @Valid @RequestBody
-            StudentTestAnswerModel.GradeRequest request) {
-
-        return ResponseEntity.ok(
-                service.gradeStudentAnswer(
-                        id,
-                        request));
-    }
-
-    /** Lấy các đáp án thuộc một attempt. */
+    /** Trả các đáp án thuộc attempt course quiz sau khi xác thực quyền xem. */
     @GetMapping("/attempt/{attemptId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER', 'TRAINEE')")
-    public ResponseEntity<
-            List<StudentTestAnswerModel.Response>>
-    getAnswersByAttempt(
+    public ResponseEntity<List<StudentTestAnswerModel.Response>> getAnswersByAttempt(
             @PathVariable UUID attemptId) {
-
-        return ResponseEntity.ok(
-                service.getAnswersByAttempt(
-                        attemptId));
+        return ResponseEntity.ok(service.getAnswersByAttempt(attemptId));
     }
 }
-

@@ -20,16 +20,6 @@ public class StudentTestAnswerModel {
         private String essayAnswer;     // Dùng cho tự luận
     }
 
-    // Chấm điểm cho từng câu (Dùng khi AI hoặc Trainer chấm câu tự luận)
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    public static class GradeRequest {
-        private Boolean isCorrect;
-        private BigDecimal scoreAwarded;
-        private String issueReported;
-    }
-
     @Getter
     @Setter
     @NoArgsConstructor

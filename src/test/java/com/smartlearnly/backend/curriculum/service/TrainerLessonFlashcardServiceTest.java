@@ -20,6 +20,7 @@ import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcard
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardLessonRequest;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardCardResponse;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.FlashcardLessonCreatedResponse;
+import com.smartlearnly.backend.flashcard.dto.FlashcardImageUploadResponse;
 import com.smartlearnly.backend.flashcard.entity.FlashcardCard;
 import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardCardRepository;
@@ -28,6 +29,7 @@ import com.smartlearnly.backend.flashcard.service.FlashcardImageUploadService;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,6 +39,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class TrainerLessonFlashcardServiceTest {
@@ -173,6 +177,27 @@ class TrainerLessonFlashcardServiceTest {
     }
 
     @Test
+    void addCardShouldRejectSetFromAnotherClassLesson() {
+        UUID foreignSetId = UUID.randomUUID();
+        CurriculumLesson lesson = lesson();
+        FlashcardSet foreignSet = new FlashcardSet();
+        foreignSet.setId(foreignSetId);
+        foreignSet.setCurriculumLessonId(UUID.randomUUID());
+        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId)).thenReturn(lesson);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(foreignSetId)).thenReturn(Optional.of(foreignSet));
+
+        assertThatThrownBy(() -> service.addCard(
+                classId,
+                lessonId,
+                foreignSetId,
+                new CreateFlashcardCardRequest("Front", null, "Back", null, null, null, null)))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+
+        verify(flashcardCardRepository, never()).save(any());
+    }
+
+    @Test
     void deleteCardShouldSoftDelete() {
         UUID cardId = UUID.randomUUID();
         UUID setId = UUID.randomUUID();
@@ -216,7 +241,7 @@ class TrainerLessonFlashcardServiceTest {
         flashcardSet.setTitle("Set");
         flashcardSet.setCreatedAt(Instant.now());
         flashcardSet.setUpdatedAt(Instant.now());
-        when(trainerClassCurriculumService.requireOwnedClassLessonForRead(classId, lessonId)).thenReturn(lesson);
+        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId)).thenReturn(lesson);
         when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(lesson.getId()))
                 .thenReturn(Optional.of(flashcardSet));
         when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(flashcardSet.getId()))
@@ -227,6 +252,41 @@ class TrainerLessonFlashcardServiceTest {
         assertThat(response.id()).isEqualTo(flashcardSet.getId());
         assertThat(response.lessonId()).isEqualTo(lesson.getId());
         assertThat(response.cards()).isEmpty();
+    }
+
+    @Test
+    void uploadImageShouldUseWritableTransaction() throws NoSuchMethodException {
+        Method method = TrainerLessonFlashcardService.class.getMethod(
+                "uploadImage",
+                UUID.class,
+                UUID.class,
+                UUID.class,
+                MultipartFile.class);
+
+        Transactional transactional = method.getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.readOnly()).isFalse();
+    }
+
+    @Test
+    void uploadImageShouldVerifyWritableLessonAndDelegateStorage() {
+        UUID setId = UUID.randomUUID();
+        CurriculumLesson lesson = lesson();
+        FlashcardSet flashcardSet = new FlashcardSet();
+        flashcardSet.setId(setId);
+        flashcardSet.setCurriculumLessonId(lesson.getId());
+        MultipartFile file = org.mockito.Mockito.mock(MultipartFile.class);
+        FlashcardImageUploadResponse expected = new FlashcardImageUploadResponse("https://cdn.example/image.jpg");
+        when(trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId)).thenReturn(lesson);
+        when(flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)).thenReturn(Optional.of(flashcardSet));
+        when(flashcardImageUploadService.uploadOwnedSet(flashcardSet, file)).thenReturn(expected);
+
+        FlashcardImageUploadResponse response = service.uploadImage(classId, lessonId, setId, file);
+
+        assertThat(response).isSameAs(expected);
+        verify(trainerClassCurriculumService).requireOwnedClassLessonForWrite(classId, lessonId);
+        verify(flashcardImageUploadService).uploadOwnedSet(flashcardSet, file);
     }
 
     private CurriculumLesson lesson() {

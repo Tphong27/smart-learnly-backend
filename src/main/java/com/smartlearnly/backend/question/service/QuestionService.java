@@ -594,17 +594,66 @@ public class QuestionService {
         }
     }
 
+    /** Đồng bộ đáp án tại chỗ để giữ ID đã được lịch sử làm quiz tham chiếu. */
     private void replaceAnswers(UUID questionId, List<QuestionModel.AnswerRequest> answers) {
-        answerRepository.deleteByQuestionId(questionId);
+        List<QuestionAnswer> existingAnswers =
+                answerRepository.findByQuestionIdOrderByOrderIndexAsc(questionId);
+        Map<UUID, QuestionAnswer> existingById = existingAnswers.stream()
+                .collect(Collectors.toMap(QuestionAnswer::getId, answer -> answer));
+        Set<UUID> retainedAnswerIds = new java.util.HashSet<>();
+        List<QuestionAnswer> synchronizedAnswers = new ArrayList<>();
+
         for (int index = 0; index < answers.size(); index += 1) {
             QuestionModel.AnswerRequest request = answers.get(index);
-            QuestionAnswer answer = new QuestionAnswer();
+            UUID requestedId = request.answerId() != null ? request.answerId() : request.id();
+            QuestionAnswer answer = requestedId == null
+                    ? findLegacyAnswerByPosition(existingAnswers, retainedAnswerIds, index)
+                    : existingById.get(requestedId);
+            if (requestedId != null && answer == null) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Answer does not belong to this question");
+            }
+            if (answer == null) {
+                answer = new QuestionAnswer();
+            } else if (!retainedAnswerIds.add(answer.getId())) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Answer is duplicated");
+            }
             answer.setQuestionId(questionId);
             answer.setAnswerText(normalizeRequired(request.answerText(), "Answer text is required"));
             answer.setIsCorrect(request.correctValue());
             answer.setOrderIndex(request.resolvedOrder() == null ? index + 1 : request.resolvedOrder());
+            synchronizedAnswers.add(answer);
+        }
+
+        List<QuestionAnswer> removedAnswers = existingAnswers.stream()
+                .filter(answer -> !retainedAnswerIds.contains(answer.getId()))
+                .toList();
+        if (removedAnswers.stream()
+                .anyMatch(answer -> answerRepository.existsStudentSelectionById(answer.getId()))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "An answer used in quiz attempts cannot be removed");
+        }
+
+        for (QuestionAnswer answer : synchronizedAnswers) {
             answerRepository.save(answer);
         }
+        if (!removedAnswers.isEmpty()) {
+            answerRepository.deleteAll(removedAnswers);
+        }
+    }
+
+    /** Ghép client cũ không gửi answerId với đáp án cùng vị trí để tránh thay ID. */
+    private QuestionAnswer findLegacyAnswerByPosition(
+            List<QuestionAnswer> existingAnswers,
+            Set<UUID> retainedAnswerIds,
+            int index) {
+        if (index >= existingAnswers.size()) {
+            return null;
+        }
+        QuestionAnswer candidate = existingAnswers.get(index);
+        return retainedAnswerIds.contains(candidate.getId()) ? null : candidate;
     }
 
     private void validateAnswers(QuestionType questionType, List<QuestionModel.AnswerRequest> answers) {

@@ -10,7 +10,7 @@ import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionReposi
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
-import com.smartlearnly.backend.test.monitor.dto.MonitorEvent;
+import com.smartlearnly.backend.assignment.monitor.dto.MonitorEvent;
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.entity.NotificationType;
 import com.smartlearnly.backend.notification.service.NotificationService;
