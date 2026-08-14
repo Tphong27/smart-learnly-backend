@@ -146,6 +146,8 @@ public final class AdminFlashcardStagingDtos {
             Short difficulty,
             String status,
             boolean imported,
+            String eligibilityStatus,
+            String eligibilityReason,
             String explanation,
             List<SourceQuestionAnswerResponse> answers,
             List<String> correctAnswers
