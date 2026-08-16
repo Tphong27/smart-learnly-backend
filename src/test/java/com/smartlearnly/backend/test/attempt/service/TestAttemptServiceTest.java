@@ -449,6 +449,27 @@ class TestAttemptServiceTest {
     }
 
     @Test
+    void getAttemptByIdShouldKeepSubmittedScoreWithoutRegradingLiveAnswers() {
+        UUID attemptId = UUID.randomUUID();
+        UUID testId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        TestAttempt attempt = attempt(attemptId, testId, studentId, AttemptStatus.SUBMITTED);
+        attempt.setScore(new BigDecimal("7.5"));
+        TestQuestion question = question(testId, UUID.randomUUID(), "10.0");
+
+        when(testAttemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
+        when(testQuestionRepository.findByIdTestId(testId)).thenReturn(List.of(question));
+
+        TestAttemptModel.Response response = service.getAttemptById(attemptId);
+
+        assertThat(response.getScore()).isEqualByComparingTo("7.5");
+        assertThat(response.getPercentage()).isEqualByComparingTo("75.00");
+        verify(studentTestAnswerRepository, never()).findByAttemptId(any());
+        verify(questionAnswerRepository, never()).findById(any());
+        verify(testAttemptRepository, never()).save(any(TestAttempt.class));
+    }
+
+    @Test
     void submitAttemptShouldNotNotifyOwnerWhenCreatorIsTheStudent() {
         UUID attemptId = UUID.randomUUID();
         UUID testId = UUID.randomUUID();

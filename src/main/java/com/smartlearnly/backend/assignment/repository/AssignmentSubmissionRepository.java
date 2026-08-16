@@ -19,6 +19,14 @@ public interface AssignmentSubmissionRepository
             UUID assignmentId,
             UUID studentId);
 
+    @Query("""
+            select count(submission) > 0
+            from AssignmentSubmission submission
+            where submission.assignmentId = :assignmentId
+              and submission.status = com.smartlearnly.backend.assignment.entity.SubmissionStatus.DOING
+            """)
+    boolean existsActiveByAssignmentId(@Param("assignmentId") UUID assignmentId);
+
     /** Đếm submission đã hoàn thành trong một nhóm assignment mà không phát sinh N+1 query. */
     @Query("""
             select count(submission)

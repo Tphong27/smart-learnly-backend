@@ -252,6 +252,7 @@ public class AssignmentService {
         Assignment assignment = assignmentRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
         requireSupportedAssignment(assignment);
+        requireNoActiveSubmissions(id);
 
         UUID targetClassId = request.getClassId() != null
                 ? request.getClassId()
@@ -306,6 +307,7 @@ public class AssignmentService {
         Assignment assignment = assignmentRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
         requireSupportedAssignment(assignment);
+        requireNoActiveSubmissions(id);
         emitAssignmentNotificationToStudents(
                 assignment,
                 "Assignment removed",
@@ -317,6 +319,14 @@ public class AssignmentService {
         assignmentSubmissionRepository.deleteByAssignmentId(id);
         assignmentSubmissionRepository.flush();
         assignmentRepository.deleteById(id);
+    }
+
+    private void requireNoActiveSubmissions(UUID assignmentId) {
+        if (assignmentSubmissionRepository.existsActiveByAssignmentId(assignmentId)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Cannot update this assignment while a trainee is working on it");
+        }
     }
 
     private void emitAssignmentNotificationToStudents(

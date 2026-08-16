@@ -17,6 +17,8 @@ public interface TestAttemptRepository
 
     List<TestAttempt> findByTestId(UUID testId);
 
+    boolean existsByTestId(UUID testId);
+
     List<TestAttempt> findByTestIdOrderByStartTimeAsc(UUID testId);
 
     List<TestAttempt> findByTestIdAndStudentIdOrderByStartTimeDesc(

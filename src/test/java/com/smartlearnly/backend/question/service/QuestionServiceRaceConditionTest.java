@@ -21,6 +21,7 @@ import com.smartlearnly.backend.question.repository.QuestionAnswerMediaAttachmen
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
+import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +59,8 @@ class QuestionServiceRaceConditionTest {
     private QuestionMediaImportService questionMediaImportService;
     @Mock
     private CourseAccessService courseAccessService;
+    @Mock
+    private StudentTestAnswerRepository studentTestAnswerRepository;
 
     private QuestionService questionService;
     private UUID courseId;
@@ -74,7 +77,8 @@ class QuestionServiceRaceConditionTest {
                 courseModuleRepository,
                 currentUserService,
                 questionMediaImportService,
-                courseAccessService
+                courseAccessService,
+                studentTestAnswerRepository
         );
         courseId = UUID.randomUUID();
         moduleId = UUID.randomUUID();

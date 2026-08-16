@@ -23,6 +23,7 @@ import com.smartlearnly.backend.question.repository.QuestionAnswerMediaAttachmen
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
+import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,6 +59,7 @@ public class QuestionService {
     private final CurrentUserService currentUserService;
     private final QuestionMediaImportService questionMediaImportService;
     private final CourseAccessService courseAccessService;
+    private final StudentTestAnswerRepository studentTestAnswerRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<QuestionModel.Response> listByCourse(UUID courseId, UUID moduleId, String search, String type, String status, boolean includeArchived, Short difficulty, int page, int size) {
@@ -165,6 +167,7 @@ public class QuestionService {
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question");
         }
+        requireQuestionNotUsedInAttempt(questionId);
         QuestionType questionType = parseSupportedQuestionType(request.questionType());
         validateAnswers(questionType, request.answers());
         String questionText = normalizeRequired(request.questionText(), "Question text is required");
@@ -193,6 +196,7 @@ public class QuestionService {
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
         }
+        requireQuestionNotUsedInAttempt(questionId);
         question.setStatus(QuestionStatus.ARCHIVED);
         questionRepository.save(question);
     }
@@ -213,6 +217,7 @@ public class QuestionService {
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Question is already archived");
         }
+        requireQuestionNotUsedInAttempt(questionId);
         question.setStatus(QuestionStatus.ARCHIVED);
         questionRepository.save(question);
     }
@@ -654,6 +659,14 @@ public class QuestionService {
         }
         QuestionAnswer candidate = existingAnswers.get(index);
         return retainedAnswerIds.contains(candidate.getId()) ? null : candidate;
+    }
+
+    private void requireQuestionNotUsedInAttempt(UUID questionId) {
+        if (studentTestAnswerRepository.existsByQuestionId(questionId)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Cannot update or delete a question that already has trainee answers");
+        }
     }
 
     private void validateAnswers(QuestionType questionType, List<QuestionModel.AnswerRequest> answers) {

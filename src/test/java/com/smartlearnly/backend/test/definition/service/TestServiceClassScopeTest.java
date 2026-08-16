@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
@@ -116,6 +118,27 @@ class TestServiceClassScopeTest {
         assertThatThrownBy(() -> service.getTestById(testId))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessage("Test not found");
+    }
+
+    @Test
+    void updateTestIsBlockedWhileATraineeIsTakingIt() {
+        UUID testId = UUID.randomUUID();
+        UserAccount admin = user(UUID.randomUUID(), "ADMIN");
+        com.smartlearnly.backend.test.entity.Test test = publishedTest(
+                UUID.randomUUID(), UUID.randomUUID());
+        test.setId(testId);
+        TestModel.UpdateRequest request = new TestModel.UpdateRequest();
+        request.setTitle("Updated title");
+
+        when(testRepository.findById(testId)).thenReturn(Optional.of(test));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(testAttemptRepository.existsActiveByTestId(testId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateTest(testId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
+                .hasMessageContaining("Cannot update this test while a trainee is taking it");
+        verify(testRepository, never()).save(test);
     }
 
     private UserAccount user(UUID id, String role) {
