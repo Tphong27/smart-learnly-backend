@@ -40,7 +40,6 @@ public class TestAttemptModel {
         private UUID id;
         private UUID testId;
         private UUID studentId;
-        private UUID classId;
         private String studentName;
         private Instant startTime;
         private Instant endTime;
