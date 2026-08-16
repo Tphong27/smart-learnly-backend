@@ -37,8 +37,11 @@ public class TestQuestionService {
     private final QuestionRepository questionRepository;
     private final QuestionAnswerRepository answerRepository;
     private final ObjectMapper objectMapper;
+    private final TestService testService;
 
     public TestQuestionModel.Response addQuestionToTest(TestQuestionModel.AddRequest request) {
+        testService.requireNoActiveAttempts(request.getTestId());
+        testService.requireNoAttempts(request.getTestId());
         TestQuestion entity = new TestQuestion();
         entity.setId(new TestQuestionId(request.getTestId(), request.getQuestionId()));
         entity.setOrderIndex(request.getOrderIndex());
@@ -64,6 +67,8 @@ public class TestQuestionService {
             UUID testId,
             UUID questionId,
             TestQuestionModel.UpdateRequest request) {
+        testService.requireNoActiveAttempts(testId);
+        testService.requireNoAttempts(testId);
         TestQuestionId id = new TestQuestionId(testId, questionId);
         TestQuestion entity = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Test question not found"));
@@ -73,6 +78,8 @@ public class TestQuestionService {
     }
 
     public void removeQuestionFromTest(UUID testId, UUID questionId) {
+        testService.requireNoActiveAttempts(testId);
+        testService.requireNoAttempts(testId);
         TestQuestionId id = new TestQuestionId(testId, questionId);
         if (!repository.existsById(id)) {
             throw new EntityNotFoundException("Test question not found");

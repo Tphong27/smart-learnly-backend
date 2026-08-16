@@ -16,6 +16,7 @@ import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionReposi
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.common.exception.BusinessException;
+import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumVersion;
@@ -392,6 +393,23 @@ class AssignmentServiceTest {
 
         assertThat(assignment.getClassId()).isEqualTo(classId);
         assertThat(response.getClassId()).isEqualTo(classId);
+    }
+
+    @Test
+    void updateAssignmentShouldBeBlockedWhileTraineeIsWorkingOnIt() {
+        UUID assignmentId = UUID.randomUUID();
+        Assignment assignment = assignment(UUID.randomUUID(), UUID.randomUUID(), "Daily assignment");
+        AssignmentModel.UpdateRequest request = new AssignmentModel.UpdateRequest();
+        request.setTitle("Updated assignment");
+
+        when(assignmentRepository.findById(assignmentId)).thenReturn(Optional.of(assignment));
+        when(assignmentSubmissionRepository.existsActiveByAssignmentId(assignmentId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateAssignment(assignmentId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
+                .hasMessageContaining("Cannot update this assignment while a trainee is working on it");
+        verify(assignmentRepository, never()).save(any(Assignment.class));
     }
 
     @Test

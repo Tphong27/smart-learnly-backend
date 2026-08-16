@@ -224,6 +224,24 @@ public class TestService {
         requireManageAccess(test, currentUserService.requireAuthenticatedUser());
     }
 
+    /** Chặn chỉnh sửa đề khi học viên đang làm bài để giữ nguyên nội dung attempt. */
+    public void requireNoActiveAttempts(UUID testId) {
+        if (testAttemptRepository.existsActiveByTestId(testId)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Cannot update this test while a trainee is taking it");
+        }
+    }
+
+    /** Chặn thay đổi cấu trúc câu hỏi khi đề đã có lịch sử làm bài. */
+    public void requireNoAttempts(UUID testId) {
+        if (testAttemptRepository.existsByTestId(testId)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Cannot change test questions after trainees have started this test");
+        }
+    }
+
     /** Trả chi tiết đề nếu caller có quyền; chỉ quản lý mới nhận mã truy cập. */
     public TestModel.Response getTestById(UUID id) {
         return getTestById(id, null);
@@ -285,6 +303,7 @@ public class TestService {
                                 "Test not found"));
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         requireManageAccess(test, actor);
+        requireNoActiveAttempts(id);
 
         Instant nextOpensAt = request.getOpensAt() != null
                 ? request.getOpensAt()

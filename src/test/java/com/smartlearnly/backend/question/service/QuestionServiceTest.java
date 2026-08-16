@@ -30,6 +30,7 @@ import com.smartlearnly.backend.question.repository.QuestionAnswerMediaAttachmen
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionMediaAttachmentRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
+import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.Arrays;
 import java.util.List;
@@ -63,6 +64,8 @@ class QuestionServiceTest {
     private QuestionMediaImportService questionMediaImportService;
     @Mock
     private CourseAccessService courseAccessService;
+    @Mock
+    private StudentTestAnswerRepository studentTestAnswerRepository;
 
     private QuestionService service;
     private UUID courseId;
@@ -81,7 +84,8 @@ class QuestionServiceTest {
                 courseModuleRepository,
                 currentUserService,
                 questionMediaImportService,
-                courseAccessService
+                courseAccessService,
+                studentTestAnswerRepository
         );
 
         courseId = UUID.randomUUID();
@@ -754,6 +758,21 @@ class QuestionServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
                 .hasMessageContaining("Cannot update an archived question");
+
+        verify(questionRepository, never()).save(any());
+        verify(answerRepository, never()).deleteByQuestionId(any());
+    }
+
+    @Test
+    void updateInCourse_throwsBusinessRuleViolation_whenQuestionAlreadyHasTraineeAnswers() {
+        Question existing = question(questionId, courseId, QuestionStatus.DRAFT);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(existing));
+        when(studentTestAnswerRepository.existsByQuestionId(questionId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateInCourse(courseId, questionId, updateRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
+                .hasMessageContaining("Cannot update or delete a question that already has trainee answers");
 
         verify(questionRepository, never()).save(any());
         verify(answerRepository, never()).deleteByQuestionId(any());

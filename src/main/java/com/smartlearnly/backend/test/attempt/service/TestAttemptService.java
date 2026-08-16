@@ -151,7 +151,6 @@ public class TestAttemptService {
         return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId)
                 .stream()
                 .map(this::expireIfOverdue)
-                .map(this::refreshFinalGrade)
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -163,7 +162,6 @@ public class TestAttemptService {
         return repository.findByTestIdOrderByStartTimeAsc(testId)
                 .stream()
                 .map(this::expireIfOverdue)
-                .map(this::refreshFinalGrade)
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -179,7 +177,7 @@ public class TestAttemptService {
         TestAttempt attempt = repository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
         testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId(), classId);
-        return mapToResponse(refreshFinalGrade(expireIfOverdue(attempt)));
+        return mapToResponse(expireIfOverdue(attempt));
     }
 
     /** Cho phép học viên làm lại attempt gần nhất và thông báo realtime đến màn hình monitor. */
@@ -239,21 +237,6 @@ public class TestAttemptService {
                 : score.multiply(BigDecimal.valueOf(100))
                         .divide(total, 2, RoundingMode.HALF_UP);
         return new GradeResult(score, percentage);
-    }
-
-    /** Tính lại điểm cuối cho attempt đã nộp để phản ánh thay đổi chấm điểm thủ công. */
-    private TestAttempt refreshFinalGrade(TestAttempt attempt) {
-        if (attempt.getStatus() != AttemptStatus.SUBMITTED
-                && attempt.getStatus() != AttemptStatus.GRADED
-                && attempt.getStatus() != AttemptStatus.EXPIRED) {
-            return attempt;
-        }
-        GradeResult grade = gradeAttempt(attempt);
-        if (attempt.getScore() == null || attempt.getScore().compareTo(grade.score()) != 0) {
-            attempt.setScore(grade.score());
-            return repository.save(attempt);
-        }
-        return attempt;
     }
 
     /** Đánh dấu hết hạn và chấm attempt nếu người học vượt quá thời gian làm bài. */
