@@ -4,6 +4,7 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 run-dev.ps1
+.env
 .venv-video-ai/
 .venv-video-ai.broken-*/
 .video-ai-models/

@@ -1,0 +1,29 @@
+# Local development PostgreSQL for the Smart Learnly backend.
+#
+# The backend dev script (run-dev.ps1) connects to localhost:55432 and expects
+# the database/user/password below. The image is pgvector because the schema
+# (and migration V1) require the `vector` extension, which the stock postgres
+# image does not ship.
+#
+# Usage: docker compose up -d
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    container_name: smartlearnly-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartlearnly_schema_retest}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - smartlearnly_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-smartlearnly_schema_retest}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  smartlearnly_pgdata:

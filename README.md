@@ -22,6 +22,23 @@ override the database URL or port locally, keep PgJDBC server-side prepared
 statements disabled for the transaction pooler by retaining
 `prepareThreshold=0` in the JDBC URL.
 
+### Local PostgreSQL via Docker
+
+Instead of the shared Supabase database, run a local PostgreSQL from the
+repository root:
+
+```text
+docker compose up -d
+```
+
+The stack uses `pgvector/pgvector:pg15` because the schema and migration `V1`
+require the `vector` extension. It exposes PostgreSQL on `localhost:55432` with
+the database, user, and password taken from `.env` (copy `.env.example` to
+`.env` first). `run-dev.ps1` already targets this instance. Stop it with
+`docker compose down`. On a brand-new database, either restore a schema dump or
+enable Flyway (remove `SPRING_FLYWAY_ENABLED=false` from `run-dev.ps1`) so the
+migrations build the schema.
+
 Optional Resend SMTP configuration:
 
 ```text
