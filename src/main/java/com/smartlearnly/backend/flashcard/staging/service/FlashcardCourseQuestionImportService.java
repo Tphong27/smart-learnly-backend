@@ -68,6 +68,9 @@ public class FlashcardCourseQuestionImportService {
     private static final String SOURCE_TYPE_COURSE_QUESTIONS = "COURSE_QUESTIONS";
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_APPROVED = "approved";
+    private static final String ELIGIBILITY_AVAILABLE = "AVAILABLE";
+    private static final String ELIGIBILITY_ALREADY_IMPORTED = "ALREADY_IMPORTED";
+    private static final String ELIGIBILITY_MATCHES_CURRENT_FLASHCARDS = "MATCHES_CURRENT_FLASHCARDS";
     private static final Set<String> IMPORTED_SOURCE_STATUSES = Set.of(STATUS_DRAFT, STATUS_APPROVED);
     private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[a-zA-Z][^>]*>");
 
@@ -108,17 +111,26 @@ public class FlashcardCourseQuestionImportService {
         ).stream()
                 .filter(question -> context.course().getId().equals(question.getCourseId()))
                 .toList();
+        if (questions.isEmpty()) {
+            return List.of();
+        }
         Map<UUID, List<QuestionAnswer>> answersByQuestionId = answersByQuestionId(questions);
         Set<UUID> importedQuestionIds = importedSourceQuestionIds(
                 setId,
                 questions.stream().map(Question::getId).toList()
         );
+        CurrentFlashcardDuplicates currentDuplicates = currentFlashcardDuplicates(context);
         return questions.stream()
                 .map(question -> toSourceQuestionResponse(
                         question,
                         "Course questions",
                         answersByQuestionId.getOrDefault(question.getId(), List.of()),
-                        importedQuestionIds.contains(question.getId())
+                        sourceQuestionEligibility(
+                                question,
+                                answersByQuestionId.getOrDefault(question.getId(), List.of()),
+                                importedQuestionIds.contains(question.getId()),
+                                currentDuplicates
+                        )
                 ))
                 .toList();
     }
@@ -200,16 +212,10 @@ public class FlashcardCourseQuestionImportService {
         }
         Map<UUID, List<QuestionAnswer>> answersByQuestionId = answersByQuestionId(questions);
         List<TemporaryCandidateSeed> candidates = questions.stream()
-                .map(question -> {
-                    List<QuestionAnswer> answers = answersByQuestionId.getOrDefault(question.getId(), List.of());
-                    return new TemporaryCandidateSeed(
-                            question.getId(),
-                            buildFrontText(question, answers),
-                            buildBackText(answers),
-                            normalizeQuestionContent(question.getExplanation()),
-                            normalizeQuestionContent(question.getQuestionText())
-                    );
-                })
+                .map(question -> toTemporaryCandidateSeed(
+                        question,
+                        answersByQuestionId.getOrDefault(question.getId(), List.of())
+                ))
                 .toList();
         return toTemporaryBatchResponse(
                 context,
@@ -319,9 +325,7 @@ public class FlashcardCourseQuestionImportService {
     ) {
         List<FlashcardCard> currentCards = flashcardCardRepository
                 .findActiveBySetIdOrderByOrderIndex(context.flashcardSet().getId());
-        Set<String> currentKeys = (currentCards == null ? List.<FlashcardCard>of() : currentCards).stream()
-                .map(card -> duplicateKey(card.getFrontText(), card.getBackText()))
-                .collect(Collectors.toSet());
+        Set<String> currentKeys = duplicateKeysForCurrentCards(currentCards);
         Map<String, Long> candidateCounts = candidates.stream()
                 .map(candidate -> duplicateKey(candidate.frontText(), candidate.backText()))
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
@@ -368,6 +372,51 @@ public class FlashcardCourseQuestionImportService {
                 cards.size(),
                 cards
         );
+    }
+
+    /** Táº¡o á»©ng viÃªn tá»« cÃ¢u há»i theo cÃ¹ng logic mÃ  bÆ°á»›c review Course Questions Ä‘ang dÃ¹ng. */
+    private TemporaryCandidateSeed toTemporaryCandidateSeed(Question question, List<QuestionAnswer> answers) {
+        return new TemporaryCandidateSeed(
+                question.getId(),
+                buildFrontText(question, answers),
+                buildBackText(answers),
+                normalizeQuestionContent(question.getExplanation()),
+                normalizeQuestionContent(question.getQuestionText())
+        );
+    }
+
+    /** Náº¡p vÃ  chuáº©n hÃ³a Current Flashcards má»™t láº§n Ä‘á»ƒ phÃ¢n loáº¡i nhiá»u source questions. */
+    private CurrentFlashcardDuplicates currentFlashcardDuplicates(SetContext context) {
+        List<FlashcardCard> currentCards = flashcardCardRepository
+                .findActiveBySetIdOrderByOrderIndex(context.flashcardSet().getId());
+        return new CurrentFlashcardDuplicates(duplicateKeysForCurrentCards(currentCards));
+    }
+
+    private Set<String> duplicateKeysForCurrentCards(List<FlashcardCard> cards) {
+        return (cards == null ? List.<FlashcardCard>of() : cards).stream()
+                .map(card -> duplicateKey(card.getFrontText(), card.getBackText()))
+                .collect(Collectors.toSet());
+    }
+
+    /** PhÃ¢n loáº¡i eligibility sá»›m, nhÆ°ng váº«n giá»¯ review lÃ  cá»•ng cháº·n cuá»‘i cÃ¹ng. */
+    private SourceQuestionEligibility sourceQuestionEligibility(
+            Question question,
+            List<QuestionAnswer> answers,
+            boolean imported,
+            CurrentFlashcardDuplicates currentDuplicates
+    ) {
+        if (imported) {
+            return new SourceQuestionEligibility(ELIGIBILITY_ALREADY_IMPORTED, "Already imported", true);
+        }
+        TemporaryCandidateSeed candidate = toTemporaryCandidateSeed(question, answers);
+        if (currentDuplicates.keys().contains(duplicateKey(candidate.frontText(), candidate.backText()))) {
+            return new SourceQuestionEligibility(
+                    ELIGIBILITY_MATCHES_CURRENT_FLASHCARDS,
+                    "Matches Current Flashcards",
+                    false
+            );
+        }
+        return new SourceQuestionEligibility(ELIGIBILITY_AVAILABLE, null, false);
     }
 
     /** Tạo khóa so sánh trùng lặp từ nội dung đã bỏ HTML và khoảng trắng thừa. */
@@ -471,7 +520,7 @@ public class FlashcardCourseQuestionImportService {
             Question question,
             String sourceName,
             List<QuestionAnswer> answers,
-            boolean imported
+            SourceQuestionEligibility eligibility
     ) {
         List<SourceQuestionAnswerResponse> answerResponses = answers.stream()
                 .sorted(Comparator.comparing(answer -> answer.getOrderIndex() == null ? 0 : answer.getOrderIndex()))
@@ -491,7 +540,9 @@ public class FlashcardCourseQuestionImportService {
                 toApiValue(question.getQuestionType()),
                 question.getDifficulty(),
                 toApiValue(question.getStatus()),
-                imported,
+                eligibility.imported(),
+                eligibility.status(),
+                eligibility.reason(),
                 question.getExplanation(),
                 answerResponses,
                 correctAnswers
@@ -692,6 +743,16 @@ public class FlashcardCourseQuestionImportService {
             String backText,
             String explanation,
             String sourceExcerpt
+    ) {
+    }
+
+    private record CurrentFlashcardDuplicates(Set<String> keys) {
+    }
+
+    private record SourceQuestionEligibility(
+            String status,
+            String reason,
+            boolean imported
     ) {
     }
 

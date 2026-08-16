@@ -20,6 +20,8 @@ public interface StudentTestAnswerRepository
             UUID attemptId,
             UUID questionId);
 
+    boolean existsByQuestionId(UUID questionId);
+
     @Modifying
     @Query("delete from StudentTestAnswer answer where answer.attemptId in :attemptIds")
     void deleteByAttemptIds(@Param("attemptIds") List<UUID> attemptIds);

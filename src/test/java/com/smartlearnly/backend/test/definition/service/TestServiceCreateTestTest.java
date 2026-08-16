@@ -15,8 +15,6 @@ import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.test.definition.dto.TestModel;
 import com.smartlearnly.backend.test.entity.TestType;
-import com.smartlearnly.backend.test.repository.StudentTestAnswerRepository;
-import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
@@ -37,10 +35,6 @@ class TestServiceCreateTestTest {
     @Mock
     private CurrentUserService currentUserService;
     @Mock
-    private TestAttemptRepository testAttemptRepository;
-    @Mock
-    private StudentTestAnswerRepository studentTestAnswerRepository;
-    @Mock
     private CurriculumSectionRepository curriculumSectionRepository;
     @Mock
     private ClassOfferingRepository classOfferingRepository;
@@ -54,8 +48,6 @@ class TestServiceCreateTestTest {
         service = new TestService(
                 testRepository,
                 currentUserService,
-                testAttemptRepository,
-                studentTestAnswerRepository,
                 curriculumSectionRepository,
                 classOfferingRepository,
                 courseAccessService);
@@ -207,32 +199,6 @@ class TestServiceCreateTestTest {
                 .hasMessage("Selected module was not found");
 
         verify(testRepository, never()).save(any(com.smartlearnly.backend.test.entity.Test.class));
-    }
-
-    @Test
-    void verifyAccessCodeShouldUseRequestedClassContext() {
-        UUID testId = UUID.randomUUID();
-        UUID studentId = UUID.randomUUID();
-        UUID classId = UUID.randomUUID();
-        com.smartlearnly.backend.test.entity.Test test =
-                new com.smartlearnly.backend.test.entity.Test();
-        test.setId(testId);
-        test.setAccessCode("123456");
-        test.setAccessCodeExpiresAt(Instant.now().plusSeconds(300));
-        TestModel.AccessCodeVerifyRequest request = new TestModel.AccessCodeVerifyRequest();
-        request.setAccessCode("123456");
-
-        when(testRepository.findById(testId)).thenReturn(java.util.Optional.of(test));
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(studentId, "TRAINEE"));
-        when(testRepository.existsAvailableCourseTestForStudentClass(testId, studentId, classId))
-                .thenReturn(true);
-
-        TestModel.AccessCodeVerifyResponse response =
-                service.verifyAccessCode(testId, request, classId);
-
-        assertThat(response.getValid()).isTrue();
-        verify(testRepository)
-                .existsAvailableCourseTestForStudentClass(testId, studentId, classId);
     }
 
     private TestModel.CreateRequest createRequest(UUID classId, UUID courseId) {

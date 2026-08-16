@@ -39,7 +39,8 @@ public class StudentTestAnswerService {
                 .orElseThrow(() ->
                         new EntityNotFoundException("Attempt not found"));
 
-        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
+        testService.requireAttemptAccess(
+                attempt.getTestId(), attempt.getStudentId(), null);
 
         if (attempt.getEndTime() != null && Instant.now().isAfter(attempt.getEndTime())) {
             throw new IllegalStateException("Attempt has expired");
@@ -82,42 +83,14 @@ public class StudentTestAnswerService {
         return mapToResponse(saved);
     }
 
-    /** Lưu kết quả chấm thủ công cho một câu trả lời của học viên. */
-    public StudentTestAnswerModel.Response gradeStudentAnswer(
-            UUID id,
-            StudentTestAnswerModel.GradeRequest request) {
-
-        StudentTestAnswer entity =
-                repository.findById(id)
-                        .orElseThrow(() ->
-                                new EntityNotFoundException(
-                                        "Student answer not found"));
-        TestAttempt attempt = attemptRepository.findById(entity.getAttemptId())
-                .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
-        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
-
-        entity.setIsCorrect(
-                request.getIsCorrect());
-
-        entity.setScoreAwarded(
-                request.getScoreAwarded());
-
-        entity.setIssueReported(
-                request.getIssueReported());
-
-        StudentTestAnswer updated =
-                repository.save(entity);
-
-        return mapToResponse(updated);
-    }
-
     /** Trả các câu trả lời đã lưu trong một attempt để người học hoặc giảng viên xem lại. */
     public List<StudentTestAnswerModel.Response>
     getAnswersByAttempt(UUID attemptId) {
 
         TestAttempt attempt = attemptRepository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
-        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId());
+        testService.requireAttemptAccess(
+                attempt.getTestId(), attempt.getStudentId(), null);
 
         List<StudentTestAnswer> entities =
                 repository.findByAttemptId(attemptId);

@@ -80,6 +80,7 @@ public class ClassCurriculumCompositionService {
         }
     }
 
+    /** Sao chép cấu trúc master và materialize riêng flashcard để mỗi class có bộ thẻ độc lập ngay từ đầu. */
     private void snapshotFromMaster(CurriculumVersion draft, CurriculumVersion source) {
         orderedSections(source).forEach(sourceSection -> {
             CurriculumSection savedSection = sectionRepository.save(copySectionRow(draft, sourceSection));
@@ -89,6 +90,12 @@ public class ClassCurriculumCompositionService {
                 entry.setSourceCurriculumLessonId(sourceLesson.getId());
                 entry.setLessonIdentityId(sourceLesson.getLessonIdentityId());
                 entry.setSortOrder(sourceLesson.getSortOrder());
+                if (sourceLesson.getType() == LessonType.FLASHCARD) {
+                    CurriculumLesson row = copyMaterializedLesson(sourceLesson, savedSection, entry);
+                    CurriculumLesson savedRow = lessonRepository.save(row);
+                    entry.setMaterializedLessonId(savedRow.getId());
+                    copyFlashcards(sourceLesson, savedRow);
+                }
                 entryRepository.save(entry);
             });
         });
@@ -290,6 +297,7 @@ public class ClassCurriculumCompositionService {
         return resolveMasterLesson(entry).map(master -> buildTransientInheritedLesson(entry, master));
     }
 
+    /** Materialize lesson kế thừa và sao chép artifact flashcard trước khi class chỉnh sửa lần đầu. */
     @Transactional
     private CurriculumLesson materializeLesson(CurriculumVersion draft, ClassCurriculumEntry entry) {
         ClassCurriculumEntry locked = entryRepository.findByIdAndClassVersionIdForUpdate(entry.getId(), draft.getId())
@@ -327,6 +335,7 @@ public class ClassCurriculumCompositionService {
 
         locked.setMaterializedLessonId(saved.getId());
         entryRepository.save(locked);
+        copyFlashcards(master, saved);
         return saved;
     }
 
@@ -431,11 +440,14 @@ public class ClassCurriculumCompositionService {
     }
 
     /**
-     * Sao chép flashcard set và card sang lesson của draft mới để trainer có thể chỉnh sửa
-     * độc lập mà không làm thay đổi nội dung của curriculum đang publish.
+     * Sao chép flashcard set và card sang lesson của class nếu lesson đích chưa có set,
+     * để mỗi class chỉnh sửa độc lập mà không làm thay đổi master hoặc class khác.
      */
     private void copyFlashcards(CurriculumLesson sourceLesson, CurriculumLesson targetLesson) {
-        if (sourceLesson.getType() != LessonType.FLASHCARD) {
+        if (sourceLesson.getType() != LessonType.FLASHCARD
+                || targetLesson.getId() == null
+                || Objects.equals(sourceLesson.getId(), targetLesson.getId())
+                || flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(targetLesson.getId()).isPresent()) {
             return;
         }
         flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(sourceLesson.getId())

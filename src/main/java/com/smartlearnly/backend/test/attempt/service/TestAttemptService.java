@@ -1,7 +1,6 @@
 package com.smartlearnly.backend.test.attempt.service;
 
 import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
-import com.smartlearnly.backend.test.monitor.dto.MonitorEvent;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
@@ -31,7 +30,6 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +43,6 @@ public class TestAttemptService {
     private final QuestionAnswerRepository questionAnswerRepository;
     private final StudentTestAnswerRepository studentTestAnswerRepository;
     private final CurriculumLessonRepository curriculumLessonRepository;
-    private final SimpMessagingTemplate messagingTemplate;
     private final TestService testService;
     private final UserRepository userRepository;
     private NotificationService notificationService;
@@ -74,8 +71,7 @@ public class TestAttemptService {
                     "Invalid or expired test access code");
         }
 
-        List<TestAttempt> existingAttempts =
-                repository.findByTestIdAndStudentIdOrderByStartTimeDesc(test.getId(), studentId);
+        List<TestAttempt> existingAttempts = findAttemptsInContext(test.getId(), studentId, null);
         if (!existingAttempts.isEmpty()) {
             TestAttempt latest = expireIfOverdue(existingAttempts.get(0));
             if (isActive(latest.getStatus())) {
@@ -98,12 +94,10 @@ public class TestAttemptService {
         attempt.setStatus(AttemptStatus.DOING);
 
         TestAttempt saved = repository.save(attempt);
-        TestAttemptModel.Response response = mapToResponse(saved);
-        broadcast(response, request.getStudentName());
-        return response;
+        return mapToResponse(saved);
     }
 
-    /** Nộp attempt, chấm các câu trắc nghiệm và phát sự kiện theo dõi cho giảng viên. */
+    /** Nộp attempt và chấm các câu trắc nghiệm của course quiz. */
     private boolean isEmbeddedCourseQuiz(Test test) {
         return test != null
                 && test.getId() != null
@@ -117,7 +111,7 @@ public class TestAttemptService {
         testService.requireAttemptAccess(
                 attempt.getTestId(),
                 attempt.getStudentId(),
-                request == null ? null : request.getClassId());
+                null);
 
         if (attempt.getStatus() == AttemptStatus.SUBMITTED
                 || attempt.getStatus() == AttemptStatus.GRADED
@@ -134,7 +128,6 @@ public class TestAttemptService {
         TestAttempt updated = repository.save(attempt);
         TestAttemptModel.Response response = mapToResponse(updated);
         response.setPercentage(grade.percentage());
-        broadcast(response, null);
         emitAttemptCompletedNotification(updated);
         return response;
     }
@@ -151,12 +144,23 @@ public class TestAttemptService {
         return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId)
                 .stream()
                 .map(this::expireIfOverdue)
-                .map(this::refreshFinalGrade)
                 .map(this::mapToResponse)
                 .toList();
     }
 
     /** Trả tất cả attempt của đề cho người có quyền quản lý đề. */
+    @Transactional
+    public List<TestAttemptModel.Response> getAttemptsByTest(UUID testId) {
+        testService.requireCurrentUserCanManage(testId);
+        return repository.findByTestIdOrderByStartTimeAsc(testId)
+        return findAttemptsInContext(testId, studentId, classId)
+                .stream()
+                .map(this::expireIfOverdue)
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    /** Trả chi tiết một attempt sau khi cập nhật trạng thái hết hạn và điểm cuối cùng. */
     @Transactional
     public List<TestAttemptModel.Response> getAttemptsByTest(UUID testId) {
         testService.requireCurrentUserCanManage(testId);
@@ -168,8 +172,6 @@ public class TestAttemptService {
                 .toList();
     }
 
-    /** Trả chi tiết một attempt sau khi cập nhật trạng thái hết hạn và điểm cuối cùng. */
-    @Transactional
     public TestAttemptModel.Response getAttemptById(UUID attemptId) {
         return getAttemptById(attemptId, null);
     }
@@ -179,28 +181,20 @@ public class TestAttemptService {
         TestAttempt attempt = repository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
         testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId(), classId);
+        return mapToResponse(expireIfOverdue(attempt));
+        testService.requireAttemptAccess(
+                attempt.getTestId(), attempt.getStudentId(), classId);
         return mapToResponse(refreshFinalGrade(expireIfOverdue(attempt)));
     }
 
-    /** Cho phép học viên làm lại attempt gần nhất và thông báo realtime đến màn hình monitor. */
-    @Transactional
-    public void reopenAttempt(UUID testId, UUID studentId) {
-        testService.requireCurrentUserCanManage(testId);
-        List<TestAttempt> attempts = repository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId);
-        if (attempts.isEmpty()) {
-            return;
-        }
-        TestAttempt latest = expireIfOverdue(attempts.get(0));
-        latest.setRetakeAllowed(true);
-        repository.save(latest);
-
-        MonitorEvent event = new MonitorEvent();
-        event.setTargetId(testId);
-        event.setStudentId(studentId);
-        event.setType("mcq");
-        event.setStatus("REOPENED");
-        messagingTemplate.convertAndSend("/topic/tests/monitor/" + testId, event);
-        messagingTemplate.convertAndSend("/topic/tests/monitor", event);
+    /** Lấy lịch sử attempt trong đúng context course trực tiếp hoặc một lớp cụ thể. */
+    private List<TestAttempt> findAttemptsInContext(
+            UUID testId,
+            UUID studentId,
+            UUID classId) {
+        return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(
+                testId,
+                studentId);
     }
 
     /** Chấm các câu trắc nghiệm đã lưu của một attempt và đồng bộ điểm từng câu. */
@@ -241,21 +235,6 @@ public class TestAttemptService {
         return new GradeResult(score, percentage);
     }
 
-    /** Tính lại điểm cuối cho attempt đã nộp để phản ánh thay đổi chấm điểm thủ công. */
-    private TestAttempt refreshFinalGrade(TestAttempt attempt) {
-        if (attempt.getStatus() != AttemptStatus.SUBMITTED
-                && attempt.getStatus() != AttemptStatus.GRADED
-                && attempt.getStatus() != AttemptStatus.EXPIRED) {
-            return attempt;
-        }
-        GradeResult grade = gradeAttempt(attempt);
-        if (attempt.getScore() == null || attempt.getScore().compareTo(grade.score()) != 0) {
-            attempt.setScore(grade.score());
-            return repository.save(attempt);
-        }
-        return attempt;
-    }
-
     /** Đánh dấu hết hạn và chấm attempt nếu người học vượt quá thời gian làm bài. */
     private TestAttempt expireIfOverdue(TestAttempt attempt) {
         if (!isActive(attempt.getStatus())
@@ -286,17 +265,19 @@ public class TestAttemptService {
         Test test = testRepository.findById(attempt.getTestId()).orElse(null);
         UUID testOwnerId = test == null ? null : test.getCreatedBy();
         String status = attempt.getStatus() == null ? null : attempt.getStatus().name();
-        String title = attempt.getStatus() == AttemptStatus.EXPIRED ? "Test attempt expired" : "Test attempt submitted";
+        String title = attempt.getStatus() == AttemptStatus.EXPIRED
+                ? "Course quiz attempt expired"
+                : "Course quiz attempt submitted";
         notificationService.emit(new NotificationCreateCommand(
                 attempt.getStudentId(),
                 NotificationType.TEST,
                 title,
                 test == null
-                        ? "Your test attempt has been recorded."
-                        : "Your attempt for " + test.getTitle() + " has been recorded.",
+                        ? "Your course quiz attempt has been recorded."
+                        : "Your quiz attempt for " + test.getTitle() + " has been recorded.",
                 "TEST_ATTEMPT",
                 attempt.getId(),
-                "/test-attempts/" + attempt.getId(),
+                "/course-quiz-attempts/" + attempt.getId(),
                 testOwnerId,
                 "test-attempt:" + attempt.getId() + ":" + status + ":student",
                 NotificationPayloads.of(
@@ -308,11 +289,11 @@ public class TestAttemptService {
                     NotificationType.TEST,
                     title,
                     test == null
-                            ? "A learner's test attempt has been recorded."
-                            : "A learner's attempt for " + test.getTitle() + " has been recorded.",
+                            ? "A learner's course quiz attempt has been recorded."
+                            : "A learner's quiz attempt for " + test.getTitle() + " has been recorded.",
                     "TEST_ATTEMPT",
                     attempt.getId(),
-                    "/test-attempts/" + attempt.getId(),
+                    "/course-quiz-attempts/" + attempt.getId(),
                     attempt.getStudentId(),
                     "test-attempt:" + attempt.getId() + ":" + status + ":owner",
                     NotificationPayloads.of(
@@ -320,24 +301,6 @@ public class TestAttemptService {
                             "studentId", attempt.getStudentId(),
                             "status", status)));
         }
-    }
-
-    /** Phát sự kiện WebSocket để màn hình theo dõi cập nhật attempt theo thời gian thực. */
-    private void broadcast(TestAttemptModel.Response response, String studentName) {
-        MonitorEvent event = new MonitorEvent();
-        event.setTargetId(response.getTestId());
-        event.setAttemptId(response.getId());
-        event.setStudentId(response.getStudentId());
-        event.setStudentName(studentName != null ? studentName : response.getStudentName());
-        event.setType("mcq");
-        event.setStatus(response.getStatus().name());
-        event.setStartTime(response.getStartTime());
-        event.setEndTime(response.getEndTime());
-        event.setScore(response.getScore());
-        event.setPercentage(response.getPercentage());
-        event.setRemainingSeconds(remainingSeconds(response.getEndTime()));
-        messagingTemplate.convertAndSend("/topic/tests/monitor/" + response.getTestId(), event);
-        messagingTemplate.convertAndSend("/topic/tests/monitor", event);
     }
 
     /** Chuyển entity attempt thành dữ liệu API, bao gồm tỷ lệ điểm và thông tin học viên. */
@@ -384,14 +347,6 @@ public class TestAttemptService {
         return test.getDurationMinutes() == null || test.getDurationMinutes() <= 0
                 ? 30
                 : test.getDurationMinutes();
-    }
-
-    /** Tính số giây còn lại để client hiển thị đồng hồ đếm ngược. */
-    private Long remainingSeconds(Instant endTime) {
-        if (endTime == null) {
-            return null;
-        }
-        return Math.max(0, Duration.between(Instant.now(), endTime).getSeconds());
     }
 
     /** Bảo đảm id bắt buộc đã có trước khi gọi repository. */

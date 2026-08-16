@@ -12,7 +12,6 @@ import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.entity.NotificationType;
 import com.smartlearnly.backend.notification.service.NotificationService;
-import com.smartlearnly.backend.test.monitor.dto.MonitorEvent;
 import com.smartlearnly.backend.question.entity.QuestionAnswer;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.test.attempt.dto.TestAttemptModel;
@@ -38,7 +37,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class TestAttemptServiceTest {
@@ -54,8 +52,6 @@ class TestAttemptServiceTest {
     private StudentTestAnswerRepository studentTestAnswerRepository;
     @Mock
     private CurriculumLessonRepository curriculumLessonRepository;
-    @Mock
-    private SimpMessagingTemplate messagingTemplate;
     @Mock
     private TestService testService;
     @Mock
@@ -74,14 +70,13 @@ class TestAttemptServiceTest {
                 questionAnswerRepository,
                 studentTestAnswerRepository,
                 curriculumLessonRepository,
-                messagingTemplate,
                 testService,
                 userRepository);
         service.setNotificationService(notificationService);
     }
 
     @Test
-    void startAttemptShouldCreateAttemptAndBroadcastRealtimeEvent() {
+    void startAttemptShouldCreateCourseQuizAttempt() {
         UUID testId = UUID.randomUUID();
         UUID studentId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
@@ -100,7 +95,8 @@ class TestAttemptServiceTest {
         when(testService.requireCurrentTraineeAccess(testId, null)).thenReturn(studentId);
         when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(true);
         when(testService.accessCodeMatches(test, "123456")).thenReturn(true);
-        when(testAttemptRepository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId))
+        when(testAttemptRepository.findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(
+                testId, studentId))
                 .thenReturn(List.of());
         when(testAttemptRepository.save(any(TestAttempt.class))).thenAnswer(invocation -> {
             TestAttempt saved = invocation.getArgument(0);
@@ -117,8 +113,6 @@ class TestAttemptServiceTest {
         assertThat(response.getAssignmentId()).isEqualTo(assignmentId);
         assertThat(response.getStatus()).isEqualTo(AttemptStatus.DOING);
         assertThat(response.getEndTime()).isAfter(response.getStartTime());
-        verify(messagingTemplate).convertAndSend(eq("/topic/tests/monitor/" + testId), any(MonitorEvent.class));
-        verify(messagingTemplate).convertAndSend(eq("/topic/tests/monitor"), any(MonitorEvent.class));
     }
 
     @Test
@@ -135,7 +129,8 @@ class TestAttemptServiceTest {
         when(testService.requireCurrentTraineeAccess(testId, null)).thenReturn(studentId);
         when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(true);
         when(testService.accessCodeMatches(test, "654321")).thenReturn(true);
-        when(testAttemptRepository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId))
+        when(testAttemptRepository.findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(
+                testId, studentId))
                 .thenReturn(List.of(existing));
         when(testQuestionRepository.findByIdTestId(testId)).thenReturn(List.of());
 
@@ -182,7 +177,8 @@ class TestAttemptServiceTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.startAttempt(request))
                 .hasMessage("This test is not open for attempts right now");
 
-        verify(testAttemptRepository, never()).findByTestIdAndStudentIdOrderByStartTimeDesc(any(), any());
+        verify(testAttemptRepository, never())
+                .findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(any(), any());
         verify(testAttemptRepository, never()).save(any(TestAttempt.class));
     }
 
@@ -212,7 +208,8 @@ class TestAttemptServiceTest {
         when(testService.requireCurrentTraineeAccess(testId, null)).thenReturn(studentId);
         when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(true);
         when(testService.accessCodeMatches(test, "222222")).thenReturn(true);
-        when(testAttemptRepository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId))
+        when(testAttemptRepository.findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(
+                testId, studentId))
                 .thenReturn(List.of(submitted));
         when(testAttemptRepository.save(any(TestAttempt.class))).thenAnswer(invocation -> {
             TestAttempt saved = invocation.getArgument(0);
@@ -230,6 +227,83 @@ class TestAttemptServiceTest {
         assertThat(response.getId()).isNotEqualTo(submitted.getId());
         assertThat(response.getStatus()).isEqualTo(AttemptStatus.DOING);
         verify(testAttemptRepository, times(2)).save(any(TestAttempt.class));
+    }
+
+    @Test
+    void startAttemptShouldCreateIndependentAttemptForClassContext() {
+        UUID testId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        com.smartlearnly.backend.test.entity.Test test = test(testId, UUID.randomUUID());
+        TestAttemptModel.StartRequest request = new TestAttemptModel.StartRequest();
+        request.setTestId(testId);
+        request.setClassId(classId);
+
+        when(testRepository.findById(testId)).thenReturn(Optional.of(test));
+        when(testService.requireCurrentTraineeAccess(testId, classId)).thenReturn(studentId);
+        when(testService.isWithinSchedule(eq(test), any(Instant.class))).thenReturn(true);
+        when(curriculumLessonRepository.existsByTestId(testId)).thenReturn(true);
+        when(testAttemptRepository.findByTestIdAndStudentIdAndClassIdOrderByStartTimeDesc(
+                testId, studentId, classId)).thenReturn(List.of());
+        when(testAttemptRepository.save(any(TestAttempt.class))).thenAnswer(invocation -> {
+            TestAttempt saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            saved.setCreatedAt(Instant.now());
+            return saved;
+        });
+        when(testQuestionRepository.findByIdTestId(testId)).thenReturn(List.of());
+
+        TestAttemptModel.Response response = service.startAttempt(request);
+
+        assertThat(response.getClassId()).isEqualTo(classId);
+        ArgumentCaptor<TestAttempt> attemptCaptor = ArgumentCaptor.forClass(TestAttempt.class);
+        verify(testAttemptRepository).save(attemptCaptor.capture());
+        assertThat(attemptCaptor.getValue().getClassId()).isEqualTo(classId);
+        verify(testAttemptRepository, never())
+                .findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(any(), any());
+    }
+
+    @Test
+    void getAttemptsShouldReturnOnlyRequestedClassContext() {
+        UUID testId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        TestAttempt classAttempt = attempt(
+                UUID.randomUUID(), testId, studentId, AttemptStatus.SUBMITTED);
+        classAttempt.setClassId(classId);
+        classAttempt.setScore(BigDecimal.ZERO);
+
+        when(testAttemptRepository.findByTestIdAndStudentIdAndClassIdOrderByStartTimeDesc(
+                testId, studentId, classId)).thenReturn(List.of(classAttempt));
+        when(testQuestionRepository.findByIdTestId(testId)).thenReturn(List.of());
+        when(studentTestAnswerRepository.findByAttemptId(classAttempt.getId())).thenReturn(List.of());
+        when(studentTestAnswerRepository.saveAll(List.of())).thenReturn(List.of());
+
+        List<TestAttemptModel.Response> responses = service.getAttempts(testId, studentId, classId);
+
+        assertThat(responses).singleElement()
+                .extracting(TestAttemptModel.Response::getClassId)
+                .isEqualTo(classId);
+        verify(testService).requireAttemptAccess(testId, studentId, classId);
+        verify(testAttemptRepository, never())
+                .findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(any(), any());
+    }
+
+    @Test
+    void getAttemptByIdShouldAuthorizeUsingPersistedClassContext() {
+        UUID attemptId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        TestAttempt attempt = attempt(
+                attemptId, UUID.randomUUID(), UUID.randomUUID(), AttemptStatus.DOING);
+        attempt.setClassId(classId);
+        when(testAttemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
+
+        TestAttemptModel.Response response = service.getAttemptById(
+                attemptId, UUID.randomUUID());
+
+        assertThat(response.getClassId()).isEqualTo(classId);
+        verify(testService).requireAttemptAccess(
+                attempt.getTestId(), attempt.getStudentId(), classId);
     }
 
     @Test
@@ -261,7 +335,7 @@ class TestAttemptServiceTest {
         assertThat(notificationCaptor.getAllValues())
                 .allSatisfy(command -> {
                     assertThat(command.type()).isEqualTo(NotificationType.TEST);
-                    assertThat(command.title()).isEqualTo("Test attempt submitted");
+                    assertThat(command.title()).isEqualTo("Course quiz attempt submitted");
                     assertThat(command.referenceType()).isEqualTo("TEST_ATTEMPT");
                     assertThat(command.referenceId()).isEqualTo(attemptId);
                 });
@@ -301,8 +375,6 @@ class TestAttemptServiceTest {
         assertThat(response.getPercentage()).isEqualByComparingTo("100.00");
         assertThat(answer.getIsCorrect()).isTrue();
         assertThat(answer.getScoreAwarded()).isEqualByComparingTo("5.0");
-        verify(messagingTemplate).convertAndSend(eq("/topic/tests/monitor/" + testId), any(MonitorEvent.class));
-        verify(messagingTemplate).convertAndSend(eq("/topic/tests/monitor"), any(MonitorEvent.class));
     }
 
     @Test
@@ -374,6 +446,27 @@ class TestAttemptServiceTest {
         assertThat(response.getScore()).isEqualByComparingTo("10");
         verify(studentTestAnswerRepository, times(0)).findByAttemptId(any());
         verify(testAttemptRepository, times(0)).save(any(TestAttempt.class));
+    }
+
+    @Test
+    void getAttemptByIdShouldKeepSubmittedScoreWithoutRegradingLiveAnswers() {
+        UUID attemptId = UUID.randomUUID();
+        UUID testId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        TestAttempt attempt = attempt(attemptId, testId, studentId, AttemptStatus.SUBMITTED);
+        attempt.setScore(new BigDecimal("7.5"));
+        TestQuestion question = question(testId, UUID.randomUUID(), "10.0");
+
+        when(testAttemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
+        when(testQuestionRepository.findByIdTestId(testId)).thenReturn(List.of(question));
+
+        TestAttemptModel.Response response = service.getAttemptById(attemptId);
+
+        assertThat(response.getScore()).isEqualByComparingTo("7.5");
+        assertThat(response.getPercentage()).isEqualByComparingTo("75.00");
+        verify(studentTestAnswerRepository, never()).findByAttemptId(any());
+        verify(questionAnswerRepository, never()).findById(any());
+        verify(testAttemptRepository, never()).save(any(TestAttempt.class));
     }
 
     @Test
