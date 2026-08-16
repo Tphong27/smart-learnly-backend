@@ -722,6 +722,12 @@ public class AssignmentAiDraftService {
             boolean sourceAttached
     ) {
         String normalizedMessage = normalizeForScope(message);
+        String existingContext = normalizeForScope((currentTitle == null ? "" : currentTitle)
+                + " "
+                + stripHtml(currentDescription));
+        if (isUnsupportedDifficultyOnlyRequest(normalizedMessage, existingContext, sourceAttached)) {
+            return false;
+        }
         if (looksLikeDraftAction(normalizedMessage)
                 && containsAssignmentIntentKeyword(normalizedMessage)) {
             return true;
@@ -729,14 +735,28 @@ public class AssignmentAiDraftService {
         if (sourceAttached && looksLikeSourceBasedDraftRequest(normalizedMessage)) {
             return true;
         }
-        String existingContext = normalizeForScope((currentTitle == null ? "" : currentTitle)
-                + " "
-                + stripHtml(currentDescription));
         if (!existingContext.isBlank() && looksLikeRevisionAction(normalizedMessage)) {
             return true;
         }
         return (containsAssignmentIntentKeyword(existingContext) || containsEducationalTopicKeyword(existingContext))
                 && looksLikeDraftAction(normalizedMessage);
+    }
+
+    /** Chặn yêu cầu chỉ nêu mức độ khó nhưng thiếu chủ đề, tài liệu hoặc bản nháp hiện tại để AI không tự bịa phạm vi bài. */
+    private boolean isUnsupportedDifficultyOnlyRequest(String normalizedMessage, String existingContext, boolean sourceAttached) {
+        if (sourceAttached || !existingContext.isBlank()) {
+            return false;
+        }
+        boolean asksForDifficulty = normalizedMessage.contains("muc do kho")
+                || normalizedMessage.contains("do kho")
+                || normalizedMessage.contains("difficulty")
+                || normalizedMessage.contains("difficult")
+                || normalizedMessage.contains("harder")
+                || normalizedMessage.contains("easier");
+        return asksForDifficulty
+                && !containsEducationalTopicKeyword(normalizedMessage)
+                && !normalizedMessage.contains("bai hoc")
+                && !normalizedMessage.contains("lesson");
     }
 
     private boolean looksLikeSourceBasedDraftRequest(String normalizedMessage) {

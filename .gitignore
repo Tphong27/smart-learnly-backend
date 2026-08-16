@@ -57,3 +57,5 @@ node_modules/
 # Python generated files
 __pycache__/
 *.py[cod]
+
+smartlearnly_schema_retest.dump
