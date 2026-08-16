@@ -73,7 +73,10 @@ class AssignmentAiDraftServicePromptTest {
         assertThat(response.rubric()).contains("Nội dung chính xác");
         assertThat(capturedProviderPrompt())
                 .contains("Normalized draft count: " + expectedDraftCount + ".")
-                .contains("Trainer request:\n" + message);
+                .contains("Trainer request:\n" + message)
+                .contains("vague difficulty requests as under-specified")
+                .contains("score allocation requests as under-specified")
+                .contains("complete and correct Vietnamese diacritics");
     }
 
     /** Yêu cầu 0 bài phải nhận hướng dẫn và không tiêu tốn lượt gọi AI. */
