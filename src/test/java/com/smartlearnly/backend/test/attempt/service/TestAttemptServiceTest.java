@@ -276,8 +276,6 @@ class TestAttemptServiceTest {
         when(testAttemptRepository.findByTestIdAndStudentIdAndClassIdOrderByStartTimeDesc(
                 testId, studentId, classId)).thenReturn(List.of(classAttempt));
         when(testQuestionRepository.findByIdTestId(testId)).thenReturn(List.of());
-        when(studentTestAnswerRepository.findByAttemptId(classAttempt.getId())).thenReturn(List.of());
-        when(studentTestAnswerRepository.saveAll(List.of())).thenReturn(List.of());
 
         List<TestAttemptModel.Response> responses = service.getAttempts(testId, studentId, classId);
 

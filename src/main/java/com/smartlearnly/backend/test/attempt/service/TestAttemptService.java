@@ -71,7 +71,8 @@ public class TestAttemptService {
                     "Invalid or expired test access code");
         }
 
-        List<TestAttempt> existingAttempts = findAttemptsInContext(test.getId(), studentId, null);
+        List<TestAttempt> existingAttempts = findAttemptsInContext(
+                test.getId(), studentId, request.getClassId());
         if (!existingAttempts.isEmpty()) {
             TestAttempt latest = expireIfOverdue(existingAttempts.get(0));
             if (isActive(latest.getStatus())) {
@@ -88,6 +89,7 @@ public class TestAttemptService {
         TestAttempt attempt = new TestAttempt();
         attempt.setTestId(test.getId());
         attempt.setStudentId(studentId);
+        attempt.setClassId(request.getClassId());
         attempt.setAssignmentId(request.getAssignmentId());
         attempt.setStartTime(start);
         attempt.setEndTime(start.plus(Duration.ofMinutes(resolveDuration(test))));
@@ -111,7 +113,7 @@ public class TestAttemptService {
         testService.requireAttemptAccess(
                 attempt.getTestId(),
                 attempt.getStudentId(),
-                null);
+                attempt.getClassId());
 
         if (attempt.getStatus() == AttemptStatus.SUBMITTED
                 || attempt.getStatus() == AttemptStatus.GRADED
@@ -141,7 +143,7 @@ public class TestAttemptService {
     @Transactional
     public List<TestAttemptModel.Response> getAttempts(UUID testId, UUID studentId, UUID classId) {
         testService.requireAttemptAccess(testId, studentId, classId);
-        return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(testId, studentId)
+        return findAttemptsInContext(testId, studentId, classId)
                 .stream()
                 .map(this::expireIfOverdue)
                 .map(this::mapToResponse)
@@ -153,7 +155,6 @@ public class TestAttemptService {
     public List<TestAttemptModel.Response> getAttemptsByTest(UUID testId) {
         testService.requireCurrentUserCanManage(testId);
         return repository.findByTestIdOrderByStartTimeAsc(testId)
-        return findAttemptsInContext(testId, studentId, classId)
                 .stream()
                 .map(this::expireIfOverdue)
                 .map(this::mapToResponse)
@@ -161,17 +162,6 @@ public class TestAttemptService {
     }
 
     /** Trả chi tiết một attempt sau khi cập nhật trạng thái hết hạn và điểm cuối cùng. */
-    @Transactional
-    public List<TestAttemptModel.Response> getAttemptsByTest(UUID testId) {
-        testService.requireCurrentUserCanManage(testId);
-        return repository.findByTestIdOrderByStartTimeAsc(testId)
-                .stream()
-                .map(this::expireIfOverdue)
-                .map(this::refreshFinalGrade)
-                .map(this::mapToResponse)
-                .toList();
-    }
-
     public TestAttemptModel.Response getAttemptById(UUID attemptId) {
         return getAttemptById(attemptId, null);
     }
@@ -180,11 +170,9 @@ public class TestAttemptService {
     public TestAttemptModel.Response getAttemptById(UUID attemptId, UUID classId) {
         TestAttempt attempt = repository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
-        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId(), classId);
-        return mapToResponse(expireIfOverdue(attempt));
         testService.requireAttemptAccess(
-                attempt.getTestId(), attempt.getStudentId(), classId);
-        return mapToResponse(refreshFinalGrade(expireIfOverdue(attempt)));
+                attempt.getTestId(), attempt.getStudentId(), attempt.getClassId());
+        return mapToResponse(expireIfOverdue(attempt));
     }
 
     /** Lấy lịch sử attempt trong đúng context course trực tiếp hoặc một lớp cụ thể. */
@@ -192,9 +180,15 @@ public class TestAttemptService {
             UUID testId,
             UUID studentId,
             UUID classId) {
-        return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(
+        if (classId == null) {
+            return repository.findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(
+                    testId,
+                    studentId);
+        }
+        return repository.findByTestIdAndStudentIdAndClassIdOrderByStartTimeDesc(
                 testId,
-                studentId);
+                studentId,
+                classId);
     }
 
     /** Chấm các câu trắc nghiệm đã lưu của một attempt và đồng bộ điểm từng câu. */
@@ -309,6 +303,7 @@ public class TestAttemptService {
         response.setId(attempt.getId());
         response.setTestId(attempt.getTestId());
         response.setStudentId(attempt.getStudentId());
+        response.setClassId(attempt.getClassId());
         response.setStudentName(resolveStudentName(attempt.getStudentId()));
         response.setStartTime(attempt.getStartTime());
         response.setEndTime(attempt.getEndTime());
