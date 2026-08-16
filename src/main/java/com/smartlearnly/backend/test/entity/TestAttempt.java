@@ -33,9 +33,6 @@ public class TestAttempt {
     @Column(name = "student_id", nullable = false)
     private UUID studentId;
 
-    @Column(name = "class_id")
-    private UUID classId;
-
     @Column(name = "start_time", nullable = false)
     private Instant startTime;
 

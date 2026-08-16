@@ -83,6 +83,7 @@ public class TestModel {
         private Instant accessCodeExpiresAt;
         private Instant opensAt;
         private Instant closesAt;
+        private Boolean hasAttempts;
     }
 
     @Getter
