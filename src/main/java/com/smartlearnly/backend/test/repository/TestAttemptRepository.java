@@ -25,24 +25,12 @@ public interface TestAttemptRepository
             UUID testId,
             UUID studentId);
 
-    List<TestAttempt> findByTestIdAndStudentIdAndClassIdOrderByStartTimeDesc(
-            UUID testId,
-            UUID studentId,
-            UUID classId);
-
-    List<TestAttempt> findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(
-            UUID testId,
-            UUID studentId);
-
     @Query(value = """
             SELECT EXISTS (
                 SELECT 1
                 FROM public.test_attempts
                 WHERE test_id = :testId
-                  AND status IN (
-                      'doing'::public.attempt_status,
-                      'in_progress'::public.attempt_status
-                  )
+                  AND status = 'doing'::public.attempt_status
                   AND (end_time IS NULL OR end_time > CURRENT_TIMESTAMP)
             )
             """, nativeQuery = true)

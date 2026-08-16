@@ -54,6 +54,13 @@ public class TestAttemptController {
     }
 
     /** Trả chi tiết attempt course quiz mà caller được phép xem. */
+    @GetMapping("/quiz/{quizId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    public ResponseEntity<List<TestAttemptModel.Response>> getAttemptsByTest(
+            @PathVariable UUID quizId) {
+        return ResponseEntity.ok(service.getAttemptsByTest(quizId));
+    }
+
     @GetMapping("/{attemptId}")
     @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<TestAttemptModel.Response> getAttemptById(

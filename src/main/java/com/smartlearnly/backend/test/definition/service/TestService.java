@@ -15,6 +15,7 @@ import com.smartlearnly.backend.notification.entity.NotificationType;
 import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.test.definition.dto.TestModel;
 import com.smartlearnly.backend.test.entity.Test;
+import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import jakarta.persistence.EntityNotFoundException;
@@ -37,6 +38,7 @@ public class TestService {
     private static final SecureRandom ACCESS_CODE_RANDOM = new SecureRandom();
 
     private final TestRepository testRepository;
+    private final TestAttemptRepository testAttemptRepository;
     private final CurrentUserService currentUserService;
     private final CurriculumSectionRepository curriculumSectionRepository;
     private final ClassOfferingRepository classOfferingRepository;
@@ -57,6 +59,29 @@ public class TestService {
     }
 
     /** Tạo đề mới sau khi kiểm tra lịch mở, lớp học và quyền người tạo. */
+    public List<TestModel.Response> getManagedTests(UUID courseId, UUID classId) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        return testRepository.findManagedTests(
+                        actor.getId(),
+                        courseId,
+                        classId,
+                        isPrivilegedStaff(actor))
+                .stream()
+                .map(test -> mapToResponse(ensureAccessCode(test), true))
+                .toList();
+    }
+
+    public List<TestModel.Response> getAvailableTests(UUID courseId, UUID classId) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        if (!isTrainee(actor)) {
+            return getManagedTests(courseId, classId);
+        }
+        return testRepository.findAvailableTestsForStudent(actor.getId(), courseId, classId)
+                .stream()
+                .map(test -> mapToResponse(test, false))
+                .toList();
+    }
+
     public TestModel.Response createTest(
             TestModel.CreateRequest request) {
 
@@ -104,6 +129,61 @@ public class TestService {
         }
 
         return mapToResponse(saved);
+    }
+
+    public TestModel.Response updateTest(UUID id, TestModel.UpdateRequest request) {
+        Test test = testRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        requireManageAccess(test, actor);
+        if (testAttemptRepository.existsByTestId(id)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "This test already has attempts and cannot be edited");
+        }
+
+        validateSchedule(request.getOpensAt(), request.getClosesAt());
+        validateClassScope(request.getClassId(), request.getCourseId(), actor);
+        validateCurriculumSection(request.getCourseId(), request.getCurriculumSectionId());
+        test.setModuleId(request.getModuleId());
+        test.setCurriculumSectionId(request.getCurriculumSectionId());
+        test.setClassId(request.getClassId());
+        test.setCourseId(request.getCourseId());
+        test.setTitle(request.getTitle());
+        test.setDescription(request.getDescription());
+        test.setTestType(request.getTestType());
+        test.setDurationMinutes(request.getDurationMinutes());
+        test.setMaxAttempts(request.getMaxAttempts());
+        test.setPassScore(request.getPassScore());
+        test.setShuffleQuestions(request.getShuffleQuestions());
+        test.setShuffleAnswers(request.getShuffleAnswers());
+        test.setShowAnswersAfter(request.getShowAnswersAfter());
+        test.setIsPublished(request.getIsPublished());
+        test.setOpensAt(request.getOpensAt());
+        test.setClosesAt(request.getClosesAt());
+        return mapToResponse(testRepository.save(test));
+    }
+
+    public void archiveTest(UUID id) {
+        Test test = testRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        requireManageAccess(test, currentUserService.requireAuthenticatedUser());
+        test.setIsArchived(true);
+        testRepository.save(test);
+    }
+
+    public TestModel.AccessCodeVerifyResponse verifyAccessCode(
+            UUID id,
+            TestModel.AccessCodeVerifyRequest request,
+            UUID classId) {
+        Test test = testRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        requireTestAccess(test, currentUserService.requireAuthenticatedUser(), classId);
+        Test current = ensureAccessCode(test);
+        TestModel.AccessCodeVerifyResponse response = new TestModel.AccessCodeVerifyResponse();
+        response.setValid(accessCodeMatches(current, request == null ? null : request.getAccessCode()));
+        response.setExpiresAt(current.getAccessCodeExpiresAt());
+        return response;
     }
 
     /** Xác thực học viên hiện tại có quyền bắt đầu attempt của đề. */
@@ -291,6 +371,7 @@ public class TestService {
         }
         response.setOpensAt(test.getOpensAt());
         response.setClosesAt(test.getClosesAt());
+        response.setHasAttempts(test.getId() != null && testAttemptRepository.existsByTestId(test.getId()));
 
         return response;
     }
@@ -331,8 +412,9 @@ public class TestService {
         if (isTrainee(actor)) {
             boolean hasAccess = contextClassId == null
                     ? test.getClassId() == null
-                    && testRepository.existsAvailableCourseTestForStudent(
+                    ? testRepository.existsAvailableCourseTestForStudent(
                     test.getId(), actor.getId())
+                    : testRepository.existsAvailableForStudent(test.getId(), actor.getId())
                     : contextClassId.equals(test.getClassId())
                     ? testRepository.existsAvailableForStudent(test.getId(), actor.getId())
                     : test.getClassId() == null

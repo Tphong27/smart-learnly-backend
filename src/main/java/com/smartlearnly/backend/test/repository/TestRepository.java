@@ -2,6 +2,7 @@
 package com.smartlearnly.backend.test.repository;
 
 import com.smartlearnly.backend.test.entity.Test;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -9,6 +10,62 @@ import org.springframework.data.repository.query.Param;
 
 public interface TestRepository
         extends JpaRepository<Test, UUID> {
+
+    @Query("""
+            select test
+            from Test test
+            left join ClassOffering classOffering
+                on classOffering.id = test.classId
+            where (test.isFlashtest = false or test.isFlashtest is null)
+              and test.isArchived = false
+              and (:courseId is null or test.courseId = :courseId)
+              and (:classId is null or test.classId = :classId)
+              and (
+                  :privileged = true
+                  or test.createdBy = :staffId
+                  or classOffering.trainerId = :staffId
+              )
+            order by test.createdAt desc
+            """)
+    List<Test> findManagedTests(
+            @Param("staffId") UUID staffId,
+            @Param("courseId") UUID courseId,
+            @Param("classId") UUID classId,
+            @Param("privileged") boolean privileged);
+
+    @Query("""
+            select distinct test
+            from Test test
+            left join ClassEnrollment classEnrollment
+                on classEnrollment.classId = test.classId
+               and classEnrollment.studentId = :studentId
+            left join CourseEnrollment courseEnrollment
+                on courseEnrollment.courseId = test.courseId
+               and courseEnrollment.studentId = :studentId
+            where (test.isFlashtest = false or test.isFlashtest is null)
+              and test.isArchived = false
+              and test.isPublished = true
+              and (:courseId is null or test.courseId = :courseId)
+              and (:classId is null or test.classId = :classId)
+              and (
+                  classEnrollment.status in (
+                      com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE,
+                      com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.COMPLETED
+                  )
+                  or (
+                      test.classId is null
+                      and courseEnrollment.status in (
+                          com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.ACTIVE,
+                          com.smartlearnly.backend.enrollment.entity.EnrollmentStatus.COMPLETED
+                      )
+                  )
+              )
+            order by test.createdAt desc
+            """)
+    List<Test> findAvailableTestsForStudent(
+            @Param("studentId") UUID studentId,
+            @Param("courseId") UUID courseId,
+            @Param("classId") UUID classId);
 
     @Query("""
             select case when count(test) > 0 then true else false end

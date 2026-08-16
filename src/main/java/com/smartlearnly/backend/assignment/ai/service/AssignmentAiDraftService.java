@@ -207,6 +207,10 @@ public class AssignmentAiDraftService {
         if (!isAssignmentDraftRequest(normalizedMessage, currentTitle, currentDescription, sourceAttached || cachedSourceRequested)) {
             return outOfScopeResponse(normalizedMessage);
         }
+        AssignmentAiDraftModel.Response clarification = vagueDifficultyOrScoringResponse(normalizedMessage);
+        if (clarification != null) {
+            return clarification;
+        }
 
         generationClient.ensureAvailable();
         SourceContent source = resolveSource(file, sourceCacheKey, normalizedMessage);
@@ -447,7 +451,7 @@ public class AssignmentAiDraftService {
                 You are a narrow AI assistant inside Smart Learnly.
                 Your only job is helping trainers draft student-facing assignment or essay lesson content and grading criteria.
                 If any request asks for unrelated help, refuse briefly and redirect to assignment/essay drafting.
-                Return copy-ready content in the same primary language as the trainer request. If the trainer writes Vietnamese, answer in natural Vietnamese with complete and correct Vietnamese diacritics. Never return unaccented Vietnamese. If the trainer writes English, answer in English.
+                Return copy-ready content in the same primary language as the trainer request. If the trainer writes Vietnamese, answer in natural Vietnamese with complete and correct Vietnamese diacritics in every word, heading, rubric title, and criterion label. Never return unaccented Vietnamese or mixed accented/unaccented Vietnamese. If the trainer writes English, answer in English.
                 Use section headings in that same language. Do not create anything in the product.
                 For every requested draft, include only this section in the assignment content:
                 Nội dung giao bài (Vietnamese) or Assignment content (English)
@@ -462,6 +466,9 @@ public class AssignmentAiDraftService {
                 Rules:
                 - Return plain text only. Do not use Markdown formatting of any kind, including # headings, bullet markers, numbered-list syntax, emphasis markers, block quotes, links, or tables.
                 - Write headings as normal text and separate sections with line breaks. Write list items as standalone sentences without bullets or Markdown numbering.
+                - Treat vague difficulty-level requests as under-specified. If the trainer only says "bai de", "bai trung binh", "bai kho", "de hon", "kho hon", "easy assignment", "medium assignment", "hard assignment", "beginner", "intermediate", "advanced", "make it easy", "make it difficult", or similar without explaining what that level means, do not generate the assignment or rubric yet. Instead, return only a clarification request saying that you cannot reliably evaluate or guarantee difficulty from that wording alone and ask the trainer to add difficulty criteria such as learner level, prerequisite knowledge, expected reasoning depth, source length, required evidence count, comparison/synthesis requirement, allowed time, or expected output length. In Vietnamese, use complete diacritics, for example: "Mức độ dễ, trung bình hoặc khó chưa đủ tiêu chí để đánh giá; vui lòng bổ sung cấp độ học viên, kiến thức nền, độ sâu lập luận, số lượng dẫn chứng, yêu cầu so sánh hoặc tổng hợp, thời lượng và độ dài bài làm mong muốn."
+                - Treat score allocation requests as under-specified unless the trainer gives an explicit total score and point distribution per criterion or asks you to draft a proposed scoring plan for trainer review. If the trainer only says "chia diem", "tinh diem", "score it", "include points", or similar, do not generate the assignment or rubric yet. Instead, return only a clarification request saying that you cannot divide points accurately without the trainer's scoring scale and weighting rules. In Vietnamese, use complete diacritics, for example: "Chưa đủ căn cứ để tự chia điểm; vui lòng cung cấp tổng điểm, trọng số từng tiêu chí hoặc cho phép AI đề xuất thang điểm để trainer duyệt."
+                - If either vague difficulty level or vague scoring is present, stop after the clarification request. Do not create assignment content, rubric criteria, examples, or suggested titles in the same response.
                 - Produce exactly the normalized draft count supplied below, in the same order as the trainer listed the requested items.
                 - The normalized count is already capped at 5. Do not create extra alternatives unless the trainer explicitly requested them.
                 - Do not merge, skip, replace, or summarize requested draft items.
@@ -469,9 +476,9 @@ public class AssignmentAiDraftService {
                 - Create a separate rubric for every generated draft. Never use one shared rubric for multiple drafts.
                 - In the rubric section, label every rubric with the matching draft number and draft name, in the same order as the assignment content. For example: "Rubric bài 1: [tên bài]" in Vietnamese or "Rubric for assignment 1: [assignment name]" in English.
                 - Every rubric must contain qualitative evaluation criteria specific to its matching draft. The number of clearly labelled rubrics must equal the number of generated drafts.
-                - Never suggest or include a scoring scale in any language.
+                - Never suggest or include a scoring scale in any language unless the trainer explicitly asked AI to propose a scoring plan for trainer review.
                 - Do not include points, point allocations, numeric scores, percentages, score ranges, totals, weights, grading bands, performance levels tied to scores, or examples such as "/10", "/100", "10 diem", "100 diem", or "20%".
-                - In Vietnamese rubrics, provide only qualitative "tieu chi danh gia"; never provide "thang diem", "phan bo diem", "trong so", or any scored achievement level.
+                - In Vietnamese rubrics, provide only qualitative "tiêu chí đánh giá"; never provide "thang điểm", "phân bổ điểm", "trọng số", or any scored achievement level unless the trainer explicitly allowed a proposed scoring plan for review. Every Vietnamese rubric label must use full diacritics, such as "Tiêu chí phân tích nội tâm", not "Tieu chi phan tich noi tam".
                 - In English rubrics, provide only qualitative evaluation criteria; never provide a score scale, points, marks, weighting, or score-based achievement levels.
                 - Be concise but complete for each requested draft.
                 - Ground the draft only in the provided source/context and trainer request.
@@ -715,6 +722,12 @@ public class AssignmentAiDraftService {
             boolean sourceAttached
     ) {
         String normalizedMessage = normalizeForScope(message);
+        String existingContext = normalizeForScope((currentTitle == null ? "" : currentTitle)
+                + " "
+                + stripHtml(currentDescription));
+        if (isUnsupportedDifficultyOnlyRequest(normalizedMessage, existingContext, sourceAttached)) {
+            return false;
+        }
         if (looksLikeDraftAction(normalizedMessage)
                 && containsAssignmentIntentKeyword(normalizedMessage)) {
             return true;
@@ -722,14 +735,28 @@ public class AssignmentAiDraftService {
         if (sourceAttached && looksLikeSourceBasedDraftRequest(normalizedMessage)) {
             return true;
         }
-        String existingContext = normalizeForScope((currentTitle == null ? "" : currentTitle)
-                + " "
-                + stripHtml(currentDescription));
         if (!existingContext.isBlank() && looksLikeRevisionAction(normalizedMessage)) {
             return true;
         }
         return (containsAssignmentIntentKeyword(existingContext) || containsEducationalTopicKeyword(existingContext))
                 && looksLikeDraftAction(normalizedMessage);
+    }
+
+    /** Chặn yêu cầu chỉ nêu mức độ khó nhưng thiếu chủ đề, tài liệu hoặc bản nháp hiện tại để AI không tự bịa phạm vi bài. */
+    private boolean isUnsupportedDifficultyOnlyRequest(String normalizedMessage, String existingContext, boolean sourceAttached) {
+        if (sourceAttached || !existingContext.isBlank()) {
+            return false;
+        }
+        boolean asksForDifficulty = normalizedMessage.contains("muc do kho")
+                || normalizedMessage.contains("do kho")
+                || normalizedMessage.contains("difficulty")
+                || normalizedMessage.contains("difficult")
+                || normalizedMessage.contains("harder")
+                || normalizedMessage.contains("easier");
+        return asksForDifficulty
+                && !containsEducationalTopicKeyword(normalizedMessage)
+                && !normalizedMessage.contains("bai hoc")
+                && !normalizedMessage.contains("lesson");
     }
 
     private boolean looksLikeSourceBasedDraftRequest(String normalizedMessage) {
@@ -870,6 +897,126 @@ public class AssignmentAiDraftService {
                 ? OUT_OF_SCOPE_RESPONSE_VI
                 : OUT_OF_SCOPE_RESPONSE_EN;
         return new AssignmentAiDraftModel.Response(content.trim(), "", null, 0, null);
+    }
+
+    private AssignmentAiDraftModel.Response vagueDifficultyOrScoringResponse(String message) {
+        String normalized = normalizeForScope(message);
+        boolean vagueDifficulty = containsKeyword(normalized, List.of(
+                "bai de",
+                "bai vua",
+                "bai trung binh",
+                "bai kho",
+                "de hon",
+                "trung binh",
+                "kho hon",
+                "tao bai kho",
+                "tao bai de",
+                "tao bai trung binh",
+                "muc do de",
+                "muc do trung binh",
+                "muc do kho",
+                "easy assignment",
+                "medium assignment",
+                "hard assignment",
+                "difficult assignment",
+                "beginner assignment",
+                "intermediate assignment",
+                "advanced assignment",
+                "beginner level",
+                "intermediate level",
+                "advanced level",
+                "make it easy",
+                "make it medium",
+                "make it hard",
+                "make it difficult",
+                "more challenging",
+                "less challenging"
+        )) && !hasDifficultyCriteria(normalized);
+        boolean vagueScoring = containsKeyword(normalized, List.of(
+                "tinh diem",
+                "chia diem",
+                "co tinh diem",
+                "cham diem tung noi dung",
+                "score it",
+                "include points",
+                "point allocation",
+                "allocate points",
+                "grading points"
+        )) && !containsKeyword(normalized, List.of(
+                "tong diem",
+                "thang diem",
+                "trong so",
+                "moi tieu chi",
+                "de xuat thang diem",
+                "trainer duyet",
+                "total score",
+                "total points",
+                "point distribution",
+                "weighting",
+                "weight",
+                "propose a scoring plan",
+                "for trainer review"
+        ));
+        if (!vagueDifficulty && !vagueScoring) {
+            return null;
+        }
+        String content = isLikelyVietnamese(message)
+                ? vagueClarificationVi(vagueDifficulty, vagueScoring)
+                : vagueClarificationEn(vagueDifficulty, vagueScoring);
+        return new AssignmentAiDraftModel.Response(content, "", null, 0, null);
+    }
+
+    private boolean hasDifficultyCriteria(String normalized) {
+        return containsKeyword(normalized, List.of(
+                "cap do hoc vien",
+                "trinh do hoc vien",
+                "kien thuc nen",
+                "do sau lap luan",
+                "so luong dan chung",
+                "yeu cau so sanh",
+                "yeu cau tong hop",
+                "thoi luong",
+                "do dai bai lam",
+                "learner level",
+                "student level",
+                "prerequisite",
+                "prior knowledge",
+                "reasoning depth",
+                "evidence count",
+                "comparison requirement",
+                "synthesis requirement",
+                "time limit",
+                "expected length"
+        )) || Pattern.compile("\\b(?:bai\\s+)?(?:de|vua|trung\\s+binh|kho)\\s+(?:la|ve|tap\\s+trung|phan\\s+tich|yeu\\s+cau)\\b")
+                .matcher(normalized)
+                .find()
+                || Pattern.compile("\\b(?:easy|medium|hard|beginner|intermediate|advanced)\\s+(?:means|is|focuses\\s+on|requires)\\b")
+                .matcher(normalized)
+                .find();
+    }
+
+    private String vagueClarificationVi(boolean vagueDifficulty, boolean vagueScoring) {
+        List<String> messages = new ArrayList<>();
+        if (vagueDifficulty) {
+            messages.add("Mức độ dễ, trung bình hoặc khó chưa đủ tiêu chí để đánh giá. Vui lòng bổ sung cấp độ học viên, kiến thức nền, độ sâu lập luận, số lượng dẫn chứng, yêu cầu so sánh hoặc tổng hợp, thời lượng và độ dài bài làm mong muốn.");
+        }
+        if (vagueScoring) {
+            messages.add("Chưa đủ căn cứ để tự chia điểm cho từng nội dung. Vui lòng cung cấp tổng điểm, trọng số từng tiêu chí hoặc cho phép AI đề xuất thang điểm để trainer duyệt.");
+        }
+        messages.add("Sau khi có các tiêu chí này, tôi sẽ tạo bài tập và rubric phù hợp hơn.");
+        return String.join("\n\n", messages);
+    }
+
+    private String vagueClarificationEn(boolean vagueDifficulty, boolean vagueScoring) {
+        List<String> messages = new ArrayList<>();
+        if (vagueDifficulty) {
+            messages.add("The requested easy, medium, or hard difficulty level is not specific enough to evaluate. Please add criteria such as learner level, prerequisite knowledge, reasoning depth, evidence count, comparison or synthesis requirements, time limit, and expected response length.");
+        }
+        if (vagueScoring) {
+            messages.add("There is not enough information to divide points by content area. Please provide the total score, criterion weights, or explicitly allow AI to propose a scoring plan for trainer review.");
+        }
+        messages.add("After those criteria are provided, I can create the assignment and rubric more reliably.");
+        return String.join("\n\n", messages);
     }
 
     private AssignmentAiDraftModel.Response unsupportedLanguageResponse() {
