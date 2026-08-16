@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
+import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.service.QuestionService;
 import java.nio.charset.StandardCharsets;
@@ -139,9 +140,9 @@ class CourseModuleQuestionControllerTest {
         verify(questionService).importBatchForCourse(courseId, moduleId, request);
     }
 
-    /** Xác nhận file CSV module-scoped không còn cột module_id dư thừa. */
+    /** Xac nhan file CSV module-scoped co cac cot import day du theo yeu cau moi. */
     @Test
-    void export_omitsModuleColumn() {
+    void export_includesTemplateColumnsAnswersModuleAndMedia() {
         when(questionService.listByCourseModule(
                 courseId, moduleId, null, null, null, true, null, 0, 10_000
         )).thenReturn(new PageResponse<>(List.of(response("Question", "approved")), 0, 10_000, 1, 1));
@@ -152,8 +153,9 @@ class CourseModuleQuestionControllerTest {
         assertThat(response.getHeaders().getContentDisposition().getFilename())
                 .isEqualTo("module-questions.csv");
         String csv = new String(response.getBody(), StandardCharsets.UTF_8);
-        assertThat(csv).startsWith("\uFEFFid,type,status,question_text\n");
-        assertThat(csv).doesNotContain("module_id");
+        assertThat(csv).startsWith("\uFEFFid,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Module ID,Image files,Audio files\n");
+        assertThat(csv).contains("\"Question\",\"single_choice\",\"Option A\",\"Option B\",\"\",\"\",\"\",\"\",\"A\",\"Explanation\"");
+        assertThat(csv).contains("\"" + moduleId + "\",\"https://cdn.smartlearnly.test/question.png\",\"https://cdn.smartlearnly.test/question.mp3\"");
     }
 
     /** Lấy tên component của Java record để test chính xác contract JSON đầu vào. */
@@ -201,12 +203,48 @@ class CourseModuleQuestionControllerTest {
                 "Explanation",
                 null,
                 null,
-                List.of(),
+                List.of(
+                        new QuestionMediaAttachmentResponse(
+                                UUID.randomUUID(),
+                                UUID.randomUUID(),
+                                questionId,
+                                "image",
+                                "https://cdn.smartlearnly.test/question.png",
+                                "questions/question.png",
+                                "bucket",
+                                "image/png",
+                                1024,
+                                "question.png",
+                                1,
+                                null,
+                                null,
+                                null
+                        ),
+                        new QuestionMediaAttachmentResponse(
+                                UUID.randomUUID(),
+                                UUID.randomUUID(),
+                                questionId,
+                                "audio",
+                                "https://cdn.smartlearnly.test/question.mp3",
+                                "questions/question.mp3",
+                                "bucket",
+                                "audio/mpeg",
+                                2048,
+                                "question.mp3",
+                                1,
+                                null,
+                                null,
+                                null
+                        )
+                ),
                 false,
                 null,
                 status,
                 2,
-                List.of(),
+                List.of(
+                        new QuestionModel.AnswerResponse(null, null, "Option A", true, true, 1, 1, List.of()),
+                        new QuestionModel.AnswerResponse(null, null, "Option B", false, false, 2, 2, List.of())
+                ),
                 UUID.randomUUID(),
                 null,
                 null,

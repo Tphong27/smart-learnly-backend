@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
+import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.service.QuestionService;
 import java.nio.charset.StandardCharsets;
@@ -56,26 +57,62 @@ class CourseQuestionControllerTest {
     }
 
     @Test
-    void export_returnsCsvWithHeaderEscapingAndAttachmentHeaders() {
+    void export_returnsCsvWithTemplateColumnsAnswersAndMedia() {
         QuestionModel.Response first = response("<p>Annotation&nbsp;nào \"Java\"?</p>", "draft");
         QuestionModel.Response second = new QuestionModel.Response(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 courseId,
                 null,
-                null,
+                "True false statement",
                 "true_false",
                 null,
                 null,
+                "True statement explanation",
                 null,
                 null,
-                null,
-                List.of(),
+                List.of(
+                        new QuestionMediaAttachmentResponse(
+                                UUID.randomUUID(),
+                                UUID.randomUUID(),
+                                questionId,
+                                "image",
+                                "https://cdn.smartlearnly.test/question.png",
+                                "questions/question.png",
+                                "bucket",
+                                "image/png",
+                                1024,
+                                "question.png",
+                                1,
+                                null,
+                                null,
+                                null
+                        ),
+                        new QuestionMediaAttachmentResponse(
+                                UUID.randomUUID(),
+                                UUID.randomUUID(),
+                                questionId,
+                                "audio",
+                                "https://cdn.smartlearnly.test/question.mp3",
+                                "questions/question.mp3",
+                                "bucket",
+                                "audio/mpeg",
+                                2048,
+                                "question.mp3",
+                                1,
+                                null,
+                                null,
+                                null
+                        )
+                ),
                 false,
                 null,
                 "approved",
-                0,
-                List.of(),
+                2,
+                List.of(
+                        new QuestionModel.AnswerResponse(null, null, "True", true, true, 1, 1, List.of()),
+                        new QuestionModel.AnswerResponse(null, null, "False", false, false, 2, 2, List.of())
+                ),
                 null,
                 null,
                 null,
@@ -92,10 +129,12 @@ class CourseQuestionControllerTest {
         assertThat(response.getHeaders().getContentType().toString()).isEqualTo("text/csv;charset=UTF-8");
         assertThat(response.getBody()).startsWith(new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
         String csv = new String(response.getBody(), StandardCharsets.UTF_8);
-        assertThat(csv).startsWith("\uFEFFid,module_id,type,status,question_text\n");
+        assertThat(csv).startsWith("\uFEFFid,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Module ID,Image files,Audio files\n");
         assertThat(csv).contains("\"Annotation nào \"\"Java\"\"?\"");
         assertThat(csv).doesNotContain("<p>").doesNotContain("&nbsp;");
-        assertThat(csv).contains(",\"true_false\",\"approved\",");
+        assertThat(csv).contains("\"Option A\",\"Option B\",\"\",\"\",\"\",\"\",\"A\",\"Explanation\"");
+        assertThat(csv).contains("\"" + moduleId + "\",\"https://cdn.smartlearnly.test/question.png\",\"https://cdn.smartlearnly.test/question.mp3\"");
+        assertThat(csv).contains("\"true_false\",\"True\",\"False\",\"\",\"\",\"\",\"\",\"True\",\"True statement explanation\"");
         verify(questionService).listByCourse(courseId, null, "java", null, null, true, null, 0, 10_000);
     }
 
@@ -217,12 +256,48 @@ class CourseQuestionControllerTest {
                 "Explanation",
                 null,
                 null,
-                List.of(),
+                List.of(
+                        new QuestionMediaAttachmentResponse(
+                                UUID.randomUUID(),
+                                UUID.randomUUID(),
+                                questionId,
+                                "image",
+                                "https://cdn.smartlearnly.test/question.png",
+                                "questions/question.png",
+                                "bucket",
+                                "image/png",
+                                1024,
+                                "question.png",
+                                1,
+                                null,
+                                null,
+                                null
+                        ),
+                        new QuestionMediaAttachmentResponse(
+                                UUID.randomUUID(),
+                                UUID.randomUUID(),
+                                questionId,
+                                "audio",
+                                "https://cdn.smartlearnly.test/question.mp3",
+                                "questions/question.mp3",
+                                "bucket",
+                                "audio/mpeg",
+                                2048,
+                                "question.mp3",
+                                1,
+                                null,
+                                null,
+                                null
+                        )
+                ),
                 false,
                 null,
                 status,
-                0,
-                List.of(),
+                2,
+                List.of(
+                        new QuestionModel.AnswerResponse(null, null, "Option A", true, true, 1, 1, List.of()),
+                        new QuestionModel.AnswerResponse(null, null, "Option B", false, false, 2, 2, List.of())
+                ),
                 UUID.randomUUID(),
                 null,
                 null,
