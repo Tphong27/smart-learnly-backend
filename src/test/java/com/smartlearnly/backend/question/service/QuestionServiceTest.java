@@ -295,7 +295,7 @@ class QuestionServiceTest {
         assertThat(questionCaptor.getValue().getQuestionType()).isEqualTo(QuestionType.SINGLE_CHOICE);
         assertThat(questionCaptor.getValue().getIsAiGenerated()).isFalse();
 
-        verify(answerRepository).deleteByQuestionId(questionId);
+        verify(answerRepository, never()).deleteByQuestionId(questionId);
         verify(answerRepository, times(2)).save(any(QuestionAnswer.class));
         verify(courseAccessService).requireUpdatableCourse(courseId);
     }
@@ -721,7 +721,7 @@ class QuestionServiceTest {
     }
 
     @Test
-    void updateInCourse_replacesQuestionAndAnswers_whenRequestIsValid() {
+    void updateInCourse_updatesQuestionAndAnswers_whenRequestIsValid() {
         Question existing = question(questionId, courseId, QuestionStatus.DRAFT);
         when(questionRepository.findById(questionId)).thenReturn(Optional.of(existing));
         when(questionRepository.existsActiveDuplicateInCourse(courseId, "Updated question?", questionId))
@@ -745,8 +745,89 @@ class QuestionServiceTest {
         assertThat(response.questionText()).isEqualTo("Updated question?");
         assertThat(response.status()).isEqualTo("pending_review");
         assertThat(existing.getStatus()).isEqualTo(QuestionStatus.PENDING_REVIEW);
-        verify(answerRepository).deleteByQuestionId(questionId);
+        verify(answerRepository, never()).deleteByQuestionId(questionId);
         verify(answerRepository, times(2)).save(any(QuestionAnswer.class));
+    }
+
+    @Test
+    void updateInCourse_preservesAnswerIdsReferencedByQuizAttempts() {
+        UUID correctAnswerId = UUID.randomUUID();
+        UUID wrongAnswerId = UUID.randomUUID();
+        Question existing = question(questionId, courseId, QuestionStatus.APPROVED);
+        QuestionAnswer correctAnswer = answer(correctAnswerId, "True", true, 1);
+        QuestionAnswer wrongAnswer = answer(wrongAnswerId, "False", false, 2);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(existing));
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Updated statement", questionId))
+                .thenReturn(false);
+        when(questionRepository.save(existing)).thenReturn(existing);
+        when(answerRepository.findByQuestionIdOrderByOrderIndexAsc(questionId))
+                .thenReturn(List.of(correctAnswer, wrongAnswer));
+
+        QuestionModel.UpdateRequest request = new QuestionModel.UpdateRequest(
+                null,
+                moduleId,
+                "Updated statement",
+                "true_false",
+                null,
+                null,
+                null,
+                "approved",
+                List.of(
+                        new QuestionModel.AnswerRequest(
+                                correctAnswerId, correctAnswerId, "True", false, null, 1, null),
+                        new QuestionModel.AnswerRequest(
+                                wrongAnswerId, wrongAnswerId, "False", true, null, 2, null)));
+
+        service.updateInCourse(courseId, questionId, request);
+
+        assertThat(correctAnswer.getId()).isEqualTo(correctAnswerId);
+        assertThat(correctAnswer.getIsCorrect()).isFalse();
+        assertThat(wrongAnswer.getId()).isEqualTo(wrongAnswerId);
+        assertThat(wrongAnswer.getIsCorrect()).isTrue();
+        verify(answerRepository).save(correctAnswer);
+        verify(answerRepository).save(wrongAnswer);
+        verify(answerRepository, never()).deleteByQuestionId(questionId);
+        verify(answerRepository, never()).existsStudentSelectionById(any());
+    }
+
+    @Test
+    void updateInCourse_rejectsRemovingAnswerReferencedByQuizAttempt() {
+        UUID retainedAnswerId = UUID.randomUUID();
+        UUID secondRetainedAnswerId = UUID.randomUUID();
+        UUID removedAnswerId = UUID.randomUUID();
+        Question existing = question(questionId, courseId, QuestionStatus.APPROVED);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(existing));
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, "Updated question?", questionId))
+                .thenReturn(false);
+        when(questionRepository.save(existing)).thenReturn(existing);
+        when(answerRepository.findByQuestionIdOrderByOrderIndexAsc(questionId)).thenReturn(List.of(
+                answer(retainedAnswerId, "A", true, 1),
+                answer(secondRetainedAnswerId, "B", false, 2),
+                answer(removedAnswerId, "C", false, 3)));
+        when(answerRepository.existsStudentSelectionById(removedAnswerId)).thenReturn(true);
+        QuestionModel.UpdateRequest request = new QuestionModel.UpdateRequest(
+                null,
+                moduleId,
+                "Updated question?",
+                "single_choice",
+                null,
+                null,
+                null,
+                "approved",
+                List.of(
+                        new QuestionModel.AnswerRequest(
+                                retainedAnswerId, null, "A", true, null, 1, null),
+                        new QuestionModel.AnswerRequest(
+                                secondRetainedAnswerId, null, "B", false, null, 2, null)));
+
+        assertThatThrownBy(() -> service.updateInCourse(courseId, questionId, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode())
+                                .isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
+                .hasMessage("An answer used in quiz attempts cannot be removed");
+
+        verify(answerRepository, never()).deleteAll(any());
+        verify(answerRepository, never()).deleteByQuestionId(any());
     }
 
     @Test
@@ -899,7 +980,8 @@ class QuestionServiceTest {
                 eq(row.imageFiles()),
                 eq(row.audioFiles()),
                 eq("excel_import"));
-        verify(answerRepository).deleteByQuestionId(response.createdQuestionIds().get(0));
+        verify(answerRepository, never())
+                .deleteByQuestionId(response.createdQuestionIds().get(0));
         verify(answerRepository, times(2)).save(any(QuestionAnswer.class));
     }
 

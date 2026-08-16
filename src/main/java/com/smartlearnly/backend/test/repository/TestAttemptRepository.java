@@ -25,6 +25,15 @@ public interface TestAttemptRepository
             UUID testId,
             UUID studentId);
 
+    List<TestAttempt> findByTestIdAndStudentIdAndClassIdOrderByStartTimeDesc(
+            UUID testId,
+            UUID studentId,
+            UUID classId);
+
+    List<TestAttempt> findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(
+            UUID testId,
+            UUID studentId);
+
     @Query(value = """
             SELECT EXISTS (
                 SELECT 1

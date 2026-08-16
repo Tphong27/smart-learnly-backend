@@ -115,6 +115,106 @@ class ClassCurriculumCompositionServiceTest {
     }
 
     @Test
+    void snapshotStructureFromMasterShouldCreateClassOwnedFlashcards() {
+        CurriculumVersion draft = version(CurriculumScope.CLASS, CurriculumStatus.DRAFT);
+        CurriculumVersion source = version(CurriculumScope.MASTER, CurriculumStatus.PUBLISHED);
+        CurriculumSection sourceSection = section(source, 0);
+        source.addSection(sourceSection);
+
+        CurriculumLesson sourceLesson = materializedLesson("Master flashcards");
+        sourceLesson.setType(LessonType.FLASHCARD);
+        sourceLesson.setLessonIdentityId(UUID.randomUUID());
+        sourceSection.addLesson(sourceLesson);
+        FlashcardSet sourceSet = flashcardSet(sourceLesson, "Master set");
+        FlashcardCard sourceCard = flashcardCard(sourceSet, "Master front", "Master back");
+        UUID classLessonId = UUID.randomUUID();
+
+        when(sectionRepository.save(any(CurriculumSection.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(lessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {
+            CurriculumLesson saved = invocation.getArgument(0);
+            saved.setId(classLessonId);
+            return saved;
+        });
+        when(entryRepository.save(any(ClassCurriculumEntry.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(any(UUID.class)))
+                .thenAnswer(invocation -> sourceLesson.getId().equals(invocation.getArgument(0))
+                        ? Optional.of(sourceSet)
+                        : Optional.empty());
+        when(flashcardSetRepository.save(any(FlashcardSet.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(sourceSet.getId()))
+                .thenReturn(List.of(sourceCard));
+
+        service.snapshotStructure(draft, source);
+
+        ArgumentCaptor<ClassCurriculumEntry> entryCaptor = ArgumentCaptor.forClass(ClassCurriculumEntry.class);
+        verify(entryRepository).save(entryCaptor.capture());
+        assertThat(entryCaptor.getValue().getMaterializedLessonId()).isEqualTo(classLessonId);
+        ArgumentCaptor<FlashcardSet> setCaptor = ArgumentCaptor.forClass(FlashcardSet.class);
+        verify(flashcardSetRepository).save(setCaptor.capture());
+        assertThat(setCaptor.getValue()).isNotSameAs(sourceSet);
+        assertThat(setCaptor.getValue().getCurriculumLessonId()).isEqualTo(classLessonId);
+        verify(flashcardCardRepository).saveAll(argThat(cards -> {
+            List<FlashcardCard> copiedCards = StreamSupport.stream(cards.spliterator(), false).toList();
+            return copiedCards.size() == 1
+                    && copiedCards.get(0) != sourceCard
+                    && copiedCards.get(0).getFlashcardSet() == setCaptor.getValue();
+        }));
+    }
+
+    @Test
+    void materializeInheritedFlashcardShouldCloneSetForExistingClass() {
+        CurriculumVersion draft = version(CurriculumScope.CLASS, CurriculumStatus.DRAFT);
+        draft.setCourseId(UUID.randomUUID());
+        CurriculumVersion masterVersion = version(CurriculumScope.MASTER, CurriculumStatus.PUBLISHED);
+        CurriculumSection classSection = section(draft, 0);
+        UUID identityId = UUID.randomUUID();
+        CurriculumLesson masterLesson = materializedLesson("Inherited flashcards");
+        masterLesson.setType(LessonType.FLASHCARD);
+        masterLesson.setLessonIdentityId(identityId);
+        ClassCurriculumEntry entry = entry(classSection, masterLesson.getId(), identityId, null);
+        entry.setClassVersionId(draft.getId());
+        FlashcardSet sourceSet = flashcardSet(masterLesson, "Inherited set");
+        FlashcardCard sourceCard = flashcardCard(sourceSet, "Inherited front", "Inherited back");
+        UUID classLessonId = UUID.randomUUID();
+
+        when(entryRepository.findByClassVersionIdAndSourceCurriculumLessonId(draft.getId(), masterLesson.getId()))
+                .thenReturn(Optional.of(entry));
+        when(entryRepository.findByIdAndClassVersionIdForUpdate(entry.getId(), draft.getId()))
+                .thenReturn(Optional.of(entry));
+        when(versionRepository.findById(draft.getId())).thenReturn(Optional.of(draft));
+        when(versionRepository.findFirstByCourseIdAndScopeAndStatusOrderByVersionNumberDescCreatedAtDesc(
+                draft.getCourseId(), CurriculumScope.MASTER, CurriculumStatus.PUBLISHED))
+                .thenReturn(Optional.of(masterVersion));
+        when(lessonRepository.findByCurriculumVersionIdAndLessonIdentityId(masterVersion.getId(), identityId))
+                .thenReturn(Optional.of(masterLesson));
+        when(lessonRepository.findByCurriculumVersionIdAndLessonIdentityId(draft.getId(), identityId))
+                .thenReturn(Optional.empty());
+        when(lessonRepository.save(any(CurriculumLesson.class))).thenAnswer(invocation -> {
+            CurriculumLesson saved = invocation.getArgument(0);
+            saved.setId(classLessonId);
+            return saved;
+        });
+        when(entryRepository.save(any(ClassCurriculumEntry.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(classLessonId))
+                .thenReturn(Optional.empty());
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(masterLesson.getId()))
+                .thenReturn(Optional.of(sourceSet));
+        when(flashcardSetRepository.save(any(FlashcardSet.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(flashcardCardRepository.findActiveBySetIdOrderByOrderIndex(sourceSet.getId()))
+                .thenReturn(List.of(sourceCard));
+
+        CurriculumLesson materialized = service.ensureMaterializedForWrite(draft, masterLesson.getId());
+
+        assertThat(materialized.getId()).isEqualTo(classLessonId);
+        assertThat(entry.getMaterializedLessonId()).isEqualTo(classLessonId);
+        verify(flashcardSetRepository).save(argThat(set ->
+                classLessonId.equals(set.getCurriculumLessonId()) && set != sourceSet));
+        verify(flashcardCardRepository).saveAll(argThat(cards ->
+                StreamSupport.stream(cards.spliterator(), false)
+                        .allMatch(card -> card != sourceCard && card.getFlashcardSet() != sourceSet)));
+    }
+
+    @Test
     void snapshotStructureFromClassVersionShouldCopyFlashcardSetAndCards() {
         CurriculumVersion draft = version(CurriculumScope.CLASS, CurriculumStatus.DRAFT);
         CurriculumVersion source = version(CurriculumScope.CLASS, CurriculumStatus.PUBLISHED);
@@ -157,8 +257,10 @@ class ClassCurriculumCompositionServiceTest {
         });
         when(entryRepository.save(any(ClassCurriculumEntry.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(sourceLesson.getId()))
-                .thenReturn(Optional.of(sourceSet));
+        when(flashcardSetRepository.findByCurriculumLessonIdAndDeletedAtIsNull(any(UUID.class)))
+                .thenAnswer(invocation -> sourceLesson.getId().equals(invocation.getArgument(0))
+                        ? Optional.of(sourceSet)
+                        : Optional.empty());
         when(flashcardSetRepository.save(any(FlashcardSet.class))).thenAnswer(invocation -> {
             FlashcardSet saved = invocation.getArgument(0);
             saved.setId(UUID.randomUUID());
@@ -404,5 +506,25 @@ class ClassCurriculumCompositionServiceTest {
         lesson.setTitle(title);
         lesson.setStatus(LessonStatus.PUBLISHED);
         return lesson;
+    }
+
+    private FlashcardSet flashcardSet(CurriculumLesson lesson, String title) {
+        FlashcardSet set = new FlashcardSet();
+        set.setId(UUID.randomUUID());
+        set.setCurriculumLessonId(lesson.getId());
+        set.setTitle(title);
+        set.setIsPublic(false);
+        set.setIsOfficial(false);
+        return set;
+    }
+
+    private FlashcardCard flashcardCard(FlashcardSet set, String frontText, String backText) {
+        FlashcardCard card = new FlashcardCard();
+        card.setId(UUID.randomUUID());
+        card.setFlashcardSet(set);
+        card.setFrontText(frontText);
+        card.setBackText(backText);
+        card.setOrderIndex(0);
+        return card;
     }
 }

@@ -82,9 +82,12 @@ public class TrainerLessonFlashcardService {
         return new FlashcardLessonCreatedResponse(lesson.getId(), saved.getId());
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * Tải set phục vụ authoring và materialize lesson trước để class cũ cũng nhận bản flashcard riêng.
+     */
+    @Transactional
     public FlashcardSetResponse getSetByLesson(UUID classId, UUID lessonId) {
-        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForRead(classId, lessonId);
+        CurriculumLesson lesson = trainerClassCurriculumService.requireOwnedClassLessonForWrite(classId, lessonId);
         FlashcardSet flashcardSet = requireSetByLesson(lesson.getId());
         return toSetResponse(lesson, flashcardSet, findActiveCards(flashcardSet.getId()));
     }
@@ -217,7 +220,7 @@ public class TrainerLessonFlashcardService {
     }
 
     /** Tải ảnh cho card sau khi xác minh set thuộc đúng class draft lesson. */
-    @Transactional(readOnly = true)
+    @Transactional
     public FlashcardImageUploadResponse uploadImage(
             UUID classId,
             UUID lessonId,

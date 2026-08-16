@@ -2,8 +2,10 @@ package com.smartlearnly.backend.flashcard.service;
 
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
-import com.smartlearnly.backend.common.security.CurrentUserService;
+import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.course.entity.Course;
+import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
+import com.smartlearnly.backend.curriculum.repository.CurriculumLessonRepository;
 import com.smartlearnly.backend.file.config.StorageProperties;
 import com.smartlearnly.backend.file.service.FileStorageService;
 import com.smartlearnly.backend.flashcard.dto.FlashcardImageUploadResponse;
@@ -11,7 +13,6 @@ import com.smartlearnly.backend.flashcard.entity.FlashcardSet;
 import com.smartlearnly.backend.flashcard.repository.FlashcardSetRepository;
 import com.smartlearnly.backend.learning.lesson.entity.Lesson;
 import com.smartlearnly.backend.learning.lesson.entity.LessonType;
-import com.smartlearnly.backend.user.entity.UserAccount;
 import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
@@ -31,7 +32,8 @@ public class FlashcardImageUploadService {
     );
 
     private final FlashcardSetRepository flashcardSetRepository;
-    private final CurrentUserService currentUserService;
+    private final CurriculumLessonRepository curriculumLessonRepository;
+    private final CourseAccessService courseAccessService;
     private final FileStorageService fileStorageService;
     private final StorageProperties storageProperties;
     private final Tika tika = new Tika();
@@ -42,8 +44,7 @@ public class FlashcardImageUploadService {
         FlashcardSet flashcardSet = flashcardSetRepository.findByIdAndDeletedAtIsNull(setId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard set was not found"));
         Course course = requireFlashcardCourse(flashcardSet);
-        UserAccount actor = currentUserService.requireAuthenticatedUser();
-        requireEditAccess(actor, course);
+        courseAccessService.requireUpdatableCourse(course.getId());
 
         return uploadOwnedSet(flashcardSet, file);
     }
@@ -74,31 +75,42 @@ public class FlashcardImageUploadService {
         return new FlashcardImageUploadResponse(stored.url());
     }
 
+    /** Xác nhận bộ thẻ còn gắn với lesson flashcard legacy hoặc curriculum hiện tại. */
     private Course requireFlashcardCourse(FlashcardSet flashcardSet) {
+        UUID curriculumLessonId = flashcardSet.getCurriculumLessonId();
+        if (curriculumLessonId != null) {
+            CurriculumLesson lesson = curriculumLessonRepository.findById(curriculumLessonId)
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.RESOURCE_NOT_FOUND,
+                            "Flashcard lesson was not found"));
+            Course course = flashcardSet.getCourse();
+            UUID lessonCourseId = lesson.getSection() == null
+                    || lesson.getSection().getCurriculumVersion() == null
+                    ? null
+                    : lesson.getSection().getCurriculumVersion().getCourseId();
+            if (lesson.getType() != LessonType.FLASHCARD
+                    || course == null
+                    || course.getId() == null
+                    || course.getDeletedAt() != null
+                    || !course.getId().equals(lessonCourseId)) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
+            }
+            return course;
+        }
+
         Lesson lesson = flashcardSet.getLesson();
-        Course course = lesson == null ? flashcardSet.getCourse() : lesson.getCourse();
-        if (lesson == null || lesson.getType() != LessonType.FLASHCARD || course == null || course.getDeletedAt() != null) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
+        if (lesson != null) {
+            Course course = lesson.getCourse();
+            if (lesson.getType() != LessonType.FLASHCARD || course == null || course.getDeletedAt() != null) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
+            }
+            return course;
         }
-        return course;
+
+        throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Flashcard lesson was not found");
     }
 
-    private void requireEditAccess(UserAccount actor, Course course) {
-        if (actor == null) {
-            throw new BusinessException(ErrorCode.UNAUTHENTICATED);
-        }
-        String role = actor.getRole() == null ? "" : actor.getRole().trim();
-        if ("ADMIN".equalsIgnoreCase(role)) {
-            return;
-        }
-        if (("SME".equalsIgnoreCase(role) || "TRAINER".equalsIgnoreCase(role))
-                && course.getCreator() != null
-                && actor.getId().equals(course.getCreator().getId())) {
-            return;
-        }
-        throw new BusinessException(ErrorCode.FORBIDDEN, "You are not allowed to edit this flashcard set");
-    }
-
+    /** Đọc tệp và từ chối dữ liệu rỗng hoặc vượt giới hạn ảnh cấu hình. */
     private byte[] readAndValidateSize(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Flashcard image file is required");
@@ -118,6 +130,7 @@ public class FlashcardImageUploadService {
         }
     }
 
+    /** Nhận diện MIME từ nội dung thật để ngăn tệp giả mạo phần mở rộng. */
     private String detectContentType(byte[] content) {
         try {
             return tika.detect(content);
