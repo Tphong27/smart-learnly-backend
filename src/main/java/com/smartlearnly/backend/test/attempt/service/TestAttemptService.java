@@ -157,11 +157,11 @@ public class TestAttemptService {
         return repository.findByTestIdOrderByStartTimeAsc(testId)
                 .stream()
                 .map(this::expireIfOverdue)
-                .map(this::refreshFinalGrade)
                 .map(this::mapToResponse)
                 .toList();
     }
 
+    /** Trả chi tiết một attempt sau khi cập nhật trạng thái hết hạn và điểm cuối cùng. */
     public TestAttemptModel.Response getAttemptById(UUID attemptId) {
         return getAttemptById(attemptId, null);
     }
@@ -170,8 +170,9 @@ public class TestAttemptService {
     public TestAttemptModel.Response getAttemptById(UUID attemptId, UUID classId) {
         TestAttempt attempt = repository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
-        testService.requireAttemptAccess(attempt.getTestId(), attempt.getStudentId(), classId);
-        return mapToResponse(refreshFinalGrade(expireIfOverdue(attempt)));
+        testService.requireAttemptAccess(
+                attempt.getTestId(), attempt.getStudentId(), attempt.getClassId());
+        return mapToResponse(expireIfOverdue(attempt));
     }
 
     /** Lấy lịch sử attempt trong đúng context course trực tiếp hoặc một lớp cụ thể. */
