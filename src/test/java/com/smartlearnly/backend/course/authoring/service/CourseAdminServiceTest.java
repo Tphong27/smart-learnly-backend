@@ -93,10 +93,13 @@ class CourseAdminServiceTest {
         @Test
         void createShouldUseDevASchemaFieldsAndAuthenticatedCreator() {
                 UUID categoryId = UUID.randomUUID();
+                UUID smeId = UUID.randomUUID();
                 UserAccount admin = admin();
+                UserAccount sme = sme(smeId);
                 Category category = category(categoryId);
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
                 when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
+                stubActiveSme(sme);
                 when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("java-backend-co-ban"))
                                 .thenReturn(false);
                 when(courseRepository.save(any(Course.class)))
@@ -117,7 +120,7 @@ class CourseAdminServiceTest {
                                 null,
                                 true,
                                 "draft",
-                                null));
+                                smeId));
 
                 assertThat(response.slug()).isEqualTo("java-backend-co-ban");
                 assertThat(response.categoryId()).isEqualTo(categoryId);
@@ -128,6 +131,7 @@ class CourseAdminServiceTest {
                 ArgumentCaptor<Course> courseCaptor = ArgumentCaptor.forClass(Course.class);
                 verify(courseRepository).save(courseCaptor.capture());
                 assertThat(courseCaptor.getValue().getCreator()).isEqualTo(admin);
+                assertThat(courseCaptor.getValue().getAssignedSme()).isEqualTo(sme);
                 assertThat(courseCaptor.getValue().getStatus()).isEqualTo(CourseStatus.DRAFT);
 
                 ArgumentCaptor<CurriculumVersion> curriculumCaptor = ArgumentCaptor.forClass(CurriculumVersion.class);
@@ -143,9 +147,11 @@ class CourseAdminServiceTest {
         @Test
         void createShouldRemainDraftWhenPublishedStatusReachesService() {
                 UUID categoryId = UUID.randomUUID();
+                UUID smeId = UUID.randomUUID();
                 UserAccount admin = admin();
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
                 when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+                stubActiveSme(sme(smeId));
                 when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("published-course")).thenReturn(false);
                 when(courseRepository.save(any(Course.class)))
                                 .thenAnswer(invocation -> persist(invocation.getArgument(0)));
@@ -165,7 +171,7 @@ class CourseAdminServiceTest {
                                 null,
                                 true,
                                 "published",
-                                null));
+                                smeId));
 
                 assertThat(response.status()).isEqualTo("draft");
 
@@ -226,8 +232,10 @@ class CourseAdminServiceTest {
         @Test
         void createShouldRejectFreeCourseWithPositivePrice() {
                 UUID categoryId = UUID.randomUUID();
+                UUID smeId = UUID.randomUUID();
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
                 when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+                stubActiveSme(sme(smeId));
 
                 assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
                                 categoryId,
@@ -244,7 +252,7 @@ class CourseAdminServiceTest {
                                 null,
                                 true,
                                 null,
-                                null)))
+                                smeId)))
                                 .isInstanceOf(BusinessException.class)
                                 .extracting("errorCode")
                                 .isEqualTo(ErrorCode.INVALID_REQUEST);
@@ -255,8 +263,10 @@ class CourseAdminServiceTest {
         @Test
         void createShouldRejectThumbnailOutsideConfiguredBucket() {
                 UUID categoryId = UUID.randomUUID();
+                UUID smeId = UUID.randomUUID();
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
                 when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+                stubActiveSme(sme(smeId));
 
                 assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
                                 categoryId,
@@ -273,7 +283,7 @@ class CourseAdminServiceTest {
                                 null,
                                 false,
                                 null,
-                                null)))
+                                smeId)))
                                 .isInstanceOf(BusinessException.class)
                                 .extracting("errorCode")
                                 .isEqualTo(ErrorCode.INVALID_REQUEST);
@@ -285,10 +295,12 @@ class CourseAdminServiceTest {
         void createShouldAcceptR2ThumbnailFromConfiguredBucketPublicUrl() {
                 storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
                 UUID categoryId = UUID.randomUUID();
+                UUID smeId = UUID.randomUUID();
                 UserAccount admin = admin();
                 Category category = category(categoryId);
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
                 when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
+                stubActiveSme(sme(smeId));
                 when(courseRepository.existsBySlugIgnoreCaseAndDeletedAtIsNull("r2-course")).thenReturn(false);
                 when(courseRepository.save(any(Course.class)))
                                 .thenAnswer(invocation -> persist(invocation.getArgument(0)));
@@ -308,7 +320,7 @@ class CourseAdminServiceTest {
                                 null,
                                 false,
                                 null,
-                                null));
+                                smeId));
 
                 assertThat(response.thumbnailUrl())
                                 .isEqualTo("https://course-thumbnails.example.com/2026/06/thumb.webp");
@@ -318,8 +330,10 @@ class CourseAdminServiceTest {
         void createShouldRejectR2ThumbnailOutsideConfiguredBucketPublicUrl() {
                 storageProperties.setR2CourseThumbnailPublicUrl("https://course-thumbnails.example.com");
                 UUID categoryId = UUID.randomUUID();
+                UUID smeId = UUID.randomUUID();
                 when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
                 when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+                stubActiveSme(sme(smeId));
 
                 assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
                                 categoryId,
@@ -336,8 +350,55 @@ class CourseAdminServiceTest {
                                 null,
                                 false,
                                 null,
+                                smeId)))
+                                .isInstanceOf(BusinessException.class)
+                                .extracting("errorCode")
+                                .isEqualTo(ErrorCode.INVALID_REQUEST);
+
+                verify(courseRepository, never()).save(any());
+        }
+
+        @Test
+        void createShouldRejectMissingAssignedSme() {
+                UUID categoryId = UUID.randomUUID();
+                when(currentUserService.requireAuthenticatedUser()).thenReturn(admin());
+                when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category(categoryId)));
+
+                assertThatThrownBy(() -> courseAdminService.create(new CreateCourseRequest(
+                                categoryId,
+                                "Course without SME",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                BigDecimal.ZERO,
+                                null,
+                                true,
+                                null,
                                 null)))
                                 .isInstanceOf(BusinessException.class)
+                                .hasMessageContaining("Assigned SME is required")
+                                .extracting("errorCode")
+                                .isEqualTo(ErrorCode.INVALID_REQUEST);
+
+                verify(courseRepository, never()).save(any());
+        }
+
+        @Test
+        void updateShouldRejectClearingAssignedSme() {
+                Course course = existingCourse(CourseStatus.DRAFT);
+                UpdateCourseRequest request = new UpdateCourseRequest();
+                request.setAssignedSmeId(null);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(course.getId())).thenReturn(Optional.of(course));
+
+                assertThatThrownBy(() -> courseAdminService.update(course.getId(), request))
+                                .isInstanceOf(BusinessException.class)
+                                .hasMessageContaining("Assigned SME is required")
                                 .extracting("errorCode")
                                 .isEqualTo(ErrorCode.INVALID_REQUEST);
 
@@ -395,6 +456,43 @@ class CourseAdminServiceTest {
         }
 
         @Test
+        void createShouldRejectDiscountedPriceEqualToCoursePrice() {
+                UUID categoryId = UUID.randomUUID();
+                UUID smeId = UUID.randomUUID();
+
+                when(currentUserService.requireAuthenticatedUser())
+                                .thenReturn(admin());
+                when(categoryRepository.findById(categoryId))
+                                .thenReturn(Optional.of(category(categoryId)));
+                stubActiveSme(sme(smeId));
+
+                assertThatThrownBy(() -> courseAdminService.create(
+                                new CreateCourseRequest(
+                                                categoryId,
+                                                "Equal price course",
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                BigDecimal.valueOf(100_000),
+                                                BigDecimal.valueOf(100_000),
+                                                false,
+                                                null,
+                                                smeId)))
+                                .isInstanceOf(BusinessException.class)
+                                .hasMessageContaining(
+                                                "Discounted price must be less than the course price")
+                                .extracting("errorCode")
+                                .isEqualTo(ErrorCode.INVALID_REQUEST);
+
+                verify(courseRepository, never()).save(any());
+        }
+
+        @Test
         void updatePublishedCourseShouldNotifyEnrolledLearnersWhenPublicDetailsChange() {
                 Course course = existingCourse(CourseStatus.PUBLISHED);
                 UserAccount actor = admin();
@@ -417,8 +515,8 @@ class CourseAdminServiceTest {
                 CourseResponse response = courseAdminService.update(course.getId(), request);
 
                 assertThat(response.title()).isEqualTo("Updated course");
-                ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
-                                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+                ArgumentCaptor<NotificationCreateCommand> notificationCaptor = ArgumentCaptor
+                                .forClass(NotificationCreateCommand.class);
                 verify(notificationService, times(2)).emit(notificationCaptor.capture());
                 assertThat(notificationCaptor.getAllValues())
                                 .extracting(NotificationCreateCommand::userId)
@@ -430,7 +528,8 @@ class CourseAdminServiceTest {
                                         assertThat(command.referenceType()).isEqualTo("COURSE");
                                         assertThat(command.referenceId()).isEqualTo(course.getId());
                                         assertThat(command.actorId()).isEqualTo(actor.getId());
-                                        assertThat(command.eventKey()).startsWith("course:" + course.getId() + ":updated:");
+                                        assertThat(command.eventKey())
+                                                        .startsWith("course:" + course.getId() + ":updated:");
                                 });
         }
 
@@ -448,8 +547,8 @@ class CourseAdminServiceTest {
 
                 courseAdminService.delete(course.getId());
 
-                ArgumentCaptor<NotificationCreateCommand> notificationCaptor =
-                                ArgumentCaptor.forClass(NotificationCreateCommand.class);
+                ArgumentCaptor<NotificationCreateCommand> notificationCaptor = ArgumentCaptor
+                                .forClass(NotificationCreateCommand.class);
                 verify(notificationService).emit(notificationCaptor.capture());
                 NotificationCreateCommand command = notificationCaptor.getValue();
                 assertThat(command.userId()).isEqualTo(studentId);
@@ -472,6 +571,7 @@ class CourseAdminServiceTest {
                 course.setId(UUID.randomUUID());
                 course.setCategory(category(UUID.randomUUID()));
                 course.setCreator(admin());
+                course.setAssignedSme(sme(UUID.randomUUID()));
                 course.setTitle("Course");
                 course.setSlug("course");
                 course.setPrice(BigDecimal.ZERO);
@@ -514,5 +614,20 @@ class CourseAdminServiceTest {
                 admin.setRole("ADMIN");
                 admin.setStatus("active");
                 return admin;
+        }
+
+        private UserAccount sme(UUID id) {
+                UserAccount sme = new UserAccount();
+                sme.setId(id);
+                sme.setEmail("sme@slp.vn");
+                sme.setFullName("Assigned SME");
+                sme.setRole("SME");
+                sme.setStatus("active");
+                return sme;
+        }
+
+        private void stubActiveSme(UserAccount sme) {
+                when(userRepository.findActiveUserByIdAndRole(sme.getId(), "SME", "active"))
+                                .thenReturn(Optional.of(sme));
         }
 }
