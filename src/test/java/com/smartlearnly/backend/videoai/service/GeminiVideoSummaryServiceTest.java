@@ -51,7 +51,7 @@ class GeminiVideoSummaryServiceTest {
                         .value("video/*"))
                 .andExpect(jsonPath(
                         "$.contents[0].parts[1].text",
-                        containsString("primary spoken language")))
+                        containsString("entire response in natural Vietnamese")))
                 .andRespond(withSuccess(
                         providerResponse(context, validSummary()),
                         MediaType.APPLICATION_JSON));
@@ -98,7 +98,10 @@ class GeminiVideoSummaryServiceTest {
                 .andExpect(header("x-goog-api-key", "gemini-test-key"))
                 .andExpect(jsonPath(
                         "$.contents[0].parts[0].text",
-                        containsString("Write in the transcript language: vi")))
+                        containsString("transcript language hint is: vi")))
+                .andExpect(jsonPath(
+                        "$.contents[0].parts[0].text",
+                        containsString("entire response in natural Vietnamese")))
                 .andExpect(jsonPath(
                         "$.contents[0].parts[0].text",
                         containsString("Bài học giải thích React state")))
@@ -193,8 +196,8 @@ class GeminiVideoSummaryServiceTest {
      * Mục đích: kiểm tra language không có giá trị.
      *
      * <p>Input: language = null, transcript hợp lệ.
-     * Expected output: prompt yêu cầu Gemini dùng ngôn ngữ được phát hiện,
-     * thay vì chèn chữ {@code null} vào prompt.
+     * Expected output: prompt vẫn ghi nhận ngôn ngữ được phát hiện làm gợi ý,
+     * nhưng bắt buộc toàn bộ output dùng tiếng Việt.
      */
     @Test
     void generateSummaryFromTranscript_usesDetectedLanguageInstruction_whenLanguageIsNull()
@@ -207,8 +210,11 @@ class GeminiVideoSummaryServiceTest {
                 .andExpect(jsonPath(
                         "$.contents[0].parts[0].text",
                         containsString(
-                                "Write in the transcript language: "
+                                "transcript language hint is: "
                                         + "the detected language")))
+                .andExpect(jsonPath(
+                        "$.contents[0].parts[0].text",
+                        containsString("entire response in natural Vietnamese")))
                 .andRespond(withSuccess(
                         providerResponse(context, validSummary()),
                         MediaType.APPLICATION_JSON));

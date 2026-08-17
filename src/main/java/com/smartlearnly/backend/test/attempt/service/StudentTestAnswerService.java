@@ -40,7 +40,7 @@ public class StudentTestAnswerService {
                         new EntityNotFoundException("Attempt not found"));
 
         testService.requireAttemptAccess(
-                attempt.getTestId(), attempt.getStudentId(), null);
+                attempt.getTestId(), attempt.getStudentId(), attempt.getClassId());
 
         if (attempt.getEndTime() != null && Instant.now().isAfter(attempt.getEndTime())) {
             throw new IllegalStateException("Attempt has expired");
@@ -90,7 +90,7 @@ public class StudentTestAnswerService {
         TestAttempt attempt = attemptRepository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
         testService.requireAttemptAccess(
-                attempt.getTestId(), attempt.getStudentId(), null);
+                attempt.getTestId(), attempt.getStudentId(), attempt.getClassId());
 
         List<StudentTestAnswer> entities =
                 repository.findByAttemptId(attemptId);

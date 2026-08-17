@@ -70,7 +70,7 @@ public class GeminiVideoSummaryService {
 
         String prompt = """
                 Create a clear lesson overview from the supplied YouTube video.
-                Write in the primary spoken language detected in the video.
+                Write the entire response in natural Vietnamese, regardless of the language spoken in the video.
                 Analyze both the audio and visual content when useful.
                 %s
                 """.formatted(summaryRequirements());
@@ -101,7 +101,8 @@ public class GeminiVideoSummaryService {
 
         String prompt = """
                 Create a clear lesson overview from this transcript.
-                Write in the transcript language: %s.
+                The transcript language hint is: %s.
+                Write the entire response in natural Vietnamese, regardless of the transcript language.
                 %s
 
                 Transcript:
@@ -177,13 +178,14 @@ public class GeminiVideoSummaryService {
                 }
 
                 Writing requirements:
+                - Write every human-readable JSON string value in natural Vietnamese.
                 - Keep the complete result between 180 and 280 words.
                 - Return exactly 3 separate overviewParagraphs.
                 - Introduce the lesson topic and explain why it is useful.
                 - Explain the main concepts or procedures in a logical order.
                 - Include important examples only when they appear in the source.
                 - Explain supported learning outcomes.
-                - Return a localized keyTakeawaysTitle.
+                - Return a Vietnamese keyTakeawaysTitle.
                 - Return 3 to 5 concise keyTakeaways without bullet characters.
                 - Preserve technical terms, code identifiers, and syntax.
                 - Use only information explicitly present in the source.

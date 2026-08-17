@@ -320,9 +320,14 @@ public class AiQuestionDraftService {
                             batch.getLanguage(),
                             batch.getInstructionSnapshot(),
                             sourceInputs));
+            List<QuestionGenerationProvider.GeneratedQuestion> generatedQuestions =
+                    result.questions() == null ? List.of() : result.questions();
+            int requestedLimit = Math.max(0, batch.getRequestedCount() == null ? 0 : batch.getRequestedCount());
             int generated = 0;
             boolean evidenceRequired = !sourceInputs.isEmpty();
-            for (QuestionGenerationProvider.GeneratedQuestion generatedQuestion : result.questions()) {
+            for (QuestionGenerationProvider.GeneratedQuestion generatedQuestion : generatedQuestions.stream()
+                    .limit(requestedLimit)
+                    .toList()) {
                 persistGeneratedDraft(batch, moduleId, generatedQuestion, evidenceRequired);
                 generated += 1;
             }

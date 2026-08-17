@@ -136,11 +136,7 @@ public class TestService {
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         requireManageAccess(test, actor);
-        if (testAttemptRepository.existsByTestId(id)) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "This test already has attempts and cannot be edited");
-        }
+        requireNoActiveAttempts(id);
 
         validateSchedule(request.getOpensAt(), request.getClosesAt());
         validateClassScope(request.getClassId(), request.getCourseId(), actor);

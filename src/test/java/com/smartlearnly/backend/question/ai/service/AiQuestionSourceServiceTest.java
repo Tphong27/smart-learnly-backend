@@ -99,7 +99,7 @@ class AiQuestionSourceServiceTest {
 
         assertThat(response.minTextCharacters()).isEqualTo(100);
         assertThat(response.maxDocumentBytes()).isEqualTo(DataSize.ofMegabytes(25).toBytes());
-        assertThat(response.maxSourcesPerBatch()).isEqualTo(8);
+        assertThat(response.maxSourcesPerBatch()).isEqualTo(3);
         assertThat(response.acceptedDocumentMimeTypes()).contains("application/pdf", "text/plain");
         assertThat(response.acceptedDocumentExtensions()).containsExactly("pdf", "docx", "txt");
         verify(courseAccessService).requireReadableCourse(courseId);
@@ -422,7 +422,7 @@ class AiQuestionSourceServiceTest {
         AiQuestionGenerationBatch batch = batch(courseId);
 
         List<AiQuestionDraftDtos.PastedTextSourceRequest> tooMany = new ArrayList<>();
-        for (int index = 0; index < 9; index += 1) {
+        for (int index = 0; index < 4; index += 1) {
             tooMany.add(new AiQuestionDraftDtos.PastedTextSourceRequest("source-" + index, longText("source " + index)));
         }
         assertThatThrownBy(() -> service.persistAndBuildSourceInputs(courseId, batch, request(List.of(), tooMany), List.of()))
@@ -444,15 +444,15 @@ class AiQuestionSourceServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.AI_SOURCE_INVALID));
 
-        List<AiQuestionDraftDtos.PastedTextSourceRequest> hugeBudget = List.of(
-                new AiQuestionDraftDtos.PastedTextSourceRequest("one", "a".repeat(50_000)),
-                new AiQuestionDraftDtos.PastedTextSourceRequest("two", "b".repeat(50_000)),
-                new AiQuestionDraftDtos.PastedTextSourceRequest("three", "c".repeat(50_000)),
-                new AiQuestionDraftDtos.PastedTextSourceRequest("four", "d".repeat(50_000)),
-                new AiQuestionDraftDtos.PastedTextSourceRequest("five", "e".repeat(50_000)),
-                new AiQuestionDraftDtos.PastedTextSourceRequest("six", "f".repeat(50_000)),
-                new AiQuestionDraftDtos.PastedTextSourceRequest("seven", "g".repeat(1_000)));
-        assertThatThrownBy(() -> service.persistAndBuildSourceInputs(courseId, batch, request(List.of(), hugeBudget), List.of()))
+        VideoAiContent firstLargeTranscript = transcript("a".repeat(160_000));
+        VideoAiContent secondLargeTranscript = transcript("b".repeat(160_000));
+        when(videoAiContentRepository.findById(firstLargeTranscript.getId()))
+                .thenReturn(Optional.of(firstLargeTranscript));
+        when(videoAiContentRepository.findById(secondLargeTranscript.getId()))
+                .thenReturn(Optional.of(secondLargeTranscript));
+
+        assertThatThrownBy(() -> service.persistAndBuildSourceInputs(courseId, batch,
+                request(List.of(firstLargeTranscript.getId(), secondLargeTranscript.getId()), List.of()), List.of()))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
     }

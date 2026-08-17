@@ -1,8 +1,6 @@
 package com.smartlearnly.backend.notification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,8 +20,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -54,16 +50,14 @@ class NotificationQueryServiceTest {
         PageRequest pageRequest = PageRequest.of(2, 5);
         PageImpl<Notification> repositoryPage = new PageImpl<>(List.of(notification), pageRequest, 12);
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(notificationRepository.findActiveForUserByStatusAndType(any(), any(), any(), any()))
+        when(notificationRepository.findByUserIdOrderByCreatedAtDesc(actor.getId(), pageRequest))
                 .thenReturn(repositoryPage);
 
         PageResponse<NotificationResponse> response = service.list(2, 5);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(notificationRepository).findActiveForUserByStatusAndType(
-                eq(actor.getId()),
-                eq("all"),
-                eq(null),
+        verify(notificationRepository).findByUserIdOrderByCreatedAtDesc(
+                org.mockito.ArgumentMatchers.eq(actor.getId()),
                 pageableCaptor.capture());
 
         assertThat(pageableCaptor.getValue()).isEqualTo(pageRequest);
@@ -90,72 +84,14 @@ class NotificationQueryServiceTest {
     }
 
     @Test
-    void listWithStatusShouldPreserveUnreadAndLeaveTypeNull() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(notificationRepository.findActiveForUserByStatusAndType(any(), any(), any(), any()))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
-
-        service.list(0, 10, "unread");
-
-        verify(notificationRepository).findActiveForUserByStatusAndType(
-                eq(actor.getId()),
-                eq("unread"),
-                eq(null),
-                eq(PageRequest.of(0, 10)));
-    }
-
-    @ParameterizedTest
-    @CsvSource(value = {
-            "NULL, all",
-            "'   ', all",
-            "' READ ', read",
-            "archived, all"
-    }, nullValues = "NULL")
-    void listShouldNormalizeStatus(String status, String expectedStatus) {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(notificationRepository.findActiveForUserByStatusAndType(any(), any(), any(), any()))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 20), 0));
-
-        service.list(1, 20, status, null);
-
-        verify(notificationRepository).findActiveForUserByStatusAndType(
-                eq(actor.getId()),
-                eq(expectedStatus),
-                eq(null),
-                eq(PageRequest.of(1, 20)));
-    }
-
-    @ParameterizedTest
-    @CsvSource(value = {
-            "NULL, NULL",
-            "'   ', NULL",
-            "payment, PAYMENT",
-            "ai-suggestion, AI_SUGGESTION",
-            "made-up, NULL"
-    }, nullValues = "NULL")
-    void listShouldNormalizeType(String type, String expectedType) {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(notificationRepository.findActiveForUserByStatusAndType(any(), any(), any(), any()))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 15), 0));
-
-        service.list(0, 15, "all", type);
-
-        verify(notificationRepository).findActiveForUserByStatusAndType(
-                eq(actor.getId()),
-                eq("all"),
-                eq(expectedType),
-                eq(PageRequest.of(0, 15)));
-    }
-
-    @Test
     void unreadCountShouldReturnRepositoryCountForAuthenticatedUser() {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
-        when(notificationRepository.countByUserIdAndReadAtIsNullAndArchivedAtIsNull(actor.getId()))
+        when(notificationRepository.countByUserIdAndReadAtIsNull(actor.getId()))
                 .thenReturn(7L);
 
         UnreadCountResponse response = service.unreadCount();
 
-        verify(notificationRepository).countByUserIdAndReadAtIsNullAndArchivedAtIsNull(actor.getId());
+        verify(notificationRepository).countByUserIdAndReadAtIsNull(actor.getId());
         assertThat(response.unreadCount()).isEqualTo(7);
     }
 

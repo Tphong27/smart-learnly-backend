@@ -53,10 +53,7 @@ public class TestAttemptService {
         this.notificationService = notificationService;
     }
 
-    /**
-     * Bắt đầu attempt mới hoặc trả lại attempt đang làm theo chính sách làm lại của
-     * đề.
-     */
+    /** Bắt đầu attempt mới hoặc trả lại attempt đang làm theo chính sách làm lại của đề. */
     @Transactional
     public TestAttemptModel.Response startAttempt(TestAttemptModel.StartRequest request) {
         Test test = testRepository.findById(required(request.getTestId(), "testId"))
@@ -74,7 +71,8 @@ public class TestAttemptService {
                     "Invalid or expired test access code");
         }
 
-        List<TestAttempt> existingAttempts = findAttemptsInContext(test.getId(), studentId, null);
+        List<TestAttempt> existingAttempts = findAttemptsInContext(
+                test.getId(), studentId, request.getClassId());
         if (!existingAttempts.isEmpty()) {
             TestAttempt latest = expireIfOverdue(existingAttempts.get(0));
             if (isActive(latest.getStatus())) {
@@ -91,6 +89,7 @@ public class TestAttemptService {
         TestAttempt attempt = new TestAttempt();
         attempt.setTestId(test.getId());
         attempt.setStudentId(studentId);
+        attempt.setClassId(request.getClassId());
         attempt.setAssignmentId(request.getAssignmentId());
         attempt.setStartTime(start);
         attempt.setEndTime(start.plus(Duration.ofMinutes(resolveDuration(test))));
@@ -114,7 +113,7 @@ public class TestAttemptService {
         testService.requireAttemptAccess(
                 attempt.getTestId(),
                 attempt.getStudentId(),
-                null);
+                attempt.getClassId());
 
         if (attempt.getStatus() == AttemptStatus.SUBMITTED
                 || attempt.getStatus() == AttemptStatus.GRADED
@@ -142,15 +141,11 @@ public class TestAttemptService {
     }
 
     @Transactional
-    public List<TestAttemptModel.Response> getAttempts(
-            UUID testId,
-            UUID studentId,
-            UUID classId) {
+    public List<TestAttemptModel.Response> getAttempts(UUID testId, UUID studentId, UUID classId) {
         testService.requireAttemptAccess(testId, studentId, classId);
         return findAttemptsInContext(testId, studentId, classId)
                 .stream()
                 .map(this::expireIfOverdue)
-                .map(this::refreshFinalGrade)
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -162,49 +157,46 @@ public class TestAttemptService {
         return repository.findByTestIdOrderByStartTimeAsc(testId)
                 .stream()
                 .map(this::expireIfOverdue)
-                .map(this::refreshFinalGrade)
                 .map(this::mapToResponse)
                 .toList();
     }
 
-    /**
-     * Trả chi tiết một attempt sau khi cập nhật trạng thái hết hạn và điểm cuối
-     * cùng.
-     */
-    @Transactional
+    /** Trả chi tiết một attempt sau khi cập nhật trạng thái hết hạn và điểm cuối cùng. */
     public TestAttemptModel.Response getAttemptById(UUID attemptId) {
         return getAttemptById(attemptId, null);
     }
 
     @Transactional
-    public TestAttemptModel.Response getAttemptById(
-            UUID attemptId,
-            UUID classId) {
+    public TestAttemptModel.Response getAttemptById(UUID attemptId, UUID classId) {
         TestAttempt attempt = repository.findById(attemptId)
                 .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
         testService.requireAttemptAccess(
-                attempt.getTestId(),
-                attempt.getStudentId(),
-                classId);
-        return mapToResponse(refreshFinalGrade(expireIfOverdue(attempt)));
+                attempt.getTestId(), attempt.getStudentId(), attempt.getClassId());
+        return mapToResponse(expireIfOverdue(attempt));
     }
 
-    /**
-     * Lấy lịch sử attempt trong đúng context course trực tiếp hoặc một lớp cụ thể.
-     */
+    /** Lấy lịch sử attempt trong đúng context course trực tiếp hoặc một lớp cụ thể. */
     private List<TestAttempt> findAttemptsInContext(
             UUID testId,
             UUID studentId,
             UUID classId) {
-        return repository.findByTestIdAndStudentIdOrderByStartTimeDesc(
+        if (classId == null) {
+            return repository.findByTestIdAndStudentIdAndClassIdIsNullOrderByStartTimeDesc(
+                    testId,
+                    studentId);
+        }
+        return repository.findByTestIdAndStudentIdAndClassIdOrderByStartTimeDesc(
                 testId,
-                studentId);
+                studentId,
+                classId);
     }
 
     /** Chấm các câu trắc nghiệm đã lưu của một attempt và đồng bộ điểm từng câu. */
     private GradeResult gradeAttempt(TestAttempt attempt) {
-        List<TestQuestion> testQuestions = testQuestionRepository.findByIdTestId(attempt.getTestId());
-        List<StudentTestAnswer> answers = studentTestAnswerRepository.findByAttemptId(attempt.getId());
+        List<TestQuestion> testQuestions =
+                testQuestionRepository.findByIdTestId(attempt.getTestId());
+        List<StudentTestAnswer> answers =
+                studentTestAnswerRepository.findByAttemptId(attempt.getId());
 
         BigDecimal total = testQuestions.stream()
                 .map(TestQuestion::getMarks)
@@ -217,56 +209,42 @@ public class TestAttemptService {
                             .filter(selected -> selected.getQuestionId().equals(answer.getQuestionId()))
                             .map(QuestionAnswer::getIsCorrect)
                             .orElse(false);
-
             BigDecimal marks = testQuestions.stream()
                     .filter(item -> item.getId().getQuestionId().equals(answer.getQuestionId()))
                     .findFirst()
                     .map(TestQuestion::getMarks)
                     .orElse(BigDecimal.ZERO);
-
             answer.setIsCorrect(correct);
             answer.setScoreAwarded(correct ? marks : BigDecimal.ZERO);
-
             if (correct) {
                 score = score.add(marks);
             }
         }
-
         studentTestAnswerRepository.saveAll(answers);
 
         BigDecimal percentage = total.compareTo(BigDecimal.ZERO) == 0
                 ? BigDecimal.ZERO
                 : score.multiply(BigDecimal.valueOf(100))
                         .divide(total, 2, RoundingMode.HALF_UP);
-
         return new GradeResult(score, percentage);
     }
 
-    /**
-     * Tính lại điểm cuối cho attempt đã nộp để phản ánh thay đổi chấm điểm thủ
-     * công.
-     */
+    /** Tính lại điểm cuối cho attempt đã nộp để phản ánh thay đổi chấm điểm thủ công. */
     private TestAttempt refreshFinalGrade(TestAttempt attempt) {
         if (attempt.getStatus() != AttemptStatus.SUBMITTED
                 && attempt.getStatus() != AttemptStatus.GRADED
                 && attempt.getStatus() != AttemptStatus.EXPIRED) {
             return attempt;
         }
-
         GradeResult grade = gradeAttempt(attempt);
-
-        if (attempt.getScore() == null
-                || attempt.getScore().compareTo(grade.score()) != 0) {
+        if (attempt.getScore() == null || attempt.getScore().compareTo(grade.score()) != 0) {
             attempt.setScore(grade.score());
             return repository.save(attempt);
         }
-
         return attempt;
     }
 
-    /**
-     * Đánh dấu hết hạn và chấm attempt nếu người học vượt quá thời gian làm bài.
-     */
+    /** Đánh dấu hết hạn và chấm attempt nếu người học vượt quá thời gian làm bài. */
     private TestAttempt expireIfOverdue(TestAttempt attempt) {
         if (!isActive(attempt.getStatus())
                 || attempt.getEndTime() == null
@@ -285,10 +263,7 @@ public class TestAttemptService {
         return status == AttemptStatus.DOING || status == AttemptStatus.IN_PROGRESS;
     }
 
-    /**
-     * Gửi thông báo nộp/hết hạn attempt cho học viên và chủ đề khi notification khả
-     * dụng.
-     */
+    /** Gửi thông báo nộp/hết hạn attempt cho học viên và chủ đề khi notification khả dụng. */
     private void emitAttemptCompletedNotification(TestAttempt attempt) {
         if (notificationService == null
                 || attempt == null
@@ -337,15 +312,13 @@ public class TestAttemptService {
         }
     }
 
-    /**
-     * Chuyển entity attempt thành dữ liệu API, bao gồm tỷ lệ điểm và thông tin học
-     * viên.
-     */
+    /** Chuyển entity attempt thành dữ liệu API, bao gồm tỷ lệ điểm và thông tin học viên. */
     private TestAttemptModel.Response mapToResponse(TestAttempt attempt) {
         TestAttemptModel.Response response = new TestAttemptModel.Response();
         response.setId(attempt.getId());
         response.setTestId(attempt.getTestId());
         response.setStudentId(attempt.getStudentId());
+        response.setClassId(attempt.getClassId());
         response.setStudentName(resolveStudentName(attempt.getStudentId()));
         response.setStartTime(attempt.getStartTime());
         response.setEndTime(attempt.getEndTime());
@@ -379,10 +352,7 @@ public class TestAttemptService {
                 .orElse(null);
     }
 
-    /**
-     * Xác định thời lượng làm bài hợp lệ, dùng giá trị mặc định cho đề thiếu cấu
-     * hình.
-     */
+    /** Xác định thời lượng làm bài hợp lệ, dùng giá trị mặc định cho đề thiếu cấu hình. */
     private Integer resolveDuration(Test test) {
         return test.getDurationMinutes() == null || test.getDurationMinutes() <= 0
                 ? 30

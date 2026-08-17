@@ -221,6 +221,27 @@ class AiQuestionDraftServiceTest {
     }
 
     @Test
+    void createBatch_persistsAtMostRequestedCountWhenProviderReturnsExtraQuestions() {
+        when(sourceService.persistAndBuildSourceInputs(eq(courseId), any(), any(), any())).thenReturn(List.of());
+        when(generationProvider.generate(any())).thenReturn(new QuestionGenerationProvider.GenerationResult(
+                List.of(
+                        generatedMc("Question 1?"),
+                        generatedMc("Question 2?"),
+                        generatedMc("Question 3?")),
+                11,
+                22,
+                33));
+
+        AiQuestionDraftDtos.BatchResponse response = service.createBatch(courseId, request("cap-key"));
+
+        assertThat(response.status()).isEqualTo(AiQuestionGenerationBatch.STATUS_READY);
+        assertThat(response.generatedCount()).isEqualTo(2);
+        assertThat(response.drafts()).extracting(AiQuestionDraftDtos.DraftResponse::questionText)
+                .containsExactly("Question 1?", "Question 2?");
+        assertThat(drafts).hasSize(2);
+    }
+
+    @Test
     void createBatch_persistsGeneratedEvidenceFromSourceChunks() {
         UUID sourceId = UUID.randomUUID();
         UUID chunkId = UUID.randomUUID();

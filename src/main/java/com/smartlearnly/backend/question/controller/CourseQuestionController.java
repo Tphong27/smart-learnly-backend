@@ -3,6 +3,7 @@ package com.smartlearnly.backend.question.controller;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.question.dto.QuestionImportDtos;
+import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
 import com.smartlearnly.backend.question.dto.QuestionModel;
 import com.smartlearnly.backend.question.service.QuestionService;
 import jakarta.validation.Valid;
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
@@ -135,21 +137,86 @@ public class CourseQuestionController {
                 .body(csv);
     }
 
+    /** Xuat CSV theo template import, giu them id/status de phuc vu doi chieu du lieu. */
     private String toCsv(Iterable<QuestionModel.Response> questions) {
-        StringBuilder builder = new StringBuilder("id,module_id,type,status,question_text\n");
+        StringBuilder builder = new StringBuilder(
+                "id,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Module ID,Image files,Audio files\n"
+        );
         for (QuestionModel.Response question : questions) {
             builder.append(csv(question.questionId()))
-                    .append(',')
-                    .append(csv(question.moduleId()))
-                    .append(',')
-                    .append(csv(question.questionType()))
                     .append(',')
                     .append(csv(question.status()))
                     .append(',')
                     .append(csv(toPlainText(question.questionText())))
+                    .append(',')
+                    .append(csv(question.questionType()));
+            for (int index = 0; index < 6; index += 1) {
+                builder.append(',').append(csv(optionText(question, index)));
+            }
+            builder.append(',')
+                    .append(csv(correctAnswer(question)))
+                    .append(',')
+                    .append(csv(toPlainText(question.explanation())))
+                    .append(',')
+                    .append(csv(question.moduleId()))
+                    .append(',')
+                    .append(csv(mediaUrls(question, "image", question.imageUrl())))
+                    .append(',')
+                    .append(csv(mediaUrls(question, "audio", question.audioUrl())))
                     .append('\n');
         }
         return builder.toString();
+    }
+
+    /** Lay noi dung option theo thu tu A-F va bo HTML neu dap an dang luu rich text. */
+    private String optionText(QuestionModel.Response question, int index) {
+        List<QuestionModel.AnswerResponse> answers = question.answers() == null
+                ? List.of()
+                : question.answers();
+        if (index < 0 || index >= answers.size()) {
+            return "";
+        }
+        return toPlainText(answers.get(index).answerText());
+    }
+
+    /** Doi danh sach dap an dung thanh format correct_answer ma import dang ho tro. */
+    private String correctAnswer(QuestionModel.Response question) {
+        List<QuestionModel.AnswerResponse> answers = question.answers() == null
+                ? List.of()
+                : question.answers();
+        if ("true_false".equalsIgnoreCase(question.questionType())) {
+            return answers.stream()
+                    .filter(QuestionModel.AnswerResponse::correct)
+                    .findFirst()
+                    .map(answer -> toPlainText(answer.answerText()))
+                    .orElse("");
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < answers.size(); index += 1) {
+            if (!answers.get(index).correct()) {
+                continue;
+            }
+            if (!builder.isEmpty()) {
+                builder.append(',');
+            }
+            builder.append((char) ('A' + index));
+        }
+        return builder.toString();
+    }
+
+    /** Ghep cac URL media cung loai bang dau cham phay dung voi parser import hien tai. */
+    private String mediaUrls(QuestionModel.Response question, String mediaType, String fallbackUrl) {
+        List<String> urls = question.mediaAttachments() == null
+                ? List.of()
+                : question.mediaAttachments().stream()
+                        .filter(media -> mediaType.equalsIgnoreCase(media.mediaType()))
+                        .map(QuestionMediaAttachmentResponse::mediaUrl)
+                        .filter(url -> url != null && !url.isBlank())
+                        .toList();
+        if (!urls.isEmpty()) {
+            return String.join("; ", urls);
+        }
+        return fallbackUrl == null ? "" : fallbackUrl;
     }
 
     private String toPlainText(String value) {
