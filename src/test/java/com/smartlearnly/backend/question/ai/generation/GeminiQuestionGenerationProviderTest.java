@@ -36,6 +36,8 @@ class GeminiQuestionGenerationProviderTest {
                 .andExpect(jsonPath("$.input[0].type").value("text"))
                 .andExpect(jsonPath("$.input[0].text").value(org.hamcrest.Matchers.containsString("Use only the provided SOURCE/CHUNK content")))
                 .andExpect(jsonPath("$.input[0].text").value(org.hamcrest.Matchers.containsString("Lesson transcript")))
+                .andExpect(jsonPath("$.input[0].text").value(org.hamcrest.Matchers.containsString("Extra AI Guides are optional focus notes only")))
+                .andExpect(jsonPath("$.input[0].text").value(org.hamcrest.Matchers.containsString("Never return more than Requested count questions")))
                 .andRespond(withSuccess("{\"output_text\":" + quote(payload) + "}", MediaType.APPLICATION_JSON));
 
         QuestionGenerationProvider.GenerationResult result = fixture.provider.generate(requestWithSources());

@@ -12,6 +12,8 @@ import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
+import com.smartlearnly.backend.test.definition.dto.TestModel;
+import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.util.Optional;
@@ -28,6 +30,8 @@ class TestServiceClassScopeTest {
 
     @Mock
     private TestRepository testRepository;
+    @Mock
+    private TestAttemptRepository testAttemptRepository;
     @Mock
     private CurrentUserService currentUserService;
     @Mock

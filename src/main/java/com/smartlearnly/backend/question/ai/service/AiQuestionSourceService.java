@@ -42,7 +42,7 @@ public class AiQuestionSourceService {
     private static final int MIN_SOURCE_CHARACTERS = 100;
     private static final int MAX_PASTED_TEXT_CHARACTERS = 50_000;
     private static final int MAX_TRANSCRIPT_CHARACTERS = 200_000;
-    private static final int MAX_SOURCES_PER_BATCH = 8;
+    private static final int MAX_SOURCES_PER_BATCH = 3;
     private static final int MAX_NORMALIZED_CHARACTERS_PER_BATCH = 300_000;
     private static final int TARGET_CHUNK_CHARACTERS = 2_800;
     private static final int SIGNED_URL_TTL_SECONDS = 300;
@@ -358,7 +358,7 @@ public class AiQuestionSourceService {
         if (specs.size() > MAX_SOURCES_PER_BATCH) {
             throw new BusinessException(
                     ErrorCode.AI_INVALID_GENERATION_CONFIG,
-                    "A generation batch can use at most 8 sources");
+                    "A generation batch can use at most 3 sources");
         }
         int totalChars = specs.stream().mapToInt(SourceSpec::normalizedCharCount).sum();
         if (totalChars > MAX_NORMALIZED_CHARACTERS_PER_BATCH) {

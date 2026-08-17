@@ -15,6 +15,7 @@ import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.test.definition.dto.TestModel;
 import com.smartlearnly.backend.test.entity.TestType;
+import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.math.BigDecimal;
@@ -33,6 +34,8 @@ class TestServiceCreateTestTest {
     @Mock
     private TestRepository testRepository;
     @Mock
+    private TestAttemptRepository testAttemptRepository;
+    @Mock
     private CurrentUserService currentUserService;
     @Mock
     private CurriculumSectionRepository curriculumSectionRepository;
@@ -47,6 +50,7 @@ class TestServiceCreateTestTest {
     void setUp() {
         service = new TestService(
                 testRepository,
+                testAttemptRepository,
                 currentUserService,
                 curriculumSectionRepository,
                 classOfferingRepository,
