@@ -140,7 +140,8 @@ public class ClassAdminService {
     }
 
     @Transactional
-    // Áp dụng các trường PATCH của lớp, kiểm tra quyền và đồng bộ phiên học nếu lịch đổi.
+    // Áp dụng các trường PATCH của lớp, kiểm tra quyền và đồng bộ phiên học nếu
+    // lịch đổi.
     public ClassResponse update(UUID classId, UpdateClassRequest request) {
 
         if (!request.hasAnyField()) {
@@ -571,19 +572,29 @@ public class ClassAdminService {
     }
 
     // Bắt buộc ngày bắt đầu/kết thúc và đảm bảo khoảng thời gian lớp hợp lệ.
+    // Bắt buộc ngày kết thúc phải nằm sau ngày bắt đầu ít nhất một ngày.
     private void validateRequiredDates(LocalDate startDate, LocalDate endDate) {
         if (startDate == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Start date is required");
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Start date is required");
         }
+
         if (endDate == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "End date is required");
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "End date is required");
         }
-        if (endDate.isBefore(startDate)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "End date must not be before start date");
+
+        if (!endDate.isAfter(startDate)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "End date must be after start date");
         }
     }
 
-    // Kiểm tra thay đổi nhạy cảm của lớp theo trạng thái, ghi danh và vai trò người sửa.
+    // Kiểm tra thay đổi nhạy cảm của lớp theo trạng thái, ghi danh và vai trò người
+    // sửa.
     private void validateUpdatePermissions(
             ClassOffering current,
             UpdateClassRequest request) {
@@ -726,7 +737,8 @@ public class ClassAdminService {
         if (notificationService == null || classOffering == null || classOffering.getId() == null) {
             return;
         }
-        for (UUID studentId : classEnrollmentRepository.findActiveOrCompletedStudentIdsByClassId(classOffering.getId())) {
+        for (UUID studentId : classEnrollmentRepository
+                .findActiveOrCompletedStudentIdsByClassId(classOffering.getId())) {
             emitClassNotification(studentId, classOffering, title, body, eventSuffix);
         }
     }

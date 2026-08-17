@@ -33,8 +33,8 @@ public final class ClassLifecycle {
             throw new IllegalArgumentException("Current date is required to resolve class status");
         }
 
-        if (endDate.isBefore(startDate)) {
-            throw new IllegalArgumentException("End date must not be before start date");
+        if (!endDate.isAfter(startDate)) {
+            throw new IllegalArgumentException("End date must be after start date");
         }
 
         if (currentStatus == ClassStatus.CANCELLED) {

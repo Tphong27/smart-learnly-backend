@@ -934,6 +934,23 @@ class ClassAdminUpdateTest {
                                 .emit(any(NotificationCreateCommand.class));
         }
 
+        @Test
+        void UTCID44_update_rejectsEndDateEqualToStartDate() {
+                ClassOffering existing = upcomingClass();
+
+                UpdateClassRequest request = new UpdateClassRequest();
+                request.setEndDate(existing.getStartDate());
+
+                stubLockedClass(existing);
+
+                assertBusinessException(
+                                request,
+                                ErrorCode.INVALID_REQUEST,
+                                "End date must be after start date");
+
+                assertNoPersistenceOrPostSaveSideEffects();
+        }
+
         private ClassResponse executeSuccessfulUpdate(
                         ClassOffering existing,
                         UpdateClassRequest request,

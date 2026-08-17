@@ -145,4 +145,17 @@ class ClassLifecycleTest {
 
         assertThat(result).isEqualTo(ClassStatus.ONGOING);
     }
+
+    @Test
+void UTCID13_resolveStatusWithToday_rejectsEqualStartAndEndDates() {
+    LocalDate sameDate = LocalDate.of(2026, 8, 10);
+
+    assertThatThrownBy(() -> ClassLifecycle.resolveStatus(
+            sameDate,
+            sameDate,
+            ClassStatus.UPCOMING,
+            REFERENCE_DATE))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("End date must be after start date");
+}
 }
