@@ -13,9 +13,14 @@ import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.curriculum.repository.CurriculumSectionRepository;
 import com.smartlearnly.backend.test.definition.dto.TestModel;
+import com.smartlearnly.backend.test.entity.AttemptStatus;
+import com.smartlearnly.backend.test.entity.TestAttempt;
 import com.smartlearnly.backend.test.repository.TestAttemptRepository;
 import com.smartlearnly.backend.test.repository.TestRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.persistence.EntityNotFoundException;
@@ -143,6 +148,43 @@ class TestServiceClassScopeTest {
                         assertThat(exception.errorCode()).isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
                 .hasMessageContaining("Cannot update this test while a trainee is taking it");
         verify(testRepository, never()).save(test);
+    }
+
+    @Test
+    void updateDurationGivesActiveAttemptsOneMinuteFromUpdateTime() {
+        UUID testId = UUID.randomUUID();
+        UserAccount admin = user(UUID.randomUUID(), "ADMIN");
+        com.smartlearnly.backend.test.entity.Test test = publishedTest(
+                UUID.randomUUID(), UUID.randomUUID());
+        test.setId(testId);
+        test.setDurationMinutes(30);
+
+        TestAttempt activeAttempt = new TestAttempt();
+        activeAttempt.setTestId(testId);
+        activeAttempt.setStatus(AttemptStatus.DOING);
+        activeAttempt.setEndTime(Instant.now().plus(Duration.ofMinutes(10)));
+
+        TestModel.DurationUpdateRequest request = new TestModel.DurationUpdateRequest();
+        request.setDurationMinutes(1);
+        Instant beforeUpdate = Instant.now();
+
+        when(testRepository.findById(testId)).thenReturn(Optional.of(test));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(testAttemptRepository.findActiveByTestId(testId)).thenReturn(List.of(activeAttempt));
+        when(testRepository.save(test)).thenReturn(test);
+        when(testAttemptRepository.existsActiveByTestId(testId)).thenReturn(true);
+
+        TestModel.Response response = service.updateDuration(testId, request);
+
+        Instant afterUpdate = Instant.now();
+        assertThat(test.getDurationMinutes()).isEqualTo(1);
+        assertThat(activeAttempt.getEndTime())
+                .isBetween(
+                        beforeUpdate.plus(Duration.ofMinutes(1)),
+                        afterUpdate.plus(Duration.ofMinutes(1)));
+        assertThat(response.getHasActiveAttempts()).isTrue();
+        verify(testAttemptRepository).saveAll(List.of(activeAttempt));
+        verify(testRepository).save(test);
     }
 
     private UserAccount user(UUID id, String role) {

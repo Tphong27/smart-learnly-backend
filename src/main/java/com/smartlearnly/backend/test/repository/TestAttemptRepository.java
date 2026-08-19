@@ -40,5 +40,15 @@ public interface TestAttemptRepository
             )
             """, nativeQuery = true)
     boolean existsActiveByTestId(@Param("testId") UUID testId);
+
+    /** Lấy các attempt đang làm và chưa hết thời gian của một test. */
+    @Query(value = """
+            SELECT *
+            FROM public.test_attempts
+            WHERE test_id = :testId
+              AND status = 'doing'::public.attempt_status
+              AND (end_time IS NULL OR end_time > CURRENT_TIMESTAMP)
+            """, nativeQuery = true)
+    List<TestAttempt> findActiveByTestId(@Param("testId") UUID testId);
 }
 

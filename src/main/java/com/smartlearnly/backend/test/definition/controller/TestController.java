@@ -2,6 +2,7 @@ package com.smartlearnly.backend.test.definition.controller;
 
 import com.smartlearnly.backend.test.definition.dto.TestModel;
 import com.smartlearnly.backend.test.definition.service.TestService;
+import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -12,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -60,6 +62,14 @@ public class TestController {
             @PathVariable UUID id,
             @RequestBody TestModel.UpdateRequest request) {
         return ResponseEntity.ok(testService.updateTest(id, request));
+    }
+
+    /** Cập nhật số phút còn lại cho test và các attempt đang làm. */
+    @PatchMapping("/{id}/duration")
+    public ResponseEntity<TestModel.Response> updateDuration(
+            @PathVariable UUID id,
+            @Valid @RequestBody TestModel.DurationUpdateRequest request) {
+        return ResponseEntity.ok(testService.updateDuration(id, request));
     }
 
     @DeleteMapping("/{id}")

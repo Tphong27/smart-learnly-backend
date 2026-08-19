@@ -29,6 +29,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -157,6 +158,31 @@ public class TestService {
         test.setIsPublished(request.getIsPublished());
         test.setOpensAt(request.getOpensAt());
         test.setClosesAt(request.getClosesAt());
+        return mapToResponse(testRepository.save(test));
+    }
+
+    /** Cập nhật thời lượng và cấp lại đúng số phút còn lại cho các attempt đang làm. */
+    @Transactional
+    public TestModel.Response updateDuration(UUID id, TestModel.DurationUpdateRequest request) {
+        Test test = testRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        requireManageAccess(test, currentUserService.requireAuthenticatedUser());
+
+        Integer durationMinutes = request == null ? null : request.getDurationMinutes();
+        if (durationMinutes == null || durationMinutes < 1) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Test duration must be at least 1 minute");
+        }
+
+        Instant newEndTime = Instant.now().plus(Duration.ofMinutes(durationMinutes));
+        var activeAttempts = testAttemptRepository.findActiveByTestId(id);
+        activeAttempts.forEach(attempt -> attempt.setEndTime(newEndTime));
+        if (!activeAttempts.isEmpty()) {
+            testAttemptRepository.saveAll(activeAttempts);
+        }
+
+        test.setDurationMinutes(durationMinutes);
         return mapToResponse(testRepository.save(test));
     }
 
@@ -368,6 +394,8 @@ public class TestService {
         response.setOpensAt(test.getOpensAt());
         response.setClosesAt(test.getClosesAt());
         response.setHasAttempts(test.getId() != null && testAttemptRepository.existsByTestId(test.getId()));
+        response.setHasActiveAttempts(
+                test.getId() != null && testAttemptRepository.existsActiveByTestId(test.getId()));
 
         return response;
     }
