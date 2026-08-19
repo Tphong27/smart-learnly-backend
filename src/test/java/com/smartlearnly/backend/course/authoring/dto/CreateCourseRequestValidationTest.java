@@ -11,7 +11,7 @@ class CreateCourseRequestValidationTest {
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
-    void createShouldRequireOnlyTitleAndCategory() {
+    void createShouldAcceptTitleCategoryAndAssignedSme() {
         CreateCourseRequest request = minimalRequest(null);
 
         assertThat(validator.validate(request)).isEmpty();
@@ -36,6 +36,33 @@ class CreateCourseRequestValidationTest {
                 });
     }
 
+    @Test
+    void createShouldRejectMissingAssignedSme() {
+        CreateCourseRequest request = new CreateCourseRequest(
+                UUID.randomUUID(),
+                "Course title",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+
+        assertThat(validator.validate(request))
+                .singleElement()
+                .satisfies(violation -> {
+                    assertThat(violation.getPropertyPath().toString()).isEqualTo("assignedSmeId");
+                    assertThat(violation.getMessage()).isEqualTo("Assigned SME is required");
+                });
+    }
+
     private CreateCourseRequest minimalRequest(String status) {
         return new CreateCourseRequest(
                 UUID.randomUUID(),
@@ -52,7 +79,6 @@ class CreateCourseRequestValidationTest {
                 null,
                 null,
                 status,
-                null
-        );
+                UUID.randomUUID());
     }
 }

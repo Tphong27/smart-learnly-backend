@@ -229,6 +229,21 @@ public class TestAttemptService {
         return new GradeResult(score, percentage);
     }
 
+    /** Tính lại điểm cuối cho attempt đã nộp để phản ánh thay đổi chấm điểm thủ công. */
+    private TestAttempt refreshFinalGrade(TestAttempt attempt) {
+        if (attempt.getStatus() != AttemptStatus.SUBMITTED
+                && attempt.getStatus() != AttemptStatus.GRADED
+                && attempt.getStatus() != AttemptStatus.EXPIRED) {
+            return attempt;
+        }
+        GradeResult grade = gradeAttempt(attempt);
+        if (attempt.getScore() == null || attempt.getScore().compareTo(grade.score()) != 0) {
+            attempt.setScore(grade.score());
+            return repository.save(attempt);
+        }
+        return attempt;
+    }
+
     /** Đánh dấu hết hạn và chấm attempt nếu người học vượt quá thời gian làm bài. */
     private TestAttempt expireIfOverdue(TestAttempt attempt) {
         if (!isActive(attempt.getStatus())

@@ -398,24 +398,27 @@ class ClassAdminCreateTest {
         }
 
         @Test
-        void UTCID10_create_acceptsEndDateEqualToStartDateBoundary() {
-                UserAccount actor = actor();
-                Course course = publishedCourse();
-                UserAccount trainer = trainer();
+        void UTCID10_create_rejectsEndDateEqualToStartDate() {
+                stubAuthenticatedCreateDependencies(
+                                actor(),
+                                publishedCourse(),
+                                trainer());
+
                 LocalDate sameDate = validStartDate();
 
-                stubAuthenticatedCreateDependencies(actor, course, trainer);
-                stubSuccessfulSave();
-
-                ClassResponse response = service.create(withDates(
+                CreateClassRequest request = withDates(
                                 validRequest(),
                                 sameDate,
-                                sameDate));
+                                sameDate);
 
-                assertThat(response.startDate()).isEqualTo(sameDate);
-                assertThat(response.endDate()).isEqualTo(sameDate);
-                assertThat(response.status()).isEqualTo("upcoming");
-                verifySuccessfulPostSaveSideEffects(actor);
+                assertBusinessException(
+                                request,
+                                ErrorCode.INVALID_REQUEST,
+                                "End date must be after start date");
+
+                verify(classSessionScheduleService, never()).validateScheduleDefinition(any(ClassOffering.class));
+
+                assertNoWriteSideEffects();
         }
 
         @Test

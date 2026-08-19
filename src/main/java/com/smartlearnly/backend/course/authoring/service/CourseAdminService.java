@@ -69,7 +69,8 @@ public class CourseAdminService {
         this.notificationService = notificationService;
     }
 
-    // Liệt kê khóa học theo phạm vi vai trò, phân công và bộ lọc trước khi phân trang.
+    // Liệt kê khóa học theo phạm vi vai trò, phân công và bộ lọc trước khi phân
+    // trang.
     @Transactional(readOnly = true)
     public PageResponse<CourseResponse> list(
             int page,
@@ -109,7 +110,8 @@ public class CourseAdminService {
                 coursePage.getTotalPages());
     }
 
-    // Kết hợp điều kiện tìm kiếm metadata với phạm vi khóa học người dùng được quản lý.
+    // Kết hợp điều kiện tìm kiếm metadata với phạm vi khóa học người dùng được quản
+    // lý.
     private Specification<Course> buildListFilters(
             String keyword,
             CourseStatus status,
@@ -178,7 +180,7 @@ public class CourseAdminService {
         Course course = new Course();
         course.setCategory(findCategory(request.categoryId()));
         course.setCreator(creator);
-        course.setAssignedSme(findAssignedSme(request.assignedSmeId()));
+        course.setAssignedSme(findRequiredAssignedSme(request.assignedSmeId()));
         course.setTitle(normalizeRequired(request.title(), "Course title is required"));
         course.setSlug(resolveCreateSlug(request.slug(), course.getTitle()));
         course.setShortDescription(normalizeNullable(request.shortDescription()));
@@ -200,7 +202,8 @@ public class CourseAdminService {
         return CourseDtoMapper.toCourseResponse(saved);
     }
 
-    // Áp dụng các trường PATCH được cung cấp và đồng bộ trạng thái xuất bản khi cần.
+    // Áp dụng các trường PATCH được cung cấp và đồng bộ trạng thái xuất bản khi
+    // cần.
     @Transactional
     public CourseResponse update(UUID courseId, UpdateCourseRequest request) {
         if (courseAccessService.isCurrentUserSme()) {
@@ -224,7 +227,7 @@ public class CourseAdminService {
         }
         if (request.isAssignedSmeIdProvided()) {
             courseAccessService.requireCourseManager();
-            course.setAssignedSme(findAssignedSme(request.getAssignedSmeId()));
+            course.setAssignedSme(findRequiredAssignedSme(request.getAssignedSmeId()));
         }
         if (request.isTitleProvided()) {
             course.setTitle(normalizeRequired(request.getTitle(), "Course title must not be blank"));
@@ -268,6 +271,10 @@ public class CourseAdminService {
         if (request.isStatusProvided()) {
             course.setStatus(parseCourseStatus(request.getStatus(), course.getStatus()));
         }
+
+        if (course.getAssignedSme() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Assigned SME is required");
+        }
         validatePrices(course.getPrice(), course.getDiscountedPrice(), course.getFree());
 
         Course saved = courseRepository.save(course);
@@ -294,13 +301,15 @@ public class CourseAdminService {
         return CourseDtoMapper.toCourseResponse(saved);
     }
 
-    // Xuất bản chương trình master mới nhất cùng lúc với khóa học để người học luôn thấy nội dung.
+    // Xuất bản chương trình master mới nhất cùng lúc với khóa học để người học luôn
+    // thấy nội dung.
     private void publishLatestMasterCurriculum(Course course, UserAccount actor) {
         CurriculumVersion latest = findOrCreateLatestMasterCurriculum(course, actor);
         publishMasterCurriculum(course, latest);
     }
 
-    // Lấy chương trình master mới nhất hoặc tạo phiên bản ban đầu khi khóa học chưa có nội dung.
+    // Lấy chương trình master mới nhất hoặc tạo phiên bản ban đầu khi khóa học chưa
+    // có nội dung.
     private CurriculumVersion findOrCreateLatestMasterCurriculum(Course course, UserAccount actor) {
         return curriculumVersionRepository
                 .findFirstByCourseIdAndScopeOrderByVersionNumberDescCreatedAtDesc(
@@ -308,7 +317,8 @@ public class CourseAdminService {
                 .orElseGet(() -> createInitialMasterCurriculum(course, actor));
     }
 
-    // Chuyển phiên bản master hiện tại sang trạng thái xuất bản và lưu thời điểm công khai.
+    // Chuyển phiên bản master hiện tại sang trạng thái xuất bản và lưu thời điểm
+    // công khai.
     private void publishMasterCurriculum(Course course, CurriculumVersion latest) {
         if (latest.getStatus() == CurriculumStatus.PUBLISHED) {
             return;
@@ -453,18 +463,17 @@ public class CourseAdminService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Course was not found"));
     }
 
-    // Kiểm tra tài khoản SME được phân công tồn tại và có đúng vai trò.
-    private UserAccount findAssignedSme(UUID assignedSmeId) {
+    // Kiểm tra SME bắt buộc tồn tại, đang active và có đúng vai trò SME.
+    private UserAccount findRequiredAssignedSme(UUID assignedSmeId) {
         if (assignedSmeId == null) {
-            return null;
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Assigned SME is required");
         }
 
         return userRepository.findActiveUserByIdAndRole(
                 assignedSmeId,
                 "SME",
                 "active")
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.INVALID_REQUEST,
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
                         "Assigned SME must be an active SME account"));
     }
 
@@ -532,10 +541,11 @@ public class CourseAdminService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "Free courses must have price 0");
         }
         if (discountedPrice != null) {
-            if (discountedPrice.signum() < 0 || discountedPrice.compareTo(resolvedPrice) > 0) {
-                throw new BusinessException(
-                        ErrorCode.INVALID_REQUEST,
-                        "Discounted price must be between 0 and the course price");
+            if (discountedPrice.signum() < 0) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Discounted price must be greater than or equal to 0");
+            }
+            if (discountedPrice.compareTo(resolvedPrice) >= 0) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "Discounted price must be less than the course price");
             }
         }
     }
@@ -567,7 +577,8 @@ public class CourseAdminService {
         return url;
     }
 
-    // Chuẩn hóa chuỗi bắt buộc và báo lỗi khi không còn nội dung sau khi cắt khoảng trắng.
+    // Chuẩn hóa chuỗi bắt buộc và báo lỗi khi không còn nội dung sau khi cắt khoảng
+    // trắng.
     private String normalizeRequired(String value, String message) {
         String normalized = normalizeNullable(value);
         if (normalized == null) {
