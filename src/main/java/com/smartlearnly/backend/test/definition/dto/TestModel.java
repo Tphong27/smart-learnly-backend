@@ -2,6 +2,8 @@ package com.smartlearnly.backend.test.definition.dto;
 
 
 import com.smartlearnly.backend.test.entity.TestType;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -59,6 +61,15 @@ public class TestModel {
     @Getter
     @Setter
     @NoArgsConstructor
+    public static class DurationUpdateRequest {
+        @NotNull
+        @Min(1)
+        private Integer durationMinutes;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
     public static class Response {
         private UUID id;
         private UUID moduleId;
@@ -84,6 +95,7 @@ public class TestModel {
         private Instant opensAt;
         private Instant closesAt;
         private Boolean hasAttempts;
+        private Boolean hasActiveAttempts;
     }
 
     @Getter
