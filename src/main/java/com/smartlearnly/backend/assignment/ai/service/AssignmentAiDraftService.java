@@ -214,6 +214,9 @@ public class AssignmentAiDraftService {
 
         generationClient.ensureAvailable();
         SourceContent source = resolveSource(file, sourceCacheKey, normalizedMessage);
+        if ((sourceAttached || cachedSourceRequested) && source.text().isBlank()) {
+            return unreadableSourceResponse(normalizedMessage, source);
+        }
         String prompt = buildPrompt(
                 trimToMax(normalizedMessage, MAX_USER_MESSAGE_LENGTH),
                 normalizeMode(mode),
@@ -1026,6 +1029,19 @@ public class AssignmentAiDraftService {
                 null,
                 0,
                 null
+        );
+    }
+
+    private AssignmentAiDraftModel.Response unreadableSourceResponse(String message, SourceContent source) {
+        String content = isLikelyVietnamese(message)
+                ? "Trong file kh\u00f4ng c\u00f3 n\u1ed9i dung v\u0103n b\u1ea3n \u0111\u1ec3 t\u00f4i \u0111\u1ecdc, ho\u1eb7c file ch\u1ec9 ch\u1ee9a \u1ea3nh m\u00e0 t\u00f4i ch\u01b0a th\u1ec3 \u0111\u1ecdc \u0111\u01b0\u1ee3c. Vui l\u00f2ng th\u00eam n\u1ed9i dung v\u0103n b\u1ea3n v\u00e0o file, ho\u1eb7c d\u00e1n n\u1ed9i dung c\u1ea7n d\u00f9ng v\u00e0o \u00f4 y\u00eau c\u1ea7u r\u1ed3i th\u1eed l\u1ea1i."
+                : "The file does not contain readable text, or it only contains images that I cannot read yet. Please add text content to the file, or paste the content you want me to use into the request and try again.";
+        return new AssignmentAiDraftModel.Response(
+                content,
+                "",
+                source == null ? null : source.name(),
+                0,
+                source == null ? null : source.cacheKey()
         );
     }
 
