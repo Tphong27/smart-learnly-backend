@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.test.attempt.controller;
+package com.smartlearnly.backend.test.attempt.controller;
 
 import com.smartlearnly.backend.test.attempt.dto.TestAttemptModel;
 import com.smartlearnly.backend.test.attempt.service.TestAttemptService;

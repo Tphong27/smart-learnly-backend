@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.file.controller;
+package com.smartlearnly.backend.file.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.file.dto.CourseThumbnailUploadResponse;

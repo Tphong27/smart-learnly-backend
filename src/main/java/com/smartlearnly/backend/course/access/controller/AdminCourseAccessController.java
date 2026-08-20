@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminCourseAccessController {
     private final CourseAccessAdminService courseAccessAdminService;
 
-    // Khóa ho?c m? l?i quy?n h?c c?a toàn b? h?c viên ð?i v?i m?t khóa h?c.
+    // KhÃ³a ho?c m? l?i quy?n h?c c?a toÃ n b? h?c viÃªn Ä‘?i v?i m?t khÃ³a h?c.
     @PatchMapping("/{courseId}/access")
     public ApiResponse<CourseAccessResponse> updateAccess(
             @PathVariable UUID courseId,

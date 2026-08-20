@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.assignment.ai.controller;
+package com.smartlearnly.backend.assignment.ai.controller;
 
 import com.smartlearnly.backend.assignment.ai.dto.AssignmentAiDraftModel;
 import com.smartlearnly.backend.assignment.ai.service.AssignmentAiDraftService;

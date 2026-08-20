@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.curriculum.admin.controller;
+package com.smartlearnly.backend.curriculum.admin.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.curriculum.dto.ModuleRequest;

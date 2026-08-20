@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.assignment.definition.controller;
+package com.smartlearnly.backend.assignment.definition.controller;
 
 import com.smartlearnly.backend.assignment.definition.dto.AssignmentModel;
 import com.smartlearnly.backend.assignment.definition.service.AssignmentService;

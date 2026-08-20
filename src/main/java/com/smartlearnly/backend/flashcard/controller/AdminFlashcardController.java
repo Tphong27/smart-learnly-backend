@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.flashcard.controller;
+package com.smartlearnly.backend.flashcard.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.flashcard.dto.AdminFlashcardDtos.CreateFlashcardCardRequest;
