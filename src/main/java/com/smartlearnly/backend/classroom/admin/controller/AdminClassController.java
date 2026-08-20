@@ -38,21 +38,21 @@ public class AdminClassController {
     private final ClassAdminService classAdminService;
     private final GoogleMeetService googleMeetService;
 
-    // Tr? các tr?ng thái l?p mà qu?n tr? viên ðý?c phép ch?n trong màn qu?n l?.
+    // Tr? cÃ¡c tr?ng thÃ¡i l?p mÃ  qu?n tr? viÃªn Ä‘Æ°?c phÃ©p ch?n trong mÃ n qu?n l?.
     @GetMapping("/admin/classes/statuses")
     @PreAuthorize("hasRole('TMO')")
     public ApiResponse<List<ClassStatusOptionResponse>> listStatusOptions() {
         return ApiResponse.success("Class statuses loaded successfully", classAdminService.listStatusOptions());
     }
 
-    // T?o link Google Meet m?i ð? qu?n tr? viên g?n vào l?p h?c.
+    // T?o link Google Meet m?i Ä‘? qu?n tr? viÃªn g?n vÃ o l?p h?c.
     @PostMapping("/admin/classes/meeting-links")
     @PreAuthorize("hasRole('TMO')")
     public ApiResponse<MeetingUrlResponse> generateMeetingUrl() {
         return ApiResponse.success("Google Meet link generated successfully", googleMeetService.createMeetingUrl());
     }
 
-    // Li?t kê l?p h?c theo các b? l?c qu?n tr? và phân trang hi?n t?i.
+    // Li?t kÃª l?p h?c theo cÃ¡c b? l?c qu?n tr? vÃ  phÃ¢n trang hi?n t?i.
     @GetMapping("/admin/classes")
     @PreAuthorize("hasRole('TMO')")
     public ApiResponse<PageResponse<ClassResponse>> listAdminClasses(
@@ -67,14 +67,14 @@ public class AdminClassController {
                 classAdminService.list(courseId, trainerId, status, keyword, page, size));
     }
 
-    // Tr? chi ti?t m?t l?p cho qu?n tr? viên ho?c TMO.
+    // Tr? chi ti?t m?t l?p cho qu?n tr? viÃªn ho?c TMO.
     @GetMapping("/admin/classes/{classId}")
     @PreAuthorize("hasRole('TMO')")
     public ApiResponse<ClassResponse> getAdminClass(@PathVariable UUID classId) {
         return ApiResponse.success("Class loaded successfully", classAdminService.get(classId));
     }
 
-    // T?o l?p m?i và tr? URL c?a tài nguyên l?p v?a ðý?c t?o.
+    // T?o l?p m?i vÃ  tr? URL c?a tÃ i nguyÃªn l?p v?a Ä‘Æ°?c t?o.
     @PostMapping("/admin/classes")
     @PreAuthorize("hasRole('TMO')")
     public ResponseEntity<ApiResponse<ClassResponse>> createClass(@Valid @RequestBody CreateClassRequest request) {
@@ -83,7 +83,7 @@ public class AdminClassController {
                 .body(ApiResponse.success("Class created successfully", created));
     }
 
-    // C?p nh?t các trý?ng l?p h?c ðý?c g?i trong yêu c?u PATCH.
+    // C?p nh?t cÃ¡c trÆ°?ng l?p h?c Ä‘Æ°?c g?i trong yÃªu c?u PATCH.
     @PatchMapping("/admin/classes/{classId}")
     @PreAuthorize("hasRole('TMO')")
     public ApiResponse<ClassResponse> updateClass(
@@ -92,14 +92,14 @@ public class AdminClassController {
         return ApiResponse.success("Class updated successfully", classAdminService.update(classId, request));
     }
 
-    // H?y l?p nhýng v?n gi? l?ch s? d? li?u ð? có th? khôi ph?c.
+    // H?y l?p nhÆ°ng v?n gi? l?ch s? d? li?u Ä‘? cÃ³ th? khÃ´i ph?c.
     @PostMapping("/admin/classes/{classId}/cancel")
     @PreAuthorize("hasRole('TMO')")
     public ApiResponse<ClassResponse> cancelClass(@PathVariable UUID classId) {
         return ApiResponse.success("Class cancelled successfully", classAdminService.cancel(classId));
     }
 
-    // Khôi ph?c l?p ð? h?y v?i thông tin c?p nh?t ðý?c xác nh?n.
+    // KhÃ´i ph?c l?p Ä‘? h?y v?i thÃ´ng tin c?p nh?t Ä‘Æ°?c xÃ¡c nh?n.
     @PostMapping("/admin/classes/{classId}/restore")
     @PreAuthorize("hasRole('TMO')")
     public ApiResponse<ClassResponse> restoreClass(
@@ -108,7 +108,7 @@ public class AdminClassController {
         return ApiResponse.success("Class restored successfully", classAdminService.restore(classId, request));
     }
 
-    // Xóa m?m l?p ð? gi? các d? li?u l?ch s? liên quan.
+    // XÃ³a m?m l?p Ä‘? gi? cÃ¡c d? li?u l?ch s? liÃªn quan.
     @DeleteMapping("/admin/classes/{classId}")
     @PreAuthorize("hasRole('TMO')")
     public ApiResponse<Void> deleteClass(@PathVariable UUID classId) {

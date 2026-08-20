@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.videoai.controller;
+package com.smartlearnly.backend.videoai.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.videoai.dto.VideoAiDtos.GenerateSummaryRequest;

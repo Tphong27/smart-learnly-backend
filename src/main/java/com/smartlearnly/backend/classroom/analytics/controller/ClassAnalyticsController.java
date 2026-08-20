@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.classroom.analytics.controller;
+package com.smartlearnly.backend.classroom.analytics.controller;
 
 import com.smartlearnly.backend.classroom.analytics.dto.ClassAnalyticsResponse;
 import com.smartlearnly.backend.classroom.analytics.dto.StudentPerformanceQuery;

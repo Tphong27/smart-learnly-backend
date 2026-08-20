@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.HtmlUtils;
 
-/** Cung c?p API qu?n l? Question List theo ðúng m?t module ðý?c xác ð?nh t? URL. */
+/** Cung c?p API qu?n l? Question List theo Ä‘Ãºng m?t module Ä‘Æ°?c xÃ¡c Ä‘?nh t? URL. */
 @Validated
 @RestController
 @RequiredArgsConstructor
@@ -40,7 +40,7 @@ import org.springframework.web.util.HtmlUtils;
 public class CourseModuleQuestionController {
     private final QuestionService questionService;
 
-    /** Tr? danh sách ð? phân trang c?a module hi?n t?i; không nh?n b? l?c module t? client. */
+    /** Tr? danh sÃ¡ch Ä‘? phÃ¢n trang c?a module hi?n t?i; khÃ´ng nh?n b? l?c module t? client. */
     @GetMapping
     public ApiResponse<PageResponse<QuestionModel.Response>> list(
             @PathVariable UUID courseId,
@@ -62,7 +62,7 @@ public class CourseModuleQuestionController {
         );
     }
 
-    /** L?y m?t câu h?i và tr? 404 n?u câu h?i không thu?c module trên URL. */
+    /** L?y m?t cÃ¢u h?i vÃ  tr? 404 n?u cÃ¢u h?i khÃ´ng thu?c module trÃªn URL. */
     @GetMapping("/{questionId}")
     public ApiResponse<QuestionModel.Response> get(
             @PathVariable UUID courseId,
@@ -75,7 +75,7 @@ public class CourseModuleQuestionController {
         );
     }
 
-    /** T?o câu h?i trong module trên URL; body ch? ch?a n?i dung câu h?i. */
+    /** T?o cÃ¢u h?i trong module trÃªn URL; body ch? ch?a n?i dung cÃ¢u h?i. */
     @PostMapping
     @PreAuthorize("hasRole('SME')")
     public ResponseEntity<ApiResponse<QuestionModel.Response>> create(
@@ -90,7 +90,7 @@ public class CourseModuleQuestionController {
                 .body(ApiResponse.success("Question created successfully", question));
     }
 
-    /** C?p nh?t câu h?i nhýng không cho phép chuy?n câu h?i sang module khác. */
+    /** C?p nh?t cÃ¢u h?i nhÆ°ng khÃ´ng cho phÃ©p chuy?n cÃ¢u h?i sang module khÃ¡c. */
     @PutMapping("/{questionId}")
     @PreAuthorize("hasRole('SME')")
     public ApiResponse<QuestionModel.Response> update(
@@ -105,7 +105,7 @@ public class CourseModuleQuestionController {
         );
     }
 
-    /** Lýu tr? câu h?i trong ðúng module hi?n t?i. */
+    /** LÆ°u tr? cÃ¢u h?i trong Ä‘Ãºng module hi?n t?i. */
     @DeleteMapping("/{questionId}")
     @PreAuthorize("hasRole('SME')")
     public ApiResponse<Void> archive(
@@ -117,7 +117,7 @@ public class CourseModuleQuestionController {
         return ApiResponse.success("Question archived successfully");
     }
 
-    /** Import toàn b? rows vào module trên URL, không ð?c module t? file ho?c request body. */
+    /** Import toÃ n b? rows vÃ o module trÃªn URL, khÃ´ng Ä‘?c module t? file ho?c request body. */
     @PostMapping("/import")
     @PreAuthorize("hasRole('SME')")
     public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(
@@ -131,7 +131,7 @@ public class CourseModuleQuestionController {
         );
     }
 
-    /** Xu?t riêng câu h?i c?a module và không l?p l?i c?t module trong file CSV. */
+    /** Xu?t riÃªng cÃ¢u h?i c?a module vÃ  khÃ´ng l?p l?i c?t module trong file CSV. */
     /** Xuat rieng cau hoi cua module va van ghi Module ID de file khop template import. */
     @GetMapping(value = "/export", produces = "text/csv")
     public ResponseEntity<byte[]> export(
@@ -237,7 +237,7 @@ public class CourseModuleQuestionController {
         return fallbackUrl == null ? "" : fallbackUrl;
     }
 
-    /** Lo?i HTML kh?i n?i dung rich text trý?c khi ðýa vào CSV. */
+    /** Lo?i HTML kh?i n?i dung rich text trÆ°?c khi Ä‘Æ°a vÃ o CSV. */
     private String toPlainText(String value) {
         if (value == null || value.isBlank()) return "";
         String withoutBlockBreaks = value
@@ -250,7 +250,7 @@ public class CourseModuleQuestionController {
                 .trim();
     }
 
-    /** Escape m?t giá tr? CSV theo chu?n d?u ngo?c kép. */
+    /** Escape m?t giÃ¡ tr? CSV theo chu?n d?u ngo?c kÃ©p. */
     private String csv(Object value) {
         if (value == null) return "";
         return "\"" + String.valueOf(value).replace("\"", "\"\"") + "\"";

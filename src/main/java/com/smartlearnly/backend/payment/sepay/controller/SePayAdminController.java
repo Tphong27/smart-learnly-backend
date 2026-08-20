@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.payment.sepay.controller;
+package com.smartlearnly.backend.payment.sepay.controller;
 
 import com.smartlearnly.backend.payment.sepay.dto.SePayWebhookEventResponse;
 import com.smartlearnly.backend.payment.sepay.repository.SePayWebhookEventRepository;

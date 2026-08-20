@@ -29,7 +29,7 @@ public class OrderController {
 
     @GetMapping
     @PreAuthorize("hasRole('TMO')")
-    // Tr? danh sách ðõn có phân trang và b? l?c cho màn h?nh giám sát c?a Admin/TMO.
+    // Tr? danh sÃ¡ch Ä‘Æ¡n cÃ³ phÃ¢n trang vÃ  b? l?c cho mÃ n h?nh giÃ¡m sÃ¡t c?a Admin/TMO.
     public ApiResponse<PageResponse<OrderSummaryResponse>> listOrders(
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
@@ -44,7 +44,7 @@ public class OrderController {
 
     @GetMapping("/{orderId}")
     @PreAuthorize("hasAnyRole('TRAINEE', 'TMO')")
-    // Tr? chi ti?t ðõn n?u ngý?i g?i là ch? ðõn ho?c có quy?n qu?n tr?.
+    // Tr? chi ti?t Ä‘Æ¡n n?u ngÆ°?i g?i lÃ  ch? Ä‘Æ¡n ho?c cÃ³ quy?n qu?n tr?.
     public ApiResponse<OrderResponse> getOrder(@PathVariable UUID orderId) {
         return ApiResponse.success("Order loaded successfully", orderService.getOrder(orderId));
     }
