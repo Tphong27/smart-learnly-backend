@@ -19,7 +19,7 @@ class AdminFlashcardControllerAuthorizationAnnotationTest {
         );
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
+        assertThat(annotation.value()).isEqualTo("hasAnyRole('TMO', 'SME', 'TRAINER')");
 
         Method createMethod = AdminFlashcardController.class.getMethod(
                 "createFlashcardLesson",
@@ -30,30 +30,30 @@ class AdminFlashcardControllerAuthorizationAnnotationTest {
                 createMethod,
                 PreAuthorize.class);
         assertThat(createAuthorization).isNotNull();
-        assertThat(createAuthorization.value()).doesNotContain("TMO");
+        assertThat(createAuthorization.value()).doesNotContain("TMO", "ADMIN");
     }
 
     @Test
-    void adminFlashcardStagingShouldRejectTmo() {
+    void adminFlashcardStagingShouldRejectTmoAndAdmin() {
         PreAuthorize annotation = AnnotatedElementUtils.findMergedAnnotation(
                 AdminFlashcardStagingController.class,
                 PreAuthorize.class
         );
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'SME', 'TRAINER')");
-        assertThat(annotation.value()).doesNotContain("TMO");
+        assertThat(annotation.value()).isEqualTo("hasAnyRole('SME', 'TRAINER')");
+        assertThat(annotation.value()).doesNotContain("TMO", "ADMIN");
     }
 
     @Test
-    void adminFlashcardImageUploadShouldAllowAdminSmeAndTrainerOnly() {
+    void adminFlashcardImageUploadShouldAllowSmeAndTrainerOnly() {
         PreAuthorize annotation = AnnotatedElementUtils.findMergedAnnotation(
                 AdminFlashcardImageUploadController.class,
                 PreAuthorize.class
         );
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('ADMIN', 'SME', 'TRAINER')");
-        assertThat(annotation.value()).doesNotContain("TMO");
+        assertThat(annotation.value()).isEqualTo("hasAnyRole('SME', 'TRAINER')");
+        assertThat(annotation.value()).doesNotContain("TMO", "ADMIN");
     }
 }

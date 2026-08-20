@@ -53,7 +53,7 @@ public class TransactionQueryService {
     }
 
     @Transactional(readOnly = true)
-    // Tìm toàn bộ giao dịch cho Admin/TMO và từ chối các vai trò khác.
+    // Tìm toàn bộ giao dịch cho TMO (ops thanh toán) và từ chối các vai trò khác.
     public PageResponse<TransactionResponse> listAllTransactions(
             int page,
             int size,
@@ -66,7 +66,7 @@ public class TransactionQueryService {
         if (!isAdminOrTmo(actor)) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN,
-                    "Only Admin or TMO can view all transactions");
+                    "Only TMO can view all transactions");
         }
 
         Page<PaymentTransaction> transactions = paymentTransactionRepository.searchAll(
@@ -80,7 +80,7 @@ public class TransactionQueryService {
     }
 
     @Transactional(readOnly = true)
-    // Lấy một giao dịch và kiểm tra người gọi là chủ sở hữu hoặc Admin/TMO.
+    // Lấy một giao dịch và kiểm tra người gọi là chủ sở hữu hoặc TMO.
     public TransactionResponse getTransaction(UUID transactionId) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 
@@ -127,14 +127,14 @@ public class TransactionQueryService {
     }
 
     @Transactional(readOnly = true)
-    // Lấy các giá trị bộ lọc giao dịch cho Trainee, Admin và TMO đã đăng nhập.
+    // Lấy các giá trị bộ lọc giao dịch cho Trainee và TMO đã đăng nhập.
     public TransactionFilterOptionsResponse getFilterOptions() {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
 
         if (!isTransactionViewer(actor)) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN,
-                    "Only Trainee, Admin or TMO can view transaction filter options");
+                    "Only Trainee or TMO can view transaction filter options");
         }
 
         return new TransactionFilterOptionsResponse(
@@ -191,9 +191,9 @@ public class TransactionQueryService {
         return keyword.trim();
     }
 
-    // Kiểm tra vai trò được phép truy vấn giao dịch của mọi người dùng.
+    // Kiểm tra vai trò được phép truy vấn giao dịch của mọi người dùng (ops thanh toán: TMO).
     private boolean isAdminOrTmo(UserAccount user) {
-        return "ADMIN".equalsIgnoreCase(user.getRole()) || "TMO".equalsIgnoreCase(user.getRole());
+        return "TMO".equalsIgnoreCase(user.getRole());
     }
 
     // Kiểm tra vai trò được phép sử dụng các giá trị lọc giao dịch.

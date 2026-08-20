@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.curriculum.admin.controller;
+﻿package com.smartlearnly.backend.curriculum.admin.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.curriculum.dto.LessonRequest;
@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
 public class AdminCourseLessonController {
     private final CurriculumLessonAdminService curriculumLessonAdminService;
@@ -52,7 +52,7 @@ public class AdminCourseLessonController {
 
     // Tạo lesson trong section và trả URL resource vừa tạo.
     @PostMapping("/sections/{sectionId}/lessons")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<LessonResponse>> createLesson(
             @PathVariable UUID sectionId,
             @Valid @RequestBody LessonRequest request) {
@@ -63,7 +63,7 @@ public class AdminCourseLessonController {
 
     // Tạo lesson trong module theo route có course ID để giữ contract cũ.
     @PostMapping("/courses/{courseId}/modules/{moduleId}/lessons")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<LessonResponse>> createModuleLesson(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -73,7 +73,7 @@ public class AdminCourseLessonController {
 
     // Tạo lesson trong module theo route rút gọn hiện tại.
     @PostMapping("/modules/{moduleId}/lessons")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<LessonResponse>> createModuleLesson(
             @PathVariable UUID moduleId,
             @Valid @RequestBody LessonRequest request) {
@@ -82,7 +82,7 @@ public class AdminCourseLessonController {
 
     // Lưu thứ tự lesson mới trong section.
     @PutMapping("/sections/{sectionId}/lessons/order")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<List<LessonResponse>> reorderLessons(
             @PathVariable UUID sectionId,
             @Valid @RequestBody ReorderRequest request) {
@@ -93,7 +93,7 @@ public class AdminCourseLessonController {
 
     // Lưu thứ tự lesson module theo route có course ID để giữ contract cũ.
     @PutMapping("/courses/{courseId}/modules/{moduleId}/lessons/order")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<List<LessonResponse>> reorderModuleLessons(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -103,7 +103,7 @@ public class AdminCourseLessonController {
 
     // Lưu thứ tự lesson module theo route rút gọn hiện tại.
     @PutMapping("/modules/{moduleId}/lessons/order")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<List<LessonResponse>> reorderModuleLessons(
             @PathVariable UUID moduleId,
             @Valid @RequestBody ReorderRequest request) {
@@ -118,7 +118,7 @@ public class AdminCourseLessonController {
 
     // Cập nhật nội dung, loại, trạng thái và resource của lesson.
     @PutMapping("/lessons/{lessonId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<LessonResponse> updateLesson(
             @PathVariable UUID lessonId,
             @Valid @RequestBody LessonRequest request) {
@@ -129,7 +129,7 @@ public class AdminCourseLessonController {
 
     // Vô hiệu lesson theo quy tắc authoring hiện tại.
     @DeleteMapping("/lessons/{lessonId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<Void> deleteLesson(@PathVariable UUID lessonId) {
         curriculumLessonAdminService.deleteLesson(lessonId);
         return ApiResponse.success("Lesson deactivated successfully");

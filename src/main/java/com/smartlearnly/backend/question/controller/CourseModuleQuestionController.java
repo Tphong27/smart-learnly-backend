@@ -31,16 +31,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.HtmlUtils;
 
-/** Cung cấp API quản lý Question List theo đúng một module được xác định từ URL. */
+/** Cung c?p API qu?n l? Question List theo ��ng m?t module ��?c x�c �?nh t? URL. */
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')")
+@PreAuthorize("hasAnyRole('SME', 'TMO', 'TRAINER')")
 @RequestMapping("/api/v1/admin/courses/{courseId}/modules/{moduleId}/questions")
 public class CourseModuleQuestionController {
     private final QuestionService questionService;
 
-    /** Trả danh sách đã phân trang của module hiện tại; không nhận bộ lọc module từ client. */
+    /** Tr? danh s�ch �? ph�n trang c?a module hi?n t?i; kh�ng nh?n b? l?c module t? client. */
     @GetMapping
     public ApiResponse<PageResponse<QuestionModel.Response>> list(
             @PathVariable UUID courseId,
@@ -62,7 +62,7 @@ public class CourseModuleQuestionController {
         );
     }
 
-    /** Lấy một câu hỏi và trả 404 nếu câu hỏi không thuộc module trên URL. */
+    /** L?y m?t c�u h?i v� tr? 404 n?u c�u h?i kh�ng thu?c module tr�n URL. */
     @GetMapping("/{questionId}")
     public ApiResponse<QuestionModel.Response> get(
             @PathVariable UUID courseId,
@@ -75,9 +75,9 @@ public class CourseModuleQuestionController {
         );
     }
 
-    /** Tạo câu hỏi trong module trên URL; body chỉ chứa nội dung câu hỏi. */
+    /** T?o c�u h?i trong module tr�n URL; body ch? ch?a n?i dung c�u h?i. */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @PreAuthorize("hasRole('SME')")
     public ResponseEntity<ApiResponse<QuestionModel.Response>> create(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -90,9 +90,9 @@ public class CourseModuleQuestionController {
                 .body(ApiResponse.success("Question created successfully", question));
     }
 
-    /** Cập nhật câu hỏi nhưng không cho phép chuyển câu hỏi sang module khác. */
+    /** C?p nh?t c�u h?i nh�ng kh�ng cho ph�p chuy?n c�u h?i sang module kh�c. */
     @PutMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @PreAuthorize("hasRole('SME')")
     public ApiResponse<QuestionModel.Response> update(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -105,9 +105,9 @@ public class CourseModuleQuestionController {
         );
     }
 
-    /** Lưu trữ câu hỏi trong đúng module hiện tại. */
+    /** L�u tr? c�u h?i trong ��ng module hi?n t?i. */
     @DeleteMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @PreAuthorize("hasRole('SME')")
     public ApiResponse<Void> archive(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -117,9 +117,9 @@ public class CourseModuleQuestionController {
         return ApiResponse.success("Question archived successfully");
     }
 
-    /** Import toàn bộ rows vào module trên URL, không đọc module từ file hoặc request body. */
+    /** Import to�n b? rows v�o module tr�n URL, kh�ng �?c module t? file ho?c request body. */
     @PostMapping("/import")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @PreAuthorize("hasRole('SME')")
     public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -131,7 +131,7 @@ public class CourseModuleQuestionController {
         );
     }
 
-    /** Xuất riêng câu hỏi của module và không lặp lại cột module trong file CSV. */
+    /** Xu?t ri�ng c�u h?i c?a module v� kh�ng l?p l?i c?t module trong file CSV. */
     /** Xuat rieng cau hoi cua module va van ghi Module ID de file khop template import. */
     @GetMapping(value = "/export", produces = "text/csv")
     public ResponseEntity<byte[]> export(
@@ -237,7 +237,7 @@ public class CourseModuleQuestionController {
         return fallbackUrl == null ? "" : fallbackUrl;
     }
 
-    /** Loại HTML khỏi nội dung rich text trước khi đưa vào CSV. */
+    /** Lo?i HTML kh?i n?i dung rich text tr�?c khi ��a v�o CSV. */
     private String toPlainText(String value) {
         if (value == null || value.isBlank()) return "";
         String withoutBlockBreaks = value
@@ -250,7 +250,7 @@ public class CourseModuleQuestionController {
                 .trim();
     }
 
-    /** Escape một giá trị CSV theo chuẩn dấu ngoặc kép. */
+    /** Escape m?t gi� tr? CSV theo chu?n d?u ngo?c k�p. */
     private String csv(Object value) {
         if (value == null) return "";
         return "\"" + String.valueOf(value).replace("\"", "\"\"") + "\"";

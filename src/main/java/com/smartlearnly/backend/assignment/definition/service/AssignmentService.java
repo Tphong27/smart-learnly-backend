@@ -499,8 +499,7 @@ public class AssignmentService {
 
     private boolean isAdminOrTmoOrSme(UserAccount user) {
         String role = user.getRole();
-        return "ADMIN".equalsIgnoreCase(role)
-                || "TMO".equalsIgnoreCase(role)
+        return "TMO".equalsIgnoreCase(role)
                 || "SME".equalsIgnoreCase(role);
     }
 }

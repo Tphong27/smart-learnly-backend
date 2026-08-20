@@ -19,7 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+// System activity log UI đã gỡ — API đọc audit bị deny; ghi log nội bộ vẫn qua AuditLogService.
+@PreAuthorize("denyAll")
 @RequestMapping("/api/v1/admin/audit-logs")
 public class AdminAuditLogController {
     private final AuditLogQueryService auditLogQueryService;

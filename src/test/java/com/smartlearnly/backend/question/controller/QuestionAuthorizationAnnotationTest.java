@@ -12,47 +12,47 @@ import org.springframework.security.access.prepost.PreAuthorize;
 class QuestionAuthorizationAnnotationTest {
 
     @Test
-    void courseQuestionReadBlockAllowsCourseAuthoringRoles() {
+    void courseQuestionReadBlockAllowsCourseAuthoringRolesWithoutAdmin() {
         assertThat(preAuthorizeValue(CourseQuestionController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')");
+                .isEqualTo("hasAnyRole('SME', 'TMO', 'TRAINER')");
         assertThat(preAuthorizeValue(CourseModuleQuestionController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')");
+                .isEqualTo("hasAnyRole('SME', 'TMO', 'TRAINER')");
     }
 
     @Test
-    void courseQuestionMutationsRemainAdminAndSmeOnly() {
+    void courseQuestionMutationsRemainSmeOnly() {
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "create")))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "update")))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "archive")))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "importBatch")))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "create")))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "update")))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "archive")))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "importBatch")))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
     }
 
     @Test
-    void questionMediaControllersRemainAdminAndSmeOnly() {
+    void questionMediaControllersRemainSmeOnly() {
         assertThat(preAuthorizeValue(QuestionMediaController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(QuestionAnswerMediaController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
         assertThat(preAuthorizeValue(QuestionAnswerController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
     }
 
     @Test
-    void aiQuestionDraftControllerRemainsAdminAndSmeOnly() {
+    void aiQuestionDraftControllerRemainsSmeOnly() {
         assertThat(preAuthorizeValue(CourseAiQuestionDraftController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME')");
+                .isEqualTo("hasRole('SME')");
     }
 
     private String preAuthorizeValue(Class<?> controllerClass) {

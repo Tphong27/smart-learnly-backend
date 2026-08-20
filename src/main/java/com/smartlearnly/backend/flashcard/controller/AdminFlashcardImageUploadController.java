@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.flashcard.controller;
+﻿package com.smartlearnly.backend.flashcard.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.flashcard.dto.FlashcardImageUploadResponse;
@@ -18,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
 public class AdminFlashcardImageUploadController {
     private final FlashcardImageUploadService flashcardImageUploadService;

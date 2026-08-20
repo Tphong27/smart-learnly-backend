@@ -86,15 +86,11 @@ class CourseQuestionControllerSecurityTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void createQuestionShouldAllowAdmin() throws Exception {
-        when(questionService.createForCourse(any(UUID.class), any(QuestionModel.CreateRequest.class)))
-                .thenReturn(sampleResponse());
-
+    void createQuestionShouldRejectAdmin() throws Exception {
         mockMvc.perform(post("/api/v1/admin/courses/{courseId}/questions", COURSE_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(sampleBody()))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(status().isForbidden());
     }
 
     private String sampleBody() {

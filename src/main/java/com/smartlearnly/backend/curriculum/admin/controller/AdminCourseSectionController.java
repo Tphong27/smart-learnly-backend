@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.curriculum.admin.controller;
+﻿package com.smartlearnly.backend.curriculum.admin.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.curriculum.dto.ModuleRequest;
@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
 public class AdminCourseSectionController {
     private final CurriculumSectionAdminService curriculumSectionAdminService;
@@ -46,7 +46,7 @@ public class AdminCourseSectionController {
 
     // Tạo section trong master curriculum và trả URL resource vừa tạo.
     @PostMapping("/courses/{courseId}/sections")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<SectionResponse>> createSection(
             @PathVariable UUID courseId,
             @Valid @RequestBody SectionRequest request) {
@@ -57,7 +57,7 @@ public class AdminCourseSectionController {
 
     // Tạo module trong khóa học và trả URL resource vừa tạo.
     @PostMapping("/courses/{courseId}/modules")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<ModuleResponse>> createModule(
             @PathVariable UUID courseId,
             @Valid @RequestBody ModuleRequest request) {
@@ -68,7 +68,7 @@ public class AdminCourseSectionController {
 
     // Lưu thứ tự đầy đủ của section trong khóa học.
     @PutMapping("/courses/{courseId}/sections/order")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<List<SectionResponse>> reorderSections(
             @PathVariable UUID courseId,
             @Valid @RequestBody ReorderRequest request) {
@@ -79,7 +79,7 @@ public class AdminCourseSectionController {
 
     // Lưu thứ tự đầy đủ của module trong khóa học.
     @PutMapping("/courses/{courseId}/modules/order")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<List<ModuleResponse>> reorderModules(
             @PathVariable UUID courseId,
             @Valid @RequestBody ReorderRequest request) {
@@ -102,7 +102,7 @@ public class AdminCourseSectionController {
 
     // Cập nhật section trong master curriculum.
     @PutMapping("/sections/{sectionId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<SectionResponse> updateSection(
             @PathVariable UUID sectionId,
             @Valid @RequestBody SectionRequest request) {
@@ -113,7 +113,7 @@ public class AdminCourseSectionController {
 
     // Cập nhật module và đồng bộ module canonical tương ứng.
     @PutMapping("/modules/{moduleId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<ModuleResponse> updateModule(
             @PathVariable UUID moduleId,
             @Valid @RequestBody ModuleRequest request) {
@@ -124,7 +124,7 @@ public class AdminCourseSectionController {
 
     // Xóa section cùng lesson trực thuộc theo nghiệp vụ hiện tại.
     @DeleteMapping("/sections/{sectionId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<Void> deleteSection(@PathVariable UUID sectionId) {
         curriculumSectionAdminService.deleteSection(sectionId);
         return ApiResponse.success("Section deleted successfully");
@@ -132,7 +132,7 @@ public class AdminCourseSectionController {
 
     // Xóa module và vô hiệu module canonical tương ứng.
     @DeleteMapping("/modules/{moduleId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ApiResponse<Void> deleteModule(@PathVariable UUID moduleId) {
         curriculumSectionAdminService.deleteModule(moduleId);
         return ApiResponse.success("Module deleted successfully");

@@ -16,12 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+@PreAuthorize("hasRole('TMO')")
 @RequestMapping("/api/v1/admin/courses")
 public class AdminCourseAccessController {
     private final CourseAccessAdminService courseAccessAdminService;
 
-    // Khóa hoặc mở lại quyền học của toàn bộ học viên đối với một khóa học.
+    // Kh�a ho?c m? l?i quy?n h?c c?a to�n b? h?c vi�n �?i v?i m?t kh�a h?c.
     @PatchMapping("/{courseId}/access")
     public ApiResponse<CourseAccessResponse> updateAccess(
             @PathVariable UUID courseId,

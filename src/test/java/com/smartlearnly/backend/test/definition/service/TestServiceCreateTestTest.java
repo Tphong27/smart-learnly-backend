@@ -167,13 +167,13 @@ class TestServiceCreateTestTest {
 
     @Test
     void createTestShouldRejectWhenClassBelongsToAnotherCourse() {
-        UUID adminId = UUID.randomUUID();
+        UUID tmoId = UUID.randomUUID();
         UUID classId = UUID.randomUUID();
         UUID requestedCourseId = UUID.randomUUID();
         ClassOffering classOffering = classOffering(classId, UUID.randomUUID(), UUID.randomUUID());
         TestModel.CreateRequest request = createRequest(classId, requestedCourseId);
 
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(adminId, "ADMIN"));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(tmoId, "TMO"));
         when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId))
                 .thenReturn(java.util.Optional.of(classOffering));
 
@@ -186,14 +186,14 @@ class TestServiceCreateTestTest {
 
     @Test
     void createTestShouldRejectUnknownCurriculumSection() {
-        UUID adminId = UUID.randomUUID();
+        UUID tmoId = UUID.randomUUID();
         UUID classId = UUID.randomUUID();
         UUID courseId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
         TestModel.CreateRequest request = createRequest(classId, courseId);
         request.setCurriculumSectionId(sectionId);
 
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(adminId, "ADMIN"));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(user(tmoId, "TMO"));
         when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId))
                 .thenReturn(java.util.Optional.of(classOffering(classId, courseId, UUID.randomUUID())));
         when(curriculumSectionRepository.existsById(sectionId)).thenReturn(false);

@@ -25,7 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/questions")
-@PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+@PreAuthorize("hasRole('SME')")
 public class QuestionMediaController {
     private final QuestionMediaService questionMediaService;
 

@@ -31,10 +31,10 @@ class AssignmentAuthorizationAnnotationTest {
                 String.class,
                 MultipartFile.class);
 
-        assertThat(preAuthorizeValue(create)).contains("ADMIN", "SME", "TRAINER").doesNotContain("TMO");
-        assertThat(preAuthorizeValue(update)).contains("ADMIN", "SME", "TRAINER").doesNotContain("TMO");
-        assertThat(preAuthorizeValue(delete)).contains("ADMIN", "SME", "TRAINER").doesNotContain("TMO");
-        assertThat(preAuthorizeValue(aiDraft)).contains("ADMIN", "SME", "TRAINER").doesNotContain("TMO");
+        assertThat(preAuthorizeValue(create)).contains("SME", "TRAINER").doesNotContain("TMO", "ADMIN");
+        assertThat(preAuthorizeValue(update)).contains("SME", "TRAINER").doesNotContain("TMO", "ADMIN");
+        assertThat(preAuthorizeValue(delete)).contains("SME", "TRAINER").doesNotContain("TMO", "ADMIN");
+        assertThat(preAuthorizeValue(aiDraft)).contains("SME", "TRAINER").doesNotContain("TMO", "ADMIN");
     }
 
     @Test
@@ -43,8 +43,8 @@ class AssignmentAuthorizationAnnotationTest {
                 "uploadSubmissionFile", MultipartFile.class);
 
         assertThat(preAuthorizeValue(upload))
-                .contains("ADMIN", "SME", "TRAINER", "TRAINEE")
-                .doesNotContain("TMO");
+                .contains("SME", "TRAINER", "TRAINEE")
+                .doesNotContain("TMO", "ADMIN");
     }
 
     @Test
@@ -56,8 +56,8 @@ class AssignmentAuthorizationAnnotationTest {
 
         assertThat(preAuthorizeValue(submit)).isEqualTo("hasRole('TRAINEE')");
         assertThat(preAuthorizeValue(grade))
-                .contains("ADMIN", "SME", "TRAINER")
-                .doesNotContain("TMO", "TRAINEE");
+                .contains("SME", "TRAINER")
+                .doesNotContain("TMO", "TRAINEE", "ADMIN");
     }
 
     private String preAuthorizeValue(Method method) {

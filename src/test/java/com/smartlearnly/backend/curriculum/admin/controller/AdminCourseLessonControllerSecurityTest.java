@@ -84,11 +84,8 @@ class AdminCourseLessonControllerSecurityTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void listModuleLessonsShouldAllowAdmin() throws Exception {
-        when(curriculumLessonAdminService.listModuleLessons(any(UUID.class)))
-                .thenReturn(List.of());
-
+    void listModuleLessonsShouldRejectAdmin() throws Exception {
         mockMvc.perform(get("/api/v1/admin/modules/{moduleId}/lessons", MODULE_ID))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
     }
 }

@@ -18,11 +18,11 @@ class CourseAdminAuthorizationAnnotationTest {
     @Test
     void courseReadEndpointsShouldStillAllowTmo() {
         assertThat(preAuthorizeValue(AdminCourseController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
+                .isEqualTo("hasAnyRole('TMO', 'SME', 'TRAINER')");
     }
 
     @Test
-    void courseWritesShouldRejectTmo() throws Exception {
+    void courseWritesShouldUseTmoAndTrainerOwnership() throws Exception {
         Method createMethod = AdminCourseController.class.getMethod(
                 "create",
                 com.smartlearnly.backend.course.authoring.dto.CreateCourseRequest.class);
@@ -35,48 +35,48 @@ class CourseAdminAuthorizationAnnotationTest {
                 java.util.UUID.class);
 
         assertThat(preAuthorizeValue(createMethod))
-                .isEqualTo("hasRole('ADMIN')")
-                .doesNotContain("TMO");
+                .isEqualTo("hasRole('TMO')")
+                .doesNotContain("ADMIN");
         assertThat(preAuthorizeValue(updateMethod))
-                .isEqualTo("hasAnyRole('ADMIN', 'TRAINER')")
-                .doesNotContain("TMO", "SME");
+                .isEqualTo("hasRole('TRAINER')")
+                .doesNotContain("ADMIN", "TMO", "SME");
         assertThat(preAuthorizeValue(deleteMethod))
-                .isEqualTo("hasRole('ADMIN')")
-                .doesNotContain("TMO");
+                .isEqualTo("hasRole('TMO')")
+                .doesNotContain("ADMIN");
     }
 
     @Test
-    void courseContentShouldAllowAllCourseAuthoringRoles() {
+    void courseContentShouldAllowCourseAuthoringRolesWithoutAdmin() {
         assertThat(preAuthorizeValue(AdminCourseSectionController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
+                .isEqualTo("hasAnyRole('TMO', 'SME', 'TRAINER')");
         assertThat(preAuthorizeValue(AdminCourseLessonController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
+                .isEqualTo("hasAnyRole('TMO', 'SME', 'TRAINER')");
     }
 
     @Test
-    void courseThumbnailUploadShouldRejectTmo() {
+    void courseThumbnailUploadShouldRejectTmoAndAdmin() {
         assertThat(preAuthorizeValue(AdminUploadController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
-                .doesNotContain("TMO");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')")
+                .doesNotContain("TMO", "ADMIN");
     }
 
     @Test
-    void courseAccessBlockShouldRemainAdminAndTmoOnly() {
+    void courseAccessBlockShouldRemainTmoOnly() {
         assertThat(preAuthorizeValue(AdminCourseAccessController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'TMO')");
+                .isEqualTo("hasRole('TMO')");
     }
 
     @Test
-    void categoryReadEndpointsShouldStillAllowTmo() throws Exception {
+    void categoryReadEndpointsShouldStillAllowStaffWithoutAdmin() throws Exception {
         assertThat(preAuthorizeValue(AdminCategoryController.class))
-                .isEqualTo("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')");
+                .isEqualTo("hasAnyRole('TMO', 'SME', 'TRAINER')");
 
         Method createMethod = AdminCategoryController.class.getMethod(
                 "create",
                 com.smartlearnly.backend.course.category.dto.CreateCategoryRequest.class);
         assertThat(preAuthorizeValue(createMethod))
-                .isEqualTo("hasRole('ADMIN')")
-                .doesNotContain("TMO");
+                .isEqualTo("hasRole('TMO')")
+                .doesNotContain("ADMIN");
     }
 
     private String preAuthorizeValue(Class<?> controllerClass) {

@@ -107,54 +107,46 @@ public class SecurityConfig {
                                 "/api/v1/courses/*/preview",
                                 "/api/v1/courses/{courseId}/preview"
                         ).permitAll()
-                        // Admin endpoints: allow ADMIN/TMO/SME/TRAINER to access course management APIs
+                        // Resource management: ADMIN is system-only (settings/dashboard/users via catch-all below).
+                        // Content roles: TMO / SME / TRAINER — method @PreAuthorize tightens further.
                         .requestMatchers("/api/v1/admin/question-banks/**", "/api/v1/admin/questions/**", "/api/v1/admin/test-questions/**")
-                        .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
+                        .hasAnyRole("SME", "TMO", "TRAINER")
                         .requestMatchers("/api/v1/admin/question-imports/**", "/api/v1/admin/question-answers/**")
-                        .hasAnyRole("ADMIN", "SME")
-                        // Admin course content management: allow ADMIN/TMO/SME/TRAINER to access course content authoring APIs
+                        .hasRole("SME")
                         .requestMatchers("/api/v1/admin/courses", "/api/v1/admin/courses/**")
-                        .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
-                        // Course scoped question management: let the method-level @PreAuthorize enforce create/update/archive/import
-                        // (ADMIN/SME) and AI drafts (ADMIN/SME); the filter only needs to admit the allowed roles.
+                        .hasAnyRole("SME", "TMO", "TRAINER")
                         .requestMatchers(
                                 "/api/v1/admin/courses/*/questions",
                                 "/api/v1/admin/courses/*/questions/**"
                         )
-                        .hasAnyRole("ADMIN", "SME", "TMO", "TRAINER")
-.requestMatchers("/api/v1/admin/sections/**")
-.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-.requestMatchers("/api/v1/admin/lessons/**")
-.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-.requestMatchers("/api/v1/admin/modules/**")
-.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-.requestMatchers(
-        "/api/v1/admin/flashcard-sets/**",
-        "/api/v1/admin/flashcard-cards/**",
-        "/api/v1/admin/flashcard-staging-cards/**"
-)
-.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-.requestMatchers(
-        HttpMethod.GET,
-        "/api/v1/admin/categories",
-        "/api/v1/admin/categories/**"
-)
-.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-// GET class list/detail: mở cho ADMIN/TMO/SME/TRAINER để staff các role có thể duyệt lớp.
-.requestMatchers(
-        HttpMethod.GET,
-        "/api/v1/admin/classes",
-        "/api/v1/admin/classes/**"
-)
-.hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
-// Các thao tác write vẫn giữ ADMIN/TMO
+                        .hasAnyRole("SME", "TMO", "TRAINER")
+                        .requestMatchers("/api/v1/admin/sections/**")
+                        .hasAnyRole("TMO", "SME", "TRAINER")
+                        .requestMatchers("/api/v1/admin/lessons/**")
+                        .hasAnyRole("TMO", "SME", "TRAINER")
+                        .requestMatchers("/api/v1/admin/modules/**")
+                        .hasAnyRole("TMO", "SME", "TRAINER")
+                        .requestMatchers(
+                                "/api/v1/admin/flashcard-sets/**",
+                                "/api/v1/admin/flashcard-cards/**",
+                                "/api/v1/admin/flashcard-staging-cards/**"
+                        )
+                        .hasAnyRole("TMO", "SME", "TRAINER")
+                        // Category list: TMO/SME/TRAINER; writes further restricted to TMO at method level.
+                        .requestMatchers(
+                                "/api/v1/admin/categories",
+                                "/api/v1/admin/categories/**"
+                        )
+                        .hasAnyRole("TMO", "SME", "TRAINER")
+                        // Class ops: TMO only (analytics under same prefix for TMO).
                         .requestMatchers("/api/v1/admin/classes/**", "/api/v1/admin/classes")
-                        .hasAnyRole("ADMIN", "TMO")
+                        .hasRole("TMO")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/users", "/api/v1/admin/users/**")
                         .hasAnyRole("ADMIN", "TMO")
-                        // Uploads: trainer cần upload material/resource/media khi tuỳ biến class curriculum.
+                        // Uploads: trainer needs material/resource/media when customizing class curriculum.
                         .requestMatchers("/api/v1/admin/uploads/**")
-                        .hasAnyRole("ADMIN", "TMO", "SME", "TRAINER")
+                        .hasAnyRole("TMO", "SME", "TRAINER")
+                        // Catch-all admin: settings, dashboard, audit (denied at controller), other system paths.
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

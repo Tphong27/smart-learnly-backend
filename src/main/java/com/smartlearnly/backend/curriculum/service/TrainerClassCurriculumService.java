@@ -444,7 +444,7 @@ public class TrainerClassCurriculumService {
 
     private boolean isAdministrator() {
         return authenticatedUserResolver.resolve()
-                .map(user -> user.hasRole("ADMIN") || user.hasRole("TMO"))
+                .map(user -> user.hasRole("TMO"))
                 .orElse(false);
     }
 

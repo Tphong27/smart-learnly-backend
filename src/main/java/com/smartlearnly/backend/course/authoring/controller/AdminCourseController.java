@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.course.authoring.controller;
+﻿package com.smartlearnly.backend.course.authoring.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/courses")
 public class AdminCourseController {
     private final CourseAdminService courseAdminService;
@@ -51,7 +51,7 @@ public class AdminCourseController {
 
     // Tạo khóa học nháp mới và trả vị trí tài nguyên vừa tạo.
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TMO')")
     public ResponseEntity<ApiResponse<CourseResponse>> create(@Valid @RequestBody CreateCourseRequest request) {
         CourseResponse course = courseAdminService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/courses/" + course.id()))
@@ -66,7 +66,7 @@ public class AdminCourseController {
 
     // Cập nhật riêng các trường metadata được gửi trong yêu cầu PATCH.
     @PatchMapping("/{courseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TRAINER')")
+    @PreAuthorize("hasRole('TRAINER')")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,
             @Valid @RequestBody UpdateCourseRequest request
@@ -76,7 +76,7 @@ public class AdminCourseController {
 
     // Lưu trữ mềm khóa học để dữ liệu lịch sử không bị xóa vật lý.
     @DeleteMapping("/{courseId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<Void> delete(@PathVariable UUID courseId) {
         courseAdminService.delete(courseId);
         return ApiResponse.success("Course deleted successfully");

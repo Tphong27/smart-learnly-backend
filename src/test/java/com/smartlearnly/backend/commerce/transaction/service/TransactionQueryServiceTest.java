@@ -41,7 +41,7 @@ class TransactionQueryServiceTest {
 
     private UserAccount owner;
     private UserAccount otherTrainee;
-    private UserAccount admin;
+    private UserAccount tmo;
 
     @BeforeEach
     void setUp() {
@@ -59,9 +59,9 @@ class TransactionQueryServiceTest {
         otherTrainee.setId(UUID.randomUUID());
         otherTrainee.setRole("TRAINEE");
 
-        admin = new UserAccount();
-        admin.setId(UUID.randomUUID());
-        admin.setRole("ADMIN");
+        tmo = new UserAccount();
+        tmo.setId(UUID.randomUUID());
+        tmo.setRole("TMO");
     }
 
     @Test
@@ -79,9 +79,9 @@ class TransactionQueryServiceTest {
     }
 
     @Test
-    void getTransactionShouldAllowAdmin() {
+    void getTransactionShouldAllowTmo() {
         PaymentTransaction transaction = sampleTransaction(owner.getId());
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
         when(paymentTransactionRepository.findById(transaction.getId())).thenReturn(Optional.of(transaction));
 
         TransactionResponse response = transactionQueryService.getTransaction(transaction.getId());
@@ -102,8 +102,8 @@ class TransactionQueryServiceTest {
     }
 
     @Test
-    void getFilterOptionsShouldReturnDistinctValuesForAdmin() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+    void getFilterOptionsShouldReturnDistinctValuesForTmo() {
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
         when(paymentTransactionRepository.findDistinctStatuses()).thenReturn(List.of("PENDING", "SUCCESS"));
         when(paymentTransactionRepository.findDistinctPaymentGateways()).thenReturn(List.of("SEPAY"));
         when(paymentTransactionRepository.findDistinctCurrencies()).thenReturn(List.of("VND"));
@@ -116,8 +116,25 @@ class TransactionQueryServiceTest {
     }
 
     @Test
-    void getFilterOptionsShouldRejectTrainee() {
+    void getFilterOptionsShouldReturnDistinctValuesForTrainee() {
         when(currentUserService.requireAuthenticatedUser()).thenReturn(owner);
+        when(paymentTransactionRepository.findDistinctStatuses()).thenReturn(List.of("PENDING", "SUCCESS"));
+        when(paymentTransactionRepository.findDistinctPaymentGateways()).thenReturn(List.of("SEPAY"));
+        when(paymentTransactionRepository.findDistinctCurrencies()).thenReturn(List.of("VND"));
+
+        TransactionFilterOptionsResponse response = transactionQueryService.getFilterOptions();
+
+        assertThat(response.statuses()).containsExactly("PENDING", "SUCCESS");
+        assertThat(response.paymentGateways()).containsExactly("SEPAY");
+        assertThat(response.currencies()).containsExactly("VND");
+    }
+
+    @Test
+    void getFilterOptionsShouldRejectNonViewerRole() {
+        UserAccount trainer = new UserAccount();
+        trainer.setId(UUID.randomUUID());
+        trainer.setRole("TRAINER");
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(trainer);
 
         assertThatThrownBy(() -> transactionQueryService.getFilterOptions())
                 .isInstanceOf(BusinessException.class)

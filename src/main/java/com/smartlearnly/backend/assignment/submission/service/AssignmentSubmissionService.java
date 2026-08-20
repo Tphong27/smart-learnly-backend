@@ -476,8 +476,7 @@ public class AssignmentSubmissionService {
     /** Chỉ cho staff toàn cục hoặc trainer được phân công quản lý assignment. */
     private void requireManageAccess(Assignment assignment, UserAccount actor) {
         String role = actor.getRole();
-        if ("ADMIN".equalsIgnoreCase(role)
-                || "TMO".equalsIgnoreCase(role)
+        if ("TMO".equalsIgnoreCase(role)
                 || "SME".equalsIgnoreCase(role)
                 || ("TRAINER".equalsIgnoreCase(role)
                 && assignmentRepository.existsManagedByStaff(

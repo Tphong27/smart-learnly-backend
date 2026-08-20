@@ -35,14 +35,7 @@ class TransactionControllerTest {
 
     @Test
     @WithMockUser(roles = "TRAINEE")
-    void filterOptionsShouldRejectTrainee() throws Exception {
-        mockMvc.perform(get("/api/v1/transactions/filter-options"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    void filterOptionsShouldReturnFilterDataForAdmin() throws Exception {
+    void filterOptionsShouldReturnFilterDataForTrainee() throws Exception {
         when(transactionQueryService.getFilterOptions())
                 .thenReturn(new TransactionFilterOptionsResponse(
                         List.of("PENDING", "SUCCESS"),
@@ -60,16 +53,28 @@ class TransactionControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
+    void filterOptionsShouldRejectAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/transactions/filter-options"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @WithMockUser(roles = "TMO")
-    void filterOptionsShouldAllowTmo() throws Exception {
+    void filterOptionsShouldReturnFilterDataForTmo() throws Exception {
         when(transactionQueryService.getFilterOptions())
                 .thenReturn(new TransactionFilterOptionsResponse(
-                        List.of(),
-                        List.of(),
-                        List.of()));
+                        List.of("PENDING", "SUCCESS"),
+                        List.of("SEPAY"),
+                        List.of("VND")));
 
         mockMvc.perform(get("/api/v1/transactions/filter-options"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Transaction filter options loaded successfully"))
+                .andExpect(jsonPath("$.data.statuses[0]").value("PENDING"))
+                .andExpect(jsonPath("$.data.statuses[1]").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.paymentGateways[0]").value("SEPAY"))
+                .andExpect(jsonPath("$.data.currencies[0]").value("VND"));
     }
 }

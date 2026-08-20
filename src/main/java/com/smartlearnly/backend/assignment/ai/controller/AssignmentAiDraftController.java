@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.assignment.ai.controller;
+﻿package com.smartlearnly.backend.assignment.ai.controller;
 
 import com.smartlearnly.backend.assignment.ai.dto.AssignmentAiDraftModel;
 import com.smartlearnly.backend.assignment.ai.service.AssignmentAiDraftService;
@@ -28,7 +28,7 @@ public class AssignmentAiDraftController {
      * @return nội dung bản nháp AI để người dùng xem và chỉnh sửa
      */
     @PostMapping(value = "/ai-draft", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<AssignmentAiDraftModel.Response> generateAiDraft(
             @RequestParam String message,
             @RequestParam(required = false) String mode,

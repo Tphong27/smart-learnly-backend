@@ -115,14 +115,14 @@ class TestServiceClassScopeTest {
     @Test
     void legacyFlashTestIsNoLongerAccessibleById() {
         UUID testId = UUID.randomUUID();
-        UserAccount admin = user(UUID.randomUUID(), "ADMIN");
+        UserAccount tmo = user(UUID.randomUUID(), "TMO");
         com.smartlearnly.backend.test.entity.Test test = publishedTest(
                 UUID.randomUUID(), UUID.randomUUID());
         test.setId(testId);
         test.setIsFlashtest(true);
 
         when(testRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
 
         assertThatThrownBy(() -> service.getTestById(testId))
                 .isInstanceOf(EntityNotFoundException.class)
@@ -132,7 +132,7 @@ class TestServiceClassScopeTest {
     @Test
     void updateTestIsBlockedWhileATraineeIsTakingIt() {
         UUID testId = UUID.randomUUID();
-        UserAccount admin = user(UUID.randomUUID(), "ADMIN");
+        UserAccount tmo = user(UUID.randomUUID(), "TMO");
         com.smartlearnly.backend.test.entity.Test test = publishedTest(
                 UUID.randomUUID(), UUID.randomUUID());
         test.setId(testId);
@@ -140,7 +140,7 @@ class TestServiceClassScopeTest {
         request.setTitle("Updated title");
 
         when(testRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
         when(testAttemptRepository.existsActiveByTestId(testId)).thenReturn(true);
 
         assertThatThrownBy(() -> service.updateTest(testId, request))
@@ -153,7 +153,7 @@ class TestServiceClassScopeTest {
     @Test
     void updateDurationGivesActiveAttemptsOneMinuteFromUpdateTime() {
         UUID testId = UUID.randomUUID();
-        UserAccount admin = user(UUID.randomUUID(), "ADMIN");
+        UserAccount tmo = user(UUID.randomUUID(), "TMO");
         com.smartlearnly.backend.test.entity.Test test = publishedTest(
                 UUID.randomUUID(), UUID.randomUUID());
         test.setId(testId);
@@ -169,7 +169,7 @@ class TestServiceClassScopeTest {
         Instant beforeUpdate = Instant.now();
 
         when(testRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
         when(testAttemptRepository.findActiveByTestId(testId)).thenReturn(List.of(activeAttempt));
         when(testRepository.save(test)).thenReturn(test);
         when(testAttemptRepository.existsActiveByTestId(testId)).thenReturn(true);

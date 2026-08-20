@@ -404,7 +404,7 @@ public class TestService {
     private boolean canManageTests(UserAccount actor) {
         String role = actor.getRole();
         return role != null && switch (role.toUpperCase()) {
-            case "ADMIN", "TMO", "SME", "TRAINER" -> true;
+            case "TMO", "SME", "TRAINER" -> true;
             default -> false;
         };
     }
@@ -413,7 +413,7 @@ public class TestService {
     private boolean isPrivilegedStaff(UserAccount actor) {
         String role = actor.getRole();
         return role != null && switch (role.toUpperCase()) {
-            case "ADMIN", "TMO", "SME" -> true;
+            case "TMO", "SME" -> true;
             default -> false;
         };
     }

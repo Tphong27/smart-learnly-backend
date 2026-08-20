@@ -30,7 +30,7 @@ class ClassAnalyticsApiIT extends AbstractPostgresIntegrationTest {
     @Test
     void an05_rejectsKeywordLongerThanOneHundredCharacters() throws Exception {
         mockMvc.perform(get("/api/v1/admin/classes/{classId}/analytics", CLASS_ID)
-                        .with(asUser(TRAINER_ID, "admin@it.local", "ADMIN"))
+                        .with(asUser(TRAINER_ID, "tmo@it.local", "TMO"))
                         .queryParam("keyword", "x".repeat(101)))
                 .andExpect(status().isBadRequest());
     }

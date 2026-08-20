@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.test.attempt.controller;
+﻿package com.smartlearnly.backend.test.attempt.controller;
 
 import com.smartlearnly.backend.test.attempt.dto.StudentTestAnswerModel;
 import com.smartlearnly.backend.test.attempt.service.StudentTestAnswerService;
@@ -32,7 +32,7 @@ public class StudentTestAnswerController {
 
     /** Trả các đáp án thuộc attempt course quiz sau khi xác thực quyền xem. */
     @GetMapping("/attempt/{attemptId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER', 'TRAINEE')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER', 'TRAINEE')")
     public ResponseEntity<List<StudentTestAnswerModel.Response>> getAnswersByAttempt(
             @PathVariable UUID attemptId) {
         return ResponseEntity.ok(service.getAnswersByAttempt(attemptId));

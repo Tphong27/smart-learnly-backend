@@ -76,9 +76,9 @@ class AssignmentServiceTest {
         UUID lessonId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         UUID courseId = UUID.randomUUID();
-        UserAccount admin = new UserAccount();
-        admin.setId(UUID.randomUUID());
-        admin.setRole("ADMIN");
+        UserAccount sme = new UserAccount();
+        sme.setId(UUID.randomUUID());
+        sme.setRole("SME");
         CurriculumLesson lesson = new CurriculumLesson();
         lesson.setId(lessonId);
         lesson.setCurriculumVersionId(versionId);
@@ -91,7 +91,7 @@ class AssignmentServiceTest {
         request.setDescription("Submit the completed project.");
         request.setAllowLateSubmission(false);
 
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(sme);
         when(assignmentRepository.save(any(Assignment.class))).thenAnswer(invocation -> {
             Assignment saved = invocation.getArgument(0);
             saved.setId(UUID.randomUUID());
@@ -106,7 +106,7 @@ class AssignmentServiceTest {
 
         assertThat(response.getLessonId()).isEqualTo(lessonId);
         assertThat(response.getCourseId()).isEqualTo(courseId);
-        assertThat(response.getCreatedBy()).isEqualTo(admin.getId());
+        assertThat(response.getCreatedBy()).isEqualTo(sme.getId());
         assertThat(response.getTitle()).isEqualTo("Final project");
     }
 

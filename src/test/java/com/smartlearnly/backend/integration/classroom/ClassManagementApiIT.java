@@ -16,7 +16,7 @@ import org.springframework.test.context.jdbc.Sql;
 
 class ClassManagementApiIT extends AbstractPostgresIntegrationTest {
 
-    private static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000301");
+    private static final UUID TMO_ID = UUID.fromString("00000000-0000-0000-0000-000000000301");
     private static final UUID COURSE_ID = UUID.fromString("00000000-0000-0000-0000-000000000303");
     private static final UUID TRAINER_ID = UUID.fromString("00000000-0000-0000-0000-000000000302");
 
@@ -24,7 +24,7 @@ class ClassManagementApiIT extends AbstractPostgresIntegrationTest {
     @Sql("/integration/classroom/cm-04-course-and-trainer.sql")
     void cm04_createPersistsClassAndFutureSessions() throws Exception {
         mockMvc.perform(post("/api/v1/admin/classes")
-                        .with(asUser(ADMIN_ID, "admin@it.local", "ADMIN"))
+                        .with(asUser(TMO_ID, "tmo@it.local", "TMO"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validCreatePayload()))
                 .andExpect(status().isCreated())
@@ -40,7 +40,7 @@ class ClassManagementApiIT extends AbstractPostgresIntegrationTest {
     @Sql("/integration/classroom/cm-04-course-and-trainer.sql")
     void cm05_createFreeClassWithoutPricePersistsWithZeroPrice() throws Exception {
         mockMvc.perform(post("/api/v1/admin/classes")
-                        .with(asUser(ADMIN_ID, "admin@it.local", "ADMIN"))
+                        .with(asUser(TMO_ID, "tmo@it.local", "TMO"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(freeCreatePayload()))
                 .andExpect(status().isCreated())

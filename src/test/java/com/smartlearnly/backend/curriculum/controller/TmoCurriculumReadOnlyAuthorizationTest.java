@@ -61,7 +61,7 @@ class TmoCurriculumReadOnlyAuthorizationTest {
 
     private void assertWriteAuthorizationExcludesTmo(Method method) {
         assertThat(preAuthorizeValue(method))
-                .contains("ADMIN")
+                .doesNotContain("ADMIN")
                 .doesNotContain("TMO");
     }
 

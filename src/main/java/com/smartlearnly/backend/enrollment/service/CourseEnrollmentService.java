@@ -474,6 +474,6 @@ public class CourseEnrollmentService {
         }
 
         private boolean isAdminOrTmo(UserAccount user) {
-                return "ADMIN".equalsIgnoreCase(user.getRole()) || "TMO".equalsIgnoreCase(user.getRole());
+                return "TMO".equalsIgnoreCase(user.getRole());
         }
 }

@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.test.attempt.controller;
+﻿package com.smartlearnly.backend.test.attempt.controller;
 
 import com.smartlearnly.backend.test.attempt.dto.TestAttemptModel;
 import com.smartlearnly.backend.test.attempt.service.TestAttemptService;
@@ -45,7 +45,7 @@ public class TestAttemptController {
 
     /** Trả lịch sử attempt của trainee cho một course quiz sau khi kiểm tra quyền. */
     @GetMapping("/quiz/{quizId}/student/{studentId}")
-    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<TestAttemptModel.Response>> getAttempts(
             @PathVariable UUID quizId,
             @PathVariable UUID studentId,
@@ -55,14 +55,14 @@ public class TestAttemptController {
 
     /** Trả chi tiết attempt course quiz mà caller được phép xem. */
     @GetMapping("/quiz/{quizId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<TestAttemptModel.Response>> getAttemptsByTest(
             @PathVariable UUID quizId) {
         return ResponseEntity.ok(service.getAttemptsByTest(quizId));
     }
 
     @GetMapping("/{attemptId}")
-    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<TestAttemptModel.Response> getAttemptById(
             @PathVariable UUID attemptId,
             @RequestParam(required = false) UUID classId) {

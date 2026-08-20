@@ -609,9 +609,9 @@ class CourseAdminServiceTest {
         private UserAccount admin() {
                 UserAccount admin = new UserAccount();
                 admin.setId(UUID.randomUUID());
-                admin.setEmail("admin@slp.vn");
-                admin.setFullName("Admin");
-                admin.setRole("ADMIN");
+                admin.setEmail("tmo@slp.vn");
+                admin.setFullName("TMO");
+                admin.setRole("TMO");
                 admin.setStatus("active");
                 return admin;
         }

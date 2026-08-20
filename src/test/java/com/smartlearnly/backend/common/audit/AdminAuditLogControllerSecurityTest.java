@@ -1,15 +1,8 @@
 package com.smartlearnly.backend.common.audit;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.smartlearnly.backend.common.api.PageResponse;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -48,17 +41,18 @@ class AdminAuditLogControllerSecurityTest {
         mockMvc.perform(get("/api/v1/admin/audit-logs/" + java.util.UUID.randomUUID()))
                 .andExpect(status().isForbidden());
     }
+
     @Test
     @WithMockUser(roles = "ADMIN")
-    void listShouldAllowAdmin() throws Exception {
-        when(auditLogQueryService.list(
-                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                isNull(), isNull(), anyInt(), anyInt()
-        )).thenReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
-
+    void listShouldDenyAdminAfterActivityLogRemoval() throws Exception {
         mockMvc.perform(get("/api/v1/admin/audit-logs"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.items").isEmpty());
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void detailShouldDenyAdminAfterActivityLogRemoval() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/audit-logs/" + java.util.UUID.randomUUID()))
+                .andExpect(status().isForbidden());
     }
 }

@@ -85,7 +85,7 @@ class QuestionServiceRaceConditionTest {
         actor = new UserAccount();
         actor.setId(UUID.randomUUID());
         actor.setEmail("admin@slp.vn");
-        actor.setRole("ADMIN");
+        actor.setRole("SME");
 
         lenient().when(currentUserService.requireAuthenticatedUser()).thenReturn(actor);
         lenient().when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(

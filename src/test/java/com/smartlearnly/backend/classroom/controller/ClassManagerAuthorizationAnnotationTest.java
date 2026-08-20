@@ -12,10 +12,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 class ClassManagerAuthorizationAnnotationTest {
 
-    private static final String CLASS_MANAGER_AUTHORIZATION = "hasAnyRole('ADMIN', 'TMO')";
+    private static final String CLASS_MANAGER_AUTHORIZATION = "hasRole('TMO')";
 
     @Test
-    void classManagementEndpointsShouldAllowAdminAndTmo() {
+    void classManagementEndpointsShouldAllowTmoOnly() {
         assertClassManagerAccess(AdminClassController.class, "listStatusOptions");
         assertClassManagerAccess(AdminClassController.class, "generateMeetingUrl");
         assertClassManagerAccess(AdminClassController.class, "listAdminClasses");
@@ -27,7 +27,7 @@ class ClassManagerAuthorizationAnnotationTest {
     }
 
     @Test
-    void classAnalyticsShouldAllowAdminAndTmo() {
+    void classAnalyticsShouldAllowTmoOnly() {
         assertClassManagerAccess(
                 ClassAnalyticsController.class,
                 "getAdminOrTmoAnalytics");

@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.assignment.definition.controller;
+﻿package com.smartlearnly.backend.assignment.definition.controller;
 
 import com.smartlearnly.backend.assignment.definition.dto.AssignmentModel;
 import com.smartlearnly.backend.assignment.definition.service.AssignmentService;
@@ -23,7 +23,7 @@ public class AssignmentController {
 
     /** Tạo bài tập sau khi backend kiểm tra quyền và dữ liệu đầu vào. */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> create(@Valid @RequestBody AssignmentModel.CreateRequest request) {
         AssignmentModel.Response response = assignmentService.createAssignment(request);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
@@ -31,7 +31,7 @@ public class AssignmentController {
 
     /** Lấy toàn bộ bài tập cho màn hình quản trị có quyền phù hợp. */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.Response>> getAll() {
         List<AssignmentModel.Response> responses = assignmentService.getAllAssignments();
         return ResponseEntity.ok(responses);
@@ -39,7 +39,7 @@ public class AssignmentController {
 
     /** Lấy bài tập mà nhân sự hiện tại được quản lý. */
     @GetMapping("/mine")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.Response>> getMine(
             @RequestParam(required = false) UUID courseId) {
         return ResponseEntity.ok(assignmentService.getMyAssignments(courseId));
@@ -57,7 +57,7 @@ public class AssignmentController {
 
     /** Lấy lớp mà người dùng có thể gán bài tập. */
     @GetMapping("/classes")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<List<AssignmentModel.ClassOptionResponse>> getAssignableClasses(
             @RequestParam(required = false) UUID courseId) {
         return ResponseEntity.ok(assignmentService.getAssignableClasses(courseId));
@@ -82,7 +82,7 @@ public class AssignmentController {
 
     /** Cập nhật cấu hình bài tập khi người dùng có quyền biên soạn. */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> update(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentModel.UpdateRequest request) {
@@ -92,7 +92,7 @@ public class AssignmentController {
 
     /** Xóa bài tập theo quy tắc nghiệp vụ của service. */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         assignmentService.deleteAssignment(id);
         return ResponseEntity.noContent().build();

@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.file.controller;
+﻿package com.smartlearnly.backend.file.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.file.dto.CourseThumbnailUploadResponse;
@@ -18,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 // Nới cho TRAINER để trainer có thể upload lesson material / resource / media
 // khi tùy biến curriculum của class draft.
-@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/uploads")
 public class AdminUploadController {
     private final CourseThumbnailService courseThumbnailService;

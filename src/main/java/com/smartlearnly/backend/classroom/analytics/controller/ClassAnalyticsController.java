@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.classroom.analytics.controller;
+﻿package com.smartlearnly.backend.classroom.analytics.controller;
 
 import com.smartlearnly.backend.classroom.analytics.dto.ClassAnalyticsResponse;
 import com.smartlearnly.backend.classroom.analytics.dto.StudentPerformanceQuery;
@@ -26,8 +26,8 @@ public class ClassAnalyticsController {
     private final ClassAnalyticsService classAnalyticsService;
 
     @GetMapping("/admin/classes/{classId}/analytics")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    // Trả số liệu lớp cho Admin/TMO với các bộ lọc học viên được yêu cầu.
+    @PreAuthorize("hasRole('TMO')")
+    // Trả số liệu lớp cho TMO với các bộ lọc học viên được yêu cầu.
     public ApiResponse<ClassAnalyticsResponse> getAdminOrTmoAnalytics(
             @PathVariable UUID classId,
             @RequestParam(defaultValue = "7") @Min(1) @Max(365) int inactiveDays,

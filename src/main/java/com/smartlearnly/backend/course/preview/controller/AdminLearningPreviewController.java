@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.course.preview.controller;
+﻿package com.smartlearnly.backend.course.preview.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.learning.content.dto.LearningContentResponse;
@@ -16,7 +16,7 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/courses")
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 public class AdminLearningPreviewController {
     private final LearningContentService learningContentService;
 

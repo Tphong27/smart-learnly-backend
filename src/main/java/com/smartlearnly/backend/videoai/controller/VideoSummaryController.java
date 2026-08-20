@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.videoai.controller;
+﻿package com.smartlearnly.backend.videoai.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.videoai.dto.VideoAiDtos.GenerateSummaryRequest;
@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/video-summary")
-@PreAuthorize("hasAnyRole('ADMIN','TMO','SME','TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 public class VideoSummaryController {
 
     private final VideoSummaryService service;

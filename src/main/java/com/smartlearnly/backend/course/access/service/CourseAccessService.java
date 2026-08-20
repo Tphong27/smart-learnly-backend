@@ -18,9 +18,9 @@ public class CourseAccessService {
     private final CourseRepository courseRepository;
     private final CurrentUserService currentUserService;
 
-    // Xác định người dùng hiện tại có vai trò quản lý toàn bộ khóa học hay không.
+    // Xác định người dùng hiện tại có vai trò quản lý toàn bộ khóa học hay không (TMO).
     public boolean isCurrentUserCourseManager() {
-        return hasRole("ADMIN") || hasRole("TMO");
+        return hasRole("TMO");
     }
 
     // Xác định người dùng hiện tại có vai trò chuyên gia nội dung hay không.
@@ -40,12 +40,12 @@ public class CourseAccessService {
         return currentUser.getId();
     }
 
-    // Chỉ cho Admin hoặc TMO thực hiện nghiệp vụ phân công khóa học.
+    // Chỉ cho TMO thực hiện nghiệp vụ phân công khóa học.
     public void requireCourseManager() {
         if (!isCurrentUserCourseManager()) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN,
-                    "Only Admin or TMO can manage course assignment");
+                    "Only TMO can manage course assignment");
         }
     }
 

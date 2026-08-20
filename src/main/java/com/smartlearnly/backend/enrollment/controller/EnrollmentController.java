@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.enrollment.controller;
+﻿package com.smartlearnly.backend.enrollment.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
@@ -57,7 +57,7 @@ public class EnrollmentController {
     }
 
     @GetMapping("/{enrollmentId}/status-history")
-    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO')")
     public ApiResponse<List<EnrollmentStatusHistoryResponse>> getStatusHistory(
             @PathVariable UUID enrollmentId) {
         return ApiResponse.success(courseEnrollmentService.getStatusHistory(enrollmentId));

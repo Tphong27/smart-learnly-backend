@@ -63,11 +63,11 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    // Tìm toàn bộ đơn theo từ khóa/trạng thái cho Admin/TMO với phân trang giới hạn.
+    // Tìm toàn bộ đơn theo từ khóa/trạng thái cho TMO với phân trang giới hạn.
     public PageResponse<OrderSummaryResponse> listOrders(int page, int size, String keyword, OrderStatus status) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
         if (!isAdminOrTmo(actor)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "Only Admin or TMO can view all orders");
+            throw new BusinessException(ErrorCode.FORBIDDEN, "Only TMO can view all orders");
         }
 
         Page<PurchaseOrder> orders = orderRepository.searchAll(
@@ -305,7 +305,7 @@ public class OrderService {
         );
     }
 
-    // Cho phép chủ đơn hoặc Admin/TMO xem đơn; từ chối mọi người dùng khác.
+    // Cho phép chủ đơn hoặc TMO xem đơn; từ chối mọi người dùng khác.
     private void requireOwnerOrAdmin(UserAccount actor, PurchaseOrder order) {
         if (order.getUserId().equals(actor.getId()) || isAdminOrTmo(actor)) {
             return;
@@ -313,9 +313,9 @@ public class OrderService {
         throw new BusinessException(ErrorCode.FORBIDDEN, "Order access is denied");
     }
 
-    // Kiểm tra vai trò được phép truy cập đơn của toàn hệ thống.
+    // Kiểm tra vai trò được phép truy cập đơn của toàn hệ thống (ops: TMO).
     private boolean isAdminOrTmo(UserAccount user) {
-        return "ADMIN".equalsIgnoreCase(user.getRole()) || "TMO".equalsIgnoreCase(user.getRole());
+        return "TMO".equalsIgnoreCase(user.getRole());
     }
 
     // Chuẩn hóa từ khóa tìm kiếm hoặc trả null khi không lọc.

@@ -38,23 +38,23 @@ public class AdminClassController {
     private final ClassAdminService classAdminService;
     private final GoogleMeetService googleMeetService;
 
-    // Trả các trạng thái lớp mà quản trị viên được phép chọn trong màn quản lý.
+    // Tr? c�c tr?ng th�i l?p m� qu?n tr? vi�n ��?c ph�p ch?n trong m�n qu?n l?.
     @GetMapping("/admin/classes/statuses")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<List<ClassStatusOptionResponse>> listStatusOptions() {
         return ApiResponse.success("Class statuses loaded successfully", classAdminService.listStatusOptions());
     }
 
-    // Tạo link Google Meet mới để quản trị viên gắn vào lớp học.
+    // T?o link Google Meet m?i �? qu?n tr? vi�n g?n v�o l?p h?c.
     @PostMapping("/admin/classes/meeting-links")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<MeetingUrlResponse> generateMeetingUrl() {
         return ApiResponse.success("Google Meet link generated successfully", googleMeetService.createMeetingUrl());
     }
 
-    // Liệt kê lớp học theo các bộ lọc quản trị và phân trang hiện tại.
+    // Li?t k� l?p h?c theo c�c b? l?c qu?n tr? v� ph�n trang hi?n t?i.
     @GetMapping("/admin/classes")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<PageResponse<ClassResponse>> listAdminClasses(
             @RequestParam(required = false) UUID courseId,
             @RequestParam(required = false) UUID trainerId,
@@ -67,50 +67,50 @@ public class AdminClassController {
                 classAdminService.list(courseId, trainerId, status, keyword, page, size));
     }
 
-    // Trả chi tiết một lớp cho quản trị viên hoặc TMO.
+    // Tr? chi ti?t m?t l?p cho qu?n tr? vi�n ho?c TMO.
     @GetMapping("/admin/classes/{classId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<ClassResponse> getAdminClass(@PathVariable UUID classId) {
         return ApiResponse.success("Class loaded successfully", classAdminService.get(classId));
     }
 
-    // Tạo lớp mới và trả URL của tài nguyên lớp vừa được tạo.
+    // T?o l?p m?i v� tr? URL c?a t�i nguy�n l?p v?a ��?c t?o.
     @PostMapping("/admin/classes")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ResponseEntity<ApiResponse<ClassResponse>> createClass(@Valid @RequestBody CreateClassRequest request) {
         ClassResponse created = classAdminService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/classes/" + created.id()))
                 .body(ApiResponse.success("Class created successfully", created));
     }
 
-    // Cập nhật các trường lớp học được gửi trong yêu cầu PATCH.
+    // C?p nh?t c�c tr�?ng l?p h?c ��?c g?i trong y�u c?u PATCH.
     @PatchMapping("/admin/classes/{classId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<ClassResponse> updateClass(
             @PathVariable UUID classId,
             @Valid @RequestBody UpdateClassRequest request) {
         return ApiResponse.success("Class updated successfully", classAdminService.update(classId, request));
     }
 
-    // Hủy lớp nhưng vẫn giữ lịch sử dữ liệu để có thể khôi phục.
+    // H?y l?p nh�ng v?n gi? l?ch s? d? li?u �? c� th? kh�i ph?c.
     @PostMapping("/admin/classes/{classId}/cancel")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<ClassResponse> cancelClass(@PathVariable UUID classId) {
         return ApiResponse.success("Class cancelled successfully", classAdminService.cancel(classId));
     }
 
-    // Khôi phục lớp đã hủy với thông tin cập nhật được xác nhận.
+    // Kh�i ph?c l?p �? h?y v?i th�ng tin c?p nh?t ��?c x�c nh?n.
     @PostMapping("/admin/classes/{classId}/restore")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<ClassResponse> restoreClass(
             @PathVariable UUID classId,
             @Valid @RequestBody RestoreClassRequest request) {
         return ApiResponse.success("Class restored successfully", classAdminService.restore(classId, request));
     }
 
-    // Xóa mềm lớp để giữ các dữ liệu lịch sử liên quan.
+    // X�a m?m l?p �? gi? c�c d? li?u l?ch s? li�n quan.
     @DeleteMapping("/admin/classes/{classId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<Void> deleteClass(@PathVariable UUID classId) {
         classAdminService.softDelete(classId);
         return ApiResponse.success("Class deleted successfully");

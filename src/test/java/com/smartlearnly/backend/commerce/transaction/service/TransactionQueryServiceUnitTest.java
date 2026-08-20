@@ -53,7 +53,6 @@ class TransactionQueryServiceUnitTest {
     private UserAccount trainee;
     private UserAccount otherTrainee;
     private UserAccount tmo;
-    private UserAccount admin;
 
     @BeforeEach
     void setUp() {
@@ -62,7 +61,6 @@ class TransactionQueryServiceUnitTest {
         trainee = user("TRAINEE");
         otherTrainee = user("TRAINEE");
         tmo = user("TMO");
-        admin = user("ADMIN");
     }
 
     @Test
@@ -115,7 +113,7 @@ class TransactionQueryServiceUnitTest {
 
     @Test
     void getTransactionShouldRejectUnknownId() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
         when(paymentTransactionRepository.findById(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getTransaction(UUID.randomUUID()))
@@ -146,7 +144,7 @@ class TransactionQueryServiceUnitTest {
         PaymentTransaction transaction = sampleTransaction(trainee.getId());
         transaction.setInvoiceNumber("INV-100");
         transaction.setStatus(TransactionStatus.SUCCESS);
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
         when(paymentTransactionRepository.findById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(userRepository.findById(trainee.getId())).thenReturn(Optional.empty());
 

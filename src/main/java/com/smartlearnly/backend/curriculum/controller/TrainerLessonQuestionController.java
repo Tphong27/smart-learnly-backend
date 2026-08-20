@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.curriculum.controller;
+﻿package com.smartlearnly.backend.curriculum.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.curriculum.dto.ReorderRequest;
@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'TMO')")
+@PreAuthorize("hasAnyRole('TRAINER', 'TMO')")
 @RequestMapping("/api/v1/trainer/classes/{classId}/curriculum/lessons/{lessonId}/questions")
 public class TrainerLessonQuestionController {
 
@@ -49,7 +49,7 @@ public class TrainerLessonQuestionController {
 
     /** Gắn câu hỏi vào quiz lesson; chỉ Trainer hoặc Admin được thay đổi. */
     @PostMapping
-    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
+    @PreAuthorize("hasRole('TRAINER')")
     public ResponseEntity<ApiResponse<TestQuestionModel.Response>> attachQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -62,7 +62,7 @@ public class TrainerLessonQuestionController {
 
     /** Cập nhật câu hỏi đã gắn trong class curriculum draft. */
     @PutMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
+    @PreAuthorize("hasRole('TRAINER')")
     public ApiResponse<TestQuestionModel.Response> updateQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -77,7 +77,7 @@ public class TrainerLessonQuestionController {
 
     /** Gỡ câu hỏi khỏi quiz lesson trong class curriculum draft. */
     @DeleteMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
+    @PreAuthorize("hasRole('TRAINER')")
     public ApiResponse<Void> detachQuestion(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,
@@ -89,7 +89,7 @@ public class TrainerLessonQuestionController {
 
     /** Lưu thứ tự câu hỏi mới trong quiz lesson của lớp. */
     @PostMapping("/reorder")
-    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN')")
+    @PreAuthorize("hasRole('TRAINER')")
     public ApiResponse<List<TestQuestionModel.Response>> reorderQuestions(
             @PathVariable UUID classId,
             @PathVariable UUID lessonId,

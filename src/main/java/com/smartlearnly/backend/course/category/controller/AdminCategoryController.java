@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.course.category.controller;
+﻿package com.smartlearnly.backend.course.category.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.course.category.dto.CategoryResponse;
@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/categories")
 public class AdminCategoryController {
     private final CategoryService categoryService;
@@ -42,7 +42,7 @@ public class AdminCategoryController {
 
     // Tạo category gốc hoặc category con và trả URL resource vừa tạo.
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TMO')")
     public ResponseEntity<ApiResponse<CategoryResponse>> create(@Valid @RequestBody CreateCategoryRequest request) {
         CategoryResponse category = categoryService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/admin/categories/" + category.id()))
@@ -57,14 +57,14 @@ public class AdminCategoryController {
 
     // Cập nhật các trường category được gửi lên.
     @PatchMapping("/{categoryId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<CategoryResponse> update(@PathVariable UUID categoryId, @Valid @RequestBody UpdateCategoryRequest request) {
         return ApiResponse.success("Category updated successfully", categoryService.update(categoryId, request));
     }
 
     // Xóa category khi chưa có category con hoặc khóa học sử dụng.
     @DeleteMapping("/{categoryId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TMO')")
     public ApiResponse<Void> delete(@PathVariable UUID categoryId) {
         categoryService.delete(categoryId);
         return ApiResponse.success("Category deleted successfully");

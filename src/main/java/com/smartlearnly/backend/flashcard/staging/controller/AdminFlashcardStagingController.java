@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.flashcard.staging.controller;
+﻿package com.smartlearnly.backend.flashcard.staging.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.flashcard.staging.dto.AdminFlashcardStagingDtos.ApproveStagingCardsRequest;
@@ -43,7 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
 public class AdminFlashcardStagingController {
     private final AdminFlashcardStagingService adminFlashcardStagingService;

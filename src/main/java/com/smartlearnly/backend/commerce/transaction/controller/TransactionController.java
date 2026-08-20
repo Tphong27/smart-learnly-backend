@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.commerce.transaction.controller;
+﻿package com.smartlearnly.backend.commerce.transaction.controller;
 
 import com.smartlearnly.backend.commerce.transaction.dto.InvoiceResponse;
 import com.smartlearnly.backend.commerce.transaction.dto.TransactionResponse;
@@ -32,7 +32,7 @@ public class TransactionController {
     private final CurrentUserService currentUserService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO')")
     // Trả giao dịch của học viên hiện tại hoặc toàn bộ giao dịch khi người gọi là Admin/TMO.
     public ApiResponse<PageResponse<TransactionResponse>> listTransactions(
             @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -62,7 +62,7 @@ public class TransactionController {
     }
 
     @GetMapping("/filter-options")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO', 'TRAINEE')")
+    @PreAuthorize("hasAnyRole('TMO', 'TRAINEE')")
     // Trả các giá trị lọc đang có trong dữ liệu để màn hình admin tạo bộ lọc.
     public ApiResponse<TransactionFilterOptionsResponse> getFilterOptions() {
         return ApiResponse.success(
@@ -71,7 +71,7 @@ public class TransactionController {
     }
 
     @GetMapping("/{transactionId}")
-    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO')")
     // Trả chi tiết giao dịch sau khi service kiểm tra quyền sở hữu hoặc quyền quản trị.
     public ApiResponse<TransactionResponse> getTransaction(@PathVariable UUID transactionId) {
         return ApiResponse.success(
@@ -80,7 +80,7 @@ public class TransactionController {
     }
 
     @GetMapping("/{transactionId}/invoice")
-    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO')")
     // Trả dữ liệu hóa đơn của giao dịch đã thanh toán thành công.
     public ApiResponse<InvoiceResponse> getInvoice(@PathVariable UUID transactionId) {
         return ApiResponse.success(
@@ -88,8 +88,8 @@ public class TransactionController {
                 transactionQueryService.getInvoice(transactionId));
     }
 
-    // Kiểm tra vai trò được phép xem dữ liệu giao dịch toàn hệ thống.
+    // Kiểm tra vai trò được phép xem dữ liệu giao dịch toàn hệ thống (ops thanh toán: TMO).
     private boolean isAdminOrTmo(UserAccount user) {
-        return "ADMIN".equalsIgnoreCase(user.getRole()) || "TMO".equalsIgnoreCase(user.getRole());
+        return "TMO".equalsIgnoreCase(user.getRole());
     }
 }

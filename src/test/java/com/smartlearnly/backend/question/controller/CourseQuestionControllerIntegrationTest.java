@@ -48,7 +48,7 @@ class CourseQuestionControllerIntegrationTest {
     private QuestionService questionService;
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithMockUser(roles = "SME")
     void listQuestionsShouldReturnPagedQuestionsWithFilters() throws Exception {
         when(questionService.listByCourse(
                 eq(COURSE_ID),
@@ -92,7 +92,7 @@ class CourseQuestionControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithMockUser(roles = "SME")
     void createQuestionShouldRejectInvalidBodyBeforeServiceCall() throws Exception {
         mockMvc.perform(post("/api/v1/admin/courses/{courseId}/questions", COURSE_ID)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -139,7 +139,7 @@ class CourseQuestionControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithMockUser(roles = "SME")
     void archiveQuestionShouldReturnSuccessResponse() throws Exception {
         mockMvc.perform(delete("/api/v1/admin/courses/{courseId}/questions/{questionId}", COURSE_ID, QUESTION_ID))
                 .andExpect(status().isOk())
@@ -181,7 +181,7 @@ class CourseQuestionControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithMockUser(roles = "SME")
     void importQuestionsShouldRejectEmptyRowsBeforeServiceCall() throws Exception {
         mockMvc.perform(post("/api/v1/admin/courses/{courseId}/questions/import", COURSE_ID)
                         .contentType(MediaType.APPLICATION_JSON)

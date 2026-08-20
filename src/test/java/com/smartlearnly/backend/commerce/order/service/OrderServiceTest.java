@@ -73,7 +73,7 @@ class OrderServiceTest {
 
     private OrderService orderService;
 
-    private UserAccount admin;
+    private UserAccount tmo;
     private UserAccount trainee;
 
     @BeforeEach
@@ -89,9 +89,9 @@ class OrderServiceTest {
         );
         orderService.setNotificationService(notificationService);
 
-        admin = new UserAccount();
-        admin.setId(UUID.randomUUID());
-        admin.setRole("ADMIN");
+        tmo = new UserAccount();
+        tmo.setId(UUID.randomUUID());
+        tmo.setRole("TMO");
 
         trainee = new UserAccount();
         trainee.setId(UUID.randomUUID());
@@ -99,8 +99,8 @@ class OrderServiceTest {
     }
 
     @Test
-    void listOrdersShouldReturnSummariesForAdmin() {
-        when(currentUserService.requireAuthenticatedUser()).thenReturn(admin);
+    void listOrdersShouldReturnSummariesForTmo() {
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
 
         PurchaseOrder order = pendingOrder(trainee.getId(), Instant.now().plus(10, ChronoUnit.MINUTES));
         when(orderRepository.searchAll(eq(null), eq(null), any(PageRequest.class)))

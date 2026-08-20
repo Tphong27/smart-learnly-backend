@@ -174,8 +174,9 @@ class VideoSummaryControllerTest {
                                 ? null
                                 : authorization.value();
 
-                // THEN: Bốn role nghiệp vụ đều có trong biểu thức.
+                // THEN: Ba role nghiệp vụ nội dung; ADMIN chỉ hệ thống nên không có.
                 assertThat(expression)
-                                .contains("ADMIN", "TMO", "SME", "TRAINER");
+                                .contains("TMO", "SME", "TRAINER")
+                                .doesNotContain("ADMIN");
         }
 }

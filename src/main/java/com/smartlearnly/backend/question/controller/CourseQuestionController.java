@@ -34,7 +34,7 @@ import org.springframework.web.util.HtmlUtils;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'SME', 'TMO', 'TRAINER')")
+@PreAuthorize("hasAnyRole('SME', 'TMO', 'TRAINER')")
 @RequestMapping("/api/v1/admin/courses/{courseId}/questions")
 public class CourseQuestionController {
     private final QuestionService questionService;
@@ -66,7 +66,7 @@ public class CourseQuestionController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @PreAuthorize("hasRole('SME')")
     public ResponseEntity<ApiResponse<QuestionModel.Response>> create(
             @PathVariable UUID courseId,
             @Valid @RequestBody QuestionModel.CreateRequest request
@@ -78,7 +78,7 @@ public class CourseQuestionController {
     }
 
     @PutMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @PreAuthorize("hasRole('SME')")
     public ApiResponse<QuestionModel.Response> update(
             @PathVariable UUID courseId,
             @PathVariable UUID questionId,
@@ -88,7 +88,7 @@ public class CourseQuestionController {
     }
 
     @DeleteMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @PreAuthorize("hasRole('SME')")
     public ApiResponse<Void> archive(
             @PathVariable UUID courseId,
             @PathVariable UUID questionId
@@ -98,7 +98,7 @@ public class CourseQuestionController {
     }
 
     @PostMapping("/import")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+    @PreAuthorize("hasRole('SME')")
     public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(
             @PathVariable UUID courseId,
             @Valid @RequestBody QuestionImportDtos.ImportBatchRequest request

@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin/question-answers")
-@PreAuthorize("hasAnyRole('ADMIN', 'SME')")
+@PreAuthorize("hasRole('SME')")
 @RequiredArgsConstructor
 public class QuestionAnswerController {
     private final QuestionAnswerService questionAnswerService;

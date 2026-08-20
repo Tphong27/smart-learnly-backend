@@ -12,16 +12,16 @@ import org.junit.jupiter.api.Test;
 
 class AdminCourseStatusFilterApiIT extends AbstractPostgresIntegrationTest {
 
-    private static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000701");
+    private static final UUID TMO_ID = UUID.fromString("00000000-0000-0000-0000-000000000701");
     private static final UUID CATEGORY_ID = UUID.fromString("00000000-0000-0000-0000-000000000702");
 
     @BeforeEach
     void seedCourses() {
         jdbcTemplate.update("""
                 insert into public.users (id, email, full_name, role, status)
-                values (?, 'course-admin@it.local', 'Course Admin', 'ADMIN'::public.user_role,
+                values (?, 'course-tmo@it.local', 'Course TMO', 'TMO'::public.user_role,
                         'active'::public.user_status)
-                """, ADMIN_ID);
+                """, TMO_ID);
         jdbcTemplate.update("""
                 insert into public.categories (id, name, slug)
                 values (?, 'Integration Category', 'integration-category')
@@ -32,7 +32,7 @@ class AdminCourseStatusFilterApiIT extends AbstractPostgresIntegrationTest {
                     ('Draft Course', 'draft-course', ?, ?, 'draft'::public.course_status),
                     ('Published Course', 'published-course', ?, ?, 'published'::public.course_status),
                     ('Inactive Course', 'inactive-course', ?, ?, 'inactive'::public.course_status)
-                """, CATEGORY_ID, ADMIN_ID, CATEGORY_ID, ADMIN_ID, CATEGORY_ID, ADMIN_ID);
+                """, CATEGORY_ID, TMO_ID, CATEGORY_ID, TMO_ID, CATEGORY_ID, TMO_ID);
     }
 
     @Test
@@ -44,7 +44,7 @@ class AdminCourseStatusFilterApiIT extends AbstractPostgresIntegrationTest {
 
     private void assertStatusFilter(String courseStatus, String expectedSlug) throws Exception {
         mockMvc.perform(get("/api/v1/admin/courses")
-                        .with(asUser(ADMIN_ID, "course-admin@it.local", "ADMIN"))
+                        .with(asUser(TMO_ID, "course-tmo@it.local", "TMO"))
                         .queryParam("status", courseStatus))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalItems").value(1))

@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.payment.sepay.controller;
+﻿package com.smartlearnly.backend.payment.sepay.controller;
 
 import com.smartlearnly.backend.payment.sepay.dto.SePayWebhookEventResponse;
 import com.smartlearnly.backend.payment.sepay.repository.SePayWebhookEventRepository;
@@ -27,7 +27,7 @@ public class SePayAdminController {
     private final SePayWebhookEventRepository sePayWebhookEventRepository;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
+    @PreAuthorize("hasRole('TMO')")
     // Trả danh sách sự kiện webhook có phân trang để admin theo dõi trạng thái xử lý.
     public ApiResponse<PageResponse<SePayWebhookEventResponse>> listEvents(
             @RequestParam(defaultValue = "0") @Min(0) int page,

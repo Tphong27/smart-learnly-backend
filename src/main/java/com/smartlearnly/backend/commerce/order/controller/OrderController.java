@@ -28,8 +28,8 @@ public class OrderController {
     private final OrderService orderService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TMO')")
-    // Tr·∫£ danh s√°ch ƒë∆°n c√≥ ph√¢n trang v√† b·ªô l·ªçc cho m√†n h√¨nh gi√°m s√°t c·ªßa Admin/TMO.
+    @PreAuthorize("hasRole('TMO')")
+    // Tr? danh s·ch ın cÛ ph‚n trang v‡ b? l?c cho m‡n h?nh gi·m s·t c?a Admin/TMO.
     public ApiResponse<PageResponse<OrderSummaryResponse>> listOrders(
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
@@ -43,8 +43,8 @@ public class OrderController {
     }
 
     @GetMapping("/{orderId}")
-    @PreAuthorize("hasAnyRole('TRAINEE', 'ADMIN', 'TMO')")
-    // Tr·∫£ chi ti·∫øt ƒë∆°n n·∫øu ng∆∞·ªùi g·ªçi l√† ch·ªß ƒë∆°n ho·∫∑c c√≥ quy·ªÅn qu·∫£n tr·ªã.
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO')")
+    // Tr? chi ti?t ın n?u ng˝?i g?i l‡ ch? ın ho?c cÛ quy?n qu?n tr?.
     public ApiResponse<OrderResponse> getOrder(@PathVariable UUID orderId) {
         return ApiResponse.success("Order loaded successfully", orderService.getOrder(orderId));
     }
