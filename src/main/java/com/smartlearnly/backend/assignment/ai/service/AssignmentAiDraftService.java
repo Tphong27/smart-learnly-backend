@@ -54,19 +54,25 @@ public class AssignmentAiDraftService {
     private static final Pattern ONE_MORE_DRAFT_ITEM_PATTERN = Pattern.compile("\\b(?:va\\s+)?(?:them\\s+)?1\\s+bai\\b");
     private static final String OUT_OF_SCOPE_RESPONSE_EN = """
             I can only help trainers create assignment or essay lesson drafts, submission requirements, and grading criteria.
-            Please enter a learning-related request, for example: "Create an assignment from the current lesson and include a rubric."
-            The number of drafts is optional. I will create 1 by default and limit each request to 5 drafts.
+            Please attach a PDF or DOCX source file and enter a learning-related request, for example: "Create 1 assignment from the attached file and include a rubric."
+            You must specify how many assignments to create, from 1 to 5.
             """;
     private static final String OUT_OF_SCOPE_RESPONSE_VI = """
             Tôi chỉ hỗ trợ trainer tạo nội dung bài, bài tập hoặc bài luận, yêu cầu nộp bài và tiêu chí chấm điểm.
-            Hãy nhập yêu cầu liên quan đến học tập, ví dụ: "Tạo một bài tập từ nội dung bài học hiện tại và kèm tiêu chí đánh giá."
-            Bạn không bắt buộc phải nêu số lượng; AI sẽ mặc định tạo 1 bài và giới hạn tối đa 5 bài mỗi lần.
+            H\u00e3y \u0111\u00ednh k\u00e8m file PDF ho\u1eb7c DOCX v\u00e0 nh\u1eadp y\u00eau c\u1ea7u li\u00ean quan \u0111\u1ebfn h\u1ecdc t\u1eadp, v\u00ed d\u1ee5: "T\u1ea1o 1 b\u00e0i t\u1eadp t\u1eeb file \u0111\u00ednh k\u00e8m v\u00e0 k\u00e8m ti\u00eau ch\u00ed \u0111\u00e1nh gi\u00e1."
+            B\u1ea1n ph\u1ea3i n\u00eau r\u00f5 s\u1ed1 l\u01b0\u1ee3ng b\u00e0i c\u1ea7n t\u1ea1o, t\u1eeb 1 \u0111\u1ebfn 5.
             """;
     private static final String UNSUPPORTED_LANGUAGE_RESPONSE_EN = """
             Please use English for this AI draft request.
             Smart Learnly AI draft currently supports English and Vietnamese only.
             Suggested keywords: assignment, essay, homework, rubric, grading criteria, exercise.
             """;
+    private static final String DRAFT_COUNT_REQUIRED_EN = "Please specify how many assignments to create, from 1 to 5. For example: \"Create 1 assignment from the attached file.\"";
+    private static final String DRAFT_COUNT_REQUIRED_VI = "Vui l\u00f2ng nh\u1eadp r\u00f5 s\u1ed1 l\u01b0\u1ee3ng b\u00e0i c\u1ea7n t\u1ea1o, t\u1eeb 1 \u0111\u1ebfn 5. V\u00ed d\u1ee5: \"T\u1ea1o 1 b\u00e0i t\u1eadp t\u1eeb file \u0111\u00ednh k\u00e8m.\"";
+    private static final String DRAFT_COUNT_RANGE_EN = "The number of assignments must be from 1 to 5. Please adjust the request and try again.";
+    private static final String DRAFT_COUNT_RANGE_VI = "S\u1ed1 l\u01b0\u1ee3ng b\u00e0i ph\u1ea3i t\u1eeb 1 \u0111\u1ebfn 5. Vui l\u00f2ng \u0111i\u1ec1u ch\u1ec9nh y\u00eau c\u1ea7u v\u00e0 th\u1eed l\u1ea1i.";
+    private static final String SOURCE_REQUIRED_EN = "Please attach a PDF or DOCX source file before generating an AI assignment draft.";
+    private static final String SOURCE_REQUIRED_VI = "Vui l\u00f2ng \u0111\u00ednh k\u00e8m file PDF ho\u1eb7c DOCX tr\u01b0\u1edbc khi t\u1ea1o b\u1ea3n nh\u00e1p b\u00e0i t\u1eadp b\u1eb1ng AI.";
     private static final List<String> ASSIGNMENT_INTENT_KEYWORDS = List.of(
             "assignment",
             "essay",
@@ -180,7 +186,7 @@ public class AssignmentAiDraftService {
     private final Map<String, CachedSource> sourceCache = new ConcurrentHashMap<>();
 
     /**
-     * Tạo tối đa 5 bản nháp assignment từ yêu cầu tự nhiên; nếu không nêu số lượng thì mặc định tạo 1 bản.
+     * Tạo tối đa 5 bản nháp assignment từ file nguồn; trainer phải nêu rõ số lượng từ 1 đến 5.
      * Yêu cầu ngoài phạm vi được trả về hướng dẫn an toàn mà không gọi provider AI.
      */
     public AssignmentAiDraftModel.Response generateDraft(
@@ -198,12 +204,19 @@ public class AssignmentAiDraftService {
         if (!isSupportedPromptLanguage(normalizedMessage)) {
             return unsupportedLanguageResponse();
         }
-        int requestedDraftCount = resolveDraftCount(normalizedMessage);
-        if (requestedDraftCount == 0) {
-            return outOfScopeResponse(normalizedMessage);
-        }
         boolean sourceAttached = file != null && !file.isEmpty();
         boolean cachedSourceRequested = normalizeNullable(sourceCacheKey) != null;
+        if (!sourceAttached && !cachedSourceRequested) {
+            return sourceRequiredResponse(normalizedMessage);
+        }
+        DraftCountResult draftCountResult = resolveDraftCount(normalizedMessage);
+        if (draftCountResult.status() == DraftCountStatus.MISSING) {
+            return draftCountRequiredResponse(normalizedMessage);
+        }
+        if (draftCountResult.status() == DraftCountStatus.OUT_OF_RANGE) {
+            return draftCountRangeResponse(normalizedMessage);
+        }
+        int requestedDraftCount = draftCountResult.count();
         if (!isAssignmentDraftRequest(normalizedMessage, currentTitle, currentDescription, sourceAttached || cachedSourceRequested)) {
             return outOfScopeResponse(normalizedMessage);
         }
@@ -473,7 +486,7 @@ public class AssignmentAiDraftService {
                 - Treat score allocation requests as under-specified unless the trainer gives an explicit total score and point distribution per criterion or asks you to draft a proposed scoring plan for trainer review. If the trainer only says "chia diem", "tinh diem", "score it", "include points", or similar, do not generate the assignment or rubric yet. Instead, return only a clarification request saying that you cannot divide points accurately without the trainer's scoring scale and weighting rules. In Vietnamese, use complete diacritics, for example: "Chưa đủ căn cứ để tự chia điểm; vui lòng cung cấp tổng điểm, trọng số từng tiêu chí hoặc cho phép AI đề xuất thang điểm để trainer duyệt."
                 - If either vague difficulty level or vague scoring is present, stop after the clarification request. Do not create assignment content, rubric criteria, examples, or suggested titles in the same response.
                 - Produce exactly the normalized draft count supplied below, in the same order as the trainer listed the requested items.
-                - The normalized count is already capped at 5. Do not create extra alternatives unless the trainer explicitly requested them.
+                - The normalized count is validated by the backend and must be from 1 to 5. Do not create extra alternatives.
                 - Do not merge, skip, replace, or summarize requested draft items.
                 - Each draft must contain a concrete student-facing assignment prompt, not only a fragment or outline.
                 - Create a separate rubric for every generated draft. Never use one shared rubric for multiple drafts.
@@ -521,6 +534,15 @@ public class AssignmentAiDraftService {
             String content = normalized.substring(contentStart + contentMarker.length(), rubricStart).trim();
             String rubric = normalized.substring(rubricStart + rubricMarker.length()).trim();
             return new DraftParts(content, rubric);
+        }
+        Matcher rubricHeading = Pattern.compile(
+                        "(?im)^\\s*(?:=+\\s*)?(?:assignment\\s+rubric|rubric(?:\\s+(?:for|bai|b\u00e0i))?|ti[e\u00ea]u\\s+ch[i\u00ed]\\s+danh\\s+gia|ti[e\u00ea]u\\s+ch[i\u00ed]\\s+\u0111[a\u00e1]nh\\s+gi[a\u00e1])\\b.*$")
+                .matcher(normalized);
+        if (rubricHeading.find() && rubricHeading.start() > 0) {
+            return new DraftParts(
+                    normalized.substring(0, rubricHeading.start()).trim(),
+                    normalized.substring(rubricHeading.start()).trim()
+            );
         }
         return new DraftParts(normalized, "");
     }
@@ -857,23 +879,25 @@ public class AssignmentAiDraftService {
     }
 
     /**
-     * Chuẩn hóa số lượng bản nháp: mặc định 1, giữ yêu cầu hợp lệ và chặn trên ở 5.
-     * Giá trị 0 được giữ lại để caller trả hướng dẫn thay vì âm thầm tạo nội dung ngoài ý muốn.
+     * Validate the explicit requested draft count. Missing count and values outside 1..5 return guidance.
      */
-    private int resolveDraftCount(String message) {
+    private DraftCountResult resolveDraftCount(String message) {
         String normalized = normalizeForScope(message);
         Matcher matcher = DRAFT_COUNT_PATTERN.matcher(normalized);
         if (matcher.find()) {
             int count = parseDraftCount(matcher.group(1));
-            if (count == 0) {
-                return 0;
+            if (count < 1 || count > MAX_DRAFT_COUNT) {
+                return new DraftCountResult(DraftCountStatus.OUT_OF_RANGE, 0);
             }
-            if (count > 0) {
-                return Math.min(count, MAX_DRAFT_COUNT);
-            }
+            return new DraftCountResult(DraftCountStatus.OK, count);
         }
         int listedCount = countListedDraftItems(normalized);
-        return listedCount > 0 ? Math.min(listedCount, MAX_DRAFT_COUNT) : 1;
+        if (listedCount > 0) {
+            return listedCount <= MAX_DRAFT_COUNT
+                    ? new DraftCountResult(DraftCountStatus.OK, listedCount)
+                    : new DraftCountResult(DraftCountStatus.OUT_OF_RANGE, 0);
+        }
+        return new DraftCountResult(DraftCountStatus.MISSING, 0);
     }
 
     private int countListedDraftItems(String normalizedMessage) {
@@ -1025,6 +1049,36 @@ public class AssignmentAiDraftService {
     private AssignmentAiDraftModel.Response unsupportedLanguageResponse() {
         return new AssignmentAiDraftModel.Response(
                 UNSUPPORTED_LANGUAGE_RESPONSE_EN.trim(),
+                "",
+                null,
+                0,
+                null
+        );
+    }
+
+    private AssignmentAiDraftModel.Response draftCountRequiredResponse(String message) {
+        return new AssignmentAiDraftModel.Response(
+                isLikelyVietnamese(message) ? DRAFT_COUNT_REQUIRED_VI : DRAFT_COUNT_REQUIRED_EN,
+                "",
+                null,
+                0,
+                null
+        );
+    }
+
+    private AssignmentAiDraftModel.Response draftCountRangeResponse(String message) {
+        return new AssignmentAiDraftModel.Response(
+                isLikelyVietnamese(message) ? DRAFT_COUNT_RANGE_VI : DRAFT_COUNT_RANGE_EN,
+                "",
+                null,
+                0,
+                null
+        );
+    }
+
+    private AssignmentAiDraftModel.Response sourceRequiredResponse(String message) {
+        return new AssignmentAiDraftModel.Response(
+                isLikelyVietnamese(message) ? SOURCE_REQUIRED_VI : SOURCE_REQUIRED_EN,
                 "",
                 null,
                 0,
@@ -1281,5 +1335,14 @@ public class AssignmentAiDraftService {
     }
 
     private record ScoredChunk(String text, int score) {
+    }
+
+    private enum DraftCountStatus {
+        OK,
+        MISSING,
+        OUT_OF_RANGE
+    }
+
+    private record DraftCountResult(DraftCountStatus status, int count) {
     }
 }
