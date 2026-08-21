@@ -1,0 +1,75 @@
+name: Deploy Frontend to Production
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+concurrency:
+  group: smart-learnly-frontend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/smart_learnly
+          chmod 600 ~/.ssh/smart_learnly
+
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy frontend
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i ~/.ssh/smart_learnly "$VPS_USER@$VPS_HOST" << 'EOF'
+            set -e
+
+            echo "=== Pull frontend source ==="
+            cd /opt/smart-learnly/smart-learnly-frontend
+
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            echo "=== Build frontend ==="
+            cd /opt/smart-learnly
+            docker compose build frontend
+
+            echo "=== Deploy frontend ==="
+            docker compose up -d frontend
+
+            echo "=== Frontend status ==="
+            docker compose ps frontend
+
+            echo "=== Frontend logs ==="
+            docker compose logs frontend --tail=50
+          EOF
+
+      - name: Verify frontend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://smartlearnly.online/)
+
+          echo "Frontend HTTP status: $STATUS"
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Frontend deployment verification failed."
+            exit 1
+          fi
+
+          echo "Frontend deployment verification passed."
