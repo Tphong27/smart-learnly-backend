@@ -71,8 +71,8 @@ public class AssignmentAiDraftService {
     private static final String DRAFT_COUNT_REQUIRED_VI = "Vui l\u00f2ng nh\u1eadp r\u00f5 s\u1ed1 l\u01b0\u1ee3ng b\u00e0i c\u1ea7n t\u1ea1o, t\u1eeb 1 \u0111\u1ebfn 5. V\u00ed d\u1ee5: \"T\u1ea1o 1 b\u00e0i t\u1eadp t\u1eeb file \u0111\u00ednh k\u00e8m.\"";
     private static final String DRAFT_COUNT_RANGE_EN = "The number of assignments must be from 1 to 5. Please adjust the request and try again.";
     private static final String DRAFT_COUNT_RANGE_VI = "S\u1ed1 l\u01b0\u1ee3ng b\u00e0i ph\u1ea3i t\u1eeb 1 \u0111\u1ebfn 5. Vui l\u00f2ng \u0111i\u1ec1u ch\u1ec9nh y\u00eau c\u1ea7u v\u00e0 th\u1eed l\u1ea1i.";
-    private static final String SOURCE_REQUIRED_EN = "Please attach a PDF or DOCX source file before generating an AI assignment draft.";
-    private static final String SOURCE_REQUIRED_VI = "Vui l\u00f2ng \u0111\u00ednh k\u00e8m file PDF ho\u1eb7c DOCX tr\u01b0\u1edbc khi t\u1ea1o b\u1ea3n nh\u00e1p b\u00e0i t\u1eadp b\u1eb1ng AI.";
+    private static final String SOURCE_REQUIRED_EN = "Please attach the PDF or DOCX source file you want me to use, or rewrite the request so it does not refer to an attached file.";
+    private static final String SOURCE_REQUIRED_VI = "Vui l\u00f2ng \u0111\u00ednh k\u00e8m file PDF ho\u1eb7c DOCX m\u00e0 b\u1ea1n mu\u1ed1n AI s\u1eed d\u1ee5ng, ho\u1eb7c vi\u1ebft l\u1ea1i y\u00eau c\u1ea7u sao cho kh\u00f4ng nh\u1eafc \u0111\u1ebfn file \u0111\u00ednh k\u00e8m.";
     private static final List<String> ASSIGNMENT_INTENT_KEYWORDS = List.of(
             "assignment",
             "essay",
@@ -206,7 +206,7 @@ public class AssignmentAiDraftService {
         }
         boolean sourceAttached = file != null && !file.isEmpty();
         boolean cachedSourceRequested = normalizeNullable(sourceCacheKey) != null;
-        if (!sourceAttached && !cachedSourceRequested) {
+        if (!sourceAttached && !cachedSourceRequested && explicitlyReferencesAttachedSource(normalizedMessage)) {
             return sourceRequiredResponse(normalizedMessage);
         }
         DraftCountResult draftCountResult = resolveDraftCount(normalizedMessage);
@@ -760,6 +760,9 @@ public class AssignmentAiDraftService {
         if (sourceAttached && looksLikeSourceBasedDraftRequest(normalizedMessage)) {
             return true;
         }
+        if (looksLikeDraftAction(normalizedMessage) && looksLikeAssignmentWorkRequest(normalizedMessage)) {
+            return true;
+        }
         if (!existingContext.isBlank() && looksLikeRevisionAction(normalizedMessage)) {
             return true;
         }
@@ -796,6 +799,47 @@ public class AssignmentAiDraftService {
                 || normalizedMessage.contains("attached file")
                 || normalizedMessage.contains("attached source")
                 || normalizedMessage.contains("tu tai lieu");
+    }
+
+    private boolean looksLikeAssignmentWorkRequest(String normalizedMessage) {
+        return containsKeyword(normalizedMessage, List.of(
+                "bai",
+                "bai tap",
+                "bai phan tich",
+                "bai van",
+                "bai luan",
+                "de bai",
+                "assignment",
+                "essay",
+                "homework",
+                "exercise",
+                "task",
+                "project",
+                "activity",
+                "case study",
+                "lab"
+        ));
+    }
+
+    private boolean explicitlyReferencesAttachedSource(String normalizedMessage) {
+        return containsKeyword(normalizedMessage, List.of(
+                "file",
+                "file dinh kem",
+                "tep dinh kem",
+                "tai lieu dinh kem",
+                "source file",
+                "attached file",
+                "attached source",
+                "attached document",
+                "uploaded file",
+                "uploaded document",
+                "from this file",
+                "from the file",
+                "based on this file",
+                "based on the file",
+                "use this file",
+                "use the file"
+        ));
     }
 
     private boolean looksLikeDraftAction(String normalizedMessage) {
