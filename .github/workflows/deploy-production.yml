@@ -1,0 +1,78 @@
+name: Deploy Backend to Production
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+concurrency:
+  group: smart-learnly-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/smart_learnly
+          chmod 600 ~/.ssh/smart_learnly
+
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy backend
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i ~/.ssh/smart_learnly "$VPS_USER@$VPS_HOST" << 'EOF'
+            set -e
+
+            echo "=== Pull backend source ==="
+            cd /opt/smart-learnly/smart-learnly-backend
+
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            echo "=== Build backend ==="
+            cd /opt/smart-learnly
+            docker compose build backend
+
+            echo "=== Deploy backend ==="
+            docker compose up -d backend
+
+            echo "=== Backend status ==="
+            docker compose ps backend
+
+            echo "=== Wait for startup ==="
+            sleep 30
+
+            echo "=== Backend logs ==="
+            docker compose logs backend --tail=80
+          EOF
+
+      - name: Verify backend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://api.smartlearnly.online/)
+
+          echo "Backend HTTP status: $STATUS"
+
+          if [ "$STATUS" = "000" ] || [ "$STATUS" = "502" ]; then
+            echo "Backend deployment verification failed."
+            exit 1
+          fi
+
+          echo "Backend deployment verification passed."
