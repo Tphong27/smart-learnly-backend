@@ -760,6 +760,9 @@ public class AssignmentAiDraftService {
         if (sourceAttached && looksLikeSourceBasedDraftRequest(normalizedMessage)) {
             return true;
         }
+        if (looksLikeDraftAction(normalizedMessage) && looksLikeAssignmentWorkRequest(normalizedMessage)) {
+            return true;
+        }
         if (!existingContext.isBlank() && looksLikeRevisionAction(normalizedMessage)) {
             return true;
         }
@@ -796,6 +799,26 @@ public class AssignmentAiDraftService {
                 || normalizedMessage.contains("attached file")
                 || normalizedMessage.contains("attached source")
                 || normalizedMessage.contains("tu tai lieu");
+    }
+
+    private boolean looksLikeAssignmentWorkRequest(String normalizedMessage) {
+        return containsKeyword(normalizedMessage, List.of(
+                "bai",
+                "bai tap",
+                "bai phan tich",
+                "bai van",
+                "bai luan",
+                "de bai",
+                "assignment",
+                "essay",
+                "homework",
+                "exercise",
+                "task",
+                "project",
+                "activity",
+                "case study",
+                "lab"
+        ));
     }
 
     private boolean explicitlyReferencesAttachedSource(String normalizedMessage) {
