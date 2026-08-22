@@ -49,7 +49,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        String key = clientIp(request);
+        String key = request.getRequestURI() + ":" + clientIp(request);
         Instant now = Instant.now();
 
         WindowCounter counter = counters.compute(key, (ignored, current) -> {
