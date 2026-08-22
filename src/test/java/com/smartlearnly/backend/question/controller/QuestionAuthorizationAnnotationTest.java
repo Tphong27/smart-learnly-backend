@@ -20,39 +20,39 @@ class QuestionAuthorizationAnnotationTest {
     }
 
     @Test
-    void courseQuestionMutationsRemainSmeOnly() {
+    void courseQuestionMutationsAllowSmeAndTrainer() {
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "create")))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "update")))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "archive")))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(method(CourseQuestionController.class, "importBatch")))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "create")))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "update")))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "archive")))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(method(CourseModuleQuestionController.class, "importBatch")))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
     }
 
     @Test
-    void questionMediaControllersRemainSmeOnly() {
+    void questionMediaControllersAllowSmeAndTrainer() {
         assertThat(preAuthorizeValue(QuestionMediaController.class))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(QuestionAnswerMediaController.class))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
         assertThat(preAuthorizeValue(QuestionAnswerController.class))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
     }
 
     @Test
-    void aiQuestionDraftControllerRemainsSmeOnly() {
+    void aiQuestionDraftControllerAllowsSmeAndTrainer() {
         assertThat(preAuthorizeValue(CourseAiQuestionDraftController.class))
-                .isEqualTo("hasRole('SME')");
+                .isEqualTo("hasAnyRole('SME', 'TRAINER')");
     }
 
     private String preAuthorizeValue(Class<?> controllerClass) {
