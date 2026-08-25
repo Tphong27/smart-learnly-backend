@@ -42,8 +42,7 @@ public class AdminCourseController {
             @RequestParam(required = false) @Size(max = 200) String keyword,
             @RequestParam(required = false) @Size(max = 20) String status,
             @RequestParam(required = false) UUID categoryId,
-            @RequestParam(required = false) @Size(max = 30) String level
-    ) {
+            @RequestParam(required = false) @Size(max = 30) String level) {
         return ApiResponse.success(
                 "Courses loaded successfully",
                 courseAdminService.list(page, size, keyword, status, categoryId, level));
@@ -66,12 +65,15 @@ public class AdminCourseController {
 
     // Cập nhật riêng các trường metadata được gửi trong yêu cầu PATCH.
     @PatchMapping("/{courseId}")
-    @PreAuthorize("hasRole('TRAINER', 'TMO')")
+    @PreAuthorize("hasAnyRole('TMO', 'TRAINER')")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,
-            @Valid @RequestBody UpdateCourseRequest request
-    ) {
-        return ApiResponse.success("Course updated successfully", courseAdminService.update(courseId, request));
+            @Valid @RequestBody UpdateCourseRequest request) {
+        CourseResponse updatedCourse = courseAdminService.update(courseId, request);
+
+        return ApiResponse.success(
+                "Course updated successfully",
+                updatedCourse);
     }
 
     // Lưu trữ mềm khóa học để dữ liệu lịch sử không bị xóa vật lý.

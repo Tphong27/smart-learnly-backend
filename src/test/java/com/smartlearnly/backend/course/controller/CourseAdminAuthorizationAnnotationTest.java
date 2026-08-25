@@ -38,7 +38,8 @@ class CourseAdminAuthorizationAnnotationTest {
                                 .isEqualTo("hasRole('TMO')")
                                 .doesNotContain("ADMIN");
                 assertThat(preAuthorizeValue(updateMethod))
-                                .isEqualTo("hasRole('TRAINER')")
+                                .isEqualTo("hasAnyRole('TMO', 'TRAINER')")
+                                .contains("TMO", "TRAINER")
                                 .doesNotContain("ADMIN", "SME");
                 assertThat(preAuthorizeValue(deleteMethod))
                                 .isEqualTo("hasRole('TMO')")
@@ -56,16 +57,19 @@ class CourseAdminAuthorizationAnnotationTest {
         @Test
         void courseThumbnailUploadShouldAllowTmoWithoutOpeningAllUploadsToTmo()
                         throws Exception {
+                // Cấp class không có TMO, vì còn chứa lesson upload endpoints.
                 assertThat(preAuthorizeValue(AdminUploadController.class))
                                 .isEqualTo("hasAnyRole('SME', 'TRAINER')")
                                 .doesNotContain("TMO", "ADMIN");
 
-                Method uploadCourseThumbnailMethod = AdminUploadController.class.getMethod(
+                Method thumbnailMethod = AdminUploadController.class.getMethod(
                                 "uploadCourseThumbnail",
                                 org.springframework.web.multipart.MultipartFile.class);
 
-                assertThat(preAuthorizeValue(uploadCourseThumbnailMethod))
-                                .isEqualTo("hasAnyRole('TMO', 'SME', 'TRAINER')")
+                // Chỉ thumbnail endpoint được mở cho TMO.
+                assertThat(preAuthorizeValue(thumbnailMethod))
+                                .isEqualTo(
+                                                "hasAnyRole('TMO', 'SME', 'TRAINER')")
                                 .doesNotContain("ADMIN");
         }
 
