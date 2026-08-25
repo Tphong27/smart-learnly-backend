@@ -26,7 +26,7 @@ public class AdminUploadController {
 
         /** Tải thumbnail course cho các role được quản lý hoặc author course detail. */
         @PostMapping(value = "/course-thumbnails", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-        @PreAuthorize("hasAnyRole('TMO')")
+        @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
         public ApiResponse<CourseThumbnailUploadResponse> uploadCourseThumbnail(
                         @RequestPart("file") MultipartFile file) {
                 return ApiResponse.success(
