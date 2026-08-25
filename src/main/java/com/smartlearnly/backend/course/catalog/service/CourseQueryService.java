@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.math.BigDecimal;
 
+import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.course.dto.CategorySummaryResponse;
 import com.smartlearnly.backend.course.catalog.dto.CourseCatalogSort;
 import com.smartlearnly.backend.course.catalog.dto.CourseClassResponse;
@@ -59,13 +60,13 @@ public class CourseQueryService {
 	}
 
 	// Tải trang khóa học published theo phân trang mặc định.
-	public Page<CourseListItemResponse> getCourses(int page, int size) {
-		return courseRepository.findPublishedCourses(pageRequest(page, size))
-				.map(this::toResponse);
+	public PageResponse<CourseListItemResponse> getCourses(int page, int size) {
+		return toPageResponse(courseRepository.findPublishedCourses(pageRequest(page, size))
+				.map(this::toResponse));
 	}
 
 	// Tải catalog published theo từ khóa, category, giá, sale, featured và sort.
-	public Page<CourseListItemResponse> getCourses(
+	public PageResponse<CourseListItemResponse> getCourses(
 			String keyword,
 			String categorySlug,
 			BigDecimal minPrice,
@@ -82,7 +83,7 @@ public class CourseQueryService {
 		}
 
 		CourseCatalogSort resolvedSort = sort == null ? CourseCatalogSort.POPULAR : sort;
-		return courseRepository.findPublishedCoursesByFilters(
+		return toPageResponse(courseRepository.findPublishedCoursesByFilters(
 				toSearchPattern(keyword),
 				normalizeOptional(categorySlug),
 				minPrice,
@@ -91,18 +92,18 @@ public class CourseQueryService {
 				featured,
 				resolvedSort.name(),
 				pageRequest(page, size))
-				.map(this::toResponse);
+				.map(this::toResponse));
 	}
 
 	// Tìm course published bằng pattern LIKE đã escape.
-	public Page<CourseListItemResponse> searchCourses(String keyword, int page, int size) {
+	public PageResponse<CourseListItemResponse> searchCourses(String keyword, int page, int size) {
 		String searchPattern = toSearchPattern(keyword);
-		return courseRepository.searchPublishedCourses(searchPattern, pageRequest(page, size))
-				.map(this::toResponse);
+		return toPageResponse(courseRepository.searchPublishedCourses(searchPattern, pageRequest(page, size))
+				.map(this::toResponse));
 	}
 
 	// Tải course published trong category còn hoạt động.
-	public Page<CourseListItemResponse> getCoursesByCategory(
+	public PageResponse<CourseListItemResponse> getCoursesByCategory(
 			String categorySlug,
 			int page,
 			int size) {
@@ -110,10 +111,10 @@ public class CourseQueryService {
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found");
 		}
 
-		return courseRepository.findPublishedCoursesByCategorySlug(
+		return toPageResponse(courseRepository.findPublishedCoursesByCategorySlug(
 				categorySlug,
 				pageRequest(page, size))
-				.map(this::toResponse);
+				.map(this::toResponse));
 	}
 
 	// Tổng hợp course detail, mục tiêu, curriculum preview và lớp đang mở.
@@ -271,6 +272,16 @@ public class CourseQueryService {
 	// Giới hạn page size để bảo vệ truy vấn catalog công khai.
 	private PageRequest pageRequest(int page, int size) {
 		return PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+	}
+
+	// Chuyển Page nội bộ của Spring Data thành contract phân trang ổn định cho API catalog.
+	private PageResponse<CourseListItemResponse> toPageResponse(Page<CourseListItemResponse> page) {
+		return new PageResponse<>(
+				page.getContent(),
+				page.getNumber(),
+				page.getSize(),
+				page.getTotalElements(),
+				page.getTotalPages());
 	}
 
 	// Escape ký tự đặc biệt của SQL LIKE trước khi tìm kiếm.

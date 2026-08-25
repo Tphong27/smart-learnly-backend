@@ -1,5 +1,6 @@
 package com.smartlearnly.backend.course.catalog.controller;
 
+import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.course.catalog.dto.CourseCatalogSort;
 import com.smartlearnly.backend.course.catalog.dto.CourseDetailResponse;
 import com.smartlearnly.backend.course.catalog.dto.CourseListItemResponse;
@@ -9,7 +10,6 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,7 +30,7 @@ public class CourseController {
 
 	// Tải catalog khóa học published theo bộ lọc và cách sắp xếp.
 	@GetMapping
-	public Page<CourseListItemResponse> getCourses(
+	public PageResponse<CourseListItemResponse> getCourses(
 			@RequestParam(required = false) String keyword,
 			@RequestParam(required = false) String categorySlug,
 			@RequestParam(required = false) @DecimalMin("0.0") BigDecimal minPrice,
@@ -54,7 +54,7 @@ public class CourseController {
 
 	// Tìm khóa học published theo từ khóa bắt buộc.
 	@GetMapping("/search")
-	public Page<CourseListItemResponse> searchCourses(
+	public PageResponse<CourseListItemResponse> searchCourses(
 			@RequestParam @NotBlank String keyword,
 			@RequestParam(defaultValue = "0") @Min(0) int page,
 			@RequestParam(defaultValue = "20") @Min(1) int size) {
@@ -63,7 +63,7 @@ public class CourseController {
 
 	// Tải khóa học published thuộc một category slug.
 	@GetMapping("/category/{categorySlug}")
-	public Page<CourseListItemResponse> getCoursesByCategory(
+	public PageResponse<CourseListItemResponse> getCoursesByCategory(
 			@PathVariable String categorySlug,
 			@RequestParam(defaultValue = "0") @Min(0) int page,
 			@RequestParam(defaultValue = "20") @Min(1) int size) {
