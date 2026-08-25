@@ -18,42 +18,37 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 // Nới cho TRAINER để trainer có thể upload lesson material / resource / media
 // khi tùy biến curriculum của class draft.
-@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('SME', 'TRAINER', 'TMO')")
 @RequestMapping("/api/v1/admin/uploads")
 public class AdminUploadController {
-    private final CourseThumbnailService courseThumbnailService;
-    private final LessonFileUploadService lessonFileUploadService;
+        private final CourseThumbnailService courseThumbnailService;
+        private final LessonFileUploadService lessonFileUploadService;
 
-    /** Tải thumbnail course cho các role authoring, không mở mutation này cho TMO. */
-    @PostMapping(value = "/course-thumbnails", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<CourseThumbnailUploadResponse> uploadCourseThumbnail(
-            @RequestPart("file") MultipartFile file
-    ) {
-        return ApiResponse.success(
-                "Course thumbnail uploaded successfully",
-                courseThumbnailService.upload(file)
-        );
-    }
+        /** Tải thumbnail course cho TMO và các role authoring course hiện tại. */
+        @PostMapping(value = "/course-thumbnails", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
+        public ApiResponse<CourseThumbnailUploadResponse> uploadCourseThumbnail(
+                        @RequestPart("file") MultipartFile file) {
+                return ApiResponse.success(
+                                "Course thumbnail uploaded successfully",
+                                courseThumbnailService.upload(file));
+        }
 
-    /** Tải material chính của lesson cho authoring workflow. */
-    @PostMapping(value = "/lesson-material", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<LessonFileUploadResponse> uploadLessonMaterial(
-            @RequestPart("file") MultipartFile file
-    ) {
-        return ApiResponse.success(
-                "Lesson material uploaded successfully",
-                lessonFileUploadService.uploadMaterial(file)
-        );
-    }
+        /** Tải material chính của lesson cho authoring workflow. */
+        @PostMapping(value = "/lesson-material", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        public ApiResponse<LessonFileUploadResponse> uploadLessonMaterial(
+                        @RequestPart("file") MultipartFile file) {
+                return ApiResponse.success(
+                                "Lesson material uploaded successfully",
+                                lessonFileUploadService.uploadMaterial(file));
+        }
 
-    /** Tải resource bổ sung của lesson cho authoring workflow. */
-    @PostMapping(value = "/lesson-resource", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<LessonFileUploadResponse> uploadLessonResource(
-            @RequestPart("file") MultipartFile file
-    ) {
-        return ApiResponse.success(
-                "Lesson resource uploaded successfully",
-                lessonFileUploadService.uploadResource(file)
-        );
-    }
+        /** Tải resource bổ sung của lesson cho authoring workflow. */
+        @PostMapping(value = "/lesson-resource", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        public ApiResponse<LessonFileUploadResponse> uploadLessonResource(
+                        @RequestPart("file") MultipartFile file) {
+                return ApiResponse.success(
+                                "Lesson resource uploaded successfully",
+                                lessonFileUploadService.uploadResource(file));
+        }
 }
