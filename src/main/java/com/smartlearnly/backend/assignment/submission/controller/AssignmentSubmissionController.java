@@ -83,7 +83,7 @@ public class AssignmentSubmissionController {
 
     /** Lưu file assignment sau khi kiểm tra kích thước, phần mở rộng và MIME thực tế. */
     @PostMapping(value = "/upload-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER', 'TRAINEE')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER', 'TRAINEE')")
     public ResponseEntity<Map<String, String>> uploadSubmissionFile(
             @RequestPart("file") MultipartFile file) throws IOException {
         if (file.isEmpty()) {
@@ -152,7 +152,7 @@ public class AssignmentSubmissionController {
 
     /** Chấm submission trong phạm vi assignment mà staff được quản lý. */
     @PutMapping("/{id}/grade")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentSubmissionModel.Response> gradeSubmission(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentSubmissionModel.GradeRequest request) {
@@ -165,7 +165,7 @@ public class AssignmentSubmissionController {
 
     /** Sinh phản hồi AI cho submission trong phạm vi staff được quản lý. */
     @PostMapping("/{id}/ai-feedback")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<Map<String, String>> generateAiFeedback(
             @PathVariable UUID id) {
         return ResponseEntity.ok(submissionService.generateFeedback(id));

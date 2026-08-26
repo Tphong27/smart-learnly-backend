@@ -77,7 +77,7 @@ public class CourseModuleQuestionController {
 
     /** T?o câu h?i trong module trên URL; body ch? ch?a n?i dung câu h?i. */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<QuestionModel.Response>> create(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -92,7 +92,7 @@ public class CourseModuleQuestionController {
 
     /** C?p nh?t câu h?i nhưng không cho phép chuy?n câu h?i sang module khác. */
     @PutMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<QuestionModel.Response> update(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -107,7 +107,7 @@ public class CourseModuleQuestionController {
 
     /** Lưu tr? câu h?i trong đúng module hi?n t?i. */
     @DeleteMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<Void> archive(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,
@@ -119,7 +119,7 @@ public class CourseModuleQuestionController {
 
     /** Import toàn b? rows vào module trên URL, không đ?c module t? file ho?c request body. */
     @PostMapping("/import")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(
             @PathVariable UUID courseId,
             @PathVariable UUID moduleId,

@@ -18,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 // Nới cho TRAINER để trainer có thể upload lesson material / resource / media
 // khi tùy biến curriculum của class draft.
-@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/uploads")
 public class AdminUploadController {
         private final CourseThumbnailService courseThumbnailService;

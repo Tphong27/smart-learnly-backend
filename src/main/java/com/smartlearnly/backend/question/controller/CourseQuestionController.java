@@ -66,7 +66,7 @@ public class CourseQuestionController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<QuestionModel.Response>> create(
             @PathVariable UUID courseId,
             @Valid @RequestBody QuestionModel.CreateRequest request
@@ -78,7 +78,7 @@ public class CourseQuestionController {
     }
 
     @PutMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<QuestionModel.Response> update(
             @PathVariable UUID courseId,
             @PathVariable UUID questionId,
@@ -88,7 +88,7 @@ public class CourseQuestionController {
     }
 
     @DeleteMapping("/{questionId}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<Void> archive(
             @PathVariable UUID courseId,
             @PathVariable UUID questionId
@@ -98,7 +98,7 @@ public class CourseQuestionController {
     }
 
     @PostMapping("/import")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(
             @PathVariable UUID courseId,
             @Valid @RequestBody QuestionImportDtos.ImportBatchRequest request

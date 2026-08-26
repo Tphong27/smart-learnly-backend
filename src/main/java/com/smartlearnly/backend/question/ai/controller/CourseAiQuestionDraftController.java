@@ -26,7 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/courses/{courseId}/questions/ai-drafts")
 public class CourseAiQuestionDraftController {
     private final AiQuestionDraftService aiQuestionDraftService;
