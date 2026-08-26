@@ -286,15 +286,26 @@ public class CurriculumDtoMapper {
     }
 
     /**
-     * Backend thực hiện redaction cho lesson bị khóa.
-     * Không được chỉ khóa bằng frontend vì response vẫn có thể bị đọc qua DevTools.
+     * Backend thực hiện redaction cho lesson preview công khai.
+     *
+     * Với QUIZ:
+     * - Không trả content vì JSON có thể chứa correct_answers/correctIndex.
+     * - Không trả testId.
+     * - Câu hỏi an toàn được lấy từ endpoint preview riêng.
+     *
+     * Với lesson không-preview:
+     * - Chỉ trả metadata, không trả nội dung và tài nguyên.
      */
     private LearningLessonResponse toCatalogPreviewLessonResponse(
             CurriculumLesson lesson) {
 
         boolean previewAllowed = Boolean.TRUE.equals(lesson.getPreview());
 
-        List<LearningResourceResponse> resources = previewAllowed
+        boolean previewTest = lesson.getType() == LessonType.QUIZ;
+
+        boolean exposeStandardContent = previewAllowed && !previewTest;
+
+        List<LearningResourceResponse> resources = exposeStandardContent
                 ? orderedResources(lesson).stream()
                         .map(resource -> new LearningResourceResponse(
                                 resource.getUrl(),
@@ -309,12 +320,18 @@ public class CurriculumDtoMapper {
                 enumUpper(lesson.getType()),
                 enumLower(lesson.getStatus()),
 
-                // Nội dung nhạy cảm chỉ được trả khi lesson cho phép preview.
-                previewAllowed ? lesson.getVideoUrl() : null,
-                previewAllowed ? lesson.getContent() : null,
-                previewAllowed ? lesson.getAttachmentUrl() : null,
+                exposeStandardContent
+                        ? lesson.getVideoUrl()
+                        : null,
 
-                // Duration là metadata nên có thể hiển thị cho lesson bị khóa.
+                exposeStandardContent
+                        ? lesson.getContent()
+                        : null,
+
+                exposeStandardContent
+                        ? lesson.getAttachmentUrl()
+                        : null,
+
                 lesson.getDurationSeconds(),
                 previewAllowed,
                 lesson.getSortOrder(),
@@ -322,8 +339,8 @@ public class CurriculumDtoMapper {
                 resources,
                 lesson.getLessonIdentityId(),
 
-                // Không làm lộ test ID của lesson bị khóa.
-                previewAllowed ? lesson.getTestId() : null);
+                // Public preview không bao giờ trả testId.
+                null);
     }
 
     /**

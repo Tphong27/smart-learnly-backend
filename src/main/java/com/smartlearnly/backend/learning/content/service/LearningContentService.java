@@ -7,6 +7,10 @@ import com.smartlearnly.backend.course.access.service.CourseAccessService;
 import com.smartlearnly.backend.course.entity.Course;
 import com.smartlearnly.backend.course.entity.CourseStatus;
 import com.smartlearnly.backend.course.repository.CourseRepository;
+import com.smartlearnly.backend.course.preview.dto.PreviewTestAnswerResponse;
+import com.smartlearnly.backend.course.preview.dto.PreviewTestQuestionResponse;
+import com.smartlearnly.backend.test.definition.dto.TestQuestionModel;
+import com.smartlearnly.backend.test.definition.service.TestQuestionService;
 import com.smartlearnly.backend.curriculum.dto.CurriculumMetadataResponse;
 import com.smartlearnly.backend.curriculum.entity.CurriculumLesson;
 import com.smartlearnly.backend.curriculum.entity.CurriculumScope;
@@ -78,6 +82,7 @@ public class LearningContentService {
         private final FlashcardCardRepository flashcardCardRepository;
         private final FlashcardProgressRepository flashcardProgressRepository;
         private final TraineeProgressService traineeProgressService;
+        private final TestQuestionService testQuestionService;
 
         /**
          * Tạo nội dung học thật cho học viên sau khi kiểm tra quyền enrollment và scope
@@ -169,18 +174,19 @@ public class LearningContentService {
         /** Tạo nội dung xem trước công khai chỉ với curriculum đã xuất bản. */
         // @Transactional(readOnly = true)
         // public LearningContentResponse getPreviewContent(UUID courseId) {
-        //         Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
-        //                         .orElseThrow(() -> new RuntimeException("Course not found"));
-        //         CurriculumResolution resolution = curriculumResolutionService.resolvePublicMaster(courseId);
-        //         CurriculumMetadataResponse metadata = curriculumDtoMapper.toMetadata(
-        //                         resolution.version(),
-        //                         resolution.classId(),
-        //                         resolution.source());
-        //         return curriculumDtoMapper.toPreviewLearningContentResponse(
-        //                         resolution.version(),
-        //                         course.getTitle(),
-        //                         course.getThumbnailUrl(),
-        //                         metadata);
+        // Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+        // .orElseThrow(() -> new RuntimeException("Course not found"));
+        // CurriculumResolution resolution =
+        // curriculumResolutionService.resolvePublicMaster(courseId);
+        // CurriculumMetadataResponse metadata = curriculumDtoMapper.toMetadata(
+        // resolution.version(),
+        // resolution.classId(),
+        // resolution.source());
+        // return curriculumDtoMapper.toPreviewLearningContentResponse(
+        // resolution.version(),
+        // course.getTitle(),
+        // course.getThumbnailUrl(),
+        // metadata);
         // }
 
         /**
@@ -219,6 +225,156 @@ public class LearningContentService {
                                 course.getTitle(),
                                 course.getThumbnailUrl(),
                                 metadata);
+        }
+
+        /**
+         * Trả danh sách câu hỏi chỉ đọc của một lesson QUIZ được phép preview.
+         *
+         * Endpoint public chỉ chấp nhận lesson:
+         * - Thuộc curriculum published hiệu lực của course/class.
+         * - Có status PUBLISHED.
+         * - Có isPreview = true.
+         * - Có type QUIZ.
+         * - Có testId hợp lệ.
+         *
+         * Response không chứa testId, questionId, answerId hoặc đáp án đúng.
+         */
+        @Transactional
+        public List<PreviewTestQuestionResponse> getPreviewTestQuestions(
+                        UUID courseId,
+                        UUID classId,
+                        UUID lessonId) {
+
+                if (courseId == null || lessonId == null) {
+                        throw new BusinessException(
+                                        ErrorCode.INVALID_REQUEST,
+                                        "Course ID and lesson ID are required");
+                }
+
+                Course course = courseRepository
+                                .findByIdAndDeletedAtIsNull(courseId)
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Course was not found"));
+
+                if (course.getStatus() != CourseStatus.PUBLISHED) {
+                        throw new BusinessException(
+                                        ErrorCode.RESOURCE_NOT_FOUND,
+                                        "Course was not found");
+                }
+
+                CurriculumResolution resolution = classId == null
+                                ? curriculumResolutionService.resolvePublicMaster(courseId)
+                                : curriculumResolutionService.resolveClassEffectivePublished(
+                                                courseId,
+                                                classId);
+
+                CurriculumLesson lesson = resolution.version()
+                                .getSections()
+                                .stream()
+                                .flatMap(section -> effectiveLessons(section).stream())
+                                .filter(candidate -> lessonMatches(candidate, lessonId))
+                                .findFirst()
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Preview test lesson was not found"));
+
+                boolean validPreviewTest = lesson.getStatus() == LessonStatus.PUBLISHED
+                                && lesson.getType() == LessonType.QUIZ
+                                && Boolean.TRUE.equals(
+                                                lesson.getPreview())
+                                && lesson.getTestId() != null;
+
+                if (!validPreviewTest) {
+                        throw new BusinessException(
+                                        ErrorCode.RESOURCE_NOT_FOUND,
+                                        "Preview test lesson was not found");
+                }
+
+                List<TestQuestionModel.LearnerResponse> learnerQuestions = testQuestionService
+                                .getLearnerQuestionsByTest(
+                                                lesson.getTestId());
+
+                return learnerQuestions.stream()
+                                .map(this::toPreviewTestQuestionResponse)
+                                .toList();
+        }
+
+        /**
+         * Trả bộ flashcard chỉ đọc của lesson được phép preview công khai.
+         *
+         * Không yêu cầu đăng nhập hoặc enrollment.
+         * Không trả progress của người dùng.
+         */
+        @Transactional(readOnly = true)
+        public FlashcardPracticeSetResponse getPreviewFlashcards(
+                        UUID courseId,
+                        UUID classId,
+                        UUID lessonId) {
+
+                if (courseId == null || lessonId == null) {
+                        throw new BusinessException(
+                                        ErrorCode.INVALID_REQUEST,
+                                        "Course ID and lesson ID are required");
+                }
+
+                Course course = courseRepository
+                                .findByIdAndDeletedAtIsNull(courseId)
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Course was not found"));
+
+                if (course.getStatus() != CourseStatus.PUBLISHED) {
+                        throw new BusinessException(
+                                        ErrorCode.RESOURCE_NOT_FOUND,
+                                        "Course was not found");
+                }
+
+                CurriculumResolution resolution = classId == null
+                                ? curriculumResolutionService.resolvePublicMaster(
+                                                courseId)
+                                : curriculumResolutionService
+                                                .resolveClassEffectivePublished(
+                                                                courseId,
+                                                                classId);
+
+                CurriculumLesson lesson = resolution.version()
+                                .getSections()
+                                .stream()
+                                .flatMap(section -> effectiveLessons(section).stream())
+                                .filter(candidate -> lessonMatches(candidate, lessonId))
+                                .findFirst()
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Preview flashcard lesson was not found"));
+
+                boolean validPreviewFlashcard = lesson.getStatus() == LessonStatus.PUBLISHED
+                                && lesson.getType() == LessonType.FLASHCARD
+                                && Boolean.TRUE.equals(
+                                                lesson.getPreview());
+
+                if (!validPreviewFlashcard) {
+                        throw new BusinessException(
+                                        ErrorCode.RESOURCE_NOT_FOUND,
+                                        "Preview flashcard lesson was not found");
+                }
+
+                FlashcardSet flashcardSet = resolveFlashcardSet(lesson)
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Preview flashcard set was not found"));
+
+                List<FlashcardCard> cards = flashcardCardRepository
+                                .findActiveBySetIdOrderByOrderIndex(
+                                                flashcardSet.getId());
+
+                return toPracticeSetResponse(
+                                lesson,
+                                flashcardSet,
+                                cards,
+
+                                // Guest không có progress.
+                                null);
         }
 
         /**
@@ -373,6 +529,34 @@ public class LearningContentService {
         }
 
         /**
+         * Chuyển LearnerResponse sang public preview response.
+         * Loại bỏ toàn bộ ID có thể dùng để tạo hoặc nộp attempt.
+         */
+        private PreviewTestQuestionResponse toPreviewTestQuestionResponse(
+                        TestQuestionModel.LearnerResponse question) {
+
+                List<PreviewTestAnswerResponse> answers = question.getAnswers() == null
+                                ? List.of()
+                                : question.getAnswers()
+                                                .stream()
+                                                .map(answer -> new PreviewTestAnswerResponse(
+                                                                answer.getAnswerText(),
+                                                                answer.getDisplayOrder(),
+                                                                answer.getMedia() == null
+                                                                                ? List.of()
+                                                                                : answer.getMedia()))
+                                                .toList();
+
+                return new PreviewTestQuestionResponse(
+                                question.getOrderIndex(),
+                                question.getQuestionText(),
+                                question.getImageUrl(),
+                                question.getAudioUrl(),
+                                question.getQuestionType(),
+                                answers);
+        }
+
+        /**
          * Chặn việc ghi tiến độ cho set không thuộc curriculum publish hiện hành của
          * học viên.
          */
@@ -463,7 +647,11 @@ public class LearningContentService {
                         List<FlashcardCard> cards,
                         UUID studentId) {
                 CurriculumSection section = lesson.getSection();
-                Map<UUID, FlashcardProgress> progressByCardId = findProgressByCardId(studentId, cards);
+                Map<UUID, FlashcardProgress> progressByCardId = studentId == null
+                                ? Collections.emptyMap()
+                                : findProgressByCardId(
+                                                studentId,
+                                                cards);
                 return new FlashcardPracticeSetResponse(
                                 flashcardSet.getId(),
                                 lesson.getId(),
