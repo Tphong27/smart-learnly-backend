@@ -30,7 +30,10 @@ class AdminFlashcardControllerAuthorizationAnnotationTest {
                 createMethod,
                 PreAuthorize.class);
         assertThat(createAuthorization).isNotNull();
-        assertThat(createAuthorization.value()).doesNotContain("TMO", "ADMIN");
+        // assertThat(createAuthorization.value()).doesNotContain("TMO", "ADMIN");
+        assertThat(createAuthorization.value())
+        .contains("TMO")
+        .doesNotContain("ADMIN");
     }
 
     @Test
@@ -41,8 +44,10 @@ class AdminFlashcardControllerAuthorizationAnnotationTest {
         );
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('SME', 'TRAINER')");
-        assertThat(annotation.value()).doesNotContain("TMO", "ADMIN");
+        // assertThat(annotation.value()).isEqualTo("hasAnyRole('SME', 'TRAINER')");
+        // assertThat(annotation.value()).doesNotContain("TMO", "ADMIN");
+        assertThat(annotation.value()).isEqualTo("hasAnyRole('TMO', 'SME', 'TRAINER')");
+        assertThat(annotation.value()).doesNotContain("ADMIN");
     }
 
     @Test
@@ -53,7 +58,9 @@ class AdminFlashcardControllerAuthorizationAnnotationTest {
         );
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('SME', 'TRAINER')");
-        assertThat(annotation.value()).doesNotContain("TMO", "ADMIN");
+        // assertThat(annotation.value()).isEqualTo("hasAnyRole('SME', 'TRAINER')");
+        // assertThat(annotation.value()).doesNotContain("TMO", "ADMIN");
+        assertThat(annotation.value()).isEqualTo("hasAnyRole('TMO', 'SME', 'TRAINER')");
+        assertThat(annotation.value()).doesNotContain("ADMIN");
     }
 }

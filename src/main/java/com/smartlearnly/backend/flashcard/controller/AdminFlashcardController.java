@@ -36,7 +36,7 @@ public class AdminFlashcardController {
 
     /** Tạo flashcard lesson trong master curriculum; TMO chỉ được xem course. */
     @PostMapping("/courses/{courseId}/sections/{sectionId}/flashcard-lessons")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<FlashcardLessonCreatedResponse>> createFlashcardLesson(
             @PathVariable UUID courseId,
             @PathVariable UUID sectionId,
@@ -60,7 +60,7 @@ public class AdminFlashcardController {
 
     /** Cập nhật metadata flashcard set trong master curriculum. */
     @PatchMapping("/flashcard-sets/{setId}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<FlashcardSetResponse> updateSet(
             @PathVariable UUID setId,
             @Valid @RequestBody UpdateFlashcardSetRequest request) {
@@ -69,7 +69,7 @@ public class AdminFlashcardController {
 
     /** Xóa flashcard set khỏi master curriculum. */
     @DeleteMapping("/flashcard-sets/{setId}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<Void> deleteSet(@PathVariable UUID setId) {
         adminFlashcardService.deleteSet(setId);
         return ApiResponse.success("Flashcard set deleted successfully");
@@ -77,7 +77,7 @@ public class AdminFlashcardController {
 
     /** Thêm card mới vào flashcard set của master curriculum. */
     @PostMapping("/flashcard-sets/{setId}/cards")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<FlashcardCardResponse>> addCard(
             @PathVariable UUID setId,
             @Valid @RequestBody CreateFlashcardCardRequest request) {
@@ -88,7 +88,7 @@ public class AdminFlashcardController {
 
     /** Cập nhật card thuộc flashcard set của master curriculum. */
     @PatchMapping("/flashcard-cards/{cardId}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<FlashcardCardResponse> updateCard(
             @PathVariable UUID cardId,
             @Valid @RequestBody UpdateFlashcardCardRequest request) {
@@ -97,7 +97,7 @@ public class AdminFlashcardController {
 
     /** Xóa card khỏi flashcard set của master curriculum. */
     @DeleteMapping("/flashcard-cards/{cardId}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<Void> deleteCard(@PathVariable UUID cardId) {
         adminFlashcardService.deleteCard(cardId);
         return ApiResponse.success("Flashcard card deleted successfully");
@@ -105,7 +105,7 @@ public class AdminFlashcardController {
 
     /** Lưu thứ tự card mới trong flashcard set của master curriculum. */
     @PatchMapping("/flashcard-sets/{setId}/cards/reorder")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<FlashcardSetResponse> reorderCards(
             @PathVariable UUID setId,
             @Valid @RequestBody ReorderFlashcardCardsRequest request) {

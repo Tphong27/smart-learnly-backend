@@ -43,7 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+@PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin")
 public class AdminFlashcardStagingController {
     private final AdminFlashcardStagingService adminFlashcardStagingService;
