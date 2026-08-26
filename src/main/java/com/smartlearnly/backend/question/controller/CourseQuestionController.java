@@ -53,7 +53,7 @@ public class CourseQuestionController {
     ) {
         return ApiResponse.success(
                 "Questions loaded successfully",
-                questionService.listByCourse(courseId, moduleId, search, type, status, includeArchived, difficulty, page, size)
+                questionService.listByCourse(courseId, null, search, type, status, includeArchived, difficulty, page, size)
         );
     }
 
@@ -117,7 +117,7 @@ public class CourseQuestionController {
     ) {
         PageResponse<QuestionModel.Response> page = questionService.listByCourse(
                 courseId,
-                moduleId,
+                null,
                 search,
                 type,
                 status,
@@ -140,7 +140,7 @@ public class CourseQuestionController {
     /** Xuat CSV theo template import, giu them id/status de phuc vu doi chieu du lieu. */
     private String toCsv(Iterable<QuestionModel.Response> questions) {
         StringBuilder builder = new StringBuilder(
-                "id,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Module ID,Image files,Audio files\n"
+                "id,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Image files,Audio files\n"
         );
         for (QuestionModel.Response question : questions) {
             builder.append(csv(question.questionId()))
@@ -157,8 +157,6 @@ public class CourseQuestionController {
                     .append(csv(correctAnswer(question)))
                     .append(',')
                     .append(csv(toPlainText(question.explanation())))
-                    .append(',')
-                    .append(csv(question.moduleId()))
                     .append(',')
                     .append(csv(mediaUrls(question, "image", question.imageUrl())))
                     .append(',')

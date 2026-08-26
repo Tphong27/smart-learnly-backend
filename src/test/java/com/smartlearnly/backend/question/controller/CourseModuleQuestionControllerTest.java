@@ -20,7 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
-/** Kiểm tra contract controller quản lý Question List theo một module trên URL. */
+/** Kiểm tra URL module cũ vẫn hoạt động như alias của Question Bank course-wide. */
 @ExtendWith(MockitoExtension.class)
 class CourseModuleQuestionControllerTest {
 
@@ -55,12 +55,12 @@ class CourseModuleQuestionControllerTest {
                 .doesNotContain("courseId", "moduleId");
     }
 
-    /** Xác nhận bộ lọc danh sách được chuyển tới service cùng đúng course/module trên URL. */
+    /** Xác nhận alias cũ bỏ qua module và tải toàn bộ câu hỏi của course. */
     @Test
-    void list_delegatesToModuleScopedService() {
+    void list_delegatesToCourseWideService() {
         PageResponse<QuestionModel.Response> page = new PageResponse<>(List.of(), 1, 25, 0, 0);
-        when(questionService.listByCourseModule(
-                courseId, moduleId, "java", "multiple_choice", "draft", false, (short) 2, 1, 25
+        when(questionService.listByCourse(
+                courseId, null, "java", "multiple_choice", "draft", false, (short) 2, 1, 25
         )).thenReturn(page);
 
         var response = controller.list(
@@ -69,8 +69,8 @@ class CourseModuleQuestionControllerTest {
 
         assertThat(response.success()).isTrue();
         assertThat(response.data()).isSameAs(page);
-        verify(questionService).listByCourseModule(
-                courseId, moduleId, "java", "multiple_choice", "draft", false, (short) 2, 1, 25
+        verify(questionService).listByCourse(
+                courseId, null, "java", "multiple_choice", "draft", false, (short) 2, 1, 25
         );
     }
 
@@ -79,49 +79,48 @@ class CourseModuleQuestionControllerTest {
      * Request body trong test chỉ có nội dung câu hỏi, không có field Module.
      */
     @Test
-    void create_usesPathModuleAndReturnsModuleScopedLocation() {
+    void create_ignoresPathModuleAndReturnsCourseWideLocation() {
         QuestionModel.ModuleCreateRequest request = createRequest();
         QuestionModel.Response created = response("What is Java?", "draft");
-        when(questionService.createForCourse(courseId, moduleId, request)).thenReturn(created);
+        when(questionService.createForCourse(courseId, request.toCreateRequest())).thenReturn(created);
 
         var response = controller.create(courseId, moduleId, request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getHeaders().getLocation().toString()).endsWith(
-                "/api/v1/admin/courses/" + courseId
-                        + "/modules/" + moduleId + "/questions/" + questionId
+                "/api/v1/admin/courses/" + courseId + "/questions/" + questionId
         );
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().data()).isSameAs(created);
-        verify(questionService).createForCourse(courseId, moduleId, request);
+        verify(questionService).createForCourse(courseId, request.toCreateRequest());
     }
 
     /** Xác nhận update bị khóa vào module trên URL và không nhận module mới trong body. */
     @Test
-    void update_usesPathModule() {
+    void update_ignoresPathModule() {
         QuestionModel.ModuleUpdateRequest request = updateRequest();
         QuestionModel.Response updated = response("Updated question", "pending_review");
-        when(questionService.updateInCourse(courseId, moduleId, questionId, request)).thenReturn(updated);
+        when(questionService.updateInCourse(courseId, questionId, request.toUpdateRequest())).thenReturn(updated);
 
         var response = controller.update(courseId, moduleId, questionId, request);
 
         assertThat(response.success()).isTrue();
         assertThat(response.data()).isSameAs(updated);
-        verify(questionService).updateInCourse(courseId, moduleId, questionId, request);
+        verify(questionService).updateInCourse(courseId, questionId, request.toUpdateRequest());
     }
 
     /** Xác nhận archive luôn truyền đủ course/module/question để service kiểm tra truy cập chéo. */
     @Test
-    void archive_usesPathModule() {
+    void archive_ignoresPathModule() {
         var response = controller.archive(courseId, moduleId, questionId);
 
         assertThat(response.success()).isTrue();
-        verify(questionService).archiveInCourse(courseId, moduleId, questionId);
+        verify(questionService).archiveInCourse(courseId, questionId);
     }
 
     /** Xác nhận batch import chỉ chứa dữ liệu câu hỏi và toàn bộ rows được gắn vào module trên URL. */
     @Test
-    void importBatch_usesPathModule() {
+    void importBatch_ignoresPathModule() {
         QuestionImportDtos.ModuleImportBatchRequest request = new QuestionImportDtos.ModuleImportBatchRequest(
                 List.of(new QuestionImportDtos.ModuleImportRow(
                         2, "What is Java?", "single_choice", List.of("A", "B"),
@@ -131,31 +130,34 @@ class CourseModuleQuestionControllerTest {
         );
         QuestionImportDtos.ImportBatchResponse imported =
                 new QuestionImportDtos.ImportBatchResponse(1, 1, List.of(questionId), List.of());
-        when(questionService.importBatchForCourse(courseId, moduleId, request)).thenReturn(imported);
+        QuestionImportDtos.ImportBatchRequest courseRequest = new QuestionImportDtos.ImportBatchRequest(
+                request.rows().stream().map(QuestionImportDtos.ModuleImportRow::toImportRow).toList(),
+                request.importSource());
+        when(questionService.importBatchForCourse(courseId, courseRequest)).thenReturn(imported);
 
         var response = controller.importBatch(courseId, moduleId, request);
 
         assertThat(response.success()).isTrue();
         assertThat(response.data()).isSameAs(imported);
-        verify(questionService).importBatchForCourse(courseId, moduleId, request);
+        verify(questionService).importBatchForCourse(courseId, courseRequest);
     }
 
     /** Xac nhan file CSV module-scoped co cac cot import day du theo yeu cau moi. */
     @Test
-    void export_includesTemplateColumnsAnswersModuleAndMedia() {
-        when(questionService.listByCourseModule(
-                courseId, moduleId, null, null, null, true, null, 0, 10_000
+    void export_includesCourseWideTemplateColumnsAnswersAndMedia() {
+        when(questionService.listByCourse(
+                courseId, null, null, null, null, true, null, 0, 10_000
         )).thenReturn(new PageResponse<>(List.of(response("Question", "approved")), 0, 10_000, 1, 1));
 
         var response = controller.export(courseId, moduleId, null, null, null, null);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getHeaders().getContentDisposition().getFilename())
-                .isEqualTo("module-questions.csv");
+                .isEqualTo("course-questions.csv");
         String csv = new String(response.getBody(), StandardCharsets.UTF_8);
-        assertThat(csv).startsWith("\uFEFFid,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Module ID,Image files,Audio files\n");
+        assertThat(csv).startsWith("\uFEFFid,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Image files,Audio files\n");
         assertThat(csv).contains("\"Question\",\"single_choice\",\"Option A\",\"Option B\",\"\",\"\",\"\",\"\",\"A\",\"Explanation\"");
-        assertThat(csv).contains("\"" + moduleId + "\",\"https://cdn.smartlearnly.test/question.png\",\"https://cdn.smartlearnly.test/question.mp3\"");
+        assertThat(csv).contains("\"https://cdn.smartlearnly.test/question.png\",\"https://cdn.smartlearnly.test/question.mp3\"");
     }
 
     /** Lấy tên component của Java record để test chính xác contract JSON đầu vào. */

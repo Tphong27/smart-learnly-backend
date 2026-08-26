@@ -113,10 +113,10 @@ public class QuestionService {
 
     @Transactional
     public QuestionModel.Response createForCourse(UUID courseId, QuestionModel.CreateRequest request) {
-        return createForCourse(courseId, request.moduleId(), request);
+        return createForCourse(courseId, null, request);
     }
 
-    /** Tạo câu hỏi trong module từ path; body không được phép quyết định module đích. */
+    /** Tạo câu hỏi course-wide; chỉ API tương thích cũ mới gắn module lấy từ path. */
     @Transactional
     public QuestionModel.Response createForCourse(UUID courseId, UUID moduleId, QuestionModel.CreateRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
@@ -130,7 +130,7 @@ public class QuestionService {
 
         Question question = new Question();
         question.setCourseId(courseId);
-        question.setModuleId(validateRequiredCourseModuleId(courseId, moduleId));
+        question.setModuleId(moduleId == null ? null : validateRequiredCourseModuleId(courseId, moduleId));
         question.setQuestionText(questionText);
         question.setQuestionType(questionType);
         question.setBloomLevel(parseBloomLevel(request.bloomLevel()));
@@ -148,7 +148,7 @@ public class QuestionService {
 
     @Transactional
     public QuestionModel.Response updateInCourse(UUID courseId, UUID questionId, QuestionModel.UpdateRequest request) {
-        return updateInCourse(courseId, request.moduleId(), questionId, request);
+        return updateInCourse(courseId, null, questionId, request);
     }
 
     /** Tạo câu hỏi từ DTO công khai không chứa module, rồi dùng module từ path. */
@@ -157,13 +157,17 @@ public class QuestionService {
         return createForCourse(courseId, moduleId, request.toCreateRequest());
     }
 
-    /** Cập nhật nội dung câu hỏi nhưng giữ nguyên phạm vi module được xác định bởi path. */
+    /** Cập nhật course-wide; API module cũ vẫn kiểm tra module khi path có truyền moduleId. */
     @Transactional
     public QuestionModel.Response updateInCourse(UUID courseId, UUID moduleId, UUID questionId, QuestionModel.UpdateRequest request) {
         courseAccessService.requireUpdatableCourse(courseId);
         Question question = findQuestion(questionId);
-        UUID resolvedModuleId = validateRequiredCourseModuleId(courseId, moduleId);
-        assertQuestionBelongsToCourseModule(question, courseId, resolvedModuleId);
+        if (moduleId == null) {
+            assertQuestionBelongsToCourse(question, courseId);
+        } else {
+            UUID resolvedModuleId = validateRequiredCourseModuleId(courseId, moduleId);
+            assertQuestionBelongsToCourseModule(question, courseId, resolvedModuleId);
+        }
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Cannot update an archived question");
         }
@@ -338,8 +342,9 @@ public class QuestionService {
         QuestionType questionType = parseSupportedQuestionType(row.questionType());
         Question question = new Question();
         question.setCourseId(courseId);
-        UUID resolvedModuleId = fixedModuleId != null ? fixedModuleId : row.moduleId();
-        question.setModuleId(validateRequiredCourseModuleId(courseId, resolvedModuleId));
+        question.setModuleId(fixedModuleId == null
+                ? null
+                : validateRequiredCourseModuleId(courseId, fixedModuleId));
         question.setQuestionText(normalizeRequired(row.questionText(), "Question text is required"));
         question.setQuestionType(questionType);
         question.setBloomLevel(parseBloomLevel(row.bloomLevel()));
@@ -425,12 +430,9 @@ public class QuestionService {
     private List<String> validateImportRowForCourse(UUID courseId, UUID fixedModuleId, QuestionImportDtos.ImportRow row) {
         List<String> rowErrors = validateImportRowContent(row);
 
-        UUID resolvedModuleId = fixedModuleId != null ? fixedModuleId : row.moduleId();
-        if (resolvedModuleId == null) {
-            rowErrors.add("Question module is required");
-        } else {
+        if (fixedModuleId != null) {
             boolean moduleExists = courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
-                    resolvedModuleId,
+                    fixedModuleId,
                     courseId,
                     CourseModule.STATUS_ACTIVE
             );

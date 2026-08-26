@@ -129,11 +129,11 @@ class CourseQuestionControllerTest {
         assertThat(response.getHeaders().getContentType().toString()).isEqualTo("text/csv;charset=UTF-8");
         assertThat(response.getBody()).startsWith(new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
         String csv = new String(response.getBody(), StandardCharsets.UTF_8);
-        assertThat(csv).startsWith("\uFEFFid,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Module ID,Image files,Audio files\n");
+        assertThat(csv).startsWith("\uFEFFid,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Image files,Audio files\n");
         assertThat(csv).contains("\"Annotation nào \"\"Java\"\"?\"");
         assertThat(csv).doesNotContain("<p>").doesNotContain("&nbsp;");
         assertThat(csv).contains("\"Option A\",\"Option B\",\"\",\"\",\"\",\"\",\"A\",\"Explanation\"");
-        assertThat(csv).contains("\"" + moduleId + "\",\"https://cdn.smartlearnly.test/question.png\",\"https://cdn.smartlearnly.test/question.mp3\"");
+        assertThat(csv).contains("\"https://cdn.smartlearnly.test/question.png\",\"https://cdn.smartlearnly.test/question.mp3\"");
         assertThat(csv).contains("\"true_false\",\"True\",\"False\",\"\",\"\",\"\",\"\",\"True\",\"True statement explanation\"");
         verify(questionService).listByCourse(courseId, null, "java", null, null, true, null, 0, 10_000);
     }
@@ -142,7 +142,7 @@ class CourseQuestionControllerTest {
     void list_delegatesFiltersToQuestionService() {
         when(questionService.listByCourse(
                 eq(courseId),
-                eq(moduleId),
+                eq(null),
                 eq("search"),
                 eq("multiple_choice"),
                 eq("draft"),

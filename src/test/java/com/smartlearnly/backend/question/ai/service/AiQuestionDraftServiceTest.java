@@ -16,8 +16,6 @@ import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
-import com.smartlearnly.backend.learning.module.entity.CourseModule;
-import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.notification.dto.NotificationCreateCommand;
 import com.smartlearnly.backend.notification.service.NotificationService;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
@@ -61,8 +59,6 @@ class AiQuestionDraftServiceTest {
     @Mock
     private CurrentUserService currentUserService;
     @Mock
-    private CourseModuleRepository courseModuleRepository;
-    @Mock
     private AiQuestionGenerationBatchRepository batchRepository;
     @Mock
     private AiQuestionGenerationSourceRepository sourceRepository;
@@ -105,7 +101,6 @@ class AiQuestionDraftServiceTest {
         service = new AiQuestionDraftService(
                 courseAccessService,
                 currentUserService,
-                courseModuleRepository,
                 batchRepository,
                 sourceRepository,
                 draftRepository,
@@ -387,10 +382,8 @@ class AiQuestionDraftServiceTest {
     }
 
     @Test
-    void createBatch_acceptsCustomInstructionAndValidModule() {
+    void createBatch_ignoresLegacyModuleAndCreatesCourseWideDraft() {
         UUID moduleId = UUID.randomUUID();
-        when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(moduleId, courseId, CourseModule.STATUS_ACTIVE))
-                .thenReturn(true);
         when(sourceService.persistAndBuildSourceInputs(eq(courseId), any(), any(), any())).thenReturn(List.of());
         when(generationProvider.generate(any())).thenReturn(new QuestionGenerationProvider.GenerationResult(
                 List.of(generatedMc("Module question?")), 1, 2, 3));
@@ -407,14 +400,13 @@ class AiQuestionDraftServiceTest {
                         "module-key"));
 
         assertThat(response.generationInstruction()).isEqualTo("Use concise English wording.");
-        assertThat(response.drafts().get(0).moduleId()).isEqualTo(moduleId);
+        assertThat(response.drafts().get(0).moduleId()).isNull();
         ArgumentCaptor<NotificationCreateCommand> notification =
                 ArgumentCaptor.forClass(NotificationCreateCommand.class);
         verify(notificationService).emit(notification.capture());
         assertThat(notification.getValue().actionUrl()).isEqualTo(
-                "/admin/courses/" + courseId + "/modules/" + moduleId
-                        + "/questions/ai-drafts/" + response.batchId());
-        assertThat(notification.getValue().payload()).containsEntry("moduleId", moduleId);
+                "/admin/courses/" + courseId + "/questions/ai-drafts/" + response.batchId());
+        assertThat(notification.getValue().payload()).doesNotContainKey("moduleId");
     }
 
     @Test
@@ -446,7 +438,7 @@ class AiQuestionDraftServiceTest {
     }
 
     @Test
-    void createBatch_rejectsInvalidQuotaProcessingConfigAndModule() {
+    void createBatch_rejectsInvalidQuotaProcessingAndGenerationConfig() {
         when(batchRepository.countByRequestedByAndCreatedAtAfter(eq(actorId), any())).thenReturn(5L);
         assertThatThrownBy(() -> service.createBatch(courseId, request("quota-key")))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -474,8 +466,6 @@ class AiQuestionDraftServiceTest {
                 "Language must be vi or en");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 1, null, "vi", "x".repeat(2001), "long-instruction"),
                 "Generation instruction must not exceed 2000 characters");
-        assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 1, UUID.randomUUID(), "vi", null, "bad-module"),
-                "Question module must belong to the selected course");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 1, null, "vi", null, " "),
                 "Idempotency key is required");
     }
@@ -1026,7 +1016,6 @@ class AiQuestionDraftServiceTest {
             savedAnswers.add(answer);
             return answer;
         });
-        lenient().when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(any(), any(), any())).thenReturn(false);
     }
 
     private AiQuestionDraftDtos.CreateBatchRequest request(String key) {

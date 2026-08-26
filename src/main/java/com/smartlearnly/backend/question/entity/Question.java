@@ -30,7 +30,7 @@ public class Question {
     @Column(name = "course_id", nullable = false)
     private UUID courseId;
 
-    @Column(name = "module_id", nullable = false)
+    @Column(name = "module_id")
     private UUID moduleId;
 
     @Column(name = "clo_id")

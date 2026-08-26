@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.HtmlUtils;
 
-/** Cung c?p API qu?n l? Question List theo đúng m?t module đư?c xác đ?nh t? URL. */
+/** Giữ URL Question theo module cũ như alias tương thích cho Question Bank course-wide. */
 @Validated
 @RestController
 @RequiredArgsConstructor
@@ -40,7 +40,7 @@ import org.springframework.web.util.HtmlUtils;
 public class CourseModuleQuestionController {
     private final QuestionService questionService;
 
-    /** Tr? danh sách đ? phân trang c?a module hi?n t?i; không nh?n b? l?c module t? client. */
+    /** Trả danh sách course-wide dù client cũ vẫn gửi moduleId trên URL. */
     @GetMapping
     public ApiResponse<PageResponse<QuestionModel.Response>> list(
             @PathVariable UUID courseId,
@@ -54,15 +54,15 @@ public class CourseModuleQuestionController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
         return ApiResponse.success(
-                "Module questions loaded successfully",
-                questionService.listByCourseModule(
-                        courseId, moduleId, search, type, status,
+                "Questions loaded successfully",
+                questionService.listByCourse(
+                        courseId, null, search, type, status,
                         includeArchived, difficulty, page, size
                 )
         );
     }
 
-    /** L?y m?t câu h?i và tr? 404 n?u câu h?i không thu?c module trên URL. */
+    /** Lấy câu hỏi theo course và bỏ qua moduleId legacy trên URL. */
     @GetMapping("/{questionId}")
     public ApiResponse<QuestionModel.Response> get(
             @PathVariable UUID courseId,
@@ -71,11 +71,11 @@ public class CourseModuleQuestionController {
     ) {
         return ApiResponse.success(
                 "Question loaded successfully",
-                questionService.getInCourse(courseId, moduleId, questionId)
+                questionService.getInCourse(courseId, questionId)
         );
     }
 
-    /** T?o câu h?i trong module trên URL; body ch? ch?a n?i dung câu h?i. */
+    /** Tạo câu hỏi course-wide từ request của client dùng URL module cũ. */
     @PostMapping
     @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<ApiResponse<QuestionModel.Response>> create(
@@ -83,14 +83,14 @@ public class CourseModuleQuestionController {
             @PathVariable UUID moduleId,
             @Valid @RequestBody QuestionModel.ModuleCreateRequest request
     ) {
-        QuestionModel.Response question = questionService.createForCourse(courseId, moduleId, request);
+        QuestionModel.Response question = questionService.createForCourse(courseId, request.toCreateRequest());
         String location = "/api/v1/admin/courses/" + courseId
-                + "/modules/" + moduleId + "/questions/" + question.questionId();
+                + "/questions/" + question.questionId();
         return ResponseEntity.created(URI.create(location))
                 .body(ApiResponse.success("Question created successfully", question));
     }
 
-    /** C?p nh?t câu h?i nhưng không cho phép chuy?n câu h?i sang module khác. */
+    /** Cập nhật câu hỏi theo course và bỏ qua moduleId legacy. */
     @PutMapping("/{questionId}")
     @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<QuestionModel.Response> update(
@@ -101,11 +101,11 @@ public class CourseModuleQuestionController {
     ) {
         return ApiResponse.success(
                 "Question updated successfully",
-                questionService.updateInCourse(courseId, moduleId, questionId, request)
+                questionService.updateInCourse(courseId, questionId, request.toUpdateRequest())
         );
     }
 
-    /** Lưu tr? câu h?i trong đúng module hi?n t?i. */
+    /** Lưu trữ câu hỏi theo course và bỏ qua moduleId legacy. */
     @DeleteMapping("/{questionId}")
     @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<Void> archive(
@@ -113,11 +113,11 @@ public class CourseModuleQuestionController {
             @PathVariable UUID moduleId,
             @PathVariable UUID questionId
     ) {
-        questionService.archiveInCourse(courseId, moduleId, questionId);
+        questionService.archiveInCourse(courseId, questionId);
         return ApiResponse.success("Question archived successfully");
     }
 
-    /** Import toàn b? rows vào module trên URL, không đ?c module t? file ho?c request body. */
+    /** Import các dòng vào Question Bank course-wide từ client dùng URL module cũ. */
     @PostMapping("/import")
     @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(
@@ -127,12 +127,15 @@ public class CourseModuleQuestionController {
     ) {
         return ApiResponse.success(
                 "Questions imported successfully",
-                questionService.importBatchForCourse(courseId, moduleId, request)
+                questionService.importBatchForCourse(
+                        courseId,
+                        new QuestionImportDtos.ImportBatchRequest(
+                                request.rows().stream().map(QuestionImportDtos.ModuleImportRow::toImportRow).toList(),
+                                request.importSource()))
         );
     }
 
-    /** Xu?t riêng câu h?i c?a module và không l?p l?i c?t module trong file CSV. */
-    /** Xuat rieng cau hoi cua module va van ghi Module ID de file khop template import. */
+    /** Xuất course-wide theo template mới không còn cột Module ID. */
     @GetMapping(value = "/export", produces = "text/csv")
     public ResponseEntity<byte[]> export(
             @PathVariable UUID courseId,
@@ -142,13 +145,13 @@ public class CourseModuleQuestionController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Short difficulty
     ) {
-        PageResponse<QuestionModel.Response> page = questionService.listByCourseModule(
-                courseId, moduleId, search, type, status, true, difficulty, 0, 10_000
+        PageResponse<QuestionModel.Response> page = questionService.listByCourse(
+                courseId, null, search, type, status, true, difficulty, 0, 10_000
         );
         byte[] csv = ("\uFEFF" + toCsv(page.items())).getBytes(StandardCharsets.UTF_8);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
-                        .filename("module-questions.csv")
+                        .filename("course-questions.csv")
                         .build()
                         .toString())
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
@@ -158,7 +161,7 @@ public class CourseModuleQuestionController {
     /** Xuat CSV theo template import, giu them id/status de phuc vu doi chieu du lieu. */
     private String toCsv(Iterable<QuestionModel.Response> questions) {
         StringBuilder builder = new StringBuilder(
-                "id,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Module ID,Image files,Audio files\n"
+                "id,status,Question text,Question type,Option A,Option B,Option C,Option D,Option E,Option F,Correct answer,Explanation,Image files,Audio files\n"
         );
         for (QuestionModel.Response question : questions) {
             builder.append(csv(question.questionId()))
@@ -175,8 +178,6 @@ public class CourseModuleQuestionController {
                     .append(csv(correctAnswer(question)))
                     .append(',')
                     .append(csv(toPlainText(question.explanation())))
-                    .append(',')
-                    .append(csv(question.moduleId()))
                     .append(',')
                     .append(csv(mediaUrls(question, "image", question.imageUrl())))
                     .append(',')
