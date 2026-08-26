@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.course.authoring.controller;
+package com.smartlearnly.backend.course.authoring.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
