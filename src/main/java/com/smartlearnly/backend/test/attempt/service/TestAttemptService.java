@@ -58,17 +58,23 @@ public class TestAttemptService {
     public TestAttemptModel.Response startAttempt(TestAttemptModel.StartRequest request) {
         Test test = testRepository.findById(required(request.getTestId(), "testId"))
                 .orElseThrow(() -> new EntityNotFoundException("Test not found"));
-        UUID studentId = testService.requireCurrentTraineeAccess(test.getId(), request.getClassId());
-        if (!testService.isWithinSchedule(test, Instant.now())) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "This test is not open for attempts right now");
-        }
-        if (!isEmbeddedCourseQuiz(test)
-                && !testService.accessCodeMatches(test, request.getAccessCode())) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "Invalid or expired test access code");
+        UUID studentId = testService.requireCurrentActorCanStartAttempt(
+                test.getId(), request.getClassId());
+        boolean staffPreview = !testService.isCurrentActorTrainee();
+
+        // Trainee giữ schedule + access code; staff preview (SME/TRAINER) bỏ qua.
+        if (!staffPreview) {
+            if (!testService.isWithinSchedule(test, Instant.now())) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_RULE_VIOLATION,
+                        "This test is not open for attempts right now");
+            }
+            if (!isEmbeddedCourseQuiz(test)
+                    && !testService.accessCodeMatches(test, request.getAccessCode())) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_RULE_VIOLATION,
+                        "Invalid or expired test access code");
+            }
         }
 
         List<TestAttempt> existingAttempts = findAttemptsInContext(
@@ -269,6 +275,10 @@ public class TestAttemptService {
                 || attempt == null
                 || attempt.getStudentId() == null
                 || attempt.getTestId() == null) {
+            return;
+        }
+        // Staff preview attempt: không phát notification enrollment metrics.
+        if (!testService.isCurrentActorTrainee()) {
             return;
         }
         Test test = testRepository.findById(attempt.getTestId()).orElse(null);

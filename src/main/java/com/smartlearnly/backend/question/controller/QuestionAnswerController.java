@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.question.controller;
+﻿package com.smartlearnly.backend.question.controller;
 
 import com.smartlearnly.backend.question.dto.QuestionAnswerModel;
 import com.smartlearnly.backend.question.service.QuestionAnswerService;
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin/question-answers")
-@PreAuthorize("hasRole('SME')")
+@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
 @RequiredArgsConstructor
 public class QuestionAnswerController {
     private final QuestionAnswerService questionAnswerService;

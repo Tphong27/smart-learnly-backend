@@ -81,6 +81,9 @@ public class AssignmentService {
         assignment.setTestId(request.getTestId());
         assignment.setIsFlashtest(false);
         assignment.setCreatedBy(currentUserService.requireAuthenticatedUser().getId());
+        requireInstructionsPresent(
+                assignment.getDescription(),
+                assignment.getInstructionFileUrl());
 
         Assignment saved = assignmentRepository.save(assignment);
 
@@ -290,6 +293,9 @@ public class AssignmentService {
             assignment.setIsArchived(request.getIsArchived());
         if (request.getTestId() != null)
             assignment.setTestId(request.getTestId());
+        requireInstructionsPresent(
+                assignment.getDescription(),
+                assignment.getInstructionFileUrl());
         Assignment updated = assignmentRepository.save(assignment);
 
         emitAssignmentNotificationToStudents(
@@ -327,6 +333,36 @@ public class AssignmentService {
                     ErrorCode.BUSINESS_RULE_VIOLATION,
                     "Cannot update this assignment while a trainee is working on it");
         }
+    }
+
+    /**
+     * Bắt buộc có instructions text (sau khi strip HTML) hoặc file đính kèm.
+     * Cả hai trống → 400 Invalid request.
+     */
+    private void requireInstructionsPresent(String description, String instructionFileUrl) {
+        boolean hasText = !isBlankHtml(description);
+        boolean hasFile = instructionFileUrl != null && !instructionFileUrl.isBlank();
+        if (!hasText && !hasFile) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Instructions text or file is required");
+        }
+    }
+
+    /** HTML rỗng / chỉ thẻ trống / whitespace được coi là blank. */
+    private boolean isBlankHtml(String html) {
+        if (html == null || html.isBlank()) {
+            return true;
+        }
+        String withoutTags = html
+                .replaceAll("(?is)<script[^>]*>.*?</script>", " ")
+                .replaceAll("(?is)<style[^>]*>.*?</style>", " ")
+                .replaceAll("(?is)<[^>]+>", " ")
+                .replace("&nbsp;", " ")
+                .replace(' ', ' ')
+                .replaceAll("\\s+", " ")
+                .trim();
+        return withoutTags.isEmpty();
     }
 
     private void emitAssignmentNotificationToStudents(

@@ -228,6 +228,33 @@ public class TestService {
         return actor.getId();
     }
 
+    /**
+     * Xác thực trainee hoặc staff (SME/TRAINER) được bắt đầu attempt.
+     * Staff preview dùng chính actor làm studentId và không cần enrollment.
+     */
+    public UUID requireCurrentActorCanStartAttempt(UUID testId, UUID classId) {
+        UserAccount actor = currentUserService.requireAuthenticatedUser();
+        Test test = testRepository.findById(testId)
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+
+        if (isTrainee(actor)) {
+            requireTestAccess(test, actor, classId);
+            return actor.getId();
+        }
+
+        if (!canStaffPreviewTest(test, actor)) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "You cannot start a course quiz attempt for this test");
+        }
+        return actor.getId();
+    }
+
+    /** True khi caller hiện tại là học viên (không phải staff preview). */
+    public boolean isCurrentActorTrainee() {
+        return isTrainee(currentUserService.requireAuthenticatedUser());
+    }
+
     /** Xác thực caller được xem hoặc thao tác attempt của học viên tương ứng. */
     public void requireAttemptAccess(UUID testId, UUID studentId) {
         requireAttemptAccess(testId, studentId, null);
@@ -246,6 +273,11 @@ public class TestService {
                         "You cannot access another trainee's attempt");
             }
             requireTestAccess(test, actor, classId);
+            return;
+        }
+
+        // Staff preview: actor sở hữu attempt của chính mình.
+        if (actor.getId().equals(studentId) && canStaffPreviewTest(test, actor)) {
             return;
         }
 
@@ -447,9 +479,7 @@ public class TestService {
             if (hasAccess) {
                 return;
             }
-        } else if (isPrivilegedStaff(actor)
-                || (canManageTests(actor)
-                && testRepository.existsManagedByStaff(test.getId(), actor.getId()))) {
+        } else if (canStaffPreviewTest(test, actor)) {
             return;
         }
 
@@ -472,6 +502,32 @@ public class TestService {
         throw new BusinessException(
                 ErrorCode.FORBIDDEN,
                 "You cannot manage tests outside your assigned classes");
+    }
+
+    /**
+     * Staff được xem/preview quiz khi privileged, quản lý đề, hoặc được gán course của đề.
+     * Dùng cho admin-preview curriculum quiz (createdBy SME, trainer vẫn xem nếu assigned).
+     */
+    private boolean canStaffPreviewTest(Test test, UserAccount actor) {
+        if (test == null || actor == null || !canManageTests(actor)) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(test.getIsFlashtest())) {
+            return false;
+        }
+        if (isPrivilegedStaff(actor)
+                || testRepository.existsManagedByStaff(test.getId(), actor.getId())) {
+            return true;
+        }
+        if (test.getCourseId() == null) {
+            return false;
+        }
+        try {
+            courseAccessService.requireReadableCourse(test.getCourseId());
+            return true;
+        } catch (BusinessException | EntityNotFoundException ignored) {
+            return false;
+        }
     }
 
     /** Kiểm tra course và quyền quản lý; đề cấp lớp còn phải thuộc đúng lớp được phân công. */

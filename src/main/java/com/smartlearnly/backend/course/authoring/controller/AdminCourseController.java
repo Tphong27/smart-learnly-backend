@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.course.authoring.controller;
+﻿package com.smartlearnly.backend.course.authoring.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.api.PageResponse;
@@ -66,7 +66,7 @@ public class AdminCourseController {
 
     // Cập nhật riêng các trường metadata được gửi trong yêu cầu PATCH.
     @PatchMapping("/{courseId}")
-    @PreAuthorize("hasRole('TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'TRAINER')")
     public ApiResponse<CourseResponse> update(
             @PathVariable UUID courseId,
             @Valid @RequestBody UpdateCourseRequest request

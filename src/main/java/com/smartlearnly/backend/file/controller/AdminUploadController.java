@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.file.controller;
+﻿package com.smartlearnly.backend.file.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.file.dto.CourseThumbnailUploadResponse;
@@ -26,6 +26,7 @@ public class AdminUploadController {
 
     /** Tải thumbnail course cho các role authoring, không mở mutation này cho TMO. */
     @PostMapping(value = "/course-thumbnails", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('SME', 'TRAINER', 'TMO')")
     public ApiResponse<CourseThumbnailUploadResponse> uploadCourseThumbnail(
             @RequestPart("file") MultipartFile file
     ) {

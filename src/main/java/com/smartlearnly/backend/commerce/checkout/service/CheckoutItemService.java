@@ -44,7 +44,9 @@ public class CheckoutItemService {
         }
 
         return switch (itemType) {
-            case COURSE -> resolveCourse(studentId, course, classId);
+            case COURSE -> throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Course self-study checkout is no longer available. Please register via an opening class.");
             case CLASS -> resolveClass(studentId, course, classId);
         };
     }

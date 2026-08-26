@@ -22,9 +22,9 @@ public class StudentTestAnswerController {
 
     private final StudentTestAnswerService service;
 
-    /** Lưu lựa chọn đáp án hiện tại của trainee trong course quiz. */
+    /** Lưu lựa chọn đáp án hiện tại của trainee/staff preview trong course quiz. */
     @PostMapping("/save")
-    @PreAuthorize("hasRole('TRAINEE')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'SME', 'TRAINER')")
     public ResponseEntity<StudentTestAnswerModel.Response> saveStudentAnswer(
             @Valid @RequestBody StudentTestAnswerModel.SaveRequest request) {
         return ResponseEntity.ok(service.saveStudentAnswer(request));

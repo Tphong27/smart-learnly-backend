@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.question.controller;
+﻿package com.smartlearnly.backend.question.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.question.dto.QuestionMediaAttachmentResponse;
@@ -25,7 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/admin/questions")
-@PreAuthorize("hasRole('SME')")
+@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
 public class QuestionMediaController {
     private final QuestionMediaService questionMediaService;
 

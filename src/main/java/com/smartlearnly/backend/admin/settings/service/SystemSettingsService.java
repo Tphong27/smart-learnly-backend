@@ -150,12 +150,39 @@ public class SystemSettingsService {
                 getOrDefault(SettingKeys.GOOGLE_MEET_REFRESH_TOKEN, googleMeetProperties.getRefreshToken()));
     }
 
+    /**
+     * Resolve image-import settings. Shared AI model fields (enabled/provider/apiKey/model)
+     * fall back to assignment_ai keys when question_image_import keys are blank so both
+     * features share one admin-configured model. Timeout/max file limits stay image-import-specific.
+     */
     public QuestionImageImportSettings resolveQuestionImageImportSettings() {
+        boolean enabled = hasValue(SettingKeys.QUESTION_IMAGE_IMPORT_ENABLED)
+                ? getBooleanOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_ENABLED, questionImageImportProperties.isEnabled())
+                : getBooleanOrDefault(SettingKeys.ASSIGNMENT_AI_ENABLED, assignmentAiDraftProperties.isEnabled());
+
+        String provider = hasValue(SettingKeys.QUESTION_IMAGE_IMPORT_PROVIDER)
+                ? getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_PROVIDER, questionImageImportProperties.getProvider())
+                : getOrDefault(SettingKeys.ASSIGNMENT_AI_PROVIDER, firstNonBlank(
+                        assignmentAiDraftProperties.getProvider(),
+                        questionImageImportProperties.getProvider()));
+
+        String apiKey = hasValue(SettingKeys.QUESTION_IMAGE_IMPORT_API_KEY)
+                ? getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_API_KEY, questionImageImportProperties.getApiKey())
+                : getOrDefault(SettingKeys.ASSIGNMENT_AI_API_KEY, firstNonBlank(
+                        assignmentAiDraftProperties.getApiKey(),
+                        questionImageImportProperties.getApiKey()));
+
+        String model = hasValue(SettingKeys.QUESTION_IMAGE_IMPORT_MODEL)
+                ? getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_MODEL, questionImageImportProperties.getModel())
+                : getOrDefault(SettingKeys.ASSIGNMENT_AI_MODEL, firstNonBlank(
+                        assignmentAiDraftProperties.getModel(),
+                        questionImageImportProperties.getModel()));
+
         return new QuestionImageImportSettings(
-                getBooleanOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_ENABLED, questionImageImportProperties.isEnabled()),
-                getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_PROVIDER, questionImageImportProperties.getProvider()),
-                getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_API_KEY, questionImageImportProperties.getApiKey()),
-                getOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_MODEL, questionImageImportProperties.getModel()),
+                enabled,
+                provider,
+                apiKey,
+                model,
                 getLongOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS, questionImageImportProperties.getTimeout().toSeconds()),
                 getIntOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB, Math.toIntExact(questionImageImportProperties.getMaxFileSize().toMegabytes())),
                 getIntOrDefault(SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILES, questionImageImportProperties.getMaxFiles()));
@@ -219,6 +246,16 @@ public class SystemSettingsService {
         } catch (NumberFormatException ignored) {
             return fallback;
         }
+    }
+
+    private static String firstNonBlank(String primary, String secondary) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        if (secondary != null && !secondary.isBlank()) {
+            return secondary;
+        }
+        return primary != null ? primary : secondary;
     }
 
     private synchronized void ensureCacheLoaded() {

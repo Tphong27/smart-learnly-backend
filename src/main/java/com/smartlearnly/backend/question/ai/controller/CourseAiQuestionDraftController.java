@@ -1,4 +1,4 @@
-package com.smartlearnly.backend.question.ai.controller;
+﻿package com.smartlearnly.backend.question.ai.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;
@@ -26,7 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('SME')")
+@PreAuthorize("hasAnyRole('SME', 'TRAINER')")
 @RequestMapping("/api/v1/admin/courses/{courseId}/questions/ai-drafts")
 public class CourseAiQuestionDraftController {
     private final AiQuestionDraftService aiQuestionDraftService;
