@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.smartlearnly.backend.common.api.PageResponse;
 import com.smartlearnly.backend.course.dto.CategorySummaryResponse;
 import com.smartlearnly.backend.course.catalog.dto.CourseCatalogSort;
 import com.smartlearnly.backend.course.catalog.dto.CourseDetailResponse;
@@ -94,10 +95,10 @@ class CourseQueryServiceTests {
 		when(courseRepository.findPublishedCourses(pageable))
 				.thenReturn(new PageImpl<>(List.of(projection), pageable, 1));
 
-		Page<CourseListItemResponse> result = service().getCourses(0, 20);
+		PageResponse<CourseListItemResponse> result = service().getCourses(0, 20);
 
-		assertThat(result.getTotalElements()).isEqualTo(1);
-		assertThat(result.getContent().get(0))
+		assertThat(result.totalItems()).isEqualTo(1);
+		assertThat(result.items().get(0))
 				.isEqualTo(new CourseListItemResponse(
 						courseId,
 						"Spring Boot Fundamentals",
@@ -139,7 +140,7 @@ class CourseQueryServiceTests {
 				pageable))
 				.thenReturn(Page.empty(pageable));
 
-		Page<CourseListItemResponse> result = service().getCourses(
+		PageResponse<CourseListItemResponse> result = service().getCourses(
 				" java ",
 				" programming ",
 				new BigDecimal("10000"),
@@ -150,7 +151,7 @@ class CourseQueryServiceTests {
 				0,
 				20);
 
-		assertThat(result).isEmpty();
+		assertThat(result.items()).isEmpty();
 		verify(courseRepository).findPublishedCoursesByFilters(
 				"%java%",
 				"programming",
@@ -189,10 +190,10 @@ class CourseQueryServiceTests {
 				cappedPageable))
 				.thenReturn(new PageImpl<>(List.of(projection), cappedPageable, 1));
 
-		Page<CourseListItemResponse> result = service()
+		PageResponse<CourseListItemResponse> result = service()
 				.searchCourses("  50%_off\\today  ", 1, 250);
 
-		assertThat(result.getContent()).hasSize(1);
+		assertThat(result.items()).hasSize(1);
 		verify(courseRepository).searchPublishedCourses(
 				"%50\\%\\_off\\\\today%",
 				cappedPageable);
@@ -305,10 +306,10 @@ class CourseQueryServiceTests {
 		when(courseRepository.findPublishedCoursesByCategorySlug("java", cappedPageable))
 				.thenReturn(Page.empty(cappedPageable));
 
-		Page<CourseListItemResponse> result = service()
+		PageResponse<CourseListItemResponse> result = service()
 				.getCoursesByCategory("java", 2, 250);
 
-		assertThat(result).isEmpty();
+		assertThat(result.items()).isEmpty();
 		verify(categoryRepository).existsBySlug("java");
 		verify(courseRepository).findPublishedCoursesByCategorySlug("java", cappedPageable);
 	}

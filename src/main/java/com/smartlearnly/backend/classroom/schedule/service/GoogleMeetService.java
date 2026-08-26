@@ -30,8 +30,7 @@ import org.springframework.web.client.RestClientResponseException;
 @Service
 public class GoogleMeetService {
 
-    private static final String CREATE_SPACE_SCOPE =
-            "https://www.googleapis.com/auth/meetings.space.created";
+    private static final String CREATE_SPACE_SCOPE = "https://www.googleapis.com/auth/meetings.space.created";
     private static final ObjectMapper GOOGLE_ERROR_JSON = new ObjectMapper();
 
     private final GoogleMeetProperties properties;
@@ -152,11 +151,11 @@ public class GoogleMeetService {
 
         GoogleOAuthSettings sharedSettings = settingsService.resolveGoogleSettings();
         String clientId = preferredValue(
-                properties.getClientId(),
-                sharedSettings == null ? null : sharedSettings.clientId());
+                sharedSettings == null ? null : sharedSettings.clientId(),
+                properties.getClientId());
         String clientSecret = preferredValue(
-                properties.getClientSecret(),
-                sharedSettings == null ? null : sharedSettings.clientSecret());
+                sharedSettings == null ? null : sharedSettings.clientSecret(),
+                properties.getClientSecret());
 
         boolean configured = StringUtils.hasText(clientId)
                 && StringUtils.hasText(clientSecret)
