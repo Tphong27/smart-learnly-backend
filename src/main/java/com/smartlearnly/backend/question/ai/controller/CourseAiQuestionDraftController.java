@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.question.ai.controller;
+package com.smartlearnly.backend.question.ai.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.question.ai.dto.AiQuestionDraftDtos;

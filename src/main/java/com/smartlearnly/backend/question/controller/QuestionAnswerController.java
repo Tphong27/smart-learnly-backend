@@ -1,4 +1,4 @@
-﻿package com.smartlearnly.backend.question.controller;
+package com.smartlearnly.backend.question.controller;
 
 import com.smartlearnly.backend.question.dto.QuestionAnswerModel;
 import com.smartlearnly.backend.question.service.QuestionAnswerService;
