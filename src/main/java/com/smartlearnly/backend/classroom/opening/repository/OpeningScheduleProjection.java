@@ -10,6 +10,13 @@ public interface OpeningScheduleProjection {
     String getCourseTitle();
     String getCourseSlug();
     String getCourseThumbnailUrl();
+    String getCourseShortDescription();
+    String getCourseDescription();
+    String getCourseLanguage();
+    String getCourseLevel();
+    UUID getCourseCategoryId();
+    String getCourseCategoryName();
+    String getCourseCategorySlug();
     String getClassName();
     UUID getTrainerId();
     String getTrainerName();

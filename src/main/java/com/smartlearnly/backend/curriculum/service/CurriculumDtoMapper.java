@@ -37,6 +37,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CurriculumDtoMapper {
     private final ClassCurriculumCompositionService compositionService;
+
     /** Chuyển một phiên bản giáo trình sang dữ liệu trả về cho quản trị. */
     public CurriculumVersionResponse toCurriculumVersionResponse(CurriculumVersion version) {
         return new CurriculumVersionResponse(
@@ -53,8 +54,7 @@ public class CurriculumDtoMapper {
                 version.getArchivedAt(),
                 orderedSections(version).stream().map(this::toCurriculumSectionResponse).toList(),
                 version.getCreatedAt(),
-                version.getUpdatedAt()
-        );
+                version.getUpdatedAt());
     }
 
     /** Chuyển một phần giáo trình cùng các bài học đã sắp xếp sang DTO quản trị. */
@@ -67,11 +67,13 @@ public class CurriculumDtoMapper {
                 section.getSortOrder(),
                 orderedLessons(section).stream().map(this::toCurriculumLessonResponse).toList(),
                 section.getCreatedAt(),
-                section.getUpdatedAt()
-        );
+                section.getUpdatedAt());
     }
 
-    /** Chuyển bài học trong giáo trình sang DTO quản trị, bao gồm tài nguyên đính kèm. */
+    /**
+     * Chuyển bài học trong giáo trình sang DTO quản trị, bao gồm tài nguyên đính
+     * kèm.
+     */
     public CurriculumLessonResponse toCurriculumLessonResponse(CurriculumLesson lesson) {
         return new CurriculumLessonResponse(
                 lesson.getId(),
@@ -90,8 +92,7 @@ public class CurriculumDtoMapper {
                 orderedResources(lesson).stream().map(this::toCurriculumResourceResponse).toList(),
                 lesson.getSortOrder(),
                 lesson.getCreatedAt(),
-                lesson.getUpdatedAt()
-        );
+                lesson.getUpdatedAt());
     }
 
     /** Chuyển tài nguyên của bài học sang DTO quản trị. */
@@ -105,11 +106,13 @@ public class CurriculumDtoMapper {
                 resource.getName(),
                 resource.getFileSize(),
                 resource.getContentType(),
-                resource.getSortOrder()
-        );
+                resource.getSortOrder());
     }
 
-    /** Chuyển liên kết giữa lớp học và giáo trình sang DTO để quản trị trạng thái tùy biến. */
+    /**
+     * Chuyển liên kết giữa lớp học và giáo trình sang DTO để quản trị trạng thái
+     * tùy biến.
+     */
     public ClassCurriculumBindingResponse toBindingResponse(ClassCurriculumBinding binding) {
         return new ClassCurriculumBindingResponse(
                 binding.getId(),
@@ -120,11 +123,13 @@ public class CurriculumDtoMapper {
                 binding.getPublishedVersionId(),
                 enumLower(binding.getCustomizationState()),
                 binding.getCreatedAt(),
-                binding.getUpdatedAt()
-        );
+                binding.getUpdatedAt());
     }
 
-    /** Chuyển section của giáo trình sang định dạng section cũ mà API khóa học đang công khai. */
+    /**
+     * Chuyển section của giáo trình sang định dạng section cũ mà API khóa học đang
+     * công khai.
+     */
     public SectionResponse toSectionResponse(CurriculumSection section) {
         CurriculumVersion version = section.getCurriculumVersion();
         return new SectionResponse(
@@ -134,11 +139,13 @@ public class CurriculumDtoMapper {
                 section.getTitle(),
                 section.getSortOrder(),
                 section.getCreatedAt(),
-                section.getUpdatedAt()
-        );
+                section.getUpdatedAt());
     }
 
-    /** Chuyển section của giáo trình sang định dạng module cũ để giữ nguyên JSON contract. */
+    /**
+     * Chuyển section của giáo trình sang định dạng module cũ để giữ nguyên JSON
+     * contract.
+     */
     public ModuleResponse toModuleResponse(CurriculumSection section) {
         CurriculumVersion version = section.getCurriculumVersion();
         return new ModuleResponse(
@@ -148,8 +155,7 @@ public class CurriculumDtoMapper {
                 section.getTitle(),
                 section.getSortOrder(),
                 section.getCreatedAt(),
-                section.getUpdatedAt()
-        );
+                section.getUpdatedAt());
     }
 
     /** Chuyển bài học giáo trình sang DTO bài học của API khóa học. */
@@ -171,8 +177,7 @@ public class CurriculumDtoMapper {
                 orderedResources(lesson).stream().map(this::toLessonResourceResponse).toList(),
                 lesson.getSortOrder(),
                 lesson.getCreatedAt(),
-                lesson.getUpdatedAt()
-        );
+                lesson.getUpdatedAt());
     }
 
     /** Chuyển tài nguyên giáo trình sang DTO tài nguyên của API khóa học. */
@@ -184,11 +189,12 @@ public class CurriculumDtoMapper {
                 resource.getName(),
                 resource.getFileSize(),
                 resource.getContentType(),
-                resource.getSortOrder()
-        );
+                resource.getSortOrder());
     }
 
-    /** Tạo nội dung học đầy đủ cho học viên từ giáo trình và các bài đã hoàn thành. */
+    /**
+     * Tạo nội dung học đầy đủ cho học viên từ giáo trình và các bài đã hoàn thành.
+     */
     public LearningContentResponse toLearningContentResponse(
             CurriculumVersion version,
             String courseTitle,
@@ -234,7 +240,96 @@ public class CurriculumDtoMapper {
                 true);
     }
 
-    /** Gom dữ liệu giáo trình thành nội dung học, đồng thời lọc theo chế độ xem trước khi cần. */
+    /**
+     * Tạo curriculum preview công khai:
+     * - Hiển thị metadata của toàn bộ lesson đã PUBLISHED.
+     * - Chỉ trả nội dung, URL và resources khi isPreview = true.
+     * - Lesson không được preview vẫn xuất hiện nhưng không làm lộ nội dung.
+     */
+    public LearningContentResponse toCatalogPreviewLearningContentResponse(
+            CurriculumVersion version,
+            String courseTitle,
+            String courseThumbnail,
+            CurriculumMetadataResponse metadata) {
+
+        List<LearningSectionResponse> sections = orderedSections(version).stream()
+                .map(this::toCatalogPreviewSectionResponse)
+                .filter(section -> !section.lessons().isEmpty())
+                .toList();
+
+        return new LearningContentResponse(
+                version.getCourseId(),
+                courseTitle,
+                courseThumbnail,
+                sections,
+                calculateStats(sections),
+                metadata);
+    }
+
+    /**
+     * Giữ toàn bộ lesson đã xuất bản trong section để người xem thấy cấu trúc
+     * curriculum, kể cả lesson không được phép xem nội dung.
+     */
+    private LearningSectionResponse toCatalogPreviewSectionResponse(
+            CurriculumSection section) {
+
+        List<LearningLessonResponse> lessons = orderedLessons(section).stream()
+                .filter(lesson -> lesson.getStatus() == LessonStatus.PUBLISHED)
+                .map(this::toCatalogPreviewLessonResponse)
+                .toList();
+
+        return new LearningSectionResponse(
+                section.getId(),
+                section.getTitle(),
+                section.getSortOrder(),
+                lessons);
+    }
+
+    /**
+     * Backend thực hiện redaction cho lesson bị khóa.
+     * Không được chỉ khóa bằng frontend vì response vẫn có thể bị đọc qua DevTools.
+     */
+    private LearningLessonResponse toCatalogPreviewLessonResponse(
+            CurriculumLesson lesson) {
+
+        boolean previewAllowed = Boolean.TRUE.equals(lesson.getPreview());
+
+        List<LearningResourceResponse> resources = previewAllowed
+                ? orderedResources(lesson).stream()
+                        .map(resource -> new LearningResourceResponse(
+                                resource.getUrl(),
+                                resource.getName(),
+                                resource.getContentType()))
+                        .toList()
+                : List.of();
+
+        return new LearningLessonResponse(
+                lesson.getId(),
+                lesson.getTitle(),
+                enumUpper(lesson.getType()),
+                enumLower(lesson.getStatus()),
+
+                // Nội dung nhạy cảm chỉ được trả khi lesson cho phép preview.
+                previewAllowed ? lesson.getVideoUrl() : null,
+                previewAllowed ? lesson.getContent() : null,
+                previewAllowed ? lesson.getAttachmentUrl() : null,
+
+                // Duration là metadata nên có thể hiển thị cho lesson bị khóa.
+                lesson.getDurationSeconds(),
+                previewAllowed,
+                lesson.getSortOrder(),
+                false,
+                resources,
+                lesson.getLessonIdentityId(),
+
+                // Không làm lộ test ID của lesson bị khóa.
+                previewAllowed ? lesson.getTestId() : null);
+    }
+
+    /**
+     * Gom dữ liệu giáo trình thành nội dung học, đồng thời lọc theo chế độ xem
+     * trước khi cần.
+     */
     private LearningContentResponse toLearningContentResponse(
             CurriculumVersion version,
             String courseTitle,
@@ -256,8 +351,7 @@ public class CurriculumDtoMapper {
                 courseThumbnail,
                 sections,
                 calculateStats(sections),
-                metadata
-        );
+                metadata);
     }
 
     /** Chuyển section sang dữ liệu học viên khi không ở chế độ xem trước. */
@@ -267,7 +361,10 @@ public class CurriculumDtoMapper {
         return toLearningSectionResponse(section, completedLessonIds, false);
     }
 
-    /** Chuyển section sang dữ liệu học viên, chỉ giữ bài đã xuất bản và đúng phạm vi truy cập. */
+    /**
+     * Chuyển section sang dữ liệu học viên, chỉ giữ bài đã xuất bản và đúng phạm vi
+     * truy cập.
+     */
     private LearningSectionResponse toLearningSectionResponse(
             CurriculumSection section,
             Set<UUID> completedLessonIds,
@@ -284,11 +381,12 @@ public class CurriculumDtoMapper {
                 section.getId(),
                 section.getTitle(),
                 section.getSortOrder(),
-                lessons
-        );
+                lessons);
     }
 
-    /** Chuyển bài học sang dữ liệu học viên và gắn trạng thái hoàn thành hiện tại. */
+    /**
+     * Chuyển bài học sang dữ liệu học viên và gắn trạng thái hoàn thành hiện tại.
+     */
     public LearningLessonResponse toLearningLessonResponse(CurriculumLesson lesson, boolean completed) {
         List<LearningResourceResponse> resources = orderedResources(lesson).stream()
                 .map(resource -> new LearningResourceResponse(
@@ -311,8 +409,7 @@ public class CurriculumDtoMapper {
                 completed,
                 resources,
                 lesson.getLessonIdentityId(),
-                lesson.getTestId()
-        );
+                lesson.getTestId());
     }
 
     /** Tạo metadata mô tả nguồn và phạm vi của giáo trình đang được sử dụng. */
@@ -324,8 +421,7 @@ public class CurriculumDtoMapper {
                 version.getCourseId(),
                 classId,
                 customized,
-                source
-        );
+                source);
     }
 
     /** Xác định nguồn giáo trình mà học viên đang học. */
@@ -376,7 +472,8 @@ public class CurriculumDtoMapper {
         return lesson.getResources().stream()
                 .sorted(Comparator
                         .comparing(CurriculumLessonResource::getSortOrder, Comparator.nullsLast(Integer::compareTo))
-                        .thenComparing(CurriculumLessonResource::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(CurriculumLessonResource::getCreatedAt,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(CurriculumLessonResource::getId, Comparator.nullsLast(UUID::compareTo)))
                 .toList();
     }

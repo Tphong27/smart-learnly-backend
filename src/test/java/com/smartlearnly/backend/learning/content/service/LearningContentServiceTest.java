@@ -243,7 +243,7 @@ class LearningContentServiceTest {
                                 metadata))
                                 .thenReturn(mappedResponse);
 
-                LearningContentResponse response = service.getPreviewContent(courseId);
+                LearningContentResponse response = service.getPreviewContent(courseId, null);
 
                 assertThat(response).isSameAs(mappedResponse);
                 verify(curriculumResolutionService).resolvePublicMaster(courseId);

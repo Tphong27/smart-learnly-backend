@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -18,9 +19,19 @@ public class CoursePreviewController {
     private final LearningContentService learningContentService;
 
     // Trả nội dung mẫu công khai để khách xem khóa học trước khi đăng ký.
+    // @GetMapping("/{courseId}/preview")
+    // public ApiResponse<LearningContentResponse> getPreviewContent(@PathVariable UUID courseId) {
+    //     return ApiResponse.success("Preview content loaded successfully",
+    //             learningContentService.getPreviewContent(courseId));
+    // }
+
     @GetMapping("/{courseId}/preview")
-    public ApiResponse<LearningContentResponse> getPreviewContent(@PathVariable UUID courseId) {
-        return ApiResponse.success("Preview content loaded successfully",
-                learningContentService.getPreviewContent(courseId));
+    public ApiResponse<LearningContentResponse> getPreviewContent(
+            @PathVariable UUID courseId,
+            @RequestParam(required = false) UUID classId) {
+
+        return ApiResponse.success(
+                "Preview content loaded successfully",
+                learningContentService.getPreviewContent(courseId, classId));
     }
 }
