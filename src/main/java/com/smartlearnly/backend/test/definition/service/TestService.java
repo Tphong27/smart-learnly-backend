@@ -229,7 +229,7 @@ public class TestService {
     }
 
     /**
-     * Xác thực trainee hoặc staff (SME/TRAINER) được bắt đầu attempt.
+     * Xác thực trainee hoặc staff (TMO/SME/TRAINER) được bắt đầu attempt.
      * Staff preview dùng chính actor làm studentId và không cần enrollment.
      */
     public UUID requireCurrentActorCanStartAttempt(UUID testId, UUID classId) {

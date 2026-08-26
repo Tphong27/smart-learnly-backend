@@ -62,7 +62,7 @@ public class TestAttemptService {
                 test.getId(), request.getClassId());
         boolean staffPreview = !testService.isCurrentActorTrainee();
 
-        // Trainee giữ schedule + access code; staff preview (SME/TRAINER) bỏ qua.
+        // Trainee giữ schedule + access code; staff preview (TMO/SME/TRAINER) bỏ qua.
         if (!staffPreview) {
             if (!testService.isWithinSchedule(test, Instant.now())) {
                 throw new BusinessException(
