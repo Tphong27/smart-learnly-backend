@@ -45,6 +45,7 @@ import com.smartlearnly.backend.lessonprogress.entity.LessonProgress;
 import com.smartlearnly.backend.lessonprogress.repository.LessonProgressRepository;
 import com.smartlearnly.backend.lessonprogress.trainee.service.TraineeProgressService;
 import com.smartlearnly.backend.user.entity.UserAccount;
+import com.smartlearnly.backend.test.definition.service.TestQuestionService;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -88,6 +89,9 @@ class LearningContentServiceTest {
         @Mock
         private TraineeProgressService traineeProgressService;
 
+        @Mock
+        private TestQuestionService testQuestionService;
+
         private LearningContentService service;
 
         @BeforeEach
@@ -106,7 +110,8 @@ class LearningContentServiceTest {
                                 flashcardSetRepository,
                                 flashcardCardRepository,
                                 flashcardProgressRepository,
-                                traineeProgressService);
+                                traineeProgressService,
+                                testQuestionService);
         }
 
         @Test
