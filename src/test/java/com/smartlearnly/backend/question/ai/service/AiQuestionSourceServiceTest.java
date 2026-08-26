@@ -200,7 +200,7 @@ class AiQuestionSourceServiceTest {
     }
 
     @Test
-    void persistAndBuildSourceInputs_allowsNullCollectionsAndReturnsNoSourceInputs() {
+    void persistAndBuildSourceInputs_rejectsRequestWithoutSourceMaterial() {
         AiQuestionGenerationBatch batch = batch(courseId);
         AiQuestionDraftDtos.CreateBatchRequest request = new AiQuestionDraftDtos.CreateBatchRequest(
                 null,
@@ -212,10 +212,11 @@ class AiQuestionSourceServiceTest {
                 null,
                 "idem");
 
-        List<QuestionGenerationProvider.SourceInput> inputs =
-                service.persistAndBuildSourceInputs(courseId, batch, request, null);
-
-        assertThat(inputs).isEmpty();
+        assertThatThrownBy(() -> service.persistAndBuildSourceInputs(courseId, batch, request, null))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.AI_SOURCE_INVALID);
+                    assertThat(exception.getMessage()).contains("At least one source material is required");
+                });
         assertThat(savedSources).isEmpty();
         assertThat(savedChunks).isEmpty();
     }
