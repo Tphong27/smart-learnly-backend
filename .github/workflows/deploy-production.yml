@@ -65,14 +65,21 @@ jobs:
 
       - name: Verify backend
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://api.smartlearnly.online/)
+          STATUS="000"
 
-          echo "Backend HTTP status: $STATUS"
+          for attempt in {1..18}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              https://api.smartlearnly.online/)
 
-          if [ "$STATUS" = "000" ] || [ "$STATUS" = "502" ]; then
-            echo "Backend deployment verification failed."
-            exit 1
-          fi
+            echo "Backend HTTP status attempt $attempt: $STATUS"
 
-          echo "Backend deployment verification passed."
+            if [ "$STATUS" != "000" ] && [ "$STATUS" != "502" ]; then
+              echo "Backend deployment verification passed."
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "Backend deployment verification failed."
+          exit 1
