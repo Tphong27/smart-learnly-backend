@@ -54,6 +54,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class AiQuestionDraftService {
     private static final String PROMPT_TEMPLATE_VERSION = "question-ai-generation-v1";
     private static final String IMPORT_SOURCE_AI_GENERATION = "ai_generation";
+    private static final String QUESTION_TYPE_TRUE_FALSE = "true_false";
     private static final int MAX_INSTRUCTION_LENGTH = 2000;
     private static final int MAX_NEAR_DUPLICATE_CANDIDATES = 3;
     private static final int NEAR_DUPLICATE_PREFILTER_LIMIT = MAX_NEAR_DUPLICATE_CANDIDATES * 2;
@@ -197,7 +198,7 @@ public class AiQuestionDraftService {
         draft.setQuestionText(normalizeRequired(request.questionText(), "Question text is required"));
         draft.setExplanation(normalizeNullable(request.explanation()));
         draft.setModuleId(null);
-        draft.setAnswersJson(toJson(normalizeAnswers(request.answers())));
+        draft.setAnswersJson(toJson(normalizeAnswers(draft.getQuestionType(), batch.getLanguage(), request.answers())));
 
         boolean requiresEvidence = evidenceRequired(batch.getId());
         List<AiQuestionGenerationEvidence> evidences = evidenceRepository.findByDraftId(draft.getId());
@@ -383,10 +384,11 @@ public class AiQuestionDraftService {
         draft.setStatus(AiQuestionGenerationDraft.STATUS_GENERATED_DRAFT);
         draft.setQuestionText(
                 normalizeRequired(generatedQuestion.questionText(), "Generated question text is required"));
-        draft.setQuestionType(normalizeQuestionType(generatedQuestion.questionType()));
+        String questionType = normalizeQuestionType(generatedQuestion.questionType());
+        draft.setQuestionType(questionType);
         draft.setExplanation(normalizeNullable(generatedQuestion.explanation()));
         draft.setModuleId(null);
-        draft.setAnswersJson(toJson(normalizeAnswers(generatedQuestion.answers())));
+        draft.setAnswersJson(toJson(normalizeAnswers(questionType, batch.getLanguage(), generatedQuestion.answers())));
         List<AiQuestionGenerationEvidence> evidences = new ArrayList<>();
         applyDraftValidation(batch.getCourseId(), draft, evidences, evidenceRequired);
         draft = draftRepository.save(draft);
@@ -517,15 +519,13 @@ public class AiQuestionDraftService {
         }
         List<AiQuestionDraftDtos.AnswerPayload> answers = parseAnswers(draft.getAnswersJson());
         long correctCount = answers.stream().filter(AiQuestionDraftDtos.AnswerPayload::correctValue).count();
-        if ("true_false".equals(draft.getQuestionType())) {
-            boolean hasTrue = answers.stream().anyMatch(answer -> "true".equalsIgnoreCase(answer.answerText()));
-            boolean hasFalse = answers.stream().anyMatch(answer -> "false".equalsIgnoreCase(answer.answerText()));
+        if (QUESTION_TYPE_TRUE_FALSE.equals(draft.getQuestionType())) {
             if (correctCount != 1) {
                 warnings.add("Exactly one correct answer is required");
                 return false;
             }
-            if (answers.size() != 2 || !hasTrue || !hasFalse) {
-                warnings.add("True/false questions must have exactly True and False answers");
+            if (answers.size() != 2 || !hasValidTrueFalsePair(answers)) {
+                warnings.add("True/false questions must have exactly True/False or Dung/Sai answers");
                 return false;
             }
         } else if ("single_choice".equals(draft.getQuestionType())) {
@@ -677,6 +677,83 @@ public class AiQuestionDraftService {
                     answer.orderIndex() == null ? index + 1 : answer.orderIndex()));
         }
         return normalized;
+    }
+
+    private List<AiQuestionDraftDtos.AnswerPayload> normalizeAnswers(
+            String questionType,
+            String language,
+            List<AiQuestionDraftDtos.AnswerPayload> answers) {
+        List<AiQuestionDraftDtos.AnswerPayload> normalized = normalizeAnswers(answers);
+        if (!QUESTION_TYPE_TRUE_FALSE.equals(questionType)) {
+            return normalized;
+        }
+        return normalizeTrueFalseAnswers(normalized, language);
+    }
+
+    /** Chon mot cap True/False hop le khi AI tra ve ca ban tieng Anh va tieng Viet. */
+    private List<AiQuestionDraftDtos.AnswerPayload> normalizeTrueFalseAnswers(
+            List<AiQuestionDraftDtos.AnswerPayload> answers,
+            String language) {
+        List<TrueFalsePair> pairs = preferredTrueFalsePairs(language);
+        for (TrueFalsePair pair : pairs) {
+            List<AiQuestionDraftDtos.AnswerPayload> selected = selectTrueFalsePair(answers, pair);
+            if (hasExactlyOneCorrectAnswer(selected)) {
+                return selected;
+            }
+        }
+        for (TrueFalsePair pair : pairs) {
+            List<AiQuestionDraftDtos.AnswerPayload> selected = selectTrueFalsePair(answers, pair);
+            if (!selected.isEmpty()) {
+                return selected;
+            }
+        }
+        return answers;
+    }
+
+    private List<TrueFalsePair> preferredTrueFalsePairs(String language) {
+        TrueFalsePair english = new TrueFalsePair("True", "False");
+        TrueFalsePair vietnamese = new TrueFalsePair("Đúng", "Sai");
+        return "vi".equalsIgnoreCase(language) ? List.of(vietnamese, english) : List.of(english, vietnamese);
+    }
+
+    private List<AiQuestionDraftDtos.AnswerPayload> selectTrueFalsePair(
+            List<AiQuestionDraftDtos.AnswerPayload> answers,
+            TrueFalsePair pair) {
+        AiQuestionDraftDtos.AnswerPayload trueAnswer = findAnswerByText(answers, pair.trueLabel());
+        AiQuestionDraftDtos.AnswerPayload falseAnswer = findAnswerByText(answers, pair.falseLabel());
+        if (trueAnswer == null || falseAnswer == null) {
+            return List.of();
+        }
+        return List.of(
+                new AiQuestionDraftDtos.AnswerPayload(pair.trueLabel(), trueAnswer.correctValue(), 1),
+                new AiQuestionDraftDtos.AnswerPayload(pair.falseLabel(), falseAnswer.correctValue(), 2));
+    }
+
+    private AiQuestionDraftDtos.AnswerPayload findAnswerByText(
+            List<AiQuestionDraftDtos.AnswerPayload> answers,
+            String expectedText) {
+        return answers.stream()
+                .filter(answer -> expectedText.equalsIgnoreCase(answer.answerText().trim()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean hasValidTrueFalsePair(List<AiQuestionDraftDtos.AnswerPayload> answers) {
+        return selectTrueFalsePair(answers, new TrueFalsePair("True", "False")).size() == 2
+                || selectTrueFalsePair(answers, new TrueFalsePair("Đúng", "Sai")).size() == 2;
+    }
+
+    private boolean hasExactlyOneCorrectAnswer(List<AiQuestionDraftDtos.AnswerPayload> answers) {
+        return answers.size() == 2 && answers.stream().filter(AiQuestionDraftDtos.AnswerPayload::correctValue).count() == 1;
+    }
+
+    private boolean correctAnswerChanged(List<AiQuestionDraftDtos.AnswerPayload> previous,
+            List<AiQuestionDraftDtos.AnswerPayload> current) {
+        String previousCorrect = previous.stream().filter(AiQuestionDraftDtos.AnswerPayload::correctValue)
+                .map(AiQuestionDraftDtos.AnswerPayload::answerText).findFirst().orElse("");
+        String currentCorrect = current.stream().filter(AiQuestionDraftDtos.AnswerPayload::correctValue)
+                .map(AiQuestionDraftDtos.AnswerPayload::answerText).findFirst().orElse("");
+        return !normalizeForCompare(previousCorrect).equals(normalizeForCompare(currentCorrect));
     }
 
     private AiQuestionGenerationBatch findBatch(UUID courseId, UUID batchId) {
@@ -882,4 +959,6 @@ public class AiQuestionDraftService {
         };
     }
 
+    private record TrueFalsePair(String trueLabel, String falseLabel) {
+    }
 }
