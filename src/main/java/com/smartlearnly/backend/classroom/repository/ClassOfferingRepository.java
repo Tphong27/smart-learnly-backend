@@ -130,6 +130,82 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             @Param("maxPrice") BigDecimal maxPrice,
             Pageable pageable);
 
+    /**
+     * Lớp sắp khai giảng xếp theo số đăng ký active giảm dần (popular / most-registered).
+     * Cùng điều kiện public opening: published course, upcoming, còn chỗ, có giá.
+     */
+    @Query(value = """
+            SELECT
+                cls.id AS "classId",
+                cls.course_id AS "courseId",
+                course.title AS "courseTitle",
+                course.slug AS "courseSlug",
+                COALESCE(
+                    course.thumbnail_url,
+                    course.avatar_url
+                ) AS "courseThumbnailUrl",
+                cls.class_name AS "className",
+                cls.trainer_id AS "trainerId",
+                trainer.full_name AS "trainerName",
+                cls.start_date AS "startDate",
+                cls.end_date AS "endDate",
+                cls.schedule_description AS "scheduleDescription",
+                cls.price AS "price",
+                cls.max_students AS "maxStudents",
+                COUNT(enrollment.id) FILTER (
+                    WHERE enrollment.status =
+                        'active'::public.enroll_status
+                ) AS "activeEnrollmentCount",
+                cls.status::text AS "status"
+            FROM public.classes cls
+            JOIN public.courses course
+                ON course.id = cls.course_id
+            LEFT JOIN public.users trainer
+                ON trainer.id = cls.trainer_id
+            LEFT JOIN public.class_enrollments enrollment
+                ON enrollment.class_id = cls.id
+            WHERE cls.deleted_at IS NULL
+              AND course.deleted_at IS NULL
+              AND course.status = 'published'::public.course_status
+              AND cls.status = 'upcoming'::public.class_status
+              AND cls.start_date >= CURRENT_DATE
+              AND cls.price IS NOT NULL
+            GROUP BY
+                cls.id,
+                course.id,
+                trainer.id
+            HAVING COUNT(enrollment.id) FILTER (
+                WHERE enrollment.status =
+                    'active'::public.enroll_status
+            ) < cls.max_students
+            ORDER BY
+                COUNT(enrollment.id) FILTER (
+                    WHERE enrollment.status =
+                        'active'::public.enroll_status
+                ) DESC,
+                cls.start_date ASC NULLS LAST,
+                cls.created_at DESC
+            """, countQuery = """
+                        SELECT COUNT(*)
+                        FROM public.classes cls
+                        JOIN public.courses course
+                            ON course.id = cls.course_id
+                        WHERE cls.deleted_at IS NULL
+                          AND course.deleted_at IS NULL
+                          AND course.status = 'published'::public.course_status
+                          AND cls.status = 'upcoming'::public.class_status
+                          AND cls.start_date >= CURRENT_DATE
+                          AND cls.price IS NOT NULL
+                          AND (
+                                SELECT COUNT(*)
+                                FROM public.class_enrollments counted_enrollment
+                                WHERE counted_enrollment.class_id = cls.id
+                                    AND counted_enrollment.status =
+                                    'active'::public.enroll_status
+                               ) < cls.max_students
+            """, nativeQuery = true)
+    Page<OpeningScheduleProjection> findMostRegisteredOpenings(Pageable pageable);
+
     /** Tìm chi tiết một lớp đang mở đăng ký để hiển thị cho người học. */
     @Query(value = """
             SELECT

@@ -67,6 +67,41 @@ public class OpeningScheduleService {
         }
 
         /**
+         * Lớp đăng ký nhiều nhất (hero homepage) — null nếu chưa có opening hợp lệ.
+         */
+        public OpeningScheduleItemResponse getMostRegistered() {
+                Page<OpeningScheduleProjection> page = classOfferingRepository
+                                .findMostRegisteredOpenings(PageRequest.of(0, 1));
+
+                if (page.isEmpty()) {
+                        return null;
+                }
+
+                return toResponse(page.getContent().get(0));
+        }
+
+        /**
+         * Danh sách lớp phổ biến theo active enrollment (Popular Classes).
+         */
+        public PageResponse<OpeningScheduleItemResponse> listMostRegistered(int page, int size) {
+                validatePageRequest(page, size);
+
+                Page<OpeningScheduleProjection> schedules = classOfferingRepository
+                                .findMostRegisteredOpenings(
+                                                PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE)));
+
+                return new PageResponse<>(
+                                schedules.getContent()
+                                                .stream()
+                                                .map(this::toResponse)
+                                                .toList(),
+                                schedules.getNumber(),
+                                schedules.getSize(),
+                                schedules.getTotalElements(),
+                                schedules.getTotalPages());
+        }
+
+        /**
          * Lấy chi tiết một class trong Opening Schedule.
          */
         // Lấy lớp mở đăng ký theo mã hoặc báo lỗi không tìm thấy.

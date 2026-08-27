@@ -2,6 +2,8 @@ package com.smartlearnly.backend.videoai.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.videoai.config.VideoAiGenerationProperties;
@@ -23,24 +25,23 @@ import org.springframework.web.client.RestClientResponseException;
 @Service
 public class GeminiVideoSummaryService {
 
+    private static final String PROVIDER_NAME = "gemini";
+
     private final VideoAiGenerationProperties properties;
+    private final SystemSettingsService settingsService;
     private final ObjectMapper objectMapper;
-    private final RestClient restClient;
 
     /**
-     * Khởi tạo service bằng cấu hình Gemini của ứng dụng.
+     * Khởi tạo service bằng cấu hình Gemini của ứng dụng + system settings runtime.
      */
     @Autowired
-    public GeminiVideoSummaryService(VideoAiGenerationProperties properties) {
+    public GeminiVideoSummaryService(
+            VideoAiGenerationProperties properties,
+            SystemSettingsService settingsService) {
         this(
-                // Giữ lại cấu hình được đọc từ application.yml hoặc biến môi trường.
                 properties,
-
-                // Tạo ObjectMapper và đăng ký các module Jackson cần thiết.
-                new ObjectMapper().findAndRegisterModules(),
-
-                // Tạo HTTP client với base URL và timeout từ properties.
-                createRestClient(properties));
+                settingsService,
+                new ObjectMapper().findAndRegisterModules());
     }
 
     /**
@@ -48,11 +49,11 @@ public class GeminiVideoSummaryService {
      */
     GeminiVideoSummaryService(
             VideoAiGenerationProperties properties,
-            ObjectMapper objectMapper,
-            RestClient restClient) {
+            SystemSettingsService settingsService,
+            ObjectMapper objectMapper) {
         this.properties = properties;
+        this.settingsService = settingsService;
         this.objectMapper = objectMapper;
-        this.restClient = restClient;
     }
 
     /**
@@ -119,13 +120,14 @@ public class GeminiVideoSummaryService {
      * Gửi các phần nội dung đến Gemini và chuẩn hóa response thành summary.
      */
     private GeneratedSummary generateSummary(List<Map<String, Object>> parts) {
-        String model = modelName(properties.getModel());
+        AssignmentAiSettings settings = resolveSettings();
+        String model = modelName(settings.model());
 
         try {
-            String responseBody = restClient.post()
+            String responseBody = restClient(settings).post()
                     .uri("/models/" + model + ":generateContent")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("x-goog-api-key", properties.getApiKey())
+                    .header("x-goog-api-key", settings.apiKey().trim())
                     .body(requestBody(parts))
                     .retrieve()
                     .body(String.class);
@@ -275,37 +277,39 @@ public class GeminiVideoSummaryService {
      */
     private List<String> normalizeItems(List<String> values) {
         if (values == null) {
-            // DEBUG: Không có danh sách => trả danh sách rỗng, không trả null.
             return List.of();
         }
         return values.stream()
-                // " Ý 1 " => "Ý 1"; chuỗi blank => null.
                 .map(this::normalize)
-
-                // Loại phần tử null hoặc blank.
                 .filter(value -> value != null)
-
-                // "• Ý 2", "* Ý 2" hoặc "- Ý 2" => "Ý 2".
                 .map(value -> value.replaceFirst("^[•*\\-]\\s*", ""))
-
-                // Trim lại sau khi loại ký tự bullet.
                 .map(this::normalize)
                 .filter(value -> value != null)
-
-                // Output là List<String> mới đã được làm sạch.
                 .toList();
     }
 
+    private AssignmentAiSettings resolveSettings() {
+        return settingsService.resolveAssignmentAiSettings();
+    }
+
     /**
-     * Bảo đảm Gemini đã được bật và có đủ key cùng model.
+     * Bảo đảm Gemini đã được bật và có đủ key cùng model từ system settings.
      */
     private void ensureAvailable() {
-        if (!properties.isEnabled()
-                || normalize(properties.getApiKey()) == null
-                || modelName(properties.getModel()) == null) {
+        AssignmentAiSettings settings = resolveSettings();
+        if (!settings.enabled()
+                || !PROVIDER_NAME.equalsIgnoreCase(settings.provider())
+                || normalize(settings.apiKey()) == null
+                || modelName(settings.model()) == null) {
             throw new BusinessException(
                     ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
                     "AI summary generation is not configured");
+        }
+        String apiKey = settings.apiKey().trim();
+        if (apiKey.startsWith("<") || apiKey.endsWith(">")) {
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "AI summary API key must not include placeholder angle brackets");
         }
     }
 
@@ -316,7 +320,6 @@ public class GeminiVideoSummaryService {
 
         String model = normalize(value);
         if (model == null) {
-            // Output null báo rằng model chưa được cấu hình.
             return null;
         }
 
@@ -329,7 +332,6 @@ public class GeminiVideoSummaryService {
      * Chọn ngôn ngữ viết summary.
      */
     private String normalizeLanguage(String value) {
-        // " vi " => "vi"; null hoặc blank => null.
         String normalized = normalize(value);
 
         return normalized == null ? "the detected language" : normalized;
@@ -340,37 +342,22 @@ public class GeminiVideoSummaryService {
      */
     private String normalize(String value) {
         if (value == null) {
-            // Input null => output null.
             return null;
         }
 
-        // Ví dụ " React " => normalized="React".
         String normalized = value.trim();
 
-        // Input " " => output null; input "React" => output "React".
         return normalized.isEmpty() ? null : normalized;
     }
 
     /**
-     * Tạo HTTP client Gemini với timeout được giới hạn bởi cấu hình.
+     * Tạo HTTP client Gemini với timeout lấy từ system settings runtime.
      */
-    private static RestClient createRestClient(VideoAiGenerationProperties properties) {
-        /*
-         * DEBUG:
-         * properties.timeout = PT90S
-         * => connect timeout = 90 giây
-         * => read timeout = 90 giây
-         */
+    private RestClient restClient(AssignmentAiSettings settings) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(properties.getTimeout());
-        factory.setReadTimeout(properties.getTimeout());
+        factory.setConnectTimeout(settings.timeout());
+        factory.setReadTimeout(settings.timeout());
 
-        /*
-         * properties.apiBaseUrl =
-         * "https://generativelanguage.googleapis.com/v1beta"
-         *
-         * Output: RestClient đã có base URL và timeout, chưa gửi request.
-         */
         return RestClient.builder()
                 .baseUrl(properties.getApiBaseUrl())
                 .requestFactory(factory)
