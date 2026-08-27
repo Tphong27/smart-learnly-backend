@@ -52,6 +52,25 @@ public class OpeningScheduleController {
                                                 size));
         }
 
+        /**
+         * Lớp đăng ký active nhiều nhất (homepage hero). Đăng ký trước /{classId}.
+         */
+        @GetMapping("/most-registered")
+        public ApiResponse<OpeningScheduleItemResponse> mostRegistered() {
+                return ApiResponse.success(openingScheduleService.getMostRegistered());
+        }
+
+        /**
+         * Danh sách lớp phổ biến theo enrollment (Popular Classes trên homepage).
+         */
+        @GetMapping(params = "sort=POPULAR")
+        public ApiResponse<PageResponse<OpeningScheduleItemResponse>> listPopular(
+                        @RequestParam(defaultValue = "0") @Min(0) int page,
+                        @RequestParam(defaultValue = "12") @Min(1) @Max(100) int size) {
+                return ApiResponse.success(
+                                openingScheduleService.listMostRegistered(page, size));
+        }
+
         @GetMapping("/{classId}")
         // Trả chi tiết lớp và thông tin cơ bản của course gắn với lớp.
         public ApiResponse<OpeningScheduleDetailResponse> getDetail(

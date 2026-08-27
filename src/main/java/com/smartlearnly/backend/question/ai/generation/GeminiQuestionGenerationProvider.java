@@ -2,6 +2,8 @@ package com.smartlearnly.backend.question.ai.generation;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.io.IOException;
@@ -25,26 +27,33 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
     private static final String PROMPT_VERSION = "question-ai-generation-v1";
 
     private final QuestionAiGenerationProperties properties;
+    private final SystemSettingsService settingsService;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestClient restClient;
 
     @Autowired
-    public GeminiQuestionGenerationProvider(QuestionAiGenerationProperties properties) {
-        this(properties, createRestClient(properties));
+    public GeminiQuestionGenerationProvider(
+            QuestionAiGenerationProperties properties,
+            SystemSettingsService settingsService) {
+        this.properties = properties;
+        this.settingsService = settingsService;
     }
 
+    /**
+     * Package-private constructor kept for unit tests that only need properties + settings.
+     */
     GeminiQuestionGenerationProvider(
             QuestionAiGenerationProperties properties,
-            RestClient restClient) {
-        this.properties = properties;
-        this.restClient = restClient;
+            SystemSettingsService settingsService,
+            ObjectMapper ignoredObjectMapper) {
+        this(properties, settingsService);
     }
 
     @Override
     public GenerationResult generate(GenerationRequest request) {
         ensureAvailable();
+        AssignmentAiSettings settings = resolveSettings();
         try {
-            String response = sendWithFallback(request);
+            String response = sendWithFallback(request, settings);
             return parseResponse(response);
         } catch (BusinessException exception) {
             throw exception;
@@ -66,32 +75,45 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
 
     @Override
     public String modelName() {
-        return properties.getModel();
+        return normalizeModel(resolveSettings().model());
     }
 
     public String promptVersion() {
         return PROMPT_VERSION;
     }
 
+    private AssignmentAiSettings resolveSettings() {
+        return settingsService.resolveAssignmentAiSettings();
+    }
+
     private void ensureAvailable() {
-        if (!properties.isEnabled()) {
+        AssignmentAiSettings settings = resolveSettings();
+        if (!settings.enabled()) {
             throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI question generation is disabled");
         }
-        if (!PROVIDER_NAME.equalsIgnoreCase(properties.getProvider())) {
+        if (!PROVIDER_NAME.equalsIgnoreCase(settings.provider())) {
             throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE,
                     "AI question generation provider is not configured");
         }
-        if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
+        if (settings.apiKey() == null || settings.apiKey().isBlank()) {
             throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "Gemini API key is not configured");
+        }
+        String apiKey = settings.apiKey().trim();
+        if (apiKey.startsWith("<") || apiKey.endsWith(">")) {
+            throw new BusinessException(
+                    ErrorCode.AI_PROVIDER_UNAVAILABLE,
+                    "Gemini API key must not include placeholder angle brackets");
         }
     }
 
-    private String sendWithFallback(GenerationRequest request) {
+    private String sendWithFallback(GenerationRequest request, AssignmentAiSettings settings) {
+        RestClient restClient = restClient(settings);
+        String apiKey = settings.apiKey().trim();
         RestClientException lastException = null;
         String lastModel = null;
         int lastStatus = 0;
         String lastResponseBody = null;
-        List<String> models = candidateModels();
+        List<String> models = candidateModels(settings);
         for (int index = 0; index < models.size(); index++) {
             String model = models.get(index);
             try {
@@ -99,7 +121,7 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                         .post()
                         .uri("/interactions")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("x-goog-api-key", properties.getApiKey())
+                        .header("x-goog-api-key", apiKey)
                         .header("Api-Revision", "2026-05-20")
                         .body(buildRequestBody(request, model))
                         .retrieve()
@@ -154,9 +176,9 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
         return message.toString();
     }
 
-    private List<String> candidateModels() {
-        String primary = normalizeModel(properties.getModel());
-        String fallback = normalizeModel(properties.getFallbackModel());
+    private List<String> candidateModels(AssignmentAiSettings settings) {
+        String primary = normalizeModel(settings.model());
+        String fallback = normalizeModel(settings.fallbackModel());
         if (fallback == null || fallback.equals(primary)) {
             return List.of(primary);
         }
@@ -178,10 +200,10 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
         return status == 400 || status == 404 || status == 408 || status == 429 || status >= 500;
     }
 
-    private static RestClient createRestClient(QuestionAiGenerationProperties properties) {
+    private RestClient restClient(AssignmentAiSettings settings) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(properties.getTimeout());
-        requestFactory.setReadTimeout(properties.getTimeout());
+        requestFactory.setConnectTimeout(settings.timeout());
+        requestFactory.setReadTimeout(settings.timeout());
         return RestClient.builder()
                 .baseUrl(properties.getApiBaseUrl())
                 .requestFactory(requestFactory)

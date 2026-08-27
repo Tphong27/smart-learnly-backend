@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
@@ -151,6 +152,43 @@ class TestServiceClassScopeTest {
     }
 
     @Test
+    void updateTestShouldKeepExistingBooleanFlagsWhenRequestOmitsThem() {
+        UUID testId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        UserAccount tmo = user(UUID.randomUUID(), "TMO");
+        com.smartlearnly.backend.test.entity.Test test = publishedTest(classId, courseId);
+        test.setId(testId);
+        test.setTitle("Original title");
+        test.setDescription("Original description");
+        test.setShuffleQuestions(false);
+        test.setShuffleAnswers(true);
+        test.setShowAnswersAfter(true);
+
+        TestModel.UpdateRequest request = new TestModel.UpdateRequest();
+        request.setTitle("Updated title");
+        request.setDescription("");
+        request.setCourseId(courseId);
+        request.setClassId(classId);
+        request.setDurationMinutes(15);
+        request.setMaxAttempts(1);
+        request.setIsPublished(true);
+
+        when(testRepository.findById(testId)).thenReturn(Optional.of(test));
+        when(currentUserService.requireAuthenticatedUser()).thenReturn(tmo);
+        when(classOfferingRepository.findByIdAndDeletedAtIsNull(classId))
+                .thenReturn(Optional.of(classOffering(classId, courseId, UUID.randomUUID())));
+        when(testRepository.save(test)).thenReturn(test);
+
+        service.updateTest(testId, request);
+
+        assertThat(test.getShuffleQuestions()).isFalse();
+        assertThat(test.getShuffleAnswers()).isTrue();
+        assertThat(test.getShowAnswersAfter()).isTrue();
+        verify(testRepository).save(test);
+    }
+
+    @Test
     void updateDurationGivesActiveAttemptsOneMinuteFromUpdateTime() {
         UUID testId = UUID.randomUUID();
         UserAccount tmo = user(UUID.randomUUID(), "TMO");
@@ -185,6 +223,14 @@ class TestServiceClassScopeTest {
         assertThat(response.getHasActiveAttempts()).isTrue();
         verify(testAttemptRepository).saveAll(List.of(activeAttempt));
         verify(testRepository).save(test);
+    }
+
+    private ClassOffering classOffering(UUID classId, UUID courseId, UUID trainerId) {
+        ClassOffering classOffering = new ClassOffering();
+        classOffering.setId(classId);
+        classOffering.setCourseId(courseId);
+        classOffering.setTrainerId(trainerId);
+        return classOffering;
     }
 
     private UserAccount user(UUID id, String role) {

@@ -21,7 +21,7 @@ public class DashboardQueryBuilder {
     private static final String QUESTIONS_TABLE = "public.questions";
 
     /**
-     * Builds the SQL query for user statistics.
+     * Builds the SQL query for account status snapshot (Information System dashboard).
      */
     public String buildUserStatsQuery() {
         return """
@@ -30,13 +30,14 @@ public class DashboardQueryBuilder {
                     COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'active') AS active,
                     COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'pending_verify') AS pending_verify,
                     COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'inactive') AS inactive,
-                    COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'banned') AS banned,
                     COUNT(*) FILTER (
-                        WHERE deleted_at IS NULL AND created_at BETWEEN :from AND :to
-                    ) AS new_in_range
+                        WHERE deleted_at IS NULL
+                          AND locked_until IS NOT NULL
+                          AND locked_until > NOW()
+                    ) AS locked,
+                    COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'banned') AS banned
                 FROM %s
-                """.formatted(
-                        USERS_TABLE);
+                """.formatted(USERS_TABLE);
     }
 
     /**
