@@ -439,6 +439,7 @@ class AiQuestionDraftServiceTest {
 
     @Test
     void createBatch_rejectsInvalidQuotaProcessingAndGenerationConfig() {
+        properties.setMaxBatchesPerUserDay(5);
         when(batchRepository.countByRequestedByAndCreatedAtAfter(eq(actorId), any())).thenReturn(5L);
         assertThatThrownBy(() -> service.createBatch(courseId, request("quota-key")))
                 .isInstanceOfSatisfying(BusinessException.class,
