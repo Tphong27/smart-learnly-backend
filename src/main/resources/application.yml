@@ -124,7 +124,7 @@ app:
         model: ${APP_QUESTION_AI_GENERATION_MODEL:${GEMINI_MODEL:gemini-2.5-flash}}
         fallback-model: ${APP_QUESTION_AI_GENERATION_FALLBACK_MODEL:gemini-3.5-flash-lite}
         timeout: ${APP_QUESTION_AI_GENERATION_TIMEOUT:PT60S}
-        max-batches-per-user-day: ${APP_QUESTION_AI_GENERATION_MAX_BATCHES_PER_USER_DAY:5}
+        max-batches-per-user-day: ${APP_QUESTION_AI_GENERATION_MAX_BATCHES_PER_USER_DAY:400}
     assignment-ai:
         enabled: ${APP_ASSIGNMENT_AI_ENABLED:true}
         provider: ${APP_ASSIGNMENT_AI_PROVIDER:gemini}

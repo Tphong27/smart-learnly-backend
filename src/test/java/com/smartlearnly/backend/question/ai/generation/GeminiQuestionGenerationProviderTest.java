@@ -2,6 +2,8 @@ package com.smartlearnly.backend.question.ai.generation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -9,6 +11,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import java.io.IOException;
@@ -325,8 +329,20 @@ class GeminiQuestionGenerationProviderTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GeminiQuestionGenerationProvider provider =
-                new GeminiQuestionGenerationProvider(properties, builder.build());
+                new GeminiQuestionGenerationProvider(properties, settingsService(properties), builder.build());
         return new ProviderFixture(properties, provider, server);
+    }
+
+    private SystemSettingsService settingsService(QuestionAiGenerationProperties properties) {
+        SystemSettingsService settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveAssignmentAiSettings()).thenAnswer(ignored -> new AssignmentAiSettings(
+                properties.isEnabled(),
+                properties.getProvider(),
+                properties.getApiKey(),
+                properties.getModel(),
+                properties.getFallbackModel(),
+                properties.getTimeout().toSeconds()));
+        return settingsService;
     }
 
     private QuestionGenerationProvider.GenerationRequest requestWithSources() {

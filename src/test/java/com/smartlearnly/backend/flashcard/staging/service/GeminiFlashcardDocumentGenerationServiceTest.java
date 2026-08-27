@@ -2,11 +2,15 @@ package com.smartlearnly.backend.flashcard.staging.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationService.DocumentGenerationRequest;
@@ -23,8 +27,10 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 class GeminiFlashcardDocumentGenerationServiceTest {
-    private final GeminiFlashcardGenerationService service =
-            new GeminiFlashcardGenerationService(properties());
+    private final FlashcardDocumentGenerationProperties defaultProperties = properties();
+    private final GeminiFlashcardGenerationService service = new GeminiFlashcardGenerationService(
+            defaultProperties,
+            settingsService(defaultProperties));
 
     @Test
     void fallsBackWhenPrimaryDocumentModelIsUnavailable() {
@@ -35,7 +41,7 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GeminiFlashcardGenerationService fallbackService =
-                new GeminiFlashcardGenerationService(properties, builder.build());
+                new GeminiFlashcardGenerationService(properties, settingsService(properties), builder.build());
 
         server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
                 .andExpect(jsonPath("$.model").value("gemini-primary"))
@@ -61,7 +67,7 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GeminiFlashcardGenerationService structuredService =
-                new GeminiFlashcardGenerationService(properties, builder.build());
+                new GeminiFlashcardGenerationService(properties, settingsService(properties), builder.build());
 
         server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
                 .andExpect(jsonPath("$.response_format.type").value("text"))
@@ -373,6 +379,18 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         FlashcardDocumentGenerationProperties properties = new FlashcardDocumentGenerationProperties();
         properties.setApiKey("test-key");
         return properties;
+    }
+
+    private static SystemSettingsService settingsService(FlashcardDocumentGenerationProperties properties) {
+        SystemSettingsService settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveAssignmentAiSettings()).thenAnswer(ignored -> new AssignmentAiSettings(
+                properties.isEnabled(),
+                properties.getProvider(),
+                properties.getApiKey(),
+                properties.getModel(),
+                properties.getFallbackModel(),
+                properties.getTimeout().toSeconds()));
+        return settingsService;
     }
 
     private static class CapturingGeminiGenerationService implements FlashcardGeminiGenerationService {

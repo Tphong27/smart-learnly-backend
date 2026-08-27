@@ -19,8 +19,9 @@ class DashboardQueryBuilderTest {
         assertThat(sql).contains("active");
         assertThat(sql).contains("pending_verify");
         assertThat(sql).contains("inactive");
+        assertThat(sql).contains("locked_until", "locked");
         assertThat(sql).contains("banned");
-        assertThat(sql).contains("new_in_range");
+        assertThat(sql).doesNotContain("new_in_range", ":from", ":to");
         assertThat(sql).contains("public.users");
     }
 

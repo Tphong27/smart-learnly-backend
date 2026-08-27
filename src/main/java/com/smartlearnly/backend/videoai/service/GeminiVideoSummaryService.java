@@ -30,6 +30,7 @@ public class GeminiVideoSummaryService {
     private final VideoAiGenerationProperties properties;
     private final SystemSettingsService settingsService;
     private final ObjectMapper objectMapper;
+    private final RestClient testRestClient;
 
     /**
      * Khởi tạo service bằng cấu hình Gemini của ứng dụng + system settings runtime.
@@ -41,7 +42,8 @@ public class GeminiVideoSummaryService {
         this(
                 properties,
                 settingsService,
-                new ObjectMapper().findAndRegisterModules());
+                new ObjectMapper().findAndRegisterModules(),
+                null);
     }
 
     /**
@@ -50,10 +52,12 @@ public class GeminiVideoSummaryService {
     GeminiVideoSummaryService(
             VideoAiGenerationProperties properties,
             SystemSettingsService settingsService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RestClient testRestClient) {
         this.properties = properties;
         this.settingsService = settingsService;
         this.objectMapper = objectMapper;
+        this.testRestClient = testRestClient;
     }
 
     /**
@@ -354,6 +358,9 @@ public class GeminiVideoSummaryService {
      * Tạo HTTP client Gemini với timeout lấy từ system settings runtime.
      */
     private RestClient restClient(AssignmentAiSettings settings) {
+        if (testRestClient != null) {
+            return testRestClient;
+        }
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(settings.timeout());
         factory.setReadTimeout(settings.timeout());

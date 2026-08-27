@@ -3,6 +3,8 @@ package com.smartlearnly.backend.videoai.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -11,6 +13,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.videoai.config.VideoAiGenerationProperties;
@@ -259,7 +263,7 @@ class GeminiVideoSummaryServiceTest {
          */
         // WHEN + THEN: Service từ chối trước khi tạo HTTP request.
         assertErrorCode(
-                () -> new GeminiVideoSummaryService(properties)
+                () -> new GeminiVideoSummaryService(properties, settingsService(properties))
                         .generateSummaryFromTranscript("en", "Lesson transcript"),
                 ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
     }
@@ -285,7 +289,7 @@ class GeminiVideoSummaryServiceTest {
          */
         // WHEN + THEN: Cấu hình thiếu phải bị từ chối.
         assertErrorCode(
-                () -> new GeminiVideoSummaryService(properties)
+                () -> new GeminiVideoSummaryService(properties, settingsService(properties))
                         .generateSummaryFromTranscript("en", "Lesson transcript"),
                 ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
     }
@@ -311,7 +315,7 @@ class GeminiVideoSummaryServiceTest {
          */
         // WHEN + THEN: Chuỗi blank được xem là chưa cấu hình.
         assertErrorCode(
-                () -> new GeminiVideoSummaryService(properties)
+                () -> new GeminiVideoSummaryService(properties, settingsService(properties))
                         .generateSummaryFromTranscript("en", "Lesson transcript"),
                 ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
     }
@@ -338,7 +342,7 @@ class GeminiVideoSummaryServiceTest {
          */
         // WHEN + THEN: Service báo cấu hình không khả dụng.
         assertErrorCode(
-                () -> new GeminiVideoSummaryService(properties)
+                () -> new GeminiVideoSummaryService(properties, settingsService(properties))
                         .generateSummaryFromTranscript("en", "Lesson transcript"),
                 ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
     }
@@ -768,6 +772,7 @@ class GeminiVideoSummaryServiceTest {
         return new TestContext(
                 new GeminiVideoSummaryService(
                         properties,
+                        settingsService(properties),
                         objectMapper,
                         builder.build()),
                 objectMapper,
@@ -783,6 +788,18 @@ class GeminiVideoSummaryServiceTest {
                 "https://gemini.example.test/v1beta");
         properties.setModel("gemini-test");
         return properties;
+    }
+
+    private SystemSettingsService settingsService(VideoAiGenerationProperties properties) {
+        SystemSettingsService settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveAssignmentAiSettings()).thenAnswer(ignored -> new AssignmentAiSettings(
+                properties.isEnabled(),
+                "gemini",
+                properties.getApiKey(),
+                properties.getModel(),
+                null,
+                properties.getTimeout().toSeconds()));
+        return settingsService;
     }
 
     private GeneratedSummary validSummary() {

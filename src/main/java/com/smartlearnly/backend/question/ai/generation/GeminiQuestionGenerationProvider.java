@@ -29,6 +29,7 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
     private final QuestionAiGenerationProperties properties;
     private final SystemSettingsService settingsService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestClient testRestClient;
 
     @Autowired
     public GeminiQuestionGenerationProvider(
@@ -36,16 +37,19 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
             SystemSettingsService settingsService) {
         this.properties = properties;
         this.settingsService = settingsService;
+        this.testRestClient = null;
     }
 
     /**
-     * Package-private constructor kept for unit tests that only need properties + settings.
+     * Cho phép unit test gắn HTTP client giả lập mà không đổi cấu hình runtime.
      */
     GeminiQuestionGenerationProvider(
             QuestionAiGenerationProperties properties,
             SystemSettingsService settingsService,
-            ObjectMapper ignoredObjectMapper) {
-        this(properties, settingsService);
+            RestClient testRestClient) {
+        this.properties = properties;
+        this.settingsService = settingsService;
+        this.testRestClient = testRestClient;
     }
 
     @Override
@@ -201,6 +205,9 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
     }
 
     private RestClient restClient(AssignmentAiSettings settings) {
+        if (testRestClient != null) {
+            return testRestClient;
+        }
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(settings.timeout());
         requestFactory.setReadTimeout(settings.timeout());
