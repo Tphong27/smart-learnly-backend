@@ -117,6 +117,18 @@ public class CourseModuleQuestionController {
         return ApiResponse.success("Question archived successfully");
     }
 
+    /** Khôi phục câu hỏi đã lưu trữ qua URL module legacy và đưa về draft. */
+    @PostMapping("/{questionId}/restore")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
+    public ApiResponse<Void> restore(
+            @PathVariable UUID courseId,
+            @PathVariable UUID moduleId,
+            @PathVariable UUID questionId
+    ) {
+        questionService.restoreInCourse(courseId, questionId);
+        return ApiResponse.success("Question restored to draft successfully");
+    }
+
     /** Import các dòng vào Question Bank course-wide từ client dùng URL module cũ. */
     @PostMapping("/import")
     @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")

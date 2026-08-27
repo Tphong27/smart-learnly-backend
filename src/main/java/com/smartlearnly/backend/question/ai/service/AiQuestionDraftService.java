@@ -182,6 +182,9 @@ public class AiQuestionDraftService {
         return toBatchResponse(batchRepository.save(batch));
     }
 
+    /**
+     * Cập nhật draft và giữ evidence hợp lệ; trạng thái chỉ phụ thuộc cấu trúc và duplicate.
+     */
     @Transactional
     public AiQuestionDraftDtos.DraftResponse updateDraft(UUID courseId, UUID batchId, UUID draftId,
             AiQuestionDraftDtos.UpdateDraftRequest request) {
@@ -191,22 +194,16 @@ public class AiQuestionDraftService {
         ensureDraftEditable(draft);
 
         String before = draftSnapshot(draft);
-        List<AiQuestionDraftDtos.AnswerPayload> previousAnswers = parseAnswers(draft.getAnswersJson());
-        String previousQuestionText = draft.getQuestionText();
 
         draft.setQuestionText(normalizeRequired(request.questionText(), "Question text is required"));
         draft.setExplanation(normalizeNullable(request.explanation()));
         draft.setModuleId(null);
         draft.setAnswersJson(toJson(normalizeAnswers(draft.getQuestionType(), batch.getLanguage(), request.answers())));
 
-        boolean contentChanged = !normalizeForCompare(previousQuestionText)
-                .equals(normalizeForCompare(draft.getQuestionText()))
-                || correctAnswerChanged(previousAnswers, request.answers());
-        if (contentChanged) {
-            markEvidenceNeedsReview(draft);
-        }
-        applyDraftValidation(batch.getCourseId(), draft, evidenceRepository.findByDraftId(draft.getId()),
-                evidenceRequired(batch.getId()));
+        boolean requiresEvidence = evidenceRequired(batch.getId());
+        List<AiQuestionGenerationEvidence> evidences = evidenceRepository.findByDraftId(draft.getId());
+        restoreEvidenceAfterEdit(draft, evidences);
+        applyDraftValidation(batch.getCourseId(), draft, evidences, requiresEvidence);
         AiQuestionGenerationDraft saved = draftRepository.save(draft);
         recordRevision(saved.getId(), currentUserService.requireAuthenticatedUser().getId(), before,
                 draftSnapshot(saved), "edited");
@@ -489,7 +486,7 @@ public class AiQuestionDraftService {
         }
         draft.setDuplicateCandidates(toJson(duplicateCandidates));
         draft.setValidationWarnings(toJson(warnings));
-        if (!evidenceRequired && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
+        if (!evidenceRequired) {
             draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_VALID);
         } else if (hasSupportingEvidence
                 && !AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
@@ -593,13 +590,19 @@ public class AiQuestionDraftService {
         return combined;
     }
 
-    private void markEvidenceNeedsReview(AiQuestionGenerationDraft draft) {
-        List<AiQuestionGenerationEvidence> evidences = evidenceRepository.findByDraftId(draft.getId());
+    /** Khôi phục evidence từng bị đánh dấu review chỉ vì draft đã được chỉnh sửa. */
+    private void restoreEvidenceAfterEdit(
+            AiQuestionGenerationDraft draft,
+            List<AiQuestionGenerationEvidence> evidences) {
         for (AiQuestionGenerationEvidence evidence : evidences) {
-            evidence.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW);
-            evidenceRepository.save(evidence);
+            if (AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(evidence.getEvidenceStatus())) {
+                evidence.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_VALID);
+                evidenceRepository.save(evidence);
+            }
         }
-        draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW);
+        if (AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW.equals(draft.getEvidenceStatus())) {
+            draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_VALID);
+        }
     }
 
     private void validateQuota(UUID actorId) {
