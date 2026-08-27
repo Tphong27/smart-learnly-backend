@@ -209,14 +209,14 @@ class QuestionMediaImportServiceTest {
                         "image/png",
                         pngBytes().length));
 
-        service.attachImportedMedia(question, List.of(" https://example.com/path/imported.png "), null, "image-import");
+        service.attachImportedMedia(question, List.of(" https://example.com/path/imported.png "), null, "excel-import");
 
         ArgumentCaptor<QuestionMediaAttachment> attachmentCaptor = ArgumentCaptor.forClass(QuestionMediaAttachment.class);
         verify(mediaAttachmentRepository).save(attachmentCaptor.capture());
         assertThat(attachmentCaptor.getValue().getMediaType()).isEqualTo(QuestionMediaType.IMAGE);
         assertThat(attachmentCaptor.getValue().getDisplayOrder()).isEqualTo(2);
         assertThat(attachmentCaptor.getValue().getOriginalFileName()).isEqualTo("imported.png");
-        assertThat(attachmentCaptor.getValue().getImportSource()).isEqualTo("image_import");
+        assertThat(attachmentCaptor.getValue().getImportSource()).isEqualTo("excel_import");
         verify(fileStorageService).store(eq("question-media"), org.mockito.ArgumentMatchers.contains("/images/"), eq("image/png"), any());
     }
 
@@ -287,7 +287,7 @@ class QuestionMediaImportServiceTest {
                         "image/png",
                         pngBytes().length));
 
-        service.attachImportedMedia(question, List.of("https://example.com/start"), null, "json_import");
+        service.attachImportedMedia(question, List.of("https://example.com/start"), null, "excel_import");
 
         ArgumentCaptor<QuestionMediaAttachment> attachmentCaptor = ArgumentCaptor.forClass(QuestionMediaAttachment.class);
         verify(mediaAttachmentRepository).save(attachmentCaptor.capture());

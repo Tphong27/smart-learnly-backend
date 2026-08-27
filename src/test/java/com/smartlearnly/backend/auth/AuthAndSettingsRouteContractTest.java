@@ -76,8 +76,6 @@ class AuthAndSettingsRouteContractTest {
         assertPut(GoogleSettingsController.class, "updateGoogleOAuth", "/oauth/google");
         assertGet(GoogleSettingsController.class, "getGoogleMeetSettings", "/integrations/google-meet");
         assertPut(GoogleSettingsController.class, "updateGoogleMeetSettings", "/integrations/google-meet");
-        assertGet(AiSettingsController.class, "getQuestionImageImportSettings", "/ai/question-image-import");
-        assertPut(AiSettingsController.class, "updateQuestionImageImportSettings", "/ai/question-image-import");
         assertGet(AiSettingsController.class, "getAssignmentAiSettings", "/ai/assignment-draft");
         assertPut(AiSettingsController.class, "updateAssignmentAiSettings", "/ai/assignment-draft");
         assertGet(SePaySettingsController.class, "getSePayBankDisplaySettings", "/integrations/sepay/bank-display");
