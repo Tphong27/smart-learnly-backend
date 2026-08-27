@@ -1,7 +1,6 @@
 package com.smartlearnly.backend.classroom.admin.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.DecimalMax;
@@ -36,7 +35,7 @@ public class UpdateClassRequest {
     @Pattern(regexp = "(?i)upcoming|ongoing|completed|cancelled", message = "Class status must be upcoming, ongoing, completed, or cancelled")
     private String status;
 
-    @DecimalMin(value = "0.0", inclusive = true, message = "Class price must be greater than or equal to 0")
+    @Positive(message = "Class price must be greater than 0")
     @DecimalMax(value = "9999999999.99", message = "Class price is too large")
     @Digits(integer = 10, fraction = 2, message = "Class price must contain at most 2 decimal places")
     private BigDecimal price;
@@ -52,7 +51,9 @@ public class UpdateClassRequest {
     private boolean statusProvided;
     private boolean priceProvided;
 
-    /** Lấy khóa học mới nếu người quản trị đã gửi trường này trong yêu cầu cập nhật. */
+    /**
+     * Lấy khóa học mới nếu người quản trị đã gửi trường này trong yêu cầu cập nhật.
+     */
     public UUID getCourseId() {
         return courseId;
     }

@@ -34,7 +34,6 @@ import java.util.UUID;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.net.URI;
-import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -117,9 +116,8 @@ public class ClassAdminService {
         classOffering.setTrainerId(trainer.getId());
         classOffering.setMeetingUrl(normalizeMeetingUrl(request.meetingUrl()));
         classOffering.setScheduleDescription(normalizeNullable(request.scheduleDescription()));
-        // Price bỏ trống được hiểu là class miễn phí; chuẩn hóa về 0 để luồng đăng ký
-        // miễn phí và lịch mở lớp (yêu cầu price NOT NULL) hoạt động nhất quán.
-        classOffering.setPrice(request.price() == null ? BigDecimal.ZERO : request.price());
+
+        classOffering.setPrice(request.price());
         classOffering.setStartDate(request.startDate());
         classOffering.setEndDate(request.endDate());
         classOffering.setMaxStudents(request.maxStudents());
