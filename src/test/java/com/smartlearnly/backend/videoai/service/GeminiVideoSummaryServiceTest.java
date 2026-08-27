@@ -50,9 +50,12 @@ class GeminiVideoSummaryServiceTest {
                 .andExpect(jsonPath(
                         "$.contents[0].parts[0].file_data.file_uri")
                         .value("https://www.youtube.com/watch?v=V9i3cGD-mts"))
+                // .andExpect(jsonPath(
+                //         "$.contents[0].parts[0].file_data.mime_type")
+                //         .value("video/*"))
                 .andExpect(jsonPath(
                         "$.contents[0].parts[0].file_data.mime_type")
-                        .value("video/*"))
+                        .doesNotExist())
                 .andExpect(jsonPath(
                         "$.contents[0].parts[1].text",
                         containsString("entire response in natural Vietnamese")))

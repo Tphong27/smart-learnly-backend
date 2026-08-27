@@ -80,10 +80,13 @@ public class GeminiVideoSummaryService {
                 %s
                 """.formatted(summaryRequirements());
 
+        // Map<String, Object> videoPart = Map.of(
+        // "file_data", Map.of(
+        // "file_uri", sourceUrl,
+        // "mime_type", "video/*"));
         Map<String, Object> videoPart = Map.of(
                 "file_data", Map.of(
-                        "file_uri", sourceUrl,
-                        "mime_type", "video/*"));
+                        "file_uri", sourceUrl));
         return generateSummary(List.of(
                 videoPart,
                 Map.of("text", prompt)));
@@ -113,9 +116,9 @@ public class GeminiVideoSummaryService {
                 Transcript:
                 %s
                 """.formatted(
-                        normalizeLanguage(language),
-                        summaryRequirements(),
-                        source);
+                normalizeLanguage(language),
+                summaryRequirements(),
+                source);
 
         return generateSummary(List.of(Map.of("text", prompt)));
     }
@@ -292,8 +295,22 @@ public class GeminiVideoSummaryService {
                 .toList();
     }
 
+    // private AssignmentAiSettings resolveSettings() {
+    // return settingsService.resolveAssignmentAiSettings();
+    // }
+
+    /**
+     * Video Summary phải sử dụng cấu hình riêng của Video AI.
+     * Không lấy API key/model của Assignment AI trong system_settings.
+     */
     private AssignmentAiSettings resolveSettings() {
-        return settingsService.resolveAssignmentAiSettings();
+        return new AssignmentAiSettings(
+                properties.isEnabled(),
+                PROVIDER_NAME,
+                properties.getApiKey(),
+                properties.getModel(),
+                null,
+                properties.getTimeout().toSeconds());
     }
 
     /**
