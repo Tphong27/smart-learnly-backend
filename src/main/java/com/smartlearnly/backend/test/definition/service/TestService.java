@@ -152,10 +152,22 @@ public class TestService {
         test.setDurationMinutes(request.getDurationMinutes());
         test.setMaxAttempts(request.getMaxAttempts());
         test.setPassScore(request.getPassScore());
-        test.setShuffleQuestions(request.getShuffleQuestions());
-        test.setShuffleAnswers(request.getShuffleAnswers());
-        test.setShowAnswersAfter(request.getShowAnswersAfter());
-        test.setIsPublished(request.getIsPublished());
+        test.setShuffleQuestions(booleanOrDefault(
+                request.getShuffleQuestions(),
+                test.getShuffleQuestions(),
+                false));
+        test.setShuffleAnswers(booleanOrDefault(
+                request.getShuffleAnswers(),
+                test.getShuffleAnswers(),
+                false));
+        test.setShowAnswersAfter(booleanOrDefault(
+                request.getShowAnswersAfter(),
+                test.getShowAnswersAfter(),
+                true));
+        test.setIsPublished(booleanOrDefault(
+                request.getIsPublished(),
+                test.getIsPublished(),
+                false));
         test.setOpensAt(request.getOpensAt());
         test.setClosesAt(request.getClosesAt());
         return mapToResponse(testRepository.save(test));
@@ -453,6 +465,13 @@ public class TestService {
     /** Kiểm tra tài khoản hiện tại có role học viên hay không. */
     private boolean isTrainee(UserAccount actor) {
         return actor.getRole() != null && "TRAINEE".equalsIgnoreCase(actor.getRole());
+    }
+
+    private boolean booleanOrDefault(Boolean requested, Boolean current, boolean fallback) {
+        if (requested != null) {
+            return requested;
+        }
+        return current != null ? current : fallback;
     }
 
     /** Bảo vệ quyền xem đề theo enrollment học viên hoặc phân công nhân sự. */
