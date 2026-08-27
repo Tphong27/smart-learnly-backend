@@ -287,7 +287,7 @@ class QuestionMediaImportServiceTest {
                         "image/png",
                         pngBytes().length));
 
-        service.attachImportedMedia(question, List.of("https://example.com/start"), null, "json_import");
+        service.attachImportedMedia(question, List.of("https://example.com/start"), null, "excel_import");
 
         ArgumentCaptor<QuestionMediaAttachment> attachmentCaptor = ArgumentCaptor.forClass(QuestionMediaAttachment.class);
         verify(mediaAttachmentRepository).save(attachmentCaptor.capture());

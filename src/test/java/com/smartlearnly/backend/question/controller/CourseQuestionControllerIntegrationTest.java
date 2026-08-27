@@ -159,7 +159,7 @@ class CourseQuestionControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "importSource": "json_import",
+                                  "importSource": "excel_import",
                                   "rows": [
                                     {
                                       "rowNumber": 1,

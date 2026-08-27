@@ -564,7 +564,7 @@ public class QuestionService {
         if (normalized == null) return "excel_import";
         String apiValue = normalized.trim().replace('-', '_').toLowerCase(Locale.ROOT);
         return switch (apiValue) {
-            case "excel_import", "json_import", "image_import" -> apiValue;
+            case "excel_import", "image_import" -> apiValue;
             default -> "excel_import";
         };
     }
