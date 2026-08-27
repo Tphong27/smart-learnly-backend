@@ -97,6 +97,17 @@ public class CourseQuestionController {
         return ApiResponse.success("Question archived successfully");
     }
 
+    /** Khôi phục câu hỏi đã lưu trữ về trạng thái draft. */
+    @PostMapping("/{questionId}/restore")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
+    public ApiResponse<Void> restore(
+            @PathVariable UUID courseId,
+            @PathVariable UUID questionId
+    ) {
+        questionService.restoreInCourse(courseId, questionId);
+        return ApiResponse.success("Question restored to draft successfully");
+    }
+
     @PostMapping("/import")
     @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ApiResponse<QuestionImportDtos.ImportBatchResponse> importBatch(

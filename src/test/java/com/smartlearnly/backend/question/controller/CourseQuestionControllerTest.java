@@ -202,6 +202,15 @@ class CourseQuestionControllerTest {
     }
 
     @Test
+    void restore_returnsSuccessAfterServiceCall() {
+        var response = controller.restore(courseId, questionId);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.message()).isEqualTo("Question restored to draft successfully");
+        verify(questionService).restoreInCourse(courseId, questionId);
+    }
+
+    @Test
     void importBatch_delegatesToQuestionService() {
         QuestionImportDtos.ImportBatchRequest request =
                 new QuestionImportDtos.ImportBatchRequest(List.of(), "excel");

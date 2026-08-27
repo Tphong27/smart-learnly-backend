@@ -537,7 +537,7 @@ class AiQuestionDraftServiceTest {
     }
 
     @Test
-    void updateDraft_updatesTextAnswersMarksEvidenceNeedsReviewAndRecordsRevision() {
+    void updateDraft_updatesTextAnswersKeepsEvidenceValidAndRecordsRevision() {
         AiQuestionGenerationBatch batch = batch(AiQuestionGenerationBatch.STATUS_READY);
         AiQuestionGenerationSource source = source(batch.getId(), false);
         AiQuestionGenerationDraft draft = draft(batch.getId(), "Old question?", "multiple_choice", validAnswersJson());
@@ -556,10 +556,32 @@ class AiQuestionDraftServiceTest {
                         answers("New correct", "Other")));
 
         assertThat(response.questionText()).isEqualTo("New question?");
-        assertThat(response.evidenceStatus()).isEqualTo(AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW);
-        assertThat(response.validationStatus()).isEqualTo(AiQuestionGenerationDraft.VALIDATION_INVALID);
-        assertThat(evidences.get(0).getEvidenceStatus()).isEqualTo(AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW);
+        assertThat(response.evidenceStatus()).isEqualTo(AiQuestionGenerationDraft.EVIDENCE_VALID);
+        assertThat(response.validationStatus()).isEqualTo(AiQuestionGenerationDraft.VALIDATION_VALID);
+        assertThat(evidences.get(0).getEvidenceStatus()).isEqualTo(AiQuestionGenerationDraft.EVIDENCE_VALID);
         assertThat(revisions).extracting(AiQuestionGenerationDraftRevision::getChangeType).contains("edited");
+    }
+
+    @Test
+    void updateDraft_keepsNoSourceDraftValidAfterContentChanges() {
+        AiQuestionGenerationBatch batch = batch(AiQuestionGenerationBatch.STATUS_READY);
+        AiQuestionGenerationDraft draft = draft(batch.getId(), "Old question?", "multiple_choice", validAnswersJson());
+        draft.setEvidenceStatus(AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW);
+        draft.setValidationStatus(AiQuestionGenerationDraft.VALIDATION_INVALID);
+        batches.add(batch);
+        drafts.add(draft);
+
+        AiQuestionDraftDtos.DraftResponse response = service.updateDraft(courseId, batch.getId(), draft.getId(),
+                new AiQuestionDraftDtos.UpdateDraftRequest(
+                        1,
+                        "Updated question?",
+                        "Updated explanation",
+                        null,
+                        answers("New correct", "Other")));
+
+        assertThat(response.questionText()).isEqualTo("Updated question?");
+        assertThat(response.evidenceStatus()).isEqualTo(AiQuestionGenerationDraft.EVIDENCE_VALID);
+        assertThat(response.validationStatus()).isEqualTo(AiQuestionGenerationDraft.VALIDATION_VALID);
     }
 
     @Test
@@ -607,7 +629,7 @@ class AiQuestionDraftServiceTest {
     }
 
     @Test
-    void updateDraft_marksEvidenceNeedsReviewWhenOnlyCorrectAnswerChanges() {
+    void updateDraft_keepsEvidenceValidWhenCorrectAnswerChanges() {
         AiQuestionGenerationBatch batch = batch(AiQuestionGenerationBatch.STATUS_READY);
         AiQuestionGenerationSource source = source(batch.getId(), false);
         AiQuestionGenerationDraft draft = draft(batch.getId(), "Same question?", "multiple_choice", validAnswersJson());
@@ -625,9 +647,11 @@ class AiQuestionDraftServiceTest {
                         null,
                         List.of(
                                 new AiQuestionDraftDtos.AnswerPayload("A", false, 1),
-                                new AiQuestionDraftDtos.AnswerPayload("B", true, 2))));
+                                new AiQuestionDraftDtos.AnswerPayload("B", true, 2),
+                                new AiQuestionDraftDtos.AnswerPayload("C", true, 3))));
 
-        assertThat(response.evidenceStatus()).isEqualTo(AiQuestionGenerationDraft.EVIDENCE_NEEDS_REVIEW);
+        assertThat(response.evidenceStatus()).isEqualTo(AiQuestionGenerationDraft.EVIDENCE_VALID);
+        assertThat(response.validationStatus()).isEqualTo(AiQuestionGenerationDraft.VALIDATION_VALID);
     }
 
     @Test
