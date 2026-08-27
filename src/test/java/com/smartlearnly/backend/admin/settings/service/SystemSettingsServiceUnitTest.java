@@ -12,7 +12,6 @@ import com.smartlearnly.backend.admin.settings.repository.SystemSettingRepositor
 import com.smartlearnly.backend.assignment.ai.config.AssignmentAiDraftProperties;
 import com.smartlearnly.backend.classroom.schedule.config.GoogleMeetProperties;
 import com.smartlearnly.backend.payment.sepay.config.SePayProperties;
-import com.smartlearnly.backend.question.image.QuestionImageImportProperties;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -176,7 +175,6 @@ class SystemSettingsServiceUnitTest {
                 "google-client-id",
                 "google-client-secret",
                 googleMeetProperties,
-                new QuestionImageImportProperties(),
                 new AssignmentAiDraftProperties(),
                 new SePayProperties());
     }

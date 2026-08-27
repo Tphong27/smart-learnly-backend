@@ -2,12 +2,9 @@ package com.smartlearnly.backend.admin.settings.controller;
 
 import com.smartlearnly.backend.admin.settings.dto.AssignmentAiSettingsResponse;
 import com.smartlearnly.backend.admin.settings.dto.AssignmentAiSettingsUpdateRequest;
-import com.smartlearnly.backend.admin.settings.dto.QuestionImageImportSettingsResponse;
-import com.smartlearnly.backend.admin.settings.dto.QuestionImageImportSettingsUpdateRequest;
 import com.smartlearnly.backend.admin.settings.service.SettingKeys;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
-import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.QuestionImageImportSettings;
 import com.smartlearnly.backend.common.api.ApiResponse;
 import com.smartlearnly.backend.common.audit.AuditAction;
 import com.smartlearnly.backend.common.audit.AuditLogService;
@@ -31,59 +28,7 @@ public class AiSettingsController {
     private final AuditLogService auditLogService;
     private final AdminSettingsSupport support;
 
-    // Trả cấu hình AI nhập câu hỏi từ ảnh và trạng thái provider đã sẵn sàng.
-    @GetMapping("/ai/question-image-import")
-    public ApiResponse<QuestionImageImportSettingsResponse> getQuestionImageImportSettings() {
-        QuestionImageImportSettings settings = settingsService.resolveQuestionImageImportSettings();
-        QuestionImageImportSettingsResponse response = new QuestionImageImportSettingsResponse(
-                settings.enabled(),
-                settings.provider(),
-                settings.isConfigured(),
-                settings.model(),
-                settings.timeoutSeconds(),
-                settings.maxFileSizeMb(),
-                settings.maxFiles());
-        return ApiResponse.success("Question image import settings loaded", response);
-    }
-
-    // Lưu provider, model và giới hạn nhập câu hỏi từ ảnh rồi ghi audit.
-    @PutMapping("/ai/question-image-import")
-    @Transactional
-    public ApiResponse<QuestionImageImportSettingsResponse> updateQuestionImageImportSettings(
-            @Valid @RequestBody QuestionImageImportSettingsUpdateRequest request) {
-        UUID actor = support.currentUserId();
-        settingsService.put(
-                SettingKeys.QUESTION_IMAGE_IMPORT_ENABLED,
-                String.valueOf(Boolean.TRUE.equals(request.enabled())),
-                false,
-                actor);
-        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_PROVIDER, request.provider(), false, actor);
-        support.putOptionalSecret(SettingKeys.QUESTION_IMAGE_IMPORT_API_KEY, request.apiKey(), actor);
-        settingsService.put(SettingKeys.QUESTION_IMAGE_IMPORT_MODEL, request.model(), false, actor);
-        settingsService.put(
-                SettingKeys.QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS,
-                String.valueOf(request.timeoutSeconds()),
-                false,
-                actor);
-        settingsService.put(
-                SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB,
-                String.valueOf(request.maxFileSizeMb()),
-                false,
-                actor);
-        settingsService.put(
-                SettingKeys.QUESTION_IMAGE_IMPORT_MAX_FILES,
-                String.valueOf(request.maxFiles()),
-                false,
-                actor);
-        auditLogService.recordAction(
-                support.actorLabel(),
-                AuditAction.SETTINGS_UPDATE_QUESTION_IMAGE_IMPORT,
-                "system_settings",
-                "question_image_import");
-        return getQuestionImageImportSettings();
-    }
-
-    // Trả cấu hình tạo bản nháp bài tập và trạng thái provider đã sẵn sàng.
+    // Tra cau hinh tao ban nhap bai tap va trang thai provider da san sang.
     @GetMapping("/ai/assignment-draft")
     public ApiResponse<AssignmentAiSettingsResponse> getAssignmentAiSettings() {
         AssignmentAiSettings settings = settingsService.resolveAssignmentAiSettings();
@@ -97,7 +42,7 @@ public class AiSettingsController {
         return ApiResponse.success("Assignment AI settings loaded", response);
     }
 
-    // Lưu provider và model tạo bản nháp bài tập rồi ghi audit thay đổi.
+    // Luu provider va model tao ban nhap bai tap roi ghi audit thay doi.
     @PutMapping("/ai/assignment-draft")
     @Transactional
     public ApiResponse<AssignmentAiSettingsResponse> updateAssignmentAiSettings(

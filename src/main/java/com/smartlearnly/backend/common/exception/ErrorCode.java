@@ -44,7 +44,6 @@ public enum ErrorCode {
     AI_QUOTA_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "AI generation quota exceeded"),
     AI_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI provider is unavailable"),
     AI_PROVIDER_OUTPUT_INVALID(HttpStatus.UNPROCESSABLE_CONTENT, "AI provider output is invalid"),
-    IMAGE_IMPORT_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Image import is unavailable"),
     EXTERNAL_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "External service unavailable"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
