@@ -559,12 +559,13 @@ public class QuestionService {
         return rowErrors;
     }
 
+    /** Chuan hoa nguon media import hien hanh, cac nguon cu khong con ho tro se ve Excel. */
     private String normalizeImportMediaSource(String value) {
         String normalized = normalizeNullable(value);
         if (normalized == null) return "excel_import";
         String apiValue = normalized.trim().replace('-', '_').toLowerCase(Locale.ROOT);
         return switch (apiValue) {
-            case "excel_import", "image_import" -> apiValue;
+            case "excel_import" -> apiValue;
             default -> "excel_import";
         };
     }

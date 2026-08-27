@@ -23,15 +23,6 @@ public final class SettingKeys {
     public static final String GOOGLE_MEET_ENABLED = "google_meet.enabled";
     public static final String GOOGLE_MEET_REFRESH_TOKEN = "google_meet.refresh_token";
 
-    // Question image import.
-    public static final String QUESTION_IMAGE_IMPORT_ENABLED = "question_image_import.enabled";
-    public static final String QUESTION_IMAGE_IMPORT_PROVIDER = "question_image_import.provider";
-    public static final String QUESTION_IMAGE_IMPORT_API_KEY = "question_image_import.api_key";
-    public static final String QUESTION_IMAGE_IMPORT_MODEL = "question_image_import.model";
-    public static final String QUESTION_IMAGE_IMPORT_TIMEOUT_SECONDS = "question_image_import.timeout_seconds";
-    public static final String QUESTION_IMAGE_IMPORT_MAX_FILE_SIZE_MB = "question_image_import.max_file_size_mb";
-    public static final String QUESTION_IMAGE_IMPORT_MAX_FILES = "question_image_import.max_files";
-
     // SePay checkout bank display settings.
     public static final String SEPAY_ACCOUNT_NUMBER = "payment.sepay.account_number";
     public static final String SEPAY_BANK_NAME = "payment.sepay.bank_name";

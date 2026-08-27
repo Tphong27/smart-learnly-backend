@@ -208,7 +208,7 @@ class QuestionServiceTest {
         UUID answerId = UUID.randomUUID();
         Question question = question(questionId, courseId, QuestionStatus.APPROVED);
         question.setBloomLevel(null);
-        question.setImportSource("image_import");
+        question.setImportSource("excel_import");
         QuestionAnswer answer = answer(answerId, "Programming language", true, null);
         QuestionAnswerMediaAttachment answerMedia = answerMediaAttachment(answerId, QuestionMediaType.AUDIO, null, null);
         QuestionMediaAttachment video = mediaAttachment(QuestionMediaType.VIDEO, "https://cdn.example.com/video.mp4", 1);
@@ -1076,7 +1076,7 @@ class QuestionServiceTest {
     }
 
     @Test
-    void importBatchForCourse_preservesImageImportSource() {
+    void importBatchForCourse_defaultsRemovedImportSourceToExcel() {
         when(questionRepository.existsActiveDuplicateInCourse(courseId, "Imported question?", null))
                 .thenReturn(false);
         when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
@@ -1094,13 +1094,13 @@ class QuestionServiceTest {
 
         service.importBatchForCourse(
                 courseId,
-                new QuestionImportDtos.ImportBatchRequest(List.of(row), "image-import"));
+                new QuestionImportDtos.ImportBatchRequest(List.of(row), "removed-import"));
 
         verify(questionMediaImportService).attachImportedMedia(
                 any(Question.class),
                 eq(row.imageFiles()),
                 eq(row.audioFiles()),
-                eq("image_import"));
+                eq("excel_import"));
     }
 
     @Test

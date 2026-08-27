@@ -111,7 +111,7 @@ public class SecurityConfig {
                         // Content roles: TMO / SME / TRAINER — method @PreAuthorize tightens further.
                         .requestMatchers("/api/v1/admin/question-banks/**", "/api/v1/admin/questions/**", "/api/v1/admin/test-questions/**")
                         .hasAnyRole("SME", "TMO", "TRAINER")
-                        .requestMatchers("/api/v1/admin/question-imports/**", "/api/v1/admin/question-answers/**")
+                        .requestMatchers("/api/v1/admin/question-answers/**")
                         .hasAnyRole("SME", "TRAINER")
                         .requestMatchers("/api/v1/admin/courses", "/api/v1/admin/courses/**")
                         .hasAnyRole("SME", "TMO", "TRAINER")

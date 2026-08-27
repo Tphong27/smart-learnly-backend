@@ -391,7 +391,7 @@ public class QuestionMediaImportService {
         }
         String normalized = value.trim().replace('-', '_').toLowerCase(Locale.ROOT);
         return switch (normalized) {
-            case "excel_import", "image_import" -> normalized;
+            case "excel_import" -> normalized;
             default -> "excel_import";
         };
     }
