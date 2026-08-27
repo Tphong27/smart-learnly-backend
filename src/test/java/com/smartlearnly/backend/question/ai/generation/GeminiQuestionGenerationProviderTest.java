@@ -69,6 +69,52 @@ class GeminiQuestionGenerationProviderTest {
     }
 
     @Test
+    void generate_parsesInteractionModelOutputInsteadOfEarlierStepText() {
+        ProviderFixture fixture = fixture("gemini-primary", null);
+        String payload = questionPayload(UUID.randomUUID(), UUID.randomUUID());
+        String response = """
+                {
+                  "steps": [
+                    {
+                      "type": "user_input",
+                      "content": [{"type":"text","text":"Return strict JSON only"}]
+                    },
+                    {
+                      "type": "model_output",
+                      "content": [{"type":"text","text":%s}]
+                    }
+                  ]
+                }
+                """.formatted(quote(payload));
+        fixture.server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
+                .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
+
+        QuestionGenerationProvider.GenerationResult result = fixture.provider.generate(requestWithSources());
+
+        assertThat(result.questions()).hasSize(1);
+        assertThat(result.questions().get(0).questionText()).isEqualTo("What is encapsulation?");
+        fixture.server.verify();
+    }
+
+    @Test
+    void generate_extractsJsonWhenProviderWrapsOutputWithText() {
+        ProviderFixture fixture = fixture("gemini-primary", null);
+        String wrappedPayload = """
+                Here is the JSON draft:
+                ```json
+                {"questions":[]}
+                ```
+                """;
+        fixture.server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
+                .andRespond(withSuccess("{\"output_text\":" + quote(wrappedPayload) + "}", MediaType.APPLICATION_JSON));
+
+        QuestionGenerationProvider.GenerationResult result = fixture.provider.generate(requestWithSources());
+
+        assertThat(result.questions()).isEmpty();
+        fixture.server.verify();
+    }
+
+    @Test
     void generate_stripsModelsPrefixAndAvoidsDuplicateFallbackModel() {
         ProviderFixture fixture = fixture("models/gemini-primary", "gemini-primary");
         fixture.server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))

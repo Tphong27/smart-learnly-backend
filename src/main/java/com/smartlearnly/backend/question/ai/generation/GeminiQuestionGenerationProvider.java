@@ -65,6 +65,10 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
             throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE,
                     "AI provider returned HTTP " + exception.getStatusCode().value(), exception);
         } catch (IOException | IllegalArgumentException exception) {
+            log.warn(
+                    "Gemini question generation response parse failed: errorType={} message={}",
+                    exception.getClass().getSimpleName(),
+                    exception.getMessage());
             throw new BusinessException(ErrorCode.AI_PROVIDER_OUTPUT_INVALID,
                     "AI provider returned an invalid response", exception);
         } catch (RestClientException exception) {
@@ -361,7 +365,80 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
         direct = text(root, "outputText");
         if (direct != null)
             return direct;
+        String interactionOutput = extractInteractionOutputText(root);
+        if (interactionOutput != null)
+            return interactionOutput;
+        String generatedContentOutput = extractGenerateContentOutputText(root);
+        if (generatedContentOutput != null)
+            return generatedContentOutput;
         return findTextValue(root);
+    }
+
+    /** Lay text tu step model_output cua Gemini Interactions API. */
+    private String extractInteractionOutputText(JsonNode root) {
+        JsonNode steps = root == null ? null : root.get("steps");
+        if (steps == null || !steps.isArray()) {
+            return null;
+        }
+        for (int index = steps.size() - 1; index >= 0; index -= 1) {
+            JsonNode step = steps.get(index);
+            if (!"model_output".equals(text(step, "type"))) {
+                continue;
+            }
+            String contentText = extractTextContent(step.get("content"));
+            if (contentText != null) {
+                return contentText;
+            }
+        }
+        return null;
+    }
+
+    /** Lay text tu candidates/content/parts cua API generateContent neu provider tra ve dang cu. */
+    private String extractGenerateContentOutputText(JsonNode root) {
+        JsonNode candidates = root == null ? null : root.get("candidates");
+        if (candidates == null || !candidates.isArray()) {
+            return null;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (JsonNode candidate : candidates) {
+            JsonNode parts = candidate.path("content").path("parts");
+            if (!parts.isArray()) {
+                continue;
+            }
+            for (JsonNode part : parts) {
+                String partText = text(part, "text");
+                if (partText == null || partText.isBlank()) {
+                    continue;
+                }
+                if (!builder.isEmpty()) {
+                    builder.append('\n');
+                }
+                builder.append(partText);
+            }
+        }
+        return builder.isEmpty() ? null : builder.toString();
+    }
+
+    /** Gom cac content item type=text thanh mot output duy nhat. */
+    private String extractTextContent(JsonNode content) {
+        if (content == null || !content.isArray()) {
+            return null;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (JsonNode item : content) {
+            if (!"text".equals(text(item, "type"))) {
+                continue;
+            }
+            String itemText = text(item, "text");
+            if (itemText == null || itemText.isBlank()) {
+                continue;
+            }
+            if (!builder.isEmpty()) {
+                builder.append('\n');
+            }
+            builder.append(itemText);
+        }
+        return builder.isEmpty() ? null : builder.toString();
     }
 
     private String findTextValue(JsonNode node) {
@@ -403,6 +480,13 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
             trimmed = trimmed.replaceFirst("^```(?:json)?", "").trim();
             if (trimmed.endsWith("```")) {
                 trimmed = trimmed.substring(0, trimmed.length() - 3).trim();
+            }
+        }
+        if (!trimmed.startsWith("{")) {
+            int start = trimmed.indexOf('{');
+            int end = trimmed.lastIndexOf('}');
+            if (start >= 0 && end > start) {
+                trimmed = trimmed.substring(start, end + 1).trim();
             }
         }
         return trimmed;
