@@ -1,5 +1,7 @@
 package com.smartlearnly.backend.flashcard.service;
 
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -57,6 +59,7 @@ public class AdminFlashcardService {
     private final CurriculumLessonRepository curriculumLessonRepository;
     private final CourseAccessService courseAccessService;
     private final MasterCurriculumAccessService masterCurriculumAccessService;
+    private final CourseAuditRecorder courseAuditRecorder;
 
     /** Tạo lesson flashcard trong master curriculum và liên kết bộ thẻ rỗng để biên tập. */
     @Transactional
@@ -94,6 +97,13 @@ public class AdminFlashcardService {
         flashcardSet.setIsPublic(false);
         flashcardSet.setIsOfficial(false);
         FlashcardSet savedSet = flashcardSetRepository.save(flashcardSet);
+        courseAuditRecorder.recordMaster(
+                actor,
+                AuditAction.FLASHCARD_SET_CREATED,
+                "FLASHCARD_SET",
+                savedSet.getId(),
+                courseId,
+                savedSet.getTitle());
 
         return new FlashcardLessonCreatedResponse(savedLesson.getId(), savedSet.getId());
     }
@@ -132,6 +142,12 @@ public class AdminFlashcardService {
         }
 
         FlashcardSet saved = flashcardSetRepository.save(flashcardSet);
+        auditFlashcardMaster(
+                AuditAction.FLASHCARD_SET_UPDATED,
+                "FLASHCARD_SET",
+                saved.getId(),
+                resolveCourseId(saved),
+                saved.getTitle());
         return toSetResponse(saved, findActiveCards(saved.getId()));
     }
 
@@ -139,6 +155,8 @@ public class AdminFlashcardService {
     public void deleteSet(UUID setId) {
         FlashcardSet flashcardSet = findSet(setId);
         requireUpdatableAccess(flashcardSet);
+        UUID courseId = resolveCourseId(flashcardSet);
+        String title = flashcardSet.getTitle();
         Instant now = Instant.now();
         flashcardSet.setDeletedAt(now);
 
@@ -148,6 +166,12 @@ public class AdminFlashcardService {
 
         deactivateLinkedLesson(flashcardSet);
         flashcardSetRepository.save(flashcardSet);
+        auditFlashcardMaster(
+                AuditAction.FLASHCARD_SET_DELETED,
+                "FLASHCARD_SET",
+                setId,
+                courseId,
+                title);
     }
 
     @Transactional
@@ -161,7 +185,14 @@ public class AdminFlashcardService {
                 ? flashcardCardRepository.findMaxOrderIndexBySetId(setId) + 1
                 : request.orderIndex());
 
-        return toCardResponse(flashcardCardRepository.save(card));
+        FlashcardCard saved = flashcardCardRepository.save(card);
+        auditFlashcardMaster(
+                AuditAction.FLASHCARD_CARD_CREATED,
+                "FLASHCARD_CARD",
+                saved.getId(),
+                resolveCourseId(flashcardSet),
+                "Flashcard card created");
+        return toCardResponse(saved);
     }
 
     @Transactional
@@ -172,7 +203,14 @@ public class AdminFlashcardService {
         applyCardUpdateRequest(card, request);
         validateCard(card);
 
-        return toCardResponse(flashcardCardRepository.save(card));
+        FlashcardCard saved = flashcardCardRepository.save(card);
+        auditFlashcardMaster(
+                AuditAction.FLASHCARD_CARD_UPDATED,
+                "FLASHCARD_CARD",
+                saved.getId(),
+                resolveCourseId(card.getFlashcardSet()),
+                "Flashcard card updated");
+        return toCardResponse(saved);
     }
 
     @Transactional
@@ -182,6 +220,12 @@ public class AdminFlashcardService {
         requireActiveSet(card.getFlashcardSet());
         card.setDeletedAt(Instant.now());
         flashcardCardRepository.save(card);
+        auditFlashcardMaster(
+                AuditAction.FLASHCARD_CARD_DELETED,
+                "FLASHCARD_CARD",
+                cardId,
+                resolveCourseId(card.getFlashcardSet()),
+                "Flashcard card deleted");
     }
 
     @Transactional
@@ -200,9 +244,37 @@ public class AdminFlashcardService {
         }
 
         flashcardCardRepository.saveAll(activeCards);
+        auditFlashcardMaster(
+                AuditAction.FLASHCARD_CARDS_REORDERED,
+                "FLASHCARD_SET",
+                setId,
+                resolveCourseId(flashcardSet),
+                "Flashcard cards reordered");
         return toSetResponse(flashcardSet, activeCards.stream()
                 .sorted(Comparator.comparing(FlashcardCard::getOrderIndex))
                 .toList());
+    }
+
+    private UUID resolveCourseId(FlashcardSet flashcardSet) {
+        return flashcardSet.getCourse() == null ? null : flashcardSet.getCourse().getId();
+    }
+
+    private void auditFlashcardMaster(
+            AuditAction action,
+            String targetType,
+            UUID targetId,
+            UUID courseId,
+            String summary) {
+        if (courseId == null) {
+            return;
+        }
+        courseAuditRecorder.recordMaster(
+                currentUserService.requireAuthenticatedUser(),
+                action,
+                targetType,
+                targetId,
+                courseId,
+                summary);
     }
 
     /**

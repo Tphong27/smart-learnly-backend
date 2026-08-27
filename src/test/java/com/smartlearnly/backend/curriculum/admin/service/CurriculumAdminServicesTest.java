@@ -8,7 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -74,7 +74,7 @@ class CurriculumAdminServicesTest {
     @Mock
     private CurrentUserService currentUserService;
     @Mock
-    private AuditLogService auditLogService;
+    private CourseAuditRecorder courseAuditRecorder;
     @Mock
     private QuizContentValidator quizContentValidator;
     @Mock
@@ -111,7 +111,7 @@ class CurriculumAdminServicesTest {
                 courseModuleRepository,
                 curriculumDtoMapper,
                 currentUserService,
-                auditLogService,
+                courseAuditRecorder,
                 courseAccessService,
                 curriculumAccessService
         );
@@ -119,7 +119,7 @@ class CurriculumAdminServicesTest {
                 curriculumLessonRepository,
                 curriculumDtoMapper,
                 currentUserService,
-                auditLogService,
+                courseAuditRecorder,
                 quizContentValidator,
                 videoSummaryService,
                 flashcardSetRepository,
@@ -190,11 +190,13 @@ class CurriculumAdminServicesTest {
 
         assertThat(lesson.getStatus()).isEqualTo(LessonStatus.INACTIVE);
         assertThat(lesson.getDeletedAt()).isNotNull();
-        verify(auditLogService).record(
-                actor.getEmail(),
-                "LESSON_DELETED",
+        verify(courseAuditRecorder).recordMaster(
+                actor,
+                com.smartlearnly.backend.common.audit.AuditAction.LESSON_DELETED,
                 "CURRICULUM_LESSON",
-                lesson.getId().toString());
+                lesson.getId(),
+                course.getId(),
+                lesson.getTitle());
     }
 
     @Test

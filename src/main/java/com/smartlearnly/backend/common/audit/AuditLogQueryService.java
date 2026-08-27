@@ -61,6 +61,63 @@ public class AuditLogQueryService {
         return AuditLogDetailResponse.from(log);
     }
 
+    /**
+     * Timeline thay đổi theo một course: metadata.courseId khớp, hoặc target COURSE = courseId.
+     * Chỉ dùng cho API change-history (TMO/SME), không thay global audit list.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<AuditLogSummaryResponse> listForCourse(
+            UUID courseId,
+            String keyword,
+            String action,
+            String actorRole,
+            Instant from,
+            Instant to,
+            int page,
+            int size
+    ) {
+        if (courseId == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Course id is required");
+        }
+        validateRange(from, to);
+        Specification<AuditLog> specification = filters(
+                keyword,
+                null,
+                action,
+                null,
+                null,
+                actorRole,
+                null,
+                null,
+                from,
+                to
+        ).and(belongsToCourse(courseId));
+        Page<AuditLog> logs = auditLogRepository.findAll(
+                specification,
+                PageRequest.of(page, size, Sort.by(Sort.Order.desc("occurredAt"), Sort.Order.desc("id")))
+        );
+        return new PageResponse<>(
+                logs.stream().map(AuditLogSummaryResponse::from).toList(),
+                logs.getNumber(), logs.getSize(), logs.getTotalElements(), logs.getTotalPages()
+        );
+    }
+
+    /**
+     * Chi tiết một audit log chỉ khi log thuộc course (chống IDOR qua UUID log).
+     */
+    @Transactional(readOnly = true)
+    public AuditLogDetailResponse getForCourse(UUID courseId, UUID auditLogId) {
+        if (courseId == null || auditLogId == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Course id and audit log id are required");
+        }
+        AuditLog log = auditLogRepository.findById(auditLogId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Audit log was not found"));
+        if (!belongsToCourse(log, courseId)) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Audit log was not found");
+        }
+        return AuditLogDetailResponse.from(log);
+    }
+
     private Specification<AuditLog> filters(
             String keyword,
             String domain,
@@ -96,6 +153,41 @@ public class AuditLogQueryService {
             if (to != null) predicates.add(builder.lessThanOrEqualTo(root.get("occurredAt"), to));
             return builder.and(predicates.toArray(Predicate[]::new));
         };
+    }
+
+    /**
+     * (metadata->>'courseId' = courseId) OR (targetType = COURSE AND targetId = courseId).
+     * Dùng jsonb_extract_path_text (Postgres); H2 MODE=PostgreSQL hỗ trợ tương đương trong test nếu cần.
+     */
+    private Specification<AuditLog> belongsToCourse(UUID courseId) {
+        String courseIdValue = courseId.toString();
+        return (root, query, builder) -> {
+            var metadataCourseId = builder.function(
+                    "jsonb_extract_path_text",
+                    String.class,
+                    root.get("metadata"),
+                    builder.literal("courseId"));
+            Predicate byMetadata = builder.equal(metadataCourseId, courseIdValue);
+            Predicate byCourseTarget = builder.and(
+                    builder.equal(builder.lower(root.get("targetType")), "course"),
+                    builder.equal(builder.lower(root.get("targetId")), courseIdValue.toLowerCase(Locale.ROOT)));
+            return builder.or(byMetadata, byCourseTarget);
+        };
+    }
+
+    static boolean belongsToCourse(AuditLog log, UUID courseId) {
+        if (log == null || courseId == null) {
+            return false;
+        }
+        String courseIdValue = courseId.toString();
+        if (log.getMetadata() != null) {
+            Object metadataCourseId = log.getMetadata().get("courseId");
+            if (metadataCourseId != null && courseIdValue.equalsIgnoreCase(String.valueOf(metadataCourseId))) {
+                return true;
+            }
+        }
+        return "COURSE".equalsIgnoreCase(log.getTargetType())
+                && courseIdValue.equalsIgnoreCase(log.getTargetId());
     }
 
     private void addIgnoreCase(

@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.curriculum.admin.service;
 
-import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -45,7 +46,7 @@ public class CurriculumLessonAdminService {
     private final CurriculumLessonRepository lessonRepository;
     private final CurriculumDtoMapper curriculumDtoMapper;
     private final CurrentUserService currentUserService;
-    private final AuditLogService auditLogService;
+    private final CourseAuditRecorder courseAuditRecorder;
     private final QuizContentValidator quizContentValidator;
     private final VideoSummaryService videoSummaryService;
     private final FlashcardSetRepository flashcardSetRepository;
@@ -89,7 +90,12 @@ public class CurriculumLessonAdminService {
         CurriculumLesson saved = lessonRepository.save(lesson);
         lessonTestLinkService.ensureQuizTest(saved);
         synchronizeFlashcardSet(saved);
-        audit("LESSON_CREATED", "CURRICULUM_LESSON", saved.getId());
+        audit(
+                AuditAction.LESSON_CREATED,
+                "CURRICULUM_LESSON",
+                saved.getId(),
+                courseIdOf(section),
+                saved.getTitle());
         return curriculumDtoMapper.toLessonResponse(saved);
     }
 
@@ -110,7 +116,12 @@ public class CurriculumLessonAdminService {
         CurriculumLesson saved = lessonRepository.save(lesson);
         lessonTestLinkService.ensureQuizTest(saved);
         synchronizeFlashcardSet(saved);
-        audit("LESSON_UPDATED", "CURRICULUM_LESSON", saved.getId());
+        audit(
+                AuditAction.LESSON_UPDATED,
+                "CURRICULUM_LESSON",
+                saved.getId(),
+                courseIdOf(saved.getSection()),
+                saved.getTitle());
         return curriculumDtoMapper.toLessonResponse(saved);
     }
 
@@ -118,10 +129,12 @@ public class CurriculumLessonAdminService {
     @Transactional
     public void deleteLesson(UUID lessonId) {
         CurriculumLesson lesson = curriculumAccessService.findUpdatableLesson(lessonId);
+        UUID courseId = courseIdOf(lesson.getSection());
+        String title = lesson.getTitle();
         lesson.setStatus(LessonStatus.INACTIVE);
         lesson.setDeletedAt(Instant.now());
         lessonRepository.save(lesson);
-        audit("LESSON_DELETED", "CURRICULUM_LESSON", lesson.getId());
+        audit(AuditAction.LESSON_DELETED, "CURRICULUM_LESSON", lessonId, courseId, title);
     }
 
     /** Sắp xếp lại toàn bộ lesson và yêu cầu payload chứa mỗi lesson đúng một lần. */
@@ -142,7 +155,12 @@ public class CurriculumLessonAdminService {
             lessonsById.get(lessonId).setSortOrder(sortOrder++);
         }
         List<CurriculumLesson> saved = lessonRepository.saveAll(lessons);
-        audit("LESSONS_REORDERED", "CURRICULUM_SECTION", section.getId());
+        audit(
+                AuditAction.LESSONS_REORDERED,
+                "CURRICULUM_SECTION",
+                section.getId(),
+                courseIdOf(section),
+                "Lessons reordered");
         return saved.stream()
                 .sorted(Comparator.comparing(CurriculumLesson::getSortOrder))
                 .map(curriculumDtoMapper::toLessonResponse)
@@ -288,10 +306,15 @@ public class CurriculumLessonAdminService {
         }
     }
 
-    /** Ghi audit thao tác lesson bằng người dùng đang đăng nhập. */
-    private void audit(String action, String targetType, UUID targetId) {
+    /** Ghi audit master lesson kèm metadata.courseId cho timeline change-history. */
+    private void audit(
+            AuditAction action, String targetType, UUID targetId, UUID courseId, String summary) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        auditLogService.record(actor.getEmail(), action, targetType, targetId.toString());
+        courseAuditRecorder.recordMaster(actor, action, targetType, targetId, courseId, summary);
+    }
+
+    private UUID courseIdOf(CurriculumSection section) {
+        return section.getCurriculumVersion().getCourseId();
     }
 
     /** Chuẩn hóa chuỗi bắt buộc và báo lỗi nếu chỉ có khoảng trắng. */

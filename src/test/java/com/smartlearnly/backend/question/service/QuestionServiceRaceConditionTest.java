@@ -10,6 +10,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.security.CurrentUserService;
 import com.smartlearnly.backend.course.access.service.CourseAccessService;
@@ -61,6 +62,8 @@ class QuestionServiceRaceConditionTest {
     private CourseAccessService courseAccessService;
     @Mock
     private StudentTestAnswerRepository studentTestAnswerRepository;
+    @Mock
+    private CourseAuditRecorder courseAuditRecorder;
 
     private QuestionService questionService;
     private UUID courseId;
@@ -78,7 +81,8 @@ class QuestionServiceRaceConditionTest {
                 currentUserService,
                 questionMediaImportService,
                 courseAccessService,
-                studentTestAnswerRepository
+                studentTestAnswerRepository,
+                courseAuditRecorder
         );
         courseId = UUID.randomUUID();
         moduleId = UUID.randomUUID();

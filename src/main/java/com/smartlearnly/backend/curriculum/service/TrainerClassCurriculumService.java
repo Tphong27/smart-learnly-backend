@@ -2,6 +2,8 @@ package com.smartlearnly.backend.curriculum.service;
 
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.AuthenticatedUserResolver;
@@ -75,6 +77,7 @@ public class TrainerClassCurriculumService {
     private final CurriculumLessonTestLinkService lessonTestLinkService;
     private final CourseRepository courseRepository;
     private final FlashcardSetRepository flashcardSetRepository;
+    private final CourseAuditRecorder courseAuditRecorder;
 
     @Transactional(readOnly = true)
     public ClassCurriculumEditorResponse getEditorCurriculum(UUID classId) {
@@ -108,6 +111,15 @@ public class TrainerClassCurriculumService {
         binding.setDraftVersionId(savedDraft.getId());
         binding.setCustomizationState(CurriculumCustomizationState.DRAFT);
         ClassCurriculumBinding savedBinding = bindingRepository.save(binding);
+
+        auditClassScoped(
+                trainer,
+                AuditAction.CLASS_CURRICULUM_DRAFT_INITIALIZED,
+                "CURRICULUM_VERSION",
+                savedDraft.getId(),
+                classOffering.getCourseId(),
+                classId,
+                "Class curriculum draft initialized");
 
         return toEditorResponse(classId, classOffering.getCourseId(), savedBinding, savedDraft, CurriculumResolutionService.SOURCE_CLASS_DRAFT);
     }
@@ -167,7 +179,16 @@ public class TrainerClassCurriculumService {
         section.setSortOrder(request.sortOrder() == null
                 ? sectionRepository.findMaxSortOrderByCurriculumVersionId(draft.getId()) + 1
                 : request.sortOrder());
-        return mapper.toSectionResponse(sectionRepository.save(section));
+        CurriculumSection saved = sectionRepository.save(section);
+        auditClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.SECTION_CREATED,
+                "CURRICULUM_SECTION",
+                saved.getId(),
+                draft.getCourseId(),
+                classId,
+                saved.getTitle());
+        return mapper.toSectionResponse(saved);
     }
 
     @Transactional
@@ -178,14 +199,32 @@ public class TrainerClassCurriculumService {
         if (request.sortOrder() != null) {
             section.setSortOrder(request.sortOrder());
         }
-        return mapper.toSectionResponse(sectionRepository.save(section));
+        CurriculumSection saved = sectionRepository.save(section);
+        auditClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.SECTION_UPDATED,
+                "CURRICULUM_SECTION",
+                saved.getId(),
+                draft.getCourseId(),
+                classId,
+                saved.getTitle());
+        return mapper.toSectionResponse(saved);
     }
 
     @Transactional
     public void deleteSection(UUID classId, UUID sectionId) {
         CurriculumVersion draft = requireEditableDraftForWrite(classId);
         CurriculumSection section = requireDraftSection(sectionId, draft.getId());
+        String title = section.getTitle();
         sectionRepository.delete(section);
+        auditClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.SECTION_DELETED,
+                "CURRICULUM_SECTION",
+                sectionId,
+                draft.getCourseId(),
+                classId,
+                title);
     }
 
     @Transactional
@@ -201,7 +240,16 @@ public class TrainerClassCurriculumService {
             sectionsById.get(requestedId).setSortOrder(sortOrder++);
         }
 
-        return sectionRepository.saveAll(sections).stream()
+        List<CurriculumSection> saved = sectionRepository.saveAll(sections);
+        auditClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.SECTIONS_REORDERED,
+                "CURRICULUM_VERSION",
+                draft.getId(),
+                draft.getCourseId(),
+                classId,
+                "Sections reordered");
+        return saved.stream()
                 .sorted(Comparator.comparing(CurriculumSection::getSortOrder))
                 .map(mapper::toSectionResponse)
                 .toList();
@@ -234,6 +282,14 @@ public class TrainerClassCurriculumService {
         savedEntry.setMaterializedLessonId(savedLesson.getId());
         entryRepository.save(savedEntry);
 
+        auditClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.LESSON_CREATED,
+                "CURRICULUM_LESSON",
+                savedLesson.getId(),
+                draft.getCourseId(),
+                classId,
+                savedLesson.getTitle());
         return mapper.toLessonResponse(savedLesson);
     }
 
@@ -250,6 +306,14 @@ public class TrainerClassCurriculumService {
         lessonTestLinkService.ensureQuizTest(saved);
         ensureFlashcardSet(saved, draft.getCourseId());
         syncEntrySortOrder(saved);
+        auditClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.LESSON_UPDATED,
+                "CURRICULUM_LESSON",
+                saved.getId(),
+                draft.getCourseId(),
+                classId,
+                saved.getTitle());
         return mapper.toLessonResponse(saved);
     }
 
@@ -257,11 +321,22 @@ public class TrainerClassCurriculumService {
     public void deleteLesson(UUID classId, UUID lessonId) {
         CurriculumVersion draft = requireEditableDraftForWrite(classId);
         ClassCurriculumEntry entry = requireDraftEntryForLessonReference(draft.getId(), lessonId);
+        String title = compositionService.resolveEffectiveLesson(draft, lessonId)
+                .map(CurriculumLesson::getTitle)
+                .orElse(null);
         entry.setDeletedAt(Instant.now());
         entryRepository.save(entry);
         if (entry.getMaterializedLessonId() != null) {
             lessonRepository.deleteById(entry.getMaterializedLessonId());
         }
+        auditClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.LESSON_DELETED,
+                "CURRICULUM_LESSON",
+                lessonId,
+                draft.getCourseId(),
+                classId,
+                title);
     }
 
     @Transactional
@@ -288,6 +363,15 @@ public class TrainerClassCurriculumService {
             }
         }
         entryRepository.saveAll(entries);
+
+        auditClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.LESSONS_REORDERED,
+                "CURRICULUM_SECTION",
+                sectionId,
+                draft.getCourseId(),
+                classId,
+                "Lessons reordered");
 
         CurriculumSection section = requireDraftSection(sectionId, draft.getId());
         return compositionService.effectiveLessons(section).stream()
@@ -425,10 +509,43 @@ public class TrainerClassCurriculumService {
         binding.setCustomizationState(CurriculumCustomizationState.PUBLISHED);
         ClassCurriculumBinding savedBinding = bindingRepository.save(binding);
 
+        auditClassScoped(
+                trainer,
+                AuditAction.CLASS_CURRICULUM_PUBLISHED,
+                "CURRICULUM_VERSION",
+                published.getId(),
+                classOffering.getCourseId(),
+                classId,
+                "Class curriculum published");
+
         return toEditorResponse(classId, classOffering.getCourseId(), savedBinding, published, CurriculumResolutionService.SOURCE_CLASS_PUBLISHED);
     }
 
     // ========== Private Helper Methods ==========
+
+    private void auditClassScoped(
+            UserAccount actor,
+            AuditAction action,
+            String targetType,
+            UUID targetId,
+            UUID courseId,
+            UUID classId,
+            String summary) {
+        if (courseId == null) {
+            return;
+        }
+        courseAuditRecorder.recordClassScoped(
+                actor,
+                action,
+                targetType,
+                targetId,
+                courseId,
+                classId,
+                summary,
+                null,
+                null,
+                null);
+    }
 
     private ClassOffering requireOwnedClass(UUID classId, UUID trainerId) {
         ClassOffering classOffering = classOfferingRepository.findByIdAndDeletedAtIsNull(classId)

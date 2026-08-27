@@ -1,18 +1,17 @@
 package com.smartlearnly.backend.dashboard.controller;
 
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.smartlearnly.backend.dashboard.dto.AdminDashboardOverviewResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardClassesResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardContentResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardCoursesResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardDateRangeResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardQuestionsResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardUsersResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardAccountStatusResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardConfigurationItemResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardConfigurationStatusResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardHealthComponentResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardServiceHealthResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardSystemHealthResponse;
 import com.smartlearnly.backend.dashboard.service.AdminDashboardService;
 import java.time.Instant;
 import java.util.List;
@@ -51,28 +50,27 @@ class AdminDashboardControllerSecurityTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void overviewShouldAllowAdmin() throws Exception {
-        when(adminDashboardService.getOverview(isNull(), isNull()))
-                .thenReturn(sampleResponse());
+        when(adminDashboardService.getOverview()).thenReturn(sampleResponse());
 
         mockMvc.perform(get("/api/v1/admin/dashboard/overview"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.users.total").value(10))
-                .andExpect(jsonPath("$.data.recentActivities").isEmpty());
+                .andExpect(jsonPath("$.data.accountStatus.total").value(10))
+                .andExpect(jsonPath("$.data.systemHealth.backend.status").value("UP"))
+                .andExpect(jsonPath("$.data.configurationStatus.items").isArray());
     }
 
     private AdminDashboardOverviewResponse sampleResponse() {
-        Instant from = Instant.parse("2026-06-04T00:00:00Z");
-        Instant to = Instant.parse("2026-07-04T00:00:00Z");
         return new AdminDashboardOverviewResponse(
-                new DashboardDateRangeResponse(from, to, 90),
-                new DashboardUsersResponse(10, 8, 1, 1, 0, 2),
-                new DashboardCoursesResponse(5, 3, 1, 1, 1),
-                new DashboardClassesResponse(4, 1, 1, 1, 1, 1),
-                new DashboardContentResponse(6, 12, 8, 3, 1, 2, 4),
-                new DashboardQuestionsResponse(20, 15, 2, 1, 1, 1, 6, 5, 7, 13),
-                List.of(),
-                to
-        );
+                Instant.parse("2026-07-04T00:00:00Z"),
+                new DashboardSystemHealthResponse(
+                        new DashboardHealthComponentResponse("UP"),
+                        new DashboardHealthComponentResponse("UP"),
+                        List.of(new DashboardServiceHealthResponse(
+                                "ai", "AI generation", "CONFIGURED", "gemini / gemini-flash"))),
+                new DashboardConfigurationStatusResponse(List.of(
+                        new DashboardConfigurationItemResponse(
+                                "ai", "AI generation", true, true, "gemini", "gemini-flash"))),
+                new DashboardAccountStatusResponse(8, 1, 1, 0, 2, 10));
     }
 }

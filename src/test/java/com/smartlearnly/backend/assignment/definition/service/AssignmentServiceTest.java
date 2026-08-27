@@ -15,6 +15,7 @@ import com.smartlearnly.backend.assignment.repository.AssignmentRepository;
 import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionRepository;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -55,6 +56,8 @@ class AssignmentServiceTest {
     private CurriculumVersionRepository curriculumVersionRepository;
     @Mock
     private ClassCurriculumCompositionService compositionService;
+    @Mock
+    private CourseAuditRecorder courseAuditRecorder;
 
     private AssignmentService service;
 
@@ -68,7 +71,8 @@ class AssignmentServiceTest {
                 curriculumResolutionService,
                 curriculumLessonRepository,
                 curriculumVersionRepository,
-                compositionService);
+                compositionService,
+                courseAuditRecorder);
     }
 
     @Test
@@ -132,6 +136,7 @@ class AssignmentServiceTest {
         AssignmentModel.CreateRequest request = new AssignmentModel.CreateRequest();
         request.setLessonId(lessonId);
         request.setTitle("Class assignment");
+        request.setDescription("Complete the class worksheet.");
 
         when(curriculumLessonRepository.findById(lessonId)).thenReturn(Optional.of(lesson));
         when(curriculumVersionRepository.findById(versionId)).thenReturn(Optional.of(version));
@@ -307,6 +312,7 @@ class AssignmentServiceTest {
         assignment.setId(assignmentId);
         assignment.setLessonId(lessonId);
         assignment.setTitle("Daily assignment");
+        assignment.setDescription("Submit the daily worksheet.");
         ClassOffering classOffering = new ClassOffering();
         classOffering.setId(classId);
         classOffering.setCourseId(courseId);
@@ -352,6 +358,7 @@ class AssignmentServiceTest {
         assignment.setId(assignmentId);
         assignment.setLessonId(draftLessonId);
         assignment.setTitle("Daily assignment");
+        assignment.setDescription("Submit the daily worksheet.");
         ClassOffering classOffering = new ClassOffering();
         classOffering.setId(classId);
         classOffering.setCourseId(courseId);

@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.curriculum.admin.service;
 
-import com.smartlearnly.backend.common.audit.AuditLogService;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -35,7 +36,7 @@ public class CurriculumSectionAdminService {
     private final CourseModuleRepository courseModuleRepository;
     private final CurriculumDtoMapper curriculumDtoMapper;
     private final CurrentUserService currentUserService;
-    private final AuditLogService auditLogService;
+    private final CourseAuditRecorder courseAuditRecorder;
     private final CourseAccessService courseAccessService;
     private final MasterCurriculumAccessService curriculumAccessService;
 
@@ -93,7 +94,7 @@ public class CurriculumSectionAdminService {
         section.setTitle(title);
         section.setSortOrder(sortOrder);
         CurriculumSection saved = sectionRepository.save(section);
-        audit("SECTION_CREATED", "CURRICULUM_SECTION", saved.getId());
+        audit(AuditAction.SECTION_CREATED, "CURRICULUM_SECTION", saved.getId(), courseId, saved.getTitle());
         return curriculumDtoMapper.toSectionResponse(saved);
     }
 
@@ -118,7 +119,8 @@ public class CurriculumSectionAdminService {
         }
         CurriculumSection saved = sectionRepository.save(section);
         synchronizeCanonicalModule(saved);
-        audit("SECTION_UPDATED", "CURRICULUM_SECTION", saved.getId());
+        UUID courseId = saved.getCurriculumVersion().getCourseId();
+        audit(AuditAction.SECTION_UPDATED, "CURRICULUM_SECTION", saved.getId(), courseId, saved.getTitle());
         return curriculumDtoMapper.toSectionResponse(saved);
     }
 
@@ -134,9 +136,11 @@ public class CurriculumSectionAdminService {
     @Transactional
     public void deleteSection(UUID sectionId) {
         CurriculumSection section = curriculumAccessService.findUpdatableSection(sectionId);
+        UUID courseId = section.getCurriculumVersion().getCourseId();
+        String title = section.getTitle();
         deactivateCanonicalModule(section);
         sectionRepository.delete(section);
-        audit("SECTION_DELETED", "CURRICULUM_SECTION", section.getId());
+        audit(AuditAction.SECTION_DELETED, "CURRICULUM_SECTION", sectionId, courseId, title);
     }
 
     // Xóa module qua snapshot section tương ứng để hai mô hình dữ liệu không lệch nhau.
@@ -165,7 +169,12 @@ public class CurriculumSectionAdminService {
         }
         List<CurriculumSection> saved = sectionRepository.saveAll(sections);
         saved.forEach(this::synchronizeCanonicalModule);
-        audit("SECTIONS_REORDERED", "CURRICULUM_VERSION", version.getId());
+        audit(
+                AuditAction.SECTIONS_REORDERED,
+                "CURRICULUM_VERSION",
+                version.getId(),
+                version.getCourseId(),
+                "Sections reordered");
         return saved.stream()
                 .sorted(Comparator.comparing(CurriculumSection::getSortOrder))
                 .map(curriculumDtoMapper::toSectionResponse)
@@ -238,10 +247,11 @@ public class CurriculumSectionAdminService {
         }
     }
 
-    // Ghi audit thao tác section/module bằng người dùng đang đăng nhập.
-    private void audit(String action, String targetType, UUID targetId) {
+    // Ghi audit master curriculum kèm metadata.courseId cho timeline change-history.
+    private void audit(
+            AuditAction action, String targetType, UUID targetId, UUID courseId, String summary) {
         UserAccount actor = currentUserService.requireAuthenticatedUser();
-        auditLogService.record(actor.getEmail(), action, targetType, targetId.toString());
+        courseAuditRecorder.recordMaster(actor, action, targetType, targetId, courseId, summary);
     }
 
     // Chuẩn hóa tiêu đề bắt buộc và báo lỗi nếu chỉ có khoảng trắng.

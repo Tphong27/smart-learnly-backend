@@ -8,6 +8,8 @@ import com.smartlearnly.backend.assignment.repository.AssignmentSubmissionReposi
 import com.smartlearnly.backend.classroom.entity.ClassOffering;
 import com.smartlearnly.backend.classroom.repository.ClassAdminProjection;
 import com.smartlearnly.backend.classroom.repository.ClassOfferingRepository;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -48,6 +50,7 @@ public class AssignmentService {
     private final CurriculumLessonRepository curriculumLessonRepository;
     private final CurriculumVersionRepository curriculumVersionRepository;
     private final ClassCurriculumCompositionService compositionService;
+    private final CourseAuditRecorder courseAuditRecorder;
     private NotificationService notificationService;
     private ClassEnrollmentRepository notificationClassEnrollmentRepository;
 
@@ -92,6 +95,11 @@ public class AssignmentService {
                 "New assignment",
                 "A new assignment is available: " + saved.getTitle() + ".",
                 "created");
+        auditAssignment(
+                AuditAction.ASSIGNMENT_CREATED,
+                saved.getId(),
+                saved.getClassId(),
+                saved.getTitle());
 
         return mapToResponse(saved);
     }
@@ -303,6 +311,11 @@ public class AssignmentService {
                 "Assignment updated",
                 updated.getTitle() + " was updated.",
                 "updated");
+        auditAssignment(
+                AuditAction.ASSIGNMENT_UPDATED,
+                updated.getId(),
+                updated.getClassId(),
+                updated.getTitle());
 
         return mapToResponse(updated);
     }
@@ -314,6 +327,9 @@ public class AssignmentService {
                 .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
         requireSupportedAssignment(assignment);
         requireNoActiveSubmissions(id);
+        UUID assignmentId = assignment.getId();
+        UUID classId = assignment.getClassId();
+        String title = assignment.getTitle();
         emitAssignmentNotificationToStudents(
                 assignment,
                 "Assignment removed",
@@ -325,6 +341,30 @@ public class AssignmentService {
         assignmentSubmissionRepository.deleteByAssignmentId(id);
         assignmentSubmissionRepository.flush();
         assignmentRepository.deleteById(id);
+        auditAssignment(AuditAction.ASSIGNMENT_DELETED, assignmentId, classId, title);
+    }
+
+    private void auditAssignment(AuditAction action, UUID assignmentId, UUID classId, String summary) {
+        if (classId == null) {
+            return;
+        }
+        UUID courseId = classOfferingRepository.findById(classId)
+                .map(ClassOffering::getCourseId)
+                .orElse(null);
+        if (courseId == null) {
+            return;
+        }
+        courseAuditRecorder.recordClassScoped(
+                currentUserService.requireAuthenticatedUser(),
+                action,
+                "ASSIGNMENT",
+                assignmentId,
+                courseId,
+                classId,
+                summary,
+                null,
+                null,
+                null);
     }
 
     private void requireNoActiveSubmissions(UUID assignmentId) {

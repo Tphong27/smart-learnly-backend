@@ -1,6 +1,8 @@
 package com.smartlearnly.backend.question.service;
 
 import com.smartlearnly.backend.common.api.PageResponse;
+import com.smartlearnly.backend.common.audit.AuditAction;
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -60,6 +62,7 @@ public class QuestionService {
     private final QuestionMediaImportService questionMediaImportService;
     private final CourseAccessService courseAccessService;
     private final StudentTestAnswerRepository studentTestAnswerRepository;
+    private final CourseAuditRecorder courseAuditRecorder;
 
     @Transactional(readOnly = true)
     public PageResponse<QuestionModel.Response> listByCourse(UUID courseId, UUID moduleId, String search, String type, String status, boolean includeArchived, Short difficulty, int page, int size) {
@@ -142,6 +145,13 @@ public class QuestionService {
 
         Question saved = questionRepository.save(question);
         replaceAnswers(saved.getId(), request.answers());
+        courseAuditRecorder.recordMaster(
+                actor,
+                AuditAction.QUESTION_BANK_CREATED,
+                "QUESTION",
+                saved.getId(),
+                courseId,
+                "Question created");
 
         return toResponse(saved);
     }
@@ -188,6 +198,13 @@ public class QuestionService {
 
         Question saved = questionRepository.save(question);
         replaceAnswers(saved.getId(), request.answers());
+        courseAuditRecorder.recordMaster(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.QUESTION_BANK_UPDATED,
+                "QUESTION",
+                saved.getId(),
+                courseId,
+                "Question updated");
 
         return toResponse(saved);
     }
@@ -203,6 +220,13 @@ public class QuestionService {
         requireQuestionNotUsedInAttempt(questionId);
         question.setStatus(QuestionStatus.ARCHIVED);
         questionRepository.save(question);
+        courseAuditRecorder.recordMaster(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.QUESTION_BANK_ARCHIVED,
+                "QUESTION",
+                questionId,
+                courseId,
+                "Question archived");
     }
 
     /** Cập nhật câu hỏi từ DTO công khai không chứa field module. */
@@ -224,6 +248,13 @@ public class QuestionService {
         requireQuestionNotUsedInAttempt(questionId);
         question.setStatus(QuestionStatus.ARCHIVED);
         questionRepository.save(question);
+        courseAuditRecorder.recordMaster(
+                currentUserService.requireAuthenticatedUser(),
+                AuditAction.QUESTION_BANK_ARCHIVED,
+                "QUESTION",
+                questionId,
+                courseId,
+                "Question archived");
     }
 
     /**

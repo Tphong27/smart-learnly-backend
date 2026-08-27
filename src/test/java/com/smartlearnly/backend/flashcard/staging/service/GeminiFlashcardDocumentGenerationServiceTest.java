@@ -2,11 +2,10 @@ package com.smartlearnly.backend.flashcard.staging.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardDocumentGenerationService.DocumentGenerationRequest;
@@ -14,91 +13,24 @@ import com.smartlearnly.backend.flashcard.staging.service.FlashcardGeminiGenerat
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardTextGenerationService.GenerationResult;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestClient;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestClientResponseException;
 
+@ExtendWith(MockitoExtension.class)
 class GeminiFlashcardDocumentGenerationServiceTest {
-    private final GeminiFlashcardGenerationService service =
-            new GeminiFlashcardGenerationService(properties());
 
-    @Test
-    void fallsBackWhenPrimaryDocumentModelIsUnavailable() {
-        FlashcardDocumentGenerationProperties properties = properties();
-        properties.setApiBaseUrl("https://gemini.example.test/v1beta");
-        properties.setModel("gemini-primary");
-        properties.setFallbackModel("gemini-fallback");
-        RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GeminiFlashcardGenerationService fallbackService =
-                new GeminiFlashcardGenerationService(properties, builder.build());
+    @Mock
+    private SystemSettingsService settingsService;
 
-        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
-                .andExpect(jsonPath("$.model").value("gemini-primary"))
-                .andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
-        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
-                .andExpect(jsonPath("$.model").value("gemini-fallback"))
-                .andRespond(withSuccess("{\"output_text\":\"fallback output\"}", MediaType.APPLICATION_JSON));
+    private GeminiFlashcardGenerationService service;
 
-        String output = fallbackService.sendGeminiInput(
-                List.of(Map.of("type", "text", "text", "Read this document.")),
-                "test");
-
-        assertThat(output).isEqualTo("fallback output");
-        server.verify();
-    }
-
-    @Test
-    void generateUsesStructuredSchemaAndJoinsModelOutputTextBlocks() {
-        FlashcardDocumentGenerationProperties properties = properties();
-        properties.setApiBaseUrl("https://gemini.example.test/v1beta");
-        properties.setModel("gemini-test");
-        properties.setFallbackModel("");
-        RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GeminiFlashcardGenerationService structuredService =
-                new GeminiFlashcardGenerationService(properties, builder.build());
-
-        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
-                .andExpect(jsonPath("$.response_format.type").value("text"))
-                .andExpect(jsonPath("$.response_format.mime_type").value("application/json"))
-                .andExpect(jsonPath("$.response_format.schema.properties.cards.type").value("array"))
-                .andExpect(jsonPath("$.response_format.schema.required[0]").value("cards"))
-                .andRespond(withSuccess("""
-                        {
-                          "steps": [
-                            {
-                              "type": "thought",
-                              "content": [{"type":"text","text":"This is not the result."}]
-                            },
-                            {
-                              "type": "model_output",
-                              "content": [
-                                {"type":"text","text":"{\\"cards\\":["},
-                                {"type":"text","text":"{\\"frontText\\":\\"What is staging?\\",\\"backText\\":\\"A review area.\\",\\"hint\\":null,\\"explanation\\":null,\\"sourceExcerpt\\":\\"Staging is a review area.\\"}]}"}
-                              ]
-                            }
-                          ]
-                        }
-                        """, MediaType.APPLICATION_JSON));
-
-        GenerationResult result = structuredService.generate(new GeminiGenerationRequest(
-                "Staging keeps generated flashcards in a review area before approval. ".repeat(3),
-                List.of(),
-                List.of(),
-                5,
-                "en",
-                "DOCX",
-                "lesson.docx",
-                "Document content"));
-
-        assertThat(result.candidates()).hasSize(1);
-        assertThat(result.candidates().get(0).frontText()).isEqualTo("What is staging?");
-        server.verify();
+    @BeforeEach
+    void setUp() {
+        service = new GeminiFlashcardGenerationService(properties(), settingsService);
     }
 
     @Test
@@ -367,6 +299,53 @@ class GeminiFlashcardDocumentGenerationServiceTest {
                     assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
                     assertThat(exception.getMessage()).contains("Scanned PDF pages could not be read");
                 });
+    }
+
+    @Test
+    void ensureAvailable_rejectsWhenAiDisabled() {
+        when(settingsService.resolveAssignmentAiSettings())
+                .thenReturn(new AssignmentAiSettings(false, "gemini", "key", "gemini-flash", null, 30));
+
+        assertThatThrownBy(() -> service.generate(readableDocxRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
+                    assertThat(exception.getMessage()).contains("Document generation is unavailable");
+                });
+    }
+
+    @Test
+    void ensureAvailable_rejectsWhenProviderIsNotGemini() {
+        when(settingsService.resolveAssignmentAiSettings())
+                .thenReturn(new AssignmentAiSettings(true, "openai", "key", "gemini-flash", null, 30));
+
+        assertThatThrownBy(() -> service.generate(readableDocxRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
+                    assertThat(exception.getMessage()).contains("Document generation provider is not configured");
+                });
+    }
+
+    @Test
+    void ensureAvailable_rejectsWhenApiKeyIsBlank() {
+        when(settingsService.resolveAssignmentAiSettings())
+                .thenReturn(new AssignmentAiSettings(true, "gemini", "  ", "gemini-flash", null, 30));
+
+        assertThatThrownBy(() -> service.generate(readableDocxRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE);
+                    assertThat(exception.getMessage()).contains("Document generation is not configured");
+                });
+    }
+
+    private GeminiGenerationRequest readableDocxRequest() {
+        return GeminiGenerationRequest.document(
+                "Readable document content for configuration checks. ".repeat(4),
+                List.of(),
+                List.of(),
+                10,
+                "auto",
+                "DOCX",
+                "lesson.docx");
     }
 
     private static FlashcardDocumentGenerationProperties properties() {

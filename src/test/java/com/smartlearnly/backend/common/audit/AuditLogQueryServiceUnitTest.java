@@ -108,6 +108,72 @@ class AuditLogQueryServiceUnitTest {
         verify(builder, times(4)).like(any(Expression.class), eq("%reconciled%"));
     }
 
+    @Test
+    void listForCourseShouldRequireCourseId() {
+        AuditLogQueryService service = new AuditLogQueryService(auditLogRepository);
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.smartlearnly.backend.common.exception.BusinessException.class,
+                () -> service.listForCourse(null, null, null, null, null, null, 0, 20));
+    }
+
+    @Test
+    void listForCourseShouldComposeCourseScopeSpecification() {
+        AuditLogQueryService service = new AuditLogQueryService(auditLogRepository);
+        UUID courseId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(sampleLog())));
+
+        PageResponse<AuditLogSummaryResponse> page =
+                service.listForCourse(courseId, null, null, null, null, null, 0, 20);
+
+        assertThat(page.items()).hasSize(1);
+        CriteriaBuilder builder = specificationBuilder().invoke();
+        verify(builder).function(eq("jsonb_extract_path_text"), eq(String.class), any(), any());
+        verify(builder, times(1)).or(any(Predicate.class), any(Predicate.class));
+    }
+
+    @Test
+    void getForCourseShouldRejectLogOutsideCourse() {
+        AuditLogQueryService service = new AuditLogQueryService(auditLogRepository);
+        UUID courseId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        AuditLog log = sampleLog();
+        log.setTargetType("SECTION");
+        log.setTargetId(UUID.randomUUID().toString());
+        log.setMetadata(java.util.Map.of("courseId", UUID.randomUUID().toString()));
+        when(auditLogRepository.findById(log.getId())).thenReturn(Optional.of(log));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.smartlearnly.backend.common.exception.BusinessException.class,
+                () -> service.getForCourse(courseId, log.getId()));
+    }
+
+    @Test
+    void getForCourseShouldAllowLogWithMatchingMetadataCourseId() {
+        AuditLogQueryService service = new AuditLogQueryService(auditLogRepository);
+        UUID courseId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        AuditLog log = sampleLog();
+        log.setTargetType("SECTION");
+        log.setMetadata(java.util.Map.of("courseId", courseId.toString()));
+        when(auditLogRepository.findById(log.getId())).thenReturn(Optional.of(log));
+
+        AuditLogDetailResponse response = service.getForCourse(courseId, log.getId());
+
+        assertThat(response.id()).isEqualTo(log.getId());
+    }
+
+    @Test
+    void belongsToCourseShouldMatchCourseTarget() {
+        UUID courseId = UUID.randomUUID();
+        AuditLog log = sampleLog();
+        log.setTargetType("COURSE");
+        log.setTargetId(courseId.toString());
+        log.setMetadata(null);
+
+        assertThat(AuditLogQueryService.belongsToCourse(log, courseId)).isTrue();
+        assertThat(AuditLogQueryService.belongsToCourse(log, UUID.randomUUID())).isFalse();
+    }
+
     /**
      * Captures the Specification passed to the repository and prepares mocked
      * Criteria objects so the returned lambda can be invoked directly.
@@ -130,9 +196,13 @@ class AuditLogQueryServiceUnitTest {
         when(builder.like(any(Expression.class), anyString())).thenReturn(predicate);
         when(builder.equal(any(Expression.class), any(Object.class))).thenReturn(predicate);
         when(builder.or(any(Predicate[].class))).thenReturn(predicate);
+        when(builder.or(any(Predicate.class), any(Predicate.class))).thenReturn(predicate);
         when(builder.and(any(Predicate[].class))).thenReturn(predicate);
+        when(builder.and(any(Predicate.class), any(Predicate.class))).thenReturn(predicate);
         when(builder.greaterThanOrEqualTo(any(Expression.class), any(Instant.class))).thenReturn(predicate);
         when(builder.lessThanOrEqualTo(any(Expression.class), any(Instant.class))).thenReturn(predicate);
+        when(builder.function(anyString(), eq(String.class), any(), any())).thenReturn(path);
+        when(builder.literal(anyString())).thenReturn(path);
 
         return new SpecificationProbe(builder, specification, root, query);
     }

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartlearnly.backend.common.audit.CourseAuditRecorder;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.common.security.CurrentUserService;
@@ -72,6 +73,8 @@ class AdminFlashcardServiceTest {
     private CourseAccessService courseAccessService;
     @Mock
     private MasterCurriculumAccessService masterCurriculumAccessService;
+    @Mock
+    private CourseAuditRecorder courseAuditRecorder;
 
     @BeforeEach
     void setUp() {
@@ -83,7 +86,8 @@ class AdminFlashcardServiceTest {
                 currentUserService,
                 curriculumLessonRepository,
                 courseAccessService,
-                masterCurriculumAccessService);
+                masterCurriculumAccessService,
+                courseAuditRecorder);
     }
 
     @Test
