@@ -153,6 +153,17 @@ class CourseQuestionControllerIntegrationTest {
 
     @Test
     @WithMockUser(roles = "SME")
+    void restoreQuestionShouldReturnSuccessResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/courses/{courseId}/questions/{questionId}/restore", COURSE_ID, QUESTION_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Question restored to draft successfully"));
+
+        verify(questionService).restoreInCourse(COURSE_ID, QUESTION_ID);
+    }
+
+    @Test
+    @WithMockUser(roles = "SME")
     void importQuestionsShouldReturnBatchSummary() throws Exception {
         when(questionService.importBatchForCourse(eq(COURSE_ID), any(QuestionImportDtos.ImportBatchRequest.class)))
                 .thenReturn(new QuestionImportDtos.ImportBatchResponse(1, 1, List.of(QUESTION_ID), List.of()));

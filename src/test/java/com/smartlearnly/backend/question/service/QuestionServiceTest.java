@@ -958,6 +958,48 @@ class QuestionServiceTest {
     }
 
     @Test
+    void restoreInCourse_setsDraftStatus_whenQuestionIsArchived() {
+        Question question = question(questionId, courseId, QuestionStatus.ARCHIVED);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, question.getQuestionText(), questionId))
+                .thenReturn(false);
+
+        service.restoreInCourse(courseId, questionId);
+
+        assertThat(question.getStatus()).isEqualTo(QuestionStatus.DRAFT);
+        verify(courseAccessService).requireUpdatableCourse(courseId);
+        verify(questionRepository).save(question);
+    }
+
+    @Test
+    void restoreInCourse_throwsBusinessRuleViolation_whenQuestionIsNotArchived() {
+        Question question = question(questionId, courseId, QuestionStatus.DRAFT);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> service.restoreInCourse(courseId, questionId))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
+                .hasMessageContaining("Only archived questions");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreInCourse_throwsBusinessRuleViolation_whenActiveDuplicateExists() {
+        Question question = question(questionId, courseId, QuestionStatus.ARCHIVED);
+        when(questionRepository.findById(questionId)).thenReturn(Optional.of(question));
+        when(questionRepository.existsActiveDuplicateInCourse(courseId, question.getQuestionText(), questionId))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.restoreInCourse(courseId, questionId))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION))
+                .hasMessageContaining("same text");
+
+        verify(questionRepository, never()).save(any());
+    }
+
+    @Test
     void importBatchForCourse_savesReviewedRowsAndAttachesImportedMedia() {
         when(questionRepository.existsActiveDuplicateInCourse(courseId, "Imported question?", null))
                 .thenReturn(false);

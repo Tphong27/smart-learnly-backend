@@ -11,6 +11,13 @@ import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.Goo
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleOAuthSettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayBankDisplaySettings;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayRuntimeSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.EmailSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleOAuthSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayBankDisplaySettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayRuntimeSettings;
 import com.smartlearnly.backend.dashboard.dto.DashboardUsersResponse;
 import com.smartlearnly.backend.dashboard.repository.AdminDashboardQueryRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,9 +28,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class AdminDashboardServiceUnitTest {
-
     @Mock
     private AdminDashboardQueryRepository dashboardQueryRepository;
+
+    @Mock
+    private SystemSettingsService systemSettingsService;
 
     @Mock
     private SystemSettingsService systemSettingsService;
@@ -32,6 +41,7 @@ class AdminDashboardServiceUnitTest {
 
     @BeforeEach
     void setUp() {
+        service = new AdminDashboardService(dashboardQueryRepository, systemSettingsService);
         service = new AdminDashboardService(dashboardQueryRepository, systemSettingsService);
     }
 

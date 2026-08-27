@@ -310,6 +310,40 @@ class LearningContentServiceTest {
         }
 
         @Test
+        void getAdminPreviewTestQuestionsAllowsDraftQuizFromAuthoringCurriculum() {
+                UUID courseId = UUID.randomUUID();
+                UUID lessonId = UUID.randomUUID();
+                UUID testId = UUID.randomUUID();
+                CurriculumVersion version = publishedVersion(courseId);
+                CurriculumSection section = sectionIn(version);
+                CurriculumLesson lesson = new CurriculumLesson();
+                lesson.setId(lessonId);
+                lesson.setType(LessonType.QUIZ);
+                lesson.setStatus(LessonStatus.DRAFT);
+                lesson.setTestId(testId);
+                section.addLesson(lesson);
+
+                when(courseRepository.findByIdAndDeletedAtIsNull(courseId))
+                                .thenReturn(Optional.of(
+                                                course(courseId, "Draft preview", "draft.png", CourseStatus.DRAFT)));
+                when(curriculumResolutionService.resolveMasterAuthoring(courseId))
+                                .thenReturn(new CurriculumResolution(
+                                                version,
+                                                null,
+                                                null,
+                                                false,
+                                                "master_authoring"));
+                when(testQuestionService.getLearnerQuestionsByTest(testId)).thenReturn(List.of());
+
+                var response = service.getAdminPreviewTestQuestions(courseId, null, lessonId);
+
+                assertThat(response).isEmpty();
+                verify(courseAccessService).requireReadableCourse(courseId);
+                verify(curriculumResolutionService).resolveMasterAuthoring(courseId);
+                verify(testQuestionService).getLearnerQuestionsByTest(testId);
+        }
+
+        @Test
         void getLearningFlashcardsRejectsNonPublishedFlashcardLesson() {
                 UUID courseId = UUID.randomUUID();
                 UUID studentId = UUID.randomUUID();

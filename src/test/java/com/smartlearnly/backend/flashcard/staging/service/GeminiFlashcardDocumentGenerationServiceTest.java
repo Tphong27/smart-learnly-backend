@@ -2,7 +2,12 @@ package com.smartlearnly.backend.flashcard.staging.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
 import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
@@ -22,15 +27,84 @@ import org.springframework.web.client.RestClientResponseException;
 
 @ExtendWith(MockitoExtension.class)
 class GeminiFlashcardDocumentGenerationServiceTest {
+    private final FlashcardDocumentGenerationProperties defaultProperties = properties();
+    private final GeminiFlashcardGenerationService service = new GeminiFlashcardGenerationService(
+            defaultProperties,
+            settingsService(defaultProperties));
 
-    @Mock
-    private SystemSettingsService settingsService;
+    @Test
+    void fallsBackWhenPrimaryDocumentModelIsUnavailable() {
+        FlashcardDocumentGenerationProperties properties = properties();
+        properties.setApiBaseUrl("https://gemini.example.test/v1beta");
+        properties.setModel("gemini-primary");
+        properties.setFallbackModel("gemini-fallback");
+        RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GeminiFlashcardGenerationService fallbackService =
+                new GeminiFlashcardGenerationService(properties, settingsService(properties), builder.build());
 
-    private GeminiFlashcardGenerationService service;
+        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
+                .andExpect(jsonPath("$.model").value("gemini-primary"))
+                .andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
+                .andExpect(jsonPath("$.model").value("gemini-fallback"))
+                .andRespond(withSuccess("{\"output_text\":\"fallback output\"}", MediaType.APPLICATION_JSON));
 
-    @BeforeEach
-    void setUp() {
-        service = new GeminiFlashcardGenerationService(properties(), settingsService);
+        String output = fallbackService.sendGeminiInput(
+                List.of(Map.of("type", "text", "text", "Read this document.")),
+                "test");
+
+        assertThat(output).isEqualTo("fallback output");
+        server.verify();
+    }
+
+    @Test
+    void generateUsesStructuredSchemaAndJoinsModelOutputTextBlocks() {
+        FlashcardDocumentGenerationProperties properties = properties();
+        properties.setApiBaseUrl("https://gemini.example.test/v1beta");
+        properties.setModel("gemini-test");
+        properties.setFallbackModel("");
+        RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiBaseUrl());
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GeminiFlashcardGenerationService structuredService =
+                new GeminiFlashcardGenerationService(properties, settingsService(properties), builder.build());
+
+        server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
+                .andExpect(jsonPath("$.response_format.type").value("text"))
+                .andExpect(jsonPath("$.response_format.mime_type").value("application/json"))
+                .andExpect(jsonPath("$.response_format.schema.properties.cards.type").value("array"))
+                .andExpect(jsonPath("$.response_format.schema.required[0]").value("cards"))
+                .andRespond(withSuccess("""
+                        {
+                          "steps": [
+                            {
+                              "type": "thought",
+                              "content": [{"type":"text","text":"This is not the result."}]
+                            },
+                            {
+                              "type": "model_output",
+                              "content": [
+                                {"type":"text","text":"{\\"cards\\":["},
+                                {"type":"text","text":"{\\"frontText\\":\\"What is staging?\\",\\"backText\\":\\"A review area.\\",\\"hint\\":null,\\"explanation\\":null,\\"sourceExcerpt\\":\\"Staging is a review area.\\"}]}"}
+                              ]
+                            }
+                          ]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        GenerationResult result = structuredService.generate(new GeminiGenerationRequest(
+                "Staging keeps generated flashcards in a review area before approval. ".repeat(3),
+                List.of(),
+                List.of(),
+                5,
+                "en",
+                "DOCX",
+                "lesson.docx",
+                "Document content"));
+
+        assertThat(result.candidates()).hasSize(1);
+        assertThat(result.candidates().get(0).frontText()).isEqualTo("What is staging?");
+        server.verify();
     }
 
     @Test
@@ -352,6 +426,18 @@ class GeminiFlashcardDocumentGenerationServiceTest {
         FlashcardDocumentGenerationProperties properties = new FlashcardDocumentGenerationProperties();
         properties.setApiKey("test-key");
         return properties;
+    }
+
+    private static SystemSettingsService settingsService(FlashcardDocumentGenerationProperties properties) {
+        SystemSettingsService settingsService = mock(SystemSettingsService.class);
+        when(settingsService.resolveAssignmentAiSettings()).thenAnswer(ignored -> new AssignmentAiSettings(
+                properties.isEnabled(),
+                properties.getProvider(),
+                properties.getApiKey(),
+                properties.getModel(),
+                properties.getFallbackModel(),
+                properties.getTimeout().toSeconds()));
+        return settingsService;
     }
 
     private static class CapturingGeminiGenerationService implements FlashcardGeminiGenerationService {

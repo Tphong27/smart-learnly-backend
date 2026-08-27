@@ -38,6 +38,7 @@ public class AssignmentAiGenerationClient {
      */
     public String generate(List<Map<String, Object>> input) {
         RestClientResponseException lastHttpException = null;
+        String lastHttpModel = null;
         for (String model : candidateModels()) {
             for (int attempt = 1; attempt <= 2; attempt += 1) {
                 try {
@@ -54,6 +55,7 @@ public class AssignmentAiGenerationClient {
                 }
                 catch (RestClientResponseException exception) {
                     lastHttpException = exception;
+                    lastHttpModel = model;
                     if (!isRetryableProviderException(exception)) {
                         break;
                     }
@@ -68,12 +70,12 @@ public class AssignmentAiGenerationClient {
                     }
                 }
             }
-            if (!isRetryableProviderException(lastHttpException)) {
+            if (!shouldTryNextModel(lastHttpException)) {
                 break;
             }
             if (!model.equals(fallbackModel())) {
                 log.warn(
-                        "Falling back Gemini assignment draft model after HTTP {}: from={} to={}",
+                        "Falling back Gemini assignment draft model after provider HTTP {}: from={} to={}",
                         lastHttpException.getStatusCode().value(),
                         model,
                         fallbackModel()
@@ -82,7 +84,7 @@ public class AssignmentAiGenerationClient {
         }
 
         if (lastHttpException != null) {
-            handleGeminiHttpException(lastHttpException);
+            handleGeminiHttpException(lastHttpException, lastHttpModel);
         }
         throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "AI draft could not be generated right now.");
     }
@@ -135,12 +137,13 @@ public class AssignmentAiGenerationClient {
     }
 
     /** Chuyển HTTP error của Gemini thành thông báo nghiệp vụ ổn định cho frontend. */
-    private void handleGeminiHttpException(RestClientResponseException exception) {
+    private void handleGeminiHttpException(RestClientResponseException exception, String model) {
+        String effectiveModel = model == null || model.isBlank() ? modelName() : model;
         log.warn(
                 "Gemini assignment draft HTTP error: status={} model={} endpoint={} responseBody={}",
                 exception.getStatusCode().value(),
-                modelName(),
-                "/models/" + modelName() + ":generateContent",
+                effectiveModel,
+                "/models/" + effectiveModel + ":generateContent",
                 truncateForLog(exception.getResponseBodyAsString(), 1000),
                 exception
         );
@@ -159,6 +162,30 @@ public class AssignmentAiGenerationClient {
         }
         int status = exception.getStatusCode().value();
         return status == 503 || status == 502 || status == 504;
+    }
+
+    /** Quyết định khi nào được chuyển sang model fallback mà không che lỗi cấu hình khác. */
+    private boolean shouldTryNextModel(RestClientResponseException exception) {
+        return isRetryableProviderException(exception)
+                || isModelUnavailableProviderException(exception);
+    }
+
+    /** Nhận diện lỗi Gemini báo model hiện tại không khả dụng hoặc không hỗ trợ generateContent. */
+    private boolean isModelUnavailableProviderException(RestClientResponseException exception) {
+        if (exception == null) {
+            return false;
+        }
+        int status = exception.getStatusCode().value();
+        if (status != 400 && status != 404) {
+            return false;
+        }
+        String body = exception.getResponseBodyAsString();
+        String normalized = body == null ? "" : body.toLowerCase(Locale.ROOT);
+        return normalized.contains("model")
+                && (normalized.contains("not found")
+                || normalized.contains("not supported")
+                || normalized.contains("no longer available")
+                || normalized.contains("not available"));
     }
 
     /** Chờ ngắn giữa hai lần gọi provider và giữ lại cờ interrupt của thread. */
@@ -208,7 +235,7 @@ public class AssignmentAiGenerationClient {
     private String modelName() {
         String configured = normalizeNullable(resolveSettings().model());
         if (configured == null) {
-            return "gemini-flash-latest";
+            return "gemini-2.5-flash";
         }
         return configured.startsWith("models/")
                 ? configured.substring("models/".length())
@@ -229,7 +256,7 @@ public class AssignmentAiGenerationClient {
     private String fallbackModel() {
         String configured = normalizeNullable(resolveSettings().fallbackModel());
         if (configured == null) {
-            return "gemini-flash-lite-latest";
+            return "gemini-3.5-flash-lite";
         }
         return configured.startsWith("models/")
                 ? configured.substring("models/".length())

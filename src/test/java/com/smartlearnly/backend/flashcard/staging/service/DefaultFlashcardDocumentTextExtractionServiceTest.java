@@ -144,6 +144,24 @@ class DefaultFlashcardDocumentTextExtractionServiceTest {
     }
 
     @Test
+    void extractRejectsDocumentLargerThanConfiguredLimitBeforeReadingContent() {
+        FlashcardDocumentGenerationProperties properties = properties();
+        properties.setMaxSourceFileSize(DataSize.ofBytes(3));
+        DefaultFlashcardDocumentTextExtractionService limitedService =
+                new DefaultFlashcardDocumentTextExtractionService(properties);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "lesson.pdf",
+                "application/pdf",
+                new byte[] { 1, 2, 3, 4 });
+
+        assertThatThrownBy(() -> limitedService.extract(file))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
+                .hasMessage("Uploaded document must not exceed 1 MB");
+    }
+
+    @Test
     void extractSanitizesPathLikeFileNameToBaseName() throws Exception {
         byte[] docx = docxWithParagraphs("Path based upload name should keep only the base document name.");
         MockMultipartFile file = new MockMultipartFile(
