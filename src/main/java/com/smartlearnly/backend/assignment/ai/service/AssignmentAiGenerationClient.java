@@ -208,7 +208,7 @@ public class AssignmentAiGenerationClient {
     private String modelName() {
         String configured = normalizeNullable(resolveSettings().model());
         if (configured == null) {
-            return "gemini-flash-latest";
+            return "gemini-2.5-flash";
         }
         return configured.startsWith("models/")
                 ? configured.substring("models/".length())
@@ -229,7 +229,7 @@ public class AssignmentAiGenerationClient {
     private String fallbackModel() {
         String configured = normalizeNullable(resolveSettings().fallbackModel());
         if (configured == null) {
-            return "gemini-flash-lite-latest";
+            return "gemini-3.5-flash-lite";
         }
         return configured.startsWith("models/")
                 ? configured.substring("models/".length())
