@@ -1,6 +1,8 @@
 package com.smartlearnly.backend.course.preview.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
+import com.smartlearnly.backend.course.preview.dto.PreviewAssignmentResponse;
+import com.smartlearnly.backend.course.preview.service.PreviewAssignmentService;
 import com.smartlearnly.backend.learning.content.dto.LearningContentResponse;
 import com.smartlearnly.backend.learning.content.service.LearningContentService;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import java.util.UUID;
 @RequestMapping("/api/v1/courses")
 public class CoursePreviewController {
     private final LearningContentService learningContentService;
+    private final PreviewAssignmentService previewAssignmentService;
 
     // Trả nội dung mẫu công khai để khách xem khóa học trước khi đăng ký.
     // @GetMapping("/{courseId}/preview")
@@ -72,5 +75,16 @@ public class CoursePreviewController {
                         courseId,
                         classId,
                         lessonId));
+    }
+
+    /** Trả nội dung assignment chỉ đọc cho lesson được đánh dấu preview. */
+    @GetMapping("/{courseId}/preview-lessons/{lessonId}/assignment")
+    public ApiResponse<PreviewAssignmentResponse> getPreviewAssignment(
+            @PathVariable UUID courseId,
+            @PathVariable UUID lessonId,
+            @RequestParam(required = false) UUID classId) {
+        return ApiResponse.success(
+                "Preview assignment loaded successfully",
+                previewAssignmentService.getPreviewAssignment(courseId, classId, lessonId));
     }
 }
