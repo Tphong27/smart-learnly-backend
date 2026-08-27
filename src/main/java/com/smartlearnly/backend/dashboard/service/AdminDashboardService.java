@@ -1,12 +1,23 @@
 package com.smartlearnly.backend.dashboard.service;
 
-import com.smartlearnly.backend.common.exception.BusinessException;
-import com.smartlearnly.backend.common.exception.ErrorCode;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.EmailSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleMeetSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.GoogleOAuthSettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayBankDisplaySettings;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.SePayRuntimeSettings;
 import com.smartlearnly.backend.dashboard.dto.AdminDashboardOverviewResponse;
-import com.smartlearnly.backend.dashboard.dto.DashboardDateRangeResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardAccountStatusResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardConfigurationItemResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardConfigurationStatusResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardHealthComponentResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardServiceHealthResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardSystemHealthResponse;
+import com.smartlearnly.backend.dashboard.dto.DashboardUsersResponse;
 import com.smartlearnly.backend.dashboard.repository.AdminDashboardQueryRepository;
-import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,49 +26,156 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class AdminDashboardService {
-    private static final int DEFAULT_RANGE_DAYS = 30;
-    private static final int MAX_RANGE_DAYS = 90;
-    private static final Duration MAX_RANGE = Duration.ofDays(MAX_RANGE_DAYS);
+    private static final String STATUS_UP = "UP";
+    private static final String STATUS_DOWN = "DOWN";
+    private static final String STATUS_CONFIGURED = "CONFIGURED";
+    private static final String STATUS_NOT_CONFIGURED = "NOT_CONFIGURED";
+    private static final String STATUS_DISABLED = "DISABLED";
 
     private final AdminDashboardQueryRepository dashboardQueryRepository;
+    private final SystemSettingsService systemSettingsService;
 
     @Transactional(readOnly = true)
-    public AdminDashboardOverviewResponse getOverview(Instant from, Instant to) {
-        DateRange range = resolveRange(from, to);
+    public AdminDashboardOverviewResponse getOverview() {
+        DashboardUsersResponse users = dashboardQueryRepository.countUsers();
+        boolean databaseUp = dashboardQueryRepository.isDatabaseUp();
+
+        AssignmentAiSettings ai = systemSettingsService.resolveAssignmentAiSettings();
+        EmailSettings email = systemSettingsService.resolveEmailSettings();
+        SePayBankDisplaySettings sePayBank = systemSettingsService.resolveSePayBankDisplaySettings();
+        SePayRuntimeSettings sePayRuntime = systemSettingsService.resolveSePayRuntimeSettings();
+        GoogleOAuthSettings googleOAuth = systemSettingsService.resolveGoogleSettings();
+        GoogleMeetSettings googleMeet = systemSettingsService.resolveGoogleMeetSettings();
+
+        List<DashboardConfigurationItemResponse> configItems = buildConfigurationItems(
+                ai, email, sePayBank, sePayRuntime, googleOAuth, googleMeet);
+        List<DashboardServiceHealthResponse> services = buildServiceHealth(configItems, ai);
 
         return new AdminDashboardOverviewResponse(
-                new DashboardDateRangeResponse(range.from(), range.to(), MAX_RANGE_DAYS),
-                dashboardQueryRepository.countUsers(range.from(), range.to()),
-                dashboardQueryRepository.countCourses(range.from(), range.to()),
-                dashboardQueryRepository.countClasses(range.from(), range.to()),
-                dashboardQueryRepository.countContent(range.from(), range.to()),
-                dashboardQueryRepository.countQuestions(range.from(), range.to()),
-                List.of(),
-                Instant.now()
+                Instant.now(),
+                new DashboardSystemHealthResponse(
+                        new DashboardHealthComponentResponse(STATUS_UP),
+                        new DashboardHealthComponentResponse(databaseUp ? STATUS_UP : STATUS_DOWN),
+                        services
+                ),
+                new DashboardConfigurationStatusResponse(configItems),
+                new DashboardAccountStatusResponse(
+                        users.active(),
+                        users.pendingVerify(),
+                        users.inactive(),
+                        users.locked(),
+                        users.banned(),
+                        users.total()
+                )
         );
     }
 
-    private DateRange resolveRange(Instant from, Instant to) {
-        if (from == null && to == null) {
-            Instant resolvedTo = Instant.now();
-            return new DateRange(resolvedTo.minus(Duration.ofDays(DEFAULT_RANGE_DAYS)), resolvedTo);
-        }
+    private List<DashboardConfigurationItemResponse> buildConfigurationItems(
+            AssignmentAiSettings ai,
+            EmailSettings email,
+            SePayBankDisplaySettings sePayBank,
+            SePayRuntimeSettings sePayRuntime,
+            GoogleOAuthSettings googleOAuth,
+            GoogleMeetSettings googleMeet
+    ) {
+        List<DashboardConfigurationItemResponse> items = new ArrayList<>();
 
-        if (from == null || to == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Dashboard date range requires both from and to");
-        }
+        items.add(new DashboardConfigurationItemResponse(
+                "ai",
+                "AI generation",
+                ai.isConfigured(),
+                ai.enabled(),
+                blankToNull(ai.provider()),
+                blankToNull(ai.model())
+        ));
 
-        if (from.isAfter(to)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Dashboard date from must not be after date to");
-        }
+        items.add(new DashboardConfigurationItemResponse(
+                "email",
+                "Email (Resend)",
+                email.isConfigured(),
+                email.isConfigured(),
+                email.isConfigured() ? "resend" : null,
+                null
+        ));
 
-        if (Duration.between(from, to).compareTo(MAX_RANGE) > 0) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Dashboard date range must not exceed 90 days");
-        }
+        boolean sePayConfigured = sePayBank.isConfigured()
+                && sePayRuntime.hasApiToken()
+                && sePayRuntime.hasWebhookSecret();
+        items.add(new DashboardConfigurationItemResponse(
+                "sepay",
+                "SePay payment",
+                sePayConfigured,
+                sePayConfigured,
+                sePayConfigured ? "sepay" : null,
+                null
+        ));
 
-        return new DateRange(from, to);
+        boolean googleOAuthConfigured = isNonBlank(googleOAuth.clientId())
+                && isNonBlank(googleOAuth.clientSecret());
+        items.add(new DashboardConfigurationItemResponse(
+                "google_oauth",
+                "Google OAuth login",
+                googleOAuthConfigured,
+                googleOAuthConfigured,
+                googleOAuthConfigured ? "google" : null,
+                null
+        ));
+
+        boolean meetConfigured = googleMeet.enabled() && isNonBlank(googleMeet.refreshToken());
+        items.add(new DashboardConfigurationItemResponse(
+                "google_meet",
+                "Google Meet",
+                meetConfigured,
+                googleMeet.enabled(),
+                meetConfigured ? "google" : null,
+                null
+        ));
+
+        return items;
     }
 
-    private record DateRange(Instant from, Instant to) {
+    /**
+     * Service health reflects configuration state only — no external provider pings
+     * (avoids cost/rate-limit on every dashboard refresh).
+     */
+    private List<DashboardServiceHealthResponse> buildServiceHealth(
+            List<DashboardConfigurationItemResponse> configItems,
+            AssignmentAiSettings ai
+    ) {
+        List<DashboardServiceHealthResponse> services = new ArrayList<>();
+        for (DashboardConfigurationItemResponse item : configItems) {
+            String status;
+            String detail = null;
+            if ("ai".equals(item.id())) {
+                if (!item.configured()) {
+                    status = STATUS_NOT_CONFIGURED;
+                    detail = "API key missing";
+                } else if (!ai.enabled()) {
+                    status = STATUS_DISABLED;
+                    detail = "AI generation disabled in settings";
+                } else {
+                    status = STATUS_CONFIGURED;
+                    detail = item.provider() != null && item.model() != null
+                            ? item.provider() + " / " + item.model()
+                            : null;
+                }
+            } else if (!item.configured()) {
+                status = STATUS_NOT_CONFIGURED;
+            } else if (!item.enabled()) {
+                status = STATUS_DISABLED;
+            } else {
+                status = STATUS_CONFIGURED;
+            }
+            services.add(new DashboardServiceHealthResponse(item.id(), item.name(), status, detail));
+        }
+        return services;
+    }
+
+    private static boolean isNonBlank(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static String blankToNull(String value) {
+        return isNonBlank(value) ? value : null;
     }
 }

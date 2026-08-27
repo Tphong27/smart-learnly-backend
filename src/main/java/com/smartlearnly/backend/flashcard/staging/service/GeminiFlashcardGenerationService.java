@@ -2,6 +2,8 @@ package com.smartlearnly.backend.flashcard.staging.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService;
+import com.smartlearnly.backend.admin.settings.service.SystemSettingsService.AssignmentAiSettings;
 import com.smartlearnly.backend.common.exception.BusinessException;
 import com.smartlearnly.backend.common.exception.ErrorCode;
 import com.smartlearnly.backend.flashcard.staging.service.FlashcardGeminiGenerationService.GeminiGenerationRequest;
@@ -41,20 +43,25 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
     private static final Set<String> SUPPORTED_LANGUAGE_OPTIONS = Set.of("auto", "vi", "en");
 
     private final FlashcardDocumentGenerationProperties properties;
+    private final SystemSettingsService settingsService;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestClient restClient;
 
     @Autowired
     public GeminiFlashcardGenerationService(
-            FlashcardDocumentGenerationProperties properties) {
-        this(properties, createRestClient(properties));
+            FlashcardDocumentGenerationProperties properties,
+            SystemSettingsService settingsService) {
+        this.properties = properties;
+        this.settingsService = settingsService;
     }
 
+    /**
+     * Package-private constructor kept for unit tests that only need properties + settings.
+     */
     GeminiFlashcardGenerationService(
             FlashcardDocumentGenerationProperties properties,
-            RestClient restClient) {
-        this.properties = properties;
-        this.restClient = restClient;
+            SystemSettingsService settingsService,
+            ObjectMapper ignoredObjectMapper) {
+        this(properties, settingsService);
     }
 
     @Override
@@ -380,12 +387,13 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
             String model,
             String operation,
             Map<String, Object> responseSchema) {
+        AssignmentAiSettings settings = resolveSettings();
         try {
-            String response = restClient
+            String response = restClient(settings)
                     .post()
                     .uri("/interactions")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("x-goog-api-key", properties.getApiKey())
+                    .header("x-goog-api-key", settings.apiKey().trim())
                     .header("Api-Revision", "2026-05-20")
                     .body(buildRequestBody(input, model, responseSchema))
                     .retrieve()
@@ -475,9 +483,14 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         return schema;
     }
 
+    private AssignmentAiSettings resolveSettings() {
+        return settingsService.resolveAssignmentAiSettings();
+    }
+
     private List<String> candidateModels() {
-        String primary = normalizeModel(properties.getModel(), "gemini-3.5-flash");
-        String fallback = normalizeModel(properties.getFallbackModel(), null);
+        AssignmentAiSettings settings = resolveSettings();
+        String primary = normalizeModel(settings.model(), "gemini-3.5-flash");
+        String fallback = normalizeModel(settings.fallbackModel(), null);
         if (fallback == null || fallback.equals(primary)) {
             return List.of(primary);
         }
@@ -499,10 +512,10 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         return status == 400 || status == 404 || status == 408 || status == 429 || status >= 500;
     }
 
-    private static RestClient createRestClient(FlashcardDocumentGenerationProperties properties) {
+    private RestClient restClient(AssignmentAiSettings settings) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(properties.getTimeout());
-        requestFactory.setReadTimeout(properties.getTimeout());
+        requestFactory.setConnectTimeout(settings.timeout());
+        requestFactory.setReadTimeout(settings.timeout());
         return RestClient.builder()
                 .baseUrl(properties.getApiBaseUrl())
                 .requestFactory(requestFactory)
@@ -538,17 +551,24 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
     }
 
     private void ensureAvailable() {
-        if (!properties.isEnabled()) {
+        AssignmentAiSettings settings = resolveSettings();
+        if (!settings.enabled()) {
             log.warn("Gemini flashcard document generation is disabled by configuration");
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "Document generation is unavailable");
         }
-        if (!PROVIDER_NAME.equalsIgnoreCase(properties.getProvider())) {
-            log.warn("Gemini flashcard document provider mismatch: configuredProvider={}", properties.getProvider());
+        if (!PROVIDER_NAME.equalsIgnoreCase(settings.provider())) {
+            log.warn("Gemini flashcard document provider mismatch: configuredProvider={}", settings.provider());
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "Document generation provider is not configured");
         }
-        if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
+        if (settings.apiKey() == null || settings.apiKey().isBlank()) {
             log.warn("Gemini flashcard document API key is missing");
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "Document generation is not configured");
+        }
+        String apiKey = settings.apiKey().trim();
+        if (apiKey.startsWith("<") || apiKey.endsWith(">")) {
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+                    "Document generation API key must not include placeholder angle brackets");
         }
     }
 

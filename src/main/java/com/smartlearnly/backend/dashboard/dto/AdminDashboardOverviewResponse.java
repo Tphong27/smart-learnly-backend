@@ -1,16 +1,11 @@
 package com.smartlearnly.backend.dashboard.dto;
 
 import java.time.Instant;
-import java.util.List;
 
 public record AdminDashboardOverviewResponse(
-        DashboardDateRangeResponse range,
-        DashboardUsersResponse users,
-        DashboardCoursesResponse courses,
-        DashboardClassesResponse classes,
-        DashboardContentResponse content,
-        DashboardQuestionsResponse questions,
-        List<DashboardRecentActivityResponse> recentActivities,
-        Instant generatedAt
+        Instant generatedAt,
+        DashboardSystemHealthResponse systemHealth,
+        DashboardConfigurationStatusResponse configurationStatus,
+        DashboardAccountStatusResponse accountStatus
 ) {
 }
