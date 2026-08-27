@@ -31,8 +31,6 @@ import com.smartlearnly.backend.question.entity.QuestionStatus;
 import com.smartlearnly.backend.question.entity.QuestionType;
 import com.smartlearnly.backend.question.repository.QuestionAnswerRepository;
 import com.smartlearnly.backend.question.repository.QuestionRepository;
-import com.smartlearnly.backend.learning.module.entity.CourseModule;
-import com.smartlearnly.backend.learning.module.repository.CourseModuleRepository;
 import com.smartlearnly.backend.user.entity.UserAccount;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -66,7 +64,6 @@ public class AiQuestionDraftService {
 
     private final CourseAccessService courseAccessService;
     private final CurrentUserService currentUserService;
-    private final CourseModuleRepository courseModuleRepository;
     private final AiQuestionGenerationBatchRepository batchRepository;
     private final AiQuestionGenerationSourceRepository sourceRepository;
     private final AiQuestionGenerationDraftRepository draftRepository;
@@ -136,7 +133,6 @@ public class AiQuestionDraftService {
         int requestedCount = normalizeRequestedCount(request.requestedCount());
         String language = normalizeLanguage(request.language());
         String instruction = normalizeInstruction(request.generationInstruction());
-        validateModuleId(courseId, request.moduleId());
 
         AiQuestionGenerationBatch batch = new AiQuestionGenerationBatch();
         batch.setCourseId(courseId);
@@ -161,7 +157,7 @@ public class AiQuestionDraftService {
 
         batch.setStatus(AiQuestionGenerationBatch.STATUS_PROCESSING);
         batch = batchRepository.save(batch);
-        generateAndPersistDrafts(batch, request.moduleId(), questionTypes, sourceInputs);
+        generateAndPersistDrafts(batch, questionTypes, sourceInputs);
         return toBatchResponse(batchRepository.save(batch));
     }
 
@@ -180,7 +176,6 @@ public class AiQuestionDraftService {
         batch.setSafeErrorMessage(null);
         generateAndPersistDrafts(
                 batch,
-                null,
                 parseQuestionTypesCsv(batch.getRequestedQuestionTypes()),
                 sourceService.buildSourceInputsForBatch(batch.getId()));
         return toBatchResponse(batchRepository.save(batch));
@@ -193,7 +188,6 @@ public class AiQuestionDraftService {
         AiQuestionGenerationDraft draft = findDraftInBatch(batch, draftId);
         ensureVersion(draft, request.version());
         ensureDraftEditable(draft);
-        validateModuleId(batch.getCourseId(), request.moduleId());
 
         String before = draftSnapshot(draft);
         List<AiQuestionDraftDtos.AnswerPayload> previousAnswers = parseAnswers(draft.getAnswersJson());
@@ -201,7 +195,7 @@ public class AiQuestionDraftService {
 
         draft.setQuestionText(normalizeRequired(request.questionText(), "Question text is required"));
         draft.setExplanation(normalizeNullable(request.explanation()));
-        draft.setModuleId(request.moduleId());
+        draft.setModuleId(null);
         draft.setAnswersJson(toJson(normalizeAnswers(request.answers())));
 
         boolean contentChanged = !normalizeForCompare(previousQuestionText)
@@ -308,7 +302,6 @@ public class AiQuestionDraftService {
     /** Sinh draft, lưu kết quả và phát notification khi batch hoàn tất. */
     private void generateAndPersistDrafts(
             AiQuestionGenerationBatch batch,
-            UUID moduleId,
             List<String> questionTypes,
             List<QuestionGenerationProvider.SourceInput> sourceInputs) {
         try {
@@ -328,7 +321,7 @@ public class AiQuestionDraftService {
             for (QuestionGenerationProvider.GeneratedQuestion generatedQuestion : generatedQuestions.stream()
                     .limit(requestedLimit)
                     .toList()) {
-                persistGeneratedDraft(batch, moduleId, generatedQuestion, evidenceRequired);
+                persistGeneratedDraft(batch, generatedQuestion, evidenceRequired);
                 generated += 1;
             }
             batch.setGeneratedCount(generated);
@@ -343,19 +336,19 @@ public class AiQuestionDraftService {
             }
             batch.setCompletedAt(Instant.now());
             refreshBatchCounts(batch);
-            emitAiBatchNotification(batch, moduleId);
+            emitAiBatchNotification(batch);
         } catch (BusinessException exception) {
             batch.setStatus(AiQuestionGenerationBatch.STATUS_FAILED);
             batch.setErrorCode(exception.errorCode().name());
             batch.setSafeErrorMessage(exception.getMessage());
             batch.setCompletedAt(Instant.now());
             refreshBatchCounts(batch);
-            emitAiBatchNotification(batch, moduleId);
+            emitAiBatchNotification(batch);
         }
     }
 
-    /** Phát notification AI với deep-link đúng module khi batch kết thúc. */
-    private void emitAiBatchNotification(AiQuestionGenerationBatch batch, UUID moduleId) {
+    /** Phát notification AI với deep-link Question Bank course-wide khi batch kết thúc. */
+    private void emitAiBatchNotification(AiQuestionGenerationBatch batch) {
         if (notificationService == null || batch.getRequestedBy() == null) {
             return;
         }
@@ -375,22 +368,17 @@ public class AiQuestionDraftService {
                                 : batch.getSafeErrorMessage()),
                 "AI_QUESTION_BATCH",
                 batch.getId(),
-                moduleId == null
-                        ? "/admin/courses/" + batch.getCourseId() + "/questions/ai-drafts/" + batch.getId()
-                        : "/admin/courses/" + batch.getCourseId() + "/modules/" + moduleId
-                                + "/questions/ai-drafts/" + batch.getId(),
+                "/admin/courses/" + batch.getCourseId() + "/questions/ai-drafts/" + batch.getId(),
                 null,
                 "ai-question-batch:" + batch.getId() + ":" + batch.getStatus(),
                 NotificationPayloads.of(
                         "courseId", batch.getCourseId(),
-                        "moduleId", moduleId,
                         "status", batch.getStatus(),
                         "generatedCount", batch.getGeneratedCount() == null ? 0 : batch.getGeneratedCount())));
     }
 
     private void persistGeneratedDraft(
             AiQuestionGenerationBatch batch,
-            UUID moduleId,
             QuestionGenerationProvider.GeneratedQuestion generatedQuestion,
             boolean evidenceRequired) {
         AiQuestionGenerationDraft draft = new AiQuestionGenerationDraft();
@@ -400,7 +388,7 @@ public class AiQuestionDraftService {
                 normalizeRequired(generatedQuestion.questionText(), "Generated question text is required"));
         draft.setQuestionType(normalizeQuestionType(generatedQuestion.questionType()));
         draft.setExplanation(normalizeNullable(generatedQuestion.explanation()));
-        draft.setModuleId(moduleId);
+        draft.setModuleId(null);
         draft.setAnswersJson(toJson(normalizeAnswers(generatedQuestion.answers())));
         List<AiQuestionGenerationEvidence> evidences = new ArrayList<>();
         applyDraftValidation(batch.getCourseId(), draft, evidences, evidenceRequired);
@@ -453,7 +441,7 @@ public class AiQuestionDraftService {
     private Question persistQuestionFromDraft(UUID courseId, AiQuestionGenerationDraft draft, UserAccount actor) {
         Question question = new Question();
         question.setCourseId(courseId);
-        question.setModuleId(validateModuleId(courseId, draft.getModuleId()));
+        question.setModuleId(null);
         question.setQuestionText(draft.getQuestionText());
         question.setQuestionType(QuestionType.valueOf(draft.getQuestionType().toUpperCase(Locale.ROOT)));
         question.setDifficulty(null);
@@ -620,20 +608,6 @@ public class AiQuestionDraftService {
         if (count >= properties.getMaxBatchesPerUserDay()) {
             throw new BusinessException(ErrorCode.AI_QUOTA_EXCEEDED, "AI generation daily quota exceeded");
         }
-    }
-
-    private UUID validateModuleId(UUID courseId, UUID moduleId) {
-        if (moduleId == null)
-            return null;
-        boolean exists = courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
-                moduleId,
-                courseId,
-                CourseModule.STATUS_ACTIVE);
-        if (!exists) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "Question module must belong to the selected course");
-        }
-        return moduleId;
     }
 
     private List<String> normalizeQuestionTypes(List<String> values) {

@@ -45,7 +45,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('TRAINEE', 'TRAINER', 'SME')")
+@PreAuthorize("hasAnyRole('TMO', 'TRAINEE', 'TRAINER', 'SME')")
 @RequestMapping("/api/v1/my-flashcards/sets")
 public class PersonalFlashcardController {
     private final PersonalFlashcardService personalFlashcardService;

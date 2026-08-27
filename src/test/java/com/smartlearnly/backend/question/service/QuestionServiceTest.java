@@ -285,13 +285,14 @@ class QuestionServiceTest {
 
         assertThat(response.questionId()).isEqualTo(questionId);
         assertThat(response.courseId()).isEqualTo(courseId);
-        assertThat(response.moduleId()).isEqualTo(moduleId);
+        assertThat(response.moduleId()).isNull();
         assertThat(response.questionText()).isEqualTo("What is Java?");
         assertThat(response.status()).isEqualTo("draft");
         assertThat(response.createdBy()).isEqualTo(actorId);
 
         ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
         verify(questionRepository).save(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getModuleId()).isNull();
         assertThat(questionCaptor.getValue().getQuestionType()).isEqualTo(QuestionType.SINGLE_CHOICE);
         assertThat(questionCaptor.getValue().getIsAiGenerated()).isFalse();
 
@@ -422,7 +423,7 @@ class QuestionServiceTest {
     }
 
     @Test
-    void createForCourse_throwsInvalidRequest_whenModuleIsMissing() {
+    void createForCourse_savesCourseWideQuestion_whenModuleIsMissing() {
         QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
                 null,
                 null,
@@ -436,25 +437,28 @@ class QuestionServiceTest {
         );
         when(questionRepository.existsActiveDuplicateInCourse(courseId, "What is Java?", null))
                 .thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(questionId);
+            return saved;
+        });
 
-        assertThatThrownBy(() -> service.createForCourse(courseId, request))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
-                .hasMessageContaining("Question module is required");
+        QuestionModel.Response response = service.createForCourse(courseId, request);
 
-        verify(questionRepository, never()).save(any());
+        assertThat(response.moduleId()).isNull();
+        verify(questionRepository).save(any(Question.class));
     }
 
     @Test
-    void createForCourse_throwsInvalidRequest_whenModuleBelongsToAnotherCourse() {
+    void createForCourse_ignoresLegacyModuleFromCourseWideRequest() {
         UUID invalidModuleId = UUID.randomUUID();
         when(questionRepository.existsActiveDuplicateInCourse(courseId, "What is Java?", null))
                 .thenReturn(false);
-        when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
-                invalidModuleId,
-                courseId,
-                CourseModule.STATUS_ACTIVE
-        )).thenReturn(false);
+        when(questionRepository.save(any(Question.class))).thenAnswer(invocation -> {
+            Question saved = invocation.getArgument(0);
+            saved.setId(questionId);
+            return saved;
+        });
         QuestionModel.CreateRequest request = new QuestionModel.CreateRequest(
                 null,
                 invalidModuleId,
@@ -467,12 +471,10 @@ class QuestionServiceTest {
                 answers()
         );
 
-        assertThatThrownBy(() -> service.createForCourse(courseId, request))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST))
-                .hasMessageContaining("module must belong");
+        QuestionModel.Response response = service.createForCourse(courseId, request);
 
-        verify(questionRepository, never()).save(any());
+        assertThat(response.moduleId()).isNull();
+        verify(questionRepository).save(any(Question.class));
     }
 
     @Test
@@ -975,6 +977,9 @@ class QuestionServiceTest {
         assertThat(response.requested()).isEqualTo(1);
         assertThat(response.created()).isEqualTo(1);
         assertThat(response.createdQuestionIds()).hasSize(1);
+        ArgumentCaptor<Question> importedQuestion = ArgumentCaptor.forClass(Question.class);
+        verify(questionRepository).save(importedQuestion.capture());
+        assertThat(importedQuestion.getValue().getModuleId()).isNull();
         verify(questionMediaImportService).attachImportedMedia(
                 any(Question.class),
                 eq(row.imageFiles()),
@@ -1267,11 +1272,6 @@ class QuestionServiceTest {
     @Test
     void importBatchForCourse_collectsBoundaryValidationErrors() {
         UUID invalidModuleId = UUID.randomUUID();
-        when(courseModuleRepository.existsByIdAndCourseIdAndSystemFalseAndStatus(
-                invalidModuleId,
-                courseId,
-                CourseModule.STATUS_ACTIVE
-        )).thenReturn(false);
         when(questionMediaImportService.validateMediaReferences(List.of("bad-image"), List.of("bad-audio")))
                 .thenReturn(List.of("Image URL is invalid", "Audio URL is invalid"));
         QuestionImportDtos.ImportRow row = importRow(
@@ -1299,7 +1299,6 @@ class QuestionServiceTest {
                 .hasMessageContaining("Correct answer is required")
                 .hasMessageContaining("Difficulty must be between 1 and 5")
                 .hasMessageContaining("Bloom level is invalid")
-                .hasMessageContaining("Question module must belong")
                 .hasMessageContaining("Explanation must not exceed 10000 characters")
                 .hasMessageContaining("Image URL is invalid");
 

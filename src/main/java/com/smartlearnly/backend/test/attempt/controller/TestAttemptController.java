@@ -28,7 +28,7 @@ public class TestAttemptController {
 
     /** Bắt đầu hoặc tiếp tục attempt của quiz đang mở trong course. */
     @PostMapping("/start")
-    @PreAuthorize("hasAnyRole('TRAINEE', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<TestAttemptModel.Response> startAttempt(
             @Valid @RequestBody TestAttemptModel.StartRequest request) {
         return new ResponseEntity<>(service.startAttempt(request), HttpStatus.CREATED);
@@ -36,7 +36,7 @@ public class TestAttemptController {
 
     /** Nộp attempt course quiz hiện tại để chấm điểm và khóa lần làm bài. */
     @PutMapping("/{id}/submit")
-    @PreAuthorize("hasAnyRole('TRAINEE', 'SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TRAINEE', 'TMO', 'SME', 'TRAINER')")
     public ResponseEntity<TestAttemptModel.Response> submitAttempt(
             @PathVariable UUID id,
             @Valid @RequestBody TestAttemptModel.SubmitRequest request) {

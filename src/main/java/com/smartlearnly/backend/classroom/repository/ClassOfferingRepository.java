@@ -135,33 +135,58 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             SELECT
                 class_offering.id AS "classId",
                 class_offering.course_id AS "courseId",
+
                 course.title AS "courseTitle",
                 course.slug AS "courseSlug",
+
                 COALESCE(
                     course.thumbnail_url,
                     course.avatar_url
                 ) AS "courseThumbnailUrl",
+
+                course.short_description AS "courseShortDescription",
+                course.description AS "courseDescription",
+                course.language AS "courseLanguage",
+                course.level AS "courseLevel",
+
+                category.id AS "courseCategoryId",
+                category.name AS "courseCategoryName",
+                category.slug AS "courseCategorySlug",
+
                 class_offering.class_name AS "className",
                 class_offering.trainer_id AS "trainerId",
                 trainer.full_name AS "trainerName",
+
                 class_offering.start_date AS "startDate",
                 class_offering.end_date AS "endDate",
+
                 class_offering.schedule_description
                     AS "scheduleDescription",
+
                 class_offering.price AS "price",
                 class_offering.max_students AS "maxStudents",
+
                 COUNT(class_enrollment.id) FILTER (
                     WHERE class_enrollment.status =
                         'active'::public.enroll_status
                 ) AS "activeEnrollmentCount",
+
                 class_offering.status::text AS "status"
+
             FROM public.classes class_offering
+
             JOIN public.courses course
                 ON course.id = class_offering.course_id
+
+            JOIN public.categories category
+                ON category.id = course.category_id
+
             LEFT JOIN public.users trainer
                 ON trainer.id = class_offering.trainer_id
+
             LEFT JOIN public.class_enrollments class_enrollment
                 ON class_enrollment.class_id = class_offering.id
+
             WHERE class_offering.id = :classId
               AND class_offering.deleted_at IS NULL
               AND course.deleted_at IS NULL
@@ -171,9 +196,11 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
                   'upcoming'::public.class_status
               AND class_offering.start_date >= CURRENT_DATE
               AND class_offering.price IS NOT NULL
+
             GROUP BY
                 class_offering.id,
                 course.id,
+                category.id,
                 trainer.id
             """, nativeQuery = true)
     Optional<OpeningScheduleProjection> findOpeningScheduleDetail(
@@ -210,13 +237,19 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             """, nativeQuery = true)
     Optional<ClassAdminProjection> findAdminClassById(@Param("classId") UUID classId);
 
-    /** Khóa bản ghi lớp còn hiệu lực trước khi cập nhật trạng thái hoặc thông tin quan trọng. */
+    /**
+     * Khóa bản ghi lớp còn hiệu lực trước khi cập nhật trạng thái hoặc thông tin
+     * quan trọng.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select classOffering from ClassOffering classOffering "
             + "where classOffering.id = :id and classOffering.deletedAt is null")
     Optional<ClassOffering> findByIdForUpdate(@Param("id") UUID id);
 
-    /** Tìm danh sách lớp cho quản trị với bộ lọc khóa học, giảng viên, trạng thái và từ khóa. */
+    /**
+     * Tìm danh sách lớp cho quản trị với bộ lọc khóa học, giảng viên, trạng thái và
+     * từ khóa.
+     */
     @Query(value = """
             SELECT
                 class_offering.id AS "id",
@@ -303,7 +336,10 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             """, nativeQuery = true)
     Optional<ClassAdminProjection> findAdminClassDetail(@Param("classId") UUID classId);
 
-    /** Kiểm tra lớp đã có dữ liệu giao dịch hoặc ghi danh để bảo vệ lịch sử thương mại. */
+    /**
+     * Kiểm tra lớp đã có dữ liệu giao dịch hoặc ghi danh để bảo vệ lịch sử thương
+     * mại.
+     */
     @Query(value = """
             SELECT EXISTS (
                 SELECT 1 FROM public.class_enrollments enrollment
@@ -446,7 +482,10 @@ public interface ClassOfferingRepository extends JpaRepository<ClassOffering, UU
             @Param("classId") UUID classId,
             @Param("trainerId") UUID trainerId);
 
-    /** Lấy các trạng thái lớp hợp lệ từ enum cơ sở dữ liệu để hiển thị lựa chọn quản trị. */
+    /**
+     * Lấy các trạng thái lớp hợp lệ từ enum cơ sở dữ liệu để hiển thị lựa chọn quản
+     * trị.
+     */
     @Query(value = """
             SELECT
                 e.enumlabel AS "value",

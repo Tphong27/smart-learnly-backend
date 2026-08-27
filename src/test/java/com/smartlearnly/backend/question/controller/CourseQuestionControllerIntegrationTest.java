@@ -52,7 +52,7 @@ class CourseQuestionControllerIntegrationTest {
     void listQuestionsShouldReturnPagedQuestionsWithFilters() throws Exception {
         when(questionService.listByCourse(
                 eq(COURSE_ID),
-                eq(MODULE_ID),
+                eq(null),
                 eq("oop"),
                 eq("single_choice"),
                 eq("draft"),
@@ -127,15 +127,17 @@ class CourseQuestionControllerIntegrationTest {
 
     @Test
     @WithMockUser(roles = "TRAINER")
-    void updateQuestionShouldRejectTrainerRole() throws Exception {
+    void updateQuestionShouldAllowTrainerRole() throws Exception {
+        when(questionService.updateInCourse(eq(COURSE_ID), eq(QUESTION_ID), any(QuestionModel.UpdateRequest.class)))
+                .thenReturn(sampleResponse("Trainer course-wide update"));
+
         mockMvc.perform(put("/api/v1/admin/courses/{courseId}/questions/{questionId}", COURSE_ID, QUESTION_ID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validQuestionBody("Trainer should not update")))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+                        .content(validQuestionBody("Trainer course-wide update")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
 
-        verify(questionService, never()).updateInCourse(any(UUID.class), any(UUID.class), any(QuestionModel.UpdateRequest.class));
+        verify(questionService).updateInCourse(eq(COURSE_ID), eq(QUESTION_ID), any(QuestionModel.UpdateRequest.class));
     }
 
     @Test
@@ -207,7 +209,7 @@ class CourseQuestionControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"course-questions.csv\""))
                 .andExpect(content().contentTypeCompatibleWith("text/csv"))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("id,module_id,type,status,question_text")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("id,status,Question text,Question type")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("\"What is \"\"CSV\"\"?\"")));
     }
 

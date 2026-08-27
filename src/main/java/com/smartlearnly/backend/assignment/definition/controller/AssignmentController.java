@@ -23,7 +23,7 @@ public class AssignmentController {
 
     /** Tạo bài tập sau khi backend kiểm tra quyền và dữ liệu đầu vào. */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> create(@Valid @RequestBody AssignmentModel.CreateRequest request) {
         AssignmentModel.Response response = assignmentService.createAssignment(request);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
@@ -82,7 +82,7 @@ public class AssignmentController {
 
     /** Cập nhật cấu hình bài tập khi người dùng có quyền biên soạn. */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<AssignmentModel.Response> update(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentModel.UpdateRequest request) {
@@ -92,7 +92,7 @@ public class AssignmentController {
 
     /** Xóa bài tập theo quy tắc nghiệp vụ của service. */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SME', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         assignmentService.deleteAssignment(id);
         return ResponseEntity.noContent().build();

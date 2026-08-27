@@ -140,7 +140,7 @@ public class AiQuestionSourceService {
         );
     }
 
-    /** Chuẩn hóa, lưu nguồn và dựng input provider cho một batch mới. */
+    /** Chuẩn hóa, bắt buộc ít nhất một nguồn, rồi lưu input provider cho batch mới. */
     @Transactional
     public List<QuestionGenerationProvider.SourceInput> persistAndBuildSourceInputs(
             UUID courseId,
@@ -149,6 +149,11 @@ public class AiQuestionSourceService {
             List<MultipartFile> files
     ) {
         List<SourceSpec> specs = resolveSourceSpecs(courseId, request, files);
+        if (specs.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.AI_SOURCE_INVALID,
+                    "At least one source material is required");
+        }
         validateSourceBudget(specs);
         return buildSourceInputs(persistSources(batch, specs));
     }
@@ -211,7 +216,7 @@ public class AiQuestionSourceService {
         }
     }
 
-    /** Gom cac loai nguon duoc request thanh danh sach chuan hoa; source co the de trong. */
+    /** Gom các loại nguồn được request thành danh sách chuẩn hóa để kiểm tra bắt buộc. */
     private List<SourceSpec> resolveSourceSpecs(
             UUID courseId,
             AiQuestionDraftDtos.CreateBatchRequest request,
