@@ -53,7 +53,7 @@ class GeminiQuestionGenerationProviderTest {
     void generate_usesDefaultModelAndNoSourcePromptWhenModelsAndSourcesAreBlank() {
         ProviderFixture fixture = fixture(" ", null);
         fixture.server.expect(requestTo("https://gemini.example.test/v1beta/interactions"))
-                .andExpect(jsonPath("$.model").value("gemini-3.5-flash"))
+                .andExpect(jsonPath("$.model").value("gemini-2.5-flash"))
                 .andExpect(jsonPath("$.input[0].text").value(org.hamcrest.Matchers.containsString("No source material selected.")))
                 .andExpect(jsonPath("$.input[0].text").value(org.hamcrest.Matchers.containsString("Generate clear, grounded draft questions")))
                 .andRespond(withSuccess("{\"output_text\":\"{\\\"questions\\\":[]}\"}", MediaType.APPLICATION_JSON));
@@ -222,7 +222,7 @@ class GeminiQuestionGenerationProviderTest {
         assertThatThrownBy(() -> fixture.provider.generate(requestWithSources()))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
                     assertThat(exception.errorCode()).isEqualTo(ErrorCode.AI_PROVIDER_UNAVAILABLE);
-                    assertThat(exception.getMessage()).isEqualTo("AI provider request failed");
+                    assertThat(exception.getMessage()).contains("AI provider request failed");
                 });
         fixture.server.verify();
     }

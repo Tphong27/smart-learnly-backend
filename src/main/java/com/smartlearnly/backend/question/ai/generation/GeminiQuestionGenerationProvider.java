@@ -58,32 +58,13 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
         } catch (BusinessException exception) {
             throw exception;
         } catch (RestClientResponseException exception) {
-            log.warn(
-                    "Gemini question generation HTTP error: status={} model={} endpoint={} responseBody={}",
-                    exception.getStatusCode().value(),
-                    settings.model(),
-                    sanitizeEndpoint(properties.getApiBaseUrl()),
-                    truncateForLog(exception.getResponseBodyAsString(), 1600),
-                    exception);
             throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE,
-                    "AI provider returned HTTP " + exception.getStatusCode().value());
+                    "AI provider returned HTTP " + exception.getStatusCode().value(), exception);
         } catch (IOException | IllegalArgumentException exception) {
-            log.warn(
-                    "Gemini question generation response parse error: model={} endpoint={} reason={}",
-                    settings.model(),
-                    sanitizeEndpoint(properties.getApiBaseUrl()),
-                    exception.getMessage(),
-                    exception);
             throw new BusinessException(ErrorCode.AI_PROVIDER_OUTPUT_INVALID,
-                    "AI provider returned an invalid response");
+                    "AI provider returned an invalid response", exception);
         } catch (RestClientException exception) {
-            log.warn(
-                    "Gemini question generation request error: model={} endpoint={} reason={}",
-                    settings.model(),
-                    sanitizeEndpoint(properties.getApiBaseUrl()),
-                    exception.getMessage(),
-                    exception);
-            throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI provider request failed");
+            throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI provider request failed", exception);
         }
     }
 
@@ -129,6 +110,9 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
         RestClient restClient = restClient(settings);
         String apiKey = settings.apiKey().trim();
         RestClientException lastException = null;
+        String lastModel = null;
+        int lastStatus = 0;
+        String lastResponseBody = null;
         List<String> models = candidateModels(settings);
         for (int index = 0; index < models.size(); index++) {
             String model = models.get(index);
@@ -148,28 +132,48 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
                 return response;
             } catch (RestClientResponseException exception) {
                 lastException = exception;
+                lastModel = model;
+                lastStatus = exception.getStatusCode().value();
+                lastResponseBody = exception.getResponseBodyAsString();
                 log.warn(
-                        "Gemini question generation attempt failed: status={} model={}",
-                        exception.getStatusCode().value(),
-                        model);
+                        "Gemini question generation attempt failed: status={} model={} endpoint={} responseBody={}",
+                        lastStatus,
+                        model,
+                        sanitizeEndpoint(properties.getApiBaseUrl()),
+                        truncateForLog(lastResponseBody, 1600));
                 if (!canTryFallback(exception) || index + 1 >= models.size()) {
-                    throw exception;
+                    throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE,
+                            providerFailureMessage(lastStatus, model, lastResponseBody), exception);
                 }
             } catch (RestClientException exception) {
                 lastException = exception;
+                lastModel = model;
                 log.warn(
                         "Gemini question generation transport attempt failed: model={} errorType={}",
                         model,
                         exception.getClass().getSimpleName());
                 if (index + 1 >= models.size()) {
-                    throw exception;
+                    throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE,
+                            "AI provider request failed for model " + model, exception);
                 }
             }
         }
         if (lastException != null) {
-            throw lastException;
+            throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE,
+                    providerFailureMessage(lastStatus, lastModel, lastResponseBody), lastException);
         }
         throw new BusinessException(ErrorCode.AI_PROVIDER_UNAVAILABLE, "AI provider request failed");
+    }
+
+    /** Xây dựng message lỗi kèm model thật và nội dung phản hồi để hiển thị cho user. */
+    private String providerFailureMessage(int status, String model, String responseBody) {
+        StringBuilder message = new StringBuilder();
+        message.append("AI provider returned HTTP ").append(status).append(" for model ").append(model);
+        String body = responseBody == null ? null : responseBody.trim();
+        if (body != null && !body.isEmpty()) {
+            message.append(": ").append(truncateForLog(body, 500));
+        }
+        return message.toString();
     }
 
     private List<String> candidateModels(AssignmentAiSettings settings) {
@@ -183,7 +187,7 @@ public class GeminiQuestionGenerationProvider implements QuestionGenerationProvi
 
     private String normalizeModel(String value) {
         if (value == null || value.isBlank()) {
-            return "gemini-3.5-flash";
+            return "gemini-2.5-flash";
         }
         String normalized = value.trim();
         return normalized.startsWith("models/")
