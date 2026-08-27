@@ -205,6 +205,24 @@ public class QuestionService {
         questionRepository.save(question);
     }
 
+    /** Khôi phục câu hỏi đã lưu trữ về draft để nội dung phải được duyệt lại trước khi sử dụng. */
+    @Transactional
+    public void restoreInCourse(UUID courseId, UUID questionId) {
+        courseAccessService.requireUpdatableCourse(courseId);
+        Question question = findQuestion(questionId);
+        assertQuestionBelongsToCourse(question, courseId);
+        if (question.getStatus() != QuestionStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only archived questions can be restored");
+        }
+        if (questionRepository.existsActiveDuplicateInCourse(courseId, question.getQuestionText(), question.getId())) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "An active question with the same text already exists in this course");
+        }
+        question.setStatus(QuestionStatus.DRAFT);
+        questionRepository.save(question);
+    }
+
     /** Cập nhật câu hỏi từ DTO công khai không chứa field module. */
     @Transactional
     public QuestionModel.Response updateInCourse(UUID courseId, UUID moduleId, UUID questionId, QuestionModel.ModuleUpdateRequest request) {
