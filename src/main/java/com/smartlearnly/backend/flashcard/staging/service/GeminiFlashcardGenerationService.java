@@ -114,7 +114,7 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
             String outputText = sendGeminiInput(
                     buildGenerationInput(request, mergedContent),
                     "flashcard document generation",
-                    flashcardResponseSchema());
+                    flashcardResponseSchema(request == null ? 10 : request.desiredCount()));
             return parseGenerationOutput(outputText, request == null ? 0 : request.desiredCount(), language);
         }
         finally {
@@ -278,6 +278,8 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
                 - Generate concrete useful cards: concepts, definitions, Q/A, process steps, comparisons, and key facts.
                 - Avoid vague cards like "What is the key idea..." unless the document genuinely requires a high-level summary.
                 - Keep backText answer-focused; put longer details in explanation.
+                - Keep frontText under 180 characters and backText under 500 characters.
+                - Keep hint under 160 characters, explanation under 700 characters, and sourceExcerpt under 240 characters.
                 - Use hint only when it helps review without giving away the answer.
                 - Use sourceExcerpt for a short supporting source line whenever possible.
                 - If a candidate card has no clear source support, omit it.
@@ -438,16 +440,24 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         return body;
     }
 
-    private Map<String, Object> flashcardResponseSchema() {
-        Map<String, Object> nullableString = Map.of("type", List.of("string", "null"));
+    private Map<String, Object> flashcardResponseSchema(int desiredCount) {
+        Map<String, Object> nullableHint = Map.of(
+                "type", List.of("string", "null"),
+                "maxLength", 160);
+        Map<String, Object> nullableExplanation = Map.of(
+                "type", List.of("string", "null"),
+                "maxLength", 700);
+        Map<String, Object> nullableSourceExcerpt = Map.of(
+                "type", List.of("string", "null"),
+                "maxLength", 240);
         Map<String, Object> card = new LinkedHashMap<>();
         card.put("type", "object");
         card.put("properties", Map.of(
-                "frontText", Map.of("type", "string"),
-                "backText", Map.of("type", "string"),
-                "hint", nullableString,
-                "explanation", nullableString,
-                "sourceExcerpt", nullableString));
+                "frontText", Map.of("type", "string", "maxLength", 180),
+                "backText", Map.of("type", "string", "maxLength", 500),
+                "hint", nullableHint,
+                "explanation", nullableExplanation,
+                "sourceExcerpt", nullableSourceExcerpt));
         card.put("required", List.of("frontText", "backText", "hint", "explanation", "sourceExcerpt"));
         card.put("additionalProperties", false);
 
@@ -456,6 +466,7 @@ public class GeminiFlashcardGenerationService implements FlashcardGeminiGenerati
         schema.put("properties", Map.of(
                 "cards", Map.of(
                         "type", "array",
+                        "maxItems", Math.max(1, desiredCount),
                         "items", card)));
         schema.put("required", List.of("cards"));
         schema.put("additionalProperties", false);

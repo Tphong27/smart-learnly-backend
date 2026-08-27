@@ -57,7 +57,8 @@ public class SecurityConfig {
                                                                 "/api/v1/courses/*/preview-lessons",
                                                                 "/api/v1/courses/*/preview-lessons/*",
                                                                 "/api/v1/courses/*/preview-lessons/*/questions",
-                                                                "/api/v1/courses/*/preview-lessons/*/flashcards")
+                                                                "/api/v1/courses/*/preview-lessons/*/flashcards",
+                                                                "/api/v1/courses/*/preview-lessons/*/assignment")
                                                 .permitAll()
                                                 .requestMatchers(
                                                                 HttpMethod.GET,
@@ -107,7 +108,8 @@ public class SecurityConfig {
                                                                 HttpMethod.GET,
                                                                 "/api/v1/courses/*/preview-lessons/*",
                                                                 "/api/v1/courses/*/preview-lessons/*/flashcards",
-                                                                "/api/v1/courses/*/preview-lessons/*/questions")
+                                                                "/api/v1/courses/*/preview-lessons/*/questions",
+                                                                "/api/v1/courses/*/preview-lessons/*/assignment")
                                                 .permitAll()
                                                 .requestMatchers(
                                                                 HttpMethod.GET,

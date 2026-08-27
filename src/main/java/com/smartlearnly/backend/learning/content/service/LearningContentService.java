@@ -301,6 +301,61 @@ public class LearningContentService {
         }
 
         /**
+         * Trả câu hỏi chỉ đọc của quiz trong staff preview.
+         *
+         * Staff được xem curriculum authoring của course draft sau khi quyền đọc course
+         * được xác thực; response vẫn loại bỏ ID nội bộ và đáp án đúng như public preview.
+         */
+        @Transactional
+        public List<PreviewTestQuestionResponse> getAdminPreviewTestQuestions(
+                        UUID courseId,
+                        UUID classId,
+                        UUID lessonId) {
+                if (courseId == null || lessonId == null) {
+                        throw new BusinessException(
+                                        ErrorCode.INVALID_REQUEST,
+                                        "Course ID and lesson ID are required");
+                }
+
+                courseAccessService.requireReadableCourse(courseId);
+                Course course = courseRepository
+                                .findByIdAndDeletedAtIsNull(courseId)
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Course was not found"));
+
+                CurriculumResolution resolution;
+                if (classId != null) {
+                        resolution = curriculumResolutionService.resolveClassEffectivePublished(courseId, classId);
+                } else if (course.getStatus() == CourseStatus.PUBLISHED) {
+                        resolution = curriculumResolutionService.resolvePublicMaster(courseId);
+                } else {
+                        resolution = curriculumResolutionService.resolveMasterAuthoring(courseId);
+                }
+
+                CurriculumLesson lesson = resolution.version()
+                                .getSections()
+                                .stream()
+                                .flatMap(section -> effectiveLessons(section).stream())
+                                .filter(candidate -> lessonMatches(candidate, lessonId))
+                                .findFirst()
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "Preview test lesson was not found"));
+
+                if (lesson.getType() != LessonType.QUIZ || lesson.getTestId() == null) {
+                        throw new BusinessException(
+                                        ErrorCode.RESOURCE_NOT_FOUND,
+                                        "Preview test lesson was not found");
+                }
+
+                return testQuestionService.getLearnerQuestionsByTest(lesson.getTestId())
+                                .stream()
+                                .map(this::toPreviewTestQuestionResponse)
+                                .toList();
+        }
+
+        /**
          * Trả bộ flashcard chỉ đọc của lesson được phép preview công khai.
          *
          * Không yêu cầu đăng nhập hoặc enrollment.

@@ -61,6 +61,7 @@ public class DefaultFlashcardDocumentTextExtractionService implements FlashcardD
 
     @Override
     public DocumentTextExtractionResult extract(MultipartFile file) {
+        validateSourceFile(file);
         long startedAtNanos = System.nanoTime();
         String fileName = sanitizeOriginalFileName(file.getOriginalFilename());
         String extension = extractExtension(fileName);
@@ -88,6 +89,20 @@ public class DefaultFlashcardDocumentTextExtractionService implements FlashcardD
                 (System.nanoTime() - startedAtNanos) / 1_000_000L
         );
         return result;
+    }
+
+    /** Chặn tài liệu rỗng hoặc quá lớn trước khi đọc toàn bộ file vào bộ nhớ. */
+    private void validateSourceFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Choose a PDF or DOCX file");
+        }
+        long maxBytes = Math.max(1L, properties.getMaxSourceFileSize().toBytes());
+        if (file.getSize() > maxBytes) {
+            long maxMegabytes = Math.max(1L, maxBytes / (1024L * 1024L));
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Uploaded document must not exceed " + maxMegabytes + " MB");
+        }
     }
 
     private ExtractionContent extractPdfContent(byte[] content) {

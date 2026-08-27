@@ -1,6 +1,7 @@
 package com.smartlearnly.backend.course.preview.controller;
 
 import com.smartlearnly.backend.common.api.ApiResponse;
+import com.smartlearnly.backend.course.preview.dto.PreviewTestQuestionResponse;
 import com.smartlearnly.backend.learning.content.dto.LearningContentResponse;
 import com.smartlearnly.backend.learning.content.service.LearningContentService;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -27,5 +29,16 @@ public class AdminLearningPreviewController {
             @RequestParam(required = false) UUID classId) {
         return ApiResponse.success("Admin preview loaded",
                 learningContentService.getAdminPreviewContent(courseId, classId));
+    }
+
+    /** Trả câu hỏi an toàn của quiz trong staff preview, kể cả course đang draft. */
+    @GetMapping("/{courseId}/learning-preview-lessons/{lessonId}/questions")
+    public ApiResponse<List<PreviewTestQuestionResponse>> getAdminPreviewTestQuestions(
+            @PathVariable UUID courseId,
+            @PathVariable UUID lessonId,
+            @RequestParam(required = false) UUID classId) {
+        return ApiResponse.success(
+                "Admin preview test questions loaded",
+                learningContentService.getAdminPreviewTestQuestions(courseId, classId, lessonId));
     }
 }
