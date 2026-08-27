@@ -116,6 +116,12 @@ public class Test {
 
     @PreUpdate
     void preUpdate() {
+        if (shuffleQuestions == null) shuffleQuestions = false;
+        if (shuffleAnswers == null) shuffleAnswers = false;
+        if (showAnswersAfter == null) showAnswersAfter = true;
+        if (isPublished == null) isPublished = false;
+        if (isArchived == null) isArchived = false;
+        if (isFlashtest == null) isFlashtest = false;
         updatedAt = Instant.now();
     }
 }
