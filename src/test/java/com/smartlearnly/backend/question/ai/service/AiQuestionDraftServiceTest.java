@@ -489,11 +489,11 @@ class AiQuestionDraftServiceTest {
         assertInvalidCreate(requestWithTypes("bad-key", List.of()), "At least one question type is required");
         assertInvalidCreate(requestWithTypes("bad-type-key", List.of("essay")), "Question type must be single_choice, multiple_choice, or true_false");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), null, null, "vi", null, "null-count"),
-                "Requested count must be between 1 and 20");
+                "Requested count must be between 1 and 10");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 0, null, "vi", null, "bad-count"),
-                "Requested count must be between 1 and 20");
-        assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 21, null, "vi", null, "too-many"),
-                "Requested count must be between 1 and 20");
+                "Requested count must be between 1 and 10");
+        assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 11, null, "vi", null, "too-many"),
+                "Requested count must be between 1 and 10");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 1, null, "jp", null, "bad-lang"),
                 "Language must be vi or en");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 1, null, "vi", "x".repeat(2001), "long-instruction"),
