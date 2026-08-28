@@ -38,20 +38,16 @@ public class AuditLogQueryService {
             Instant from,
             Instant to,
             int page,
-            int size
-    ) {
+            int size) {
         validateRange(from, to);
         Specification<AuditLog> specification = filters(
-                keyword, domain, action, result, actorId, actorRole, targetType, targetId, from, to
-        );
+                keyword, domain, action, result, actorId, actorRole, targetType, targetId, from, to);
         Page<AuditLog> logs = auditLogRepository.findAll(
                 specification,
-                PageRequest.of(page, size, Sort.by(Sort.Order.desc("occurredAt"), Sort.Order.desc("id")))
-        );
+                PageRequest.of(page, size, Sort.by(Sort.Order.desc("occurredAt"), Sort.Order.desc("id"))));
         return new PageResponse<>(
                 logs.stream().map(AuditLogSummaryResponse::from).toList(),
-                logs.getNumber(), logs.getSize(), logs.getTotalElements(), logs.getTotalPages()
-        );
+                logs.getNumber(), logs.getSize(), logs.getTotalElements(), logs.getTotalPages());
     }
 
     @Transactional(readOnly = true)
@@ -128,8 +124,7 @@ public class AuditLogQueryService {
             String targetType,
             String targetId,
             Instant from,
-            Instant to
-    ) {
+            Instant to) {
         return (root, query, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
             String normalizedKeyword = normalize(keyword);
@@ -139,18 +134,20 @@ public class AuditLogQueryService {
                         builder.like(builder.lower(root.get("actorEmail")), pattern),
                         builder.like(builder.lower(root.get("summary")), pattern),
                         builder.like(builder.lower(root.get("targetId")), pattern),
-                        builder.like(builder.lower(root.get("action").as(String.class)), pattern)
-                ));
+                        builder.like(builder.lower(root.get("action").as(String.class)), pattern)));
             }
             addIgnoreCase(predicates, builder, root.get("domain"), domain);
             addIgnoreCase(predicates, builder, root.get("action"), action);
             addIgnoreCase(predicates, builder, root.get("result"), result);
-            if (actorId != null) predicates.add(builder.equal(root.get("actorId"), actorId));
+            if (actorId != null)
+                predicates.add(builder.equal(root.get("actorId"), actorId));
             addIgnoreCase(predicates, builder, root.get("actorRole"), actorRole);
             addIgnoreCase(predicates, builder, root.get("targetType"), targetType);
             addIgnoreCase(predicates, builder, root.get("targetId"), targetId);
-            if (from != null) predicates.add(builder.greaterThanOrEqualTo(root.get("occurredAt"), from));
-            if (to != null) predicates.add(builder.lessThanOrEqualTo(root.get("occurredAt"), to));
+            if (from != null)
+                predicates.add(builder.greaterThanOrEqualTo(root.get("occurredAt"), from));
+            if (to != null)
+                predicates.add(builder.lessThanOrEqualTo(root.get("occurredAt"), to));
             return builder.and(predicates.toArray(Predicate[]::new));
         };
     }
@@ -194,8 +191,7 @@ public class AuditLogQueryService {
             List<Predicate> predicates,
             jakarta.persistence.criteria.CriteriaBuilder builder,
             jakarta.persistence.criteria.Path<String> path,
-            String value
-    ) {
+            String value) {
         String normalized = normalize(value);
         if (normalized != null) {
             predicates.add(builder.equal(builder.lower(path), normalized.toLowerCase(Locale.ROOT)));
@@ -214,7 +210,8 @@ public class AuditLogQueryService {
     }
 
     private String normalize(String value) {
-        if (value == null) return null;
+        if (value == null)
+            return null;
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
     }

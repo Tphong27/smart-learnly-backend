@@ -237,6 +237,37 @@ class AiQuestionDraftServiceTest {
     }
 
     @Test
+    void createBatch_normalizesVietnameseTrueFalsePairWhenProviderReturnsBothLanguages() {
+        when(sourceService.persistAndBuildSourceInputs(eq(courseId), any(), any(), any())).thenReturn(List.of());
+        when(generationProvider.generate(any())).thenReturn(new QuestionGenerationProvider.GenerationResult(
+                List.of(new QuestionGenerationProvider.GeneratedQuestion(
+                        "API key của dịch vụ AI được lưu trữ trực tiếp ở phía frontend.",
+                        "true_false",
+                        List.of(
+                                new AiQuestionDraftDtos.AnswerPayload("True", false, 1),
+                                new AiQuestionDraftDtos.AnswerPayload("False", false, 2),
+                                new AiQuestionDraftDtos.AnswerPayload("Đúng", false, 3),
+                                new AiQuestionDraftDtos.AnswerPayload("Sai", true, 4)),
+                        null,
+                        List.of())),
+                1,
+                2,
+                3));
+
+        AiQuestionDraftDtos.BatchResponse response = service.createBatch(courseId, request("tf-vi-normalize"));
+
+        assertThat(response.status()).isEqualTo(AiQuestionGenerationBatch.STATUS_READY);
+        assertThat(response.usableCount()).isEqualTo(1);
+        AiQuestionDraftDtos.DraftResponse draft = response.drafts().get(0);
+        assertThat(draft.questionType()).isEqualTo("true_false");
+        assertThat(draft.validationStatus()).isEqualTo(AiQuestionGenerationDraft.VALIDATION_VALID);
+        assertThat(draft.answers()).extracting(AiQuestionDraftDtos.AnswerPayload::answerText)
+                .containsExactly("Đúng", "Sai");
+        assertThat(draft.answers()).extracting(AiQuestionDraftDtos.AnswerPayload::correctValue)
+                .containsExactly(false, true);
+    }
+
+    @Test
     void createBatch_persistsGeneratedEvidenceFromSourceChunks() {
         UUID sourceId = UUID.randomUUID();
         UUID chunkId = UUID.randomUUID();
@@ -458,11 +489,11 @@ class AiQuestionDraftServiceTest {
         assertInvalidCreate(requestWithTypes("bad-key", List.of()), "At least one question type is required");
         assertInvalidCreate(requestWithTypes("bad-type-key", List.of("essay")), "Question type must be single_choice, multiple_choice, or true_false");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), null, null, "vi", null, "null-count"),
-                "Requested count must be between 1 and 20");
+                "Requested count must be between 1 and 10");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 0, null, "vi", null, "bad-count"),
-                "Requested count must be between 1 and 20");
-        assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 21, null, "vi", null, "too-many"),
-                "Requested count must be between 1 and 20");
+                "Requested count must be between 1 and 10");
+        assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 11, null, "vi", null, "too-many"),
+                "Requested count must be between 1 and 10");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 1, null, "jp", null, "bad-lang"),
                 "Language must be vi or en");
         assertInvalidCreate(new AiQuestionDraftDtos.CreateBatchRequest(List.of(), List.of(), List.of("multiple_choice"), 1, null, "vi", "x".repeat(2001), "long-instruction"),
@@ -696,7 +727,7 @@ class AiQuestionDraftServiceTest {
                 .toList(), "Multiple choice requires at least two correct answers");
         assertInvalidAfterNoopUpdate(batch, badTrueFalse, List.of(
                 new AiQuestionDraftDtos.AnswerPayload("True", true, 1),
-                new AiQuestionDraftDtos.AnswerPayload("Maybe", false, 2)), "True/false questions must have exactly True and False answers");
+                new AiQuestionDraftDtos.AnswerPayload("Maybe", false, 2)), "True/false questions must have exactly True/False or Dung/Sai answers");
         assertInvalidAfterNoopUpdate(batch, tooFewMultipleChoice,
                 List.of(new AiQuestionDraftDtos.AnswerPayload("Only", true, 1)), "Multiple choice questions support 2 to 6 answers");
         assertInvalidAfterNoopUpdate(batch, unsupportedType, answers("A", "B"), "Question type must be single_choice, multiple_choice, or true_false");
