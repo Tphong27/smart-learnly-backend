@@ -101,6 +101,11 @@ public class VideoSummaryService {
                         transcript.text());
             } catch (BusinessException fallbackFailure) {
                 directFailure.addSuppressed(fallbackFailure);
+                log.warn(
+                        "Transcript fallback for video summary failed: videoId={} errorCode={} message={}",
+                        videoId,
+                        fallbackFailure.errorCode(),
+                        fallbackFailure.getMessage());
                 throw directFailure;
             }
         }
