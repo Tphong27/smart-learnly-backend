@@ -56,6 +56,7 @@ public class AiQuestionDraftService {
     private static final String IMPORT_SOURCE_AI_GENERATION = "ai_generation";
     private static final String QUESTION_TYPE_TRUE_FALSE = "true_false";
     private static final int MAX_INSTRUCTION_LENGTH = 2000;
+    private static final int MAX_REQUESTED_COUNT = 10;
     private static final int MAX_NEAR_DUPLICATE_CANDIDATES = 3;
     private static final int NEAR_DUPLICATE_PREFILTER_LIMIT = MAX_NEAR_DUPLICATE_CANDIDATES * 2;
     private static final double NEAR_DUPLICATE_THRESHOLD = 0.86D;
@@ -641,9 +642,9 @@ public class AiQuestionDraftService {
     }
 
     private int normalizeRequestedCount(Integer value) {
-        if (value == null || value < 1 || value > 20) {
+        if (value == null || value < 1 || value > MAX_REQUESTED_COUNT) {
             throw new BusinessException(ErrorCode.AI_INVALID_GENERATION_CONFIG,
-                    "Requested count must be between 1 and 20");
+                    "Requested count must be between 1 and " + MAX_REQUESTED_COUNT);
         }
         return value;
     }
