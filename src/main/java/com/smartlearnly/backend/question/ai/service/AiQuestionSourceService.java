@@ -557,10 +557,11 @@ public class AiQuestionSourceService {
         return batchId + "/" + sourceId + "/" + safeName;
     }
 
-    /** Làm sạch whitespace của source nhưng giữ ranh giới paragraph. */
+    /** Loại bỏ NUL không hợp lệ với PostgreSQL và chuẩn hóa whitespace của source. */
     private String normalizeSourceText(String value) {
         if (value == null) return "";
-        return value.replace("\r\n", "\n")
+        return value.replace("\u0000", "")
+                .replace("\r\n", "\n")
                 .replace('\r', '\n')
                 .replace('\u00a0', ' ')
                 .replaceAll("[\\t\\x0B\\f ]+", " ")

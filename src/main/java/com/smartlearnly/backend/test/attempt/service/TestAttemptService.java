@@ -140,6 +140,26 @@ public class TestAttemptService {
         return response;
     }
 
+    /**
+     * Cho phép trainee tạo attempt mới sau khi lần gần nhất đã kết thúc.
+     * Lịch sử, đáp án và điểm cũ được giữ nguyên để phục vụ audit.
+     */
+    @Transactional
+    public TestAttemptModel.Response reopenAttempt(UUID attemptId) {
+        TestAttempt latest = repository.findById(required(attemptId, "attemptId"))
+                .orElseThrow(() -> new EntityNotFoundException("Attempt not found"));
+        testService.requireCurrentUserCanManage(latest.getTestId());
+        latest = expireIfOverdue(latest);
+        if (isActive(latest.getStatus())) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "An active attempt cannot be reopened");
+        }
+
+        latest.setRetakeAllowed(true);
+        return mapToResponse(repository.save(latest));
+    }
+
     /** Trả lịch sử attempt của một học viên sau khi xác thực quyền xem. */
     @Transactional
     public List<TestAttemptModel.Response> getAttempts(UUID testId, UUID studentId) {

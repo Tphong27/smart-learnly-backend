@@ -43,6 +43,13 @@ public class TestAttemptController {
         return ResponseEntity.ok(service.submitAttempt(id, request));
     }
 
+    /** Cho phép staff mở một lượt làm mới cho trainee và giữ nguyên lịch sử cũ. */
+    @PutMapping("/{attemptId}/reopen")
+    @PreAuthorize("hasAnyRole('TMO', 'SME', 'TRAINER')")
+    public ResponseEntity<TestAttemptModel.Response> reopenAttempt(@PathVariable UUID attemptId) {
+        return ResponseEntity.ok(service.reopenAttempt(attemptId));
+    }
+
     /** Trả lịch sử attempt của trainee cho một course quiz sau khi kiểm tra quyền. */
     @GetMapping("/quiz/{quizId}/student/{studentId}")
     @PreAuthorize("hasAnyRole('TRAINEE', 'TMO', 'SME', 'TRAINER')")

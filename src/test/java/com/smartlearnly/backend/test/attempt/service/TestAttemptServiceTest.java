@@ -230,6 +230,44 @@ class TestAttemptServiceTest {
     }
 
     @Test
+    void reopenAttemptShouldAllowNewAttemptAndPreserveCompletedHistory() {
+        UUID testId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        TestAttempt submitted = attempt(
+                UUID.randomUUID(), testId, studentId, AttemptStatus.SUBMITTED);
+        submitted.setClassId(classId);
+        submitted.setScore(BigDecimal.valueOf(8));
+
+        when(testAttemptRepository.findById(submitted.getId())).thenReturn(Optional.of(submitted));
+        when(testAttemptRepository.save(submitted)).thenReturn(submitted);
+
+        TestAttemptModel.Response response = service.reopenAttempt(submitted.getId());
+
+        assertThat(submitted.getRetakeAllowed()).isTrue();
+        assertThat(submitted.getScore()).isEqualByComparingTo("8");
+        assertThat(response.getRetakeAllowed()).isTrue();
+        verify(testService).requireCurrentUserCanManage(testId);
+        verify(studentTestAnswerRepository, never()).deleteByAttemptIds(any());
+    }
+
+    @Test
+    void reopenAttemptShouldRejectAnActiveAttempt() {
+        UUID testId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        TestAttempt active = attempt(UUID.randomUUID(), testId, studentId, AttemptStatus.DOING);
+
+        when(testAttemptRepository.findById(active.getId())).thenReturn(Optional.of(active));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.reopenAttempt(active.getId()))
+                .isInstanceOf(com.smartlearnly.backend.common.exception.BusinessException.class)
+                .hasMessage("An active attempt cannot be reopened");
+
+        verify(testAttemptRepository, never()).save(any(TestAttempt.class));
+    }
+
+    @Test
     void startAttemptShouldCreateIndependentAttemptForClassContext() {
         UUID testId = UUID.randomUUID();
         UUID studentId = UUID.randomUUID();

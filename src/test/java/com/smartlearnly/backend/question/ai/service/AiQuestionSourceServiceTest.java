@@ -235,6 +235,26 @@ class AiQuestionSourceServiceTest {
     }
 
     @Test
+    void persistAndBuildSourceInputs_removesNullCharactersBeforePersistingChunks() {
+        AiQuestionGenerationBatch batch = batch(courseId);
+        String text = longText("content before null") + "\u0000" + longText("content after null");
+
+        List<QuestionGenerationProvider.SourceInput> inputs = service.persistAndBuildSourceInputs(
+                courseId,
+                batch,
+                request(List.of(), List.of(new AiQuestionDraftDtos.PastedTextSourceRequest("NUL source", text))),
+                List.of());
+
+        assertThat(savedChunks)
+                .extracting(AiQuestionGenerationSourceChunk::getContentExcerpt)
+                .allMatch(excerpt -> !excerpt.contains("\u0000"));
+        assertThat(inputs)
+                .flatExtracting(QuestionGenerationProvider.SourceInput::chunks)
+                .extracting(QuestionGenerationProvider.ChunkInput::excerpt)
+                .allMatch(content -> !content.contains("\u0000"));
+    }
+
+    @Test
     void persistAndBuildSourceInputs_splitsLargePastedTextIntoMultipleChunks() {
         AiQuestionGenerationBatch batch = batch(courseId);
         String text = "Paragraph one ".repeat(260) + "\n\n" + "Paragraph two ".repeat(260);

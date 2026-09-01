@@ -17,11 +17,14 @@ class CourseQuizStaffPreviewSecurityTest {
                 "startAttempt", TestAttemptModel.StartRequest.class);
         Method submit = TestAttemptController.class.getMethod(
                 "submitAttempt", UUID.class, TestAttemptModel.SubmitRequest.class);
+        Method reopen = TestAttemptController.class.getMethod(
+                "reopenAttempt", UUID.class);
         Method saveAnswer = StudentTestAnswerController.class.getMethod(
                 "saveStudentAnswer", StudentTestAnswerModel.SaveRequest.class);
 
         assertThat(start.getAnnotation(PreAuthorize.class).value()).contains("'TMO'");
         assertThat(submit.getAnnotation(PreAuthorize.class).value()).contains("'TMO'");
+        assertThat(reopen.getAnnotation(PreAuthorize.class).value()).contains("'TMO'");
         assertThat(saveAnswer.getAnnotation(PreAuthorize.class).value()).contains("'TMO'");
     }
 }
